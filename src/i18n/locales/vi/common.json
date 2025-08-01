@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "Hệ thống giám sát OEE CNC",
+    "subtitle": "Quản lý hiệu suất tổng thể thiết bị"
+  },
+  "nav": {
+    "dashboard": "Bảng điều khiển",
+    "machines": "Tình trạng thiết bị",
+    "myMachines": "Thiết bị của tôi",
+    "logInput": "Nhập nhật ký",
+    "reports": "Báo cáo thống kê",
+    "management": "Quản lý",
+    "settings": "Cài đặt",
+    "logout": "Đăng xuất"
+  },
+  "auth": {
+    "login": "Đăng nhập",
+    "email": "Email",
+    "password": "Mật khẩu",
+    "loginButton": "Đăng nhập",
+    "loginError": "Đăng nhập thất bại",
+    "welcome": "Chào mừng"
+  },
+  "roles": {
+    "admin": "Quản trị viên",
+    "operator": "Người vận hành",
+    "engineer": "Kỹ sư"
+  },
+  "oee": {
+    "title": "Chỉ số OEE",
+    "overall": "OEE tổng thể",
+    "availability": "Tỷ lệ khả dụng",
+    "performance": "Hiệu suất",
+    "quality": "Chất lượng",
+    "calculation": "Tính toán",
+    "realtime": "Thời gian thực",
+    "daily": "Hàng ngày",
+    "shift": "Ca làm việc"
+  },
+  "machine": {
+    "status": "Trạng thái thiết bị",
+    "running": "Hoạt động bình thường",
+    "maintenance": "Đang bảo trì",
+    "modelChange": "Thay đổi model",
+    "plannedStop": "Dừng theo kế hoạch",
+    "programChange": "Thay đổi chương trình",
+    "toolChange": "Thay dụng cụ",
+    "pause": "Tạm dừng",
+    "name": "Tên thiết bị",
+    "location": "Vị trí",
+    "model": "Model",
+    "tactTime": "Thời gian Tact"
+  },
+  "production": {
+    "title": "Kết quả sản xuất",
+    "output": "Số lượng sản xuất",
+    "defects": "Số lượng lỗi",
+    "goodProducts": "Số lượng đạt",
+    "defectRate": "Tỷ lệ lỗi",
+    "input": "Nhập",
+    "save": "Lưu",
+    "cancel": "Hủy"
+  },
+  "time": {
+    "today": "Hôm nay",
+    "yesterday": "Hôm qua",
+    "thisWeek": "Tuần này",
+    "lastWeek": "Tuần trước",
+    "thisMonth": "Tháng này",
+    "lastMonth": "Tháng trước",
+    "dateRange": "Chọn khoảng thời gian",
+    "startDate": "Ngày bắt đầu",
+    "endDate": "Ngày kết thúc",
+    "shiftA": "Ca A",
+    "shiftB": "Ca B"
+  },
+  "chart": {
+    "trend": "Xu hướng",
+    "comparison": "So sánh",
+    "distribution": "Phân bố",
+    "top": "Hàng đầu",
+    "downtime": "Thời gian ngừng",
+    "causes": "Nguyên nhân"
+  },
+  "alert": {
+    "title": "Thông báo",
+    "warning": "Cảnh báo",
+    "error": "Lỗi",
+    "info": "Thông tin",
+    "success": "Thành công",
+    "oeeDropped": "OEE giảm mạnh",
+    "longDowntime": "Thời gian ngừng kéo dài"
+  },
+  "common": {
+    "search": "Tìm kiếm",
+    "filter": "Lọc",
+    "export": "Xuất",
+    "print": "In",
+    "refresh": "Làm mới",
+    "loading": "Đang tải...",
+    "noData": "Không có dữ liệu",
+    "confirm": "Xác nhận",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "delete": "Xóa",
+    "edit": "Sửa",
+    "add": "Thêm",
+    "back": "Quay lại",
+    "next": "Tiếp theo",
+    "previous": "Trước",
+    "close": "Đóng"
+  }
+}

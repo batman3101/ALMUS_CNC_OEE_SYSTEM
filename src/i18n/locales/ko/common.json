@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "CNC OEE 모니터링 시스템",
+    "subtitle": "설비 종합 효율 관리"
+  },
+  "nav": {
+    "dashboard": "대시보드",
+    "machines": "설비 현황",
+    "myMachines": "내 설비 현황",
+    "logInput": "로그 입력",
+    "reports": "통계 리포트",
+    "management": "관리",
+    "settings": "설정",
+    "logout": "로그아웃"
+  },
+  "auth": {
+    "login": "로그인",
+    "email": "이메일",
+    "password": "비밀번호",
+    "loginButton": "로그인",
+    "loginError": "로그인 실패",
+    "welcome": "환영합니다"
+  },
+  "roles": {
+    "admin": "관리자",
+    "operator": "운영자",
+    "engineer": "엔지니어"
+  },
+  "oee": {
+    "title": "OEE 지표",
+    "overall": "종합 OEE",
+    "availability": "가동률",
+    "performance": "성능",
+    "quality": "품질",
+    "calculation": "계산",
+    "realtime": "실시간",
+    "daily": "일일",
+    "shift": "교대"
+  },
+  "machine": {
+    "status": "설비 상태",
+    "running": "정상가동",
+    "maintenance": "점검중",
+    "modelChange": "모델교체",
+    "plannedStop": "계획정지",
+    "programChange": "프로그램 교체",
+    "toolChange": "공구교환",
+    "pause": "일시정지",
+    "name": "설비명",
+    "location": "위치",
+    "model": "모델",
+    "tactTime": "Tact Time"
+  },
+  "production": {
+    "title": "생산 실적",
+    "output": "생산 수량",
+    "defects": "불량 수량",
+    "goodProducts": "양품 수량",
+    "defectRate": "불량률",
+    "input": "입력",
+    "save": "저장",
+    "cancel": "취소"
+  },
+  "time": {
+    "today": "오늘",
+    "yesterday": "어제",
+    "thisWeek": "이번주",
+    "lastWeek": "지난주",
+    "thisMonth": "이번달",
+    "lastMonth": "지난달",
+    "dateRange": "기간 선택",
+    "startDate": "시작일",
+    "endDate": "종료일",
+    "shiftA": "A조",
+    "shiftB": "B조"
+  },
+  "chart": {
+    "trend": "추이",
+    "comparison": "비교",
+    "distribution": "분포",
+    "top": "상위",
+    "downtime": "다운타임",
+    "causes": "원인"
+  },
+  "alert": {
+    "title": "알림",
+    "warning": "경고",
+    "error": "오류",
+    "info": "정보",
+    "success": "성공",
+    "oeeDropped": "OEE 급락",
+    "longDowntime": "장시간 다운타임"
+  },
+  "common": {
+    "search": "검색",
+    "filter": "필터",
+    "export": "내보내기",
+    "print": "인쇄",
+    "refresh": "새로고침",
+    "loading": "로딩중...",
+    "noData": "데이터 없음",
+    "confirm": "확인",
+    "cancel": "취소",
+    "save": "저장",
+    "delete": "삭제",
+    "edit": "편집",
+    "add": "추가",
+    "back": "뒤로",
+    "next": "다음",
+    "previous": "이전",
+    "close": "닫기"
+  }
+}
