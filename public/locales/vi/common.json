@@ -1,0 +1,40 @@
+{
+  "app": {
+    "title": "Hệ thống Giám sát OEE CNC",
+    "loading": "Đang tải...",
+    "error": "Đã xảy ra lỗi",
+    "success": "Hoàn thành thành công",
+    "confirm": "Xác nhận",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "delete": "Xóa",
+    "edit": "Chỉnh sửa",
+    "add": "Thêm",
+    "search": "Tìm kiếm",
+    "filter": "Lọc",
+    "refresh": "Làm mới"
+  },
+  "nav": {
+    "dashboard": "Bảng điều khiển",
+    "machines": "Tình trạng thiết bị",
+    "myMachines": "Thiết bị của tôi",
+    "logInput": "Nhập nhật ký",
+    "reports": "Báo cáo thống kê",
+    "management": "Quản lý người dùng và thiết bị",
+    "settings": "Cài đặt"
+  },
+  "auth": {
+    "login": "Đăng nhập",
+    "logout": "Đăng xuất",
+    "email": "Email",
+    "password": "Mật khẩu",
+    "loginButton": "Đăng nhập",
+    "loginFailed": "Đăng nhập thất bại",
+    "logoutSuccess": "Đã đăng xuất"
+  },
+  "roles": {
+    "admin": "Quản trị viên",
+    "operator": "Người vận hành",
+    "engineer": "Kỹ sư"
+  }
+}

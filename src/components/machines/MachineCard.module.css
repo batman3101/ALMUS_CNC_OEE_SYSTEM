@@ -1,0 +1,83 @@
+.machineCard {
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.machineCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.machineCardContent {
+  padding: 0;
+}
+
+.machineHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.machineStatus {
+  margin-bottom: 12px;
+}
+
+.machineInfo {
+  margin-top: 8px;
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.statusTag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.durationInfo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .machineCard {
+    margin-bottom: 16px;
+  }
+  
+  .machineHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
+/* 상태별 카드 테두리 색상 */
+.machineCard.normal {
+  border-left: 4px solid #52c41a;
+}
+
+.machineCard.warning {
+  border-left: 4px solid #faad14;
+}
+
+.machineCard.error {
+  border-left: 4px solid #ff4d4f;
+}
+
+.machineCard.processing {
+  border-left: 4px solid #1890ff;
+}
+
+.machineCard.default {
+  border-left: 4px solid #d9d9d9;
+}

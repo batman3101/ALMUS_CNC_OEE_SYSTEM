@@ -1,0 +1,78 @@
+{
+  "title": "Bảng điều khiển",
+  "overview": "Tổng quan",
+  "myMachines": "Thiết bị của tôi",
+  "totalMachines": "Tổng số thiết bị",
+  "activeMachines": "Đang hoạt động",
+  "maintenanceMachines": "Đang bảo trì",
+  "stoppedMachines": "Dừng",
+  "oee": {
+    "title": "Chỉ số OEE",
+    "availability": "Tỷ lệ khả dụng",
+    "performance": "Hiệu suất",
+    "quality": "Chất lượng",
+    "overall": "OEE tổng thể",
+    "target": "Mục tiêu",
+    "actual": "Thực tế",
+    "trend": "Xu hướng",
+    "daily": "Hàng ngày",
+    "weekly": "Hàng tuần",
+    "monthly": "Hàng tháng"
+  },
+  "production": {
+    "title": "Tình hình sản xuất",
+    "planned": "Sản lượng kế hoạch",
+    "actual": "Sản lượng thực tế",
+    "defects": "Sản phẩm lỗi",
+    "goodParts": "Sản phẩm tốt",
+    "efficiency": "Hiệu quả",
+    "output": "Đầu ra",
+    "inputProduction": "Nhập kết quả sản xuất",
+    "shiftA": "Ca A",
+    "shiftB": "Ca B"
+  },
+  "alerts": {
+    "title": "Thông báo",
+    "critical": "Khẩn cấp",
+    "warning": "Cảnh báo",
+    "info": "Thông tin",
+    "noAlerts": "Không có thông báo",
+    "viewAll": "Xem tất cả thông báo",
+    "markAsRead": "Đánh dấu đã đọc",
+    "oeeBelow": "OEE giảm",
+    "downtimeExceeded": "Vượt quá thời gian ngừng",
+    "maintenanceRequired": "Cần bảo trì"
+  },
+  "charts": {
+    "downtimeReasons": "Nguyên nhân ngừng máy",
+    "productionTrend": "Xu hướng sản xuất",
+    "oeeComparison": "So sánh OEE",
+    "machineUtilization": "Tỷ lệ sử dụng thiết bị",
+    "qualityTrend": "Xu hướng chất lượng"
+  },
+  "filters": {
+    "dateRange": "Khoảng thời gian",
+    "machine": "Thiết bị",
+    "shift": "Ca làm việc",
+    "department": "Phòng ban",
+    "apply": "Áp dụng",
+    "reset": "Đặt lại",
+    "today": "Hôm nay",
+    "yesterday": "Hôm qua",
+    "thisWeek": "Tuần này",
+    "lastWeek": "Tuần trước",
+    "thisMonth": "Tháng này",
+    "lastMonth": "Tháng trước"
+  },
+  "time": {
+    "realTime": "Thời gian thực",
+    "lastUpdated": "Cập nhật lần cuối",
+    "duration": "Thời gian kéo dài",
+    "startTime": "Thời gian bắt đầu",
+    "endTime": "Thời gian kết thúc",
+    "totalTime": "Tổng thời gian",
+    "hours": "giờ",
+    "minutes": "phút",
+    "seconds": "giây"
+  }
+}

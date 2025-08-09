@@ -1,0 +1,33 @@
+{
+  "states": {
+    "NORMAL_OPERATION": "정상가동",
+    "MAINTENANCE": "점검중",
+    "MODEL_CHANGE": "모델교체",
+    "PLANNED_STOP": "계획정지",
+    "PROGRAM_CHANGE": "프로그램 교체",
+    "TOOL_CHANGE": "공구교환",
+    "TEMPORARY_STOP": "일시정지"
+  },
+  "labels": {
+    "machineId": "설비 ID",
+    "machineName": "설비명",
+    "location": "위치",
+    "modelType": "모델 타입",
+    "tactTime": "Tact Time",
+    "currentState": "현재 상태",
+    "duration": "지속 시간",
+    "status": "상태",
+    "isActive": "활성 상태"
+  },
+  "actions": {
+    "changeState": "상태 변경",
+    "startState": "시작",
+    "viewDetails": "상세 보기",
+    "inputProduction": "생산 실적 입력"
+  },
+  "messages": {
+    "stateChanged": "설비 상태가 변경되었습니다",
+    "stateChangeFailed": "상태 변경에 실패했습니다",
+    "confirmStateChange": "설비 상태를 변경하시겠습니까?"
+  }
+}

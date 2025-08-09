@@ -1,0 +1,33 @@
+{
+  "states": {
+    "NORMAL_OPERATION": "Hoạt động bình thường",
+    "MAINTENANCE": "Bảo trì",
+    "MODEL_CHANGE": "Thay đổi mô hình",
+    "PLANNED_STOP": "Dừng theo kế hoạch",
+    "PROGRAM_CHANGE": "Thay đổi chương trình",
+    "TOOL_CHANGE": "Thay dụng cụ",
+    "TEMPORARY_STOP": "Dừng tạm thời"
+  },
+  "labels": {
+    "machineId": "ID thiết bị",
+    "machineName": "Tên thiết bị",
+    "location": "Vị trí",
+    "modelType": "Loại mô hình",
+    "tactTime": "Thời gian Tact",
+    "currentState": "Trạng thái hiện tại",
+    "duration": "Thời gian kéo dài",
+    "status": "Trạng thái",
+    "isActive": "Trạng thái hoạt động"
+  },
+  "actions": {
+    "changeState": "Thay đổi trạng thái",
+    "startState": "Bắt đầu",
+    "viewDetails": "Xem chi tiết",
+    "inputProduction": "Nhập kết quả sản xuất"
+  },
+  "messages": {
+    "stateChanged": "Trạng thái thiết bị đã được thay đổi",
+    "stateChangeFailed": "Thay đổi trạng thái thất bại",
+    "confirmStateChange": "Bạn có muốn thay đổi trạng thái thiết bị không?"
+  }
+}

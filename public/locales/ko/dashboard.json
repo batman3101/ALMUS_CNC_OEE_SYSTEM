@@ -1,0 +1,78 @@
+{
+  "title": "대시보드",
+  "overview": "전체 현황",
+  "myMachines": "내 설비 현황",
+  "totalMachines": "전체 설비",
+  "activeMachines": "가동 중",
+  "maintenanceMachines": "점검 중",
+  "stoppedMachines": "정지",
+  "oee": {
+    "title": "OEE 지표",
+    "availability": "가동률",
+    "performance": "성능",
+    "quality": "품질",
+    "overall": "종합 OEE",
+    "target": "목표",
+    "actual": "실제",
+    "trend": "추이",
+    "daily": "일별",
+    "weekly": "주별",
+    "monthly": "월별"
+  },
+  "production": {
+    "title": "생산 현황",
+    "planned": "계획 생산량",
+    "actual": "실제 생산량",
+    "defects": "불량품",
+    "goodParts": "양품",
+    "efficiency": "효율성",
+    "output": "산출량",
+    "inputProduction": "생산 실적 입력",
+    "shiftA": "A조",
+    "shiftB": "B조"
+  },
+  "alerts": {
+    "title": "알림",
+    "critical": "긴급",
+    "warning": "경고",
+    "info": "정보",
+    "noAlerts": "알림이 없습니다",
+    "viewAll": "모든 알림 보기",
+    "markAsRead": "읽음 처리",
+    "oeeBelow": "OEE 저하",
+    "downtimeExceeded": "다운타임 초과",
+    "maintenanceRequired": "점검 필요"
+  },
+  "charts": {
+    "downtimeReasons": "다운타임 원인",
+    "productionTrend": "생산량 추이",
+    "oeeComparison": "OEE 비교",
+    "machineUtilization": "설비 가동률",
+    "qualityTrend": "품질 추이"
+  },
+  "filters": {
+    "dateRange": "기간",
+    "machine": "설비",
+    "shift": "교대",
+    "department": "부서",
+    "apply": "적용",
+    "reset": "초기화",
+    "today": "오늘",
+    "yesterday": "어제",
+    "thisWeek": "이번 주",
+    "lastWeek": "지난 주",
+    "thisMonth": "이번 달",
+    "lastMonth": "지난 달"
+  },
+  "time": {
+    "realTime": "실시간",
+    "lastUpdated": "마지막 업데이트",
+    "duration": "지속 시간",
+    "startTime": "시작 시간",
+    "endTime": "종료 시간",
+    "totalTime": "총 시간",
+    "hours": "시간",
+    "minutes": "분",
+    "seconds": "초"
+  }
+}

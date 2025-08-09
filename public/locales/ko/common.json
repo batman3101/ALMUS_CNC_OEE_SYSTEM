@@ -1,0 +1,40 @@
+{
+  "app": {
+    "title": "CNC OEE 모니터링 시스템",
+    "loading": "로딩 중...",
+    "error": "오류가 발생했습니다",
+    "success": "성공적으로 완료되었습니다",
+    "confirm": "확인",
+    "cancel": "취소",
+    "save": "저장",
+    "delete": "삭제",
+    "edit": "편집",
+    "add": "추가",
+    "search": "검색",
+    "filter": "필터",
+    "refresh": "새로고침"
+  },
+  "nav": {
+    "dashboard": "대시보드",
+    "machines": "설비 현황",
+    "myMachines": "내 설비 현황",
+    "logInput": "로그 입력",
+    "reports": "통계 리포트",
+    "management": "사용자 및 설비 관리",
+    "settings": "설정"
+  },
+  "auth": {
+    "login": "로그인",
+    "logout": "로그아웃",
+    "email": "이메일",
+    "password": "비밀번호",
+    "loginButton": "로그인",
+    "loginFailed": "로그인에 실패했습니다",
+    "logoutSuccess": "로그아웃되었습니다"
+  },
+  "roles": {
+    "admin": "관리자",
+    "operator": "운영자",
+    "engineer": "엔지니어"
+  }
+}
