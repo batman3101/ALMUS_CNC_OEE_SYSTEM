@@ -12,7 +12,8 @@
     "add": "추가",
     "search": "검색",
     "filter": "필터",
-    "refresh": "새로고침"
+    "refresh": "새로고침",
+    "goBack": "돌아가기"
   },
   "nav": {
     "dashboard": "대시보드",
@@ -28,6 +29,8 @@
     "logout": "로그아웃",
     "email": "이메일",
     "password": "비밀번호",
+    "name": "이름",
+    "role": "역할",
     "loginButton": "로그인",
     "loginFailed": "로그인에 실패했습니다",
     "logoutSuccess": "로그아웃되었습니다"
@@ -36,5 +39,53 @@
     "admin": "관리자",
     "operator": "운영자",
     "engineer": "엔지니어"
+  },
+  "notifications": {
+    "title": "알림",
+    "dashboardTitle": "알림 및 경고",
+    "activeCount": "건",
+    "empty": "알림이 없습니다",
+    "noActiveAlerts": "현재 활성 알림이 없습니다",
+    "viewAll": "전체 보기",
+    "currentValue": "현재값",
+    "threshold": "임계값",
+    "acknowledged": "확인됨",
+    "acknowledgedMessage": "알림이 확인되었습니다",
+    "acknowledgeError": "알림 확인에 실패했습니다",
+    "resolved": "해결됨",
+    "resolvedMessage": "알림이 해결되었습니다",
+    "resolveError": "알림 해결에 실패했습니다",
+    "deleted": "삭제됨",
+    "deletedMessage": "알림이 삭제되었습니다",
+    "deleteError": "알림 삭제에 실패했습니다",
+    "allCleared": "모든 알림 삭제",
+    "allClearedMessage": "모든 알림이 삭제되었습니다",
+    "clearAllError": "모든 알림 삭제에 실패했습니다",
+    "filter": {
+      "label": "필터",
+      "all": "전체",
+      "active": "활성",
+      "acknowledged": "확인됨",
+      "resolved": "해결됨"
+    },
+    "severity": {
+      "label": "심각도",
+      "all": "전체",
+      "critical": "긴급",
+      "high": "높음",
+      "medium": "보통",
+      "low": "낮음"
+    },
+    "status": {
+      "active": "활성",
+      "acknowledged": "확인됨",
+      "resolved": "해결됨"
+    },
+    "actions": {
+      "acknowledge": "확인",
+      "resolve": "해결",
+      "delete": "삭제",
+      "clearAll": "모두 삭제"
+    }
   }
 }

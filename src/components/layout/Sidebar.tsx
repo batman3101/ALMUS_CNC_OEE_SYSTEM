@@ -11,6 +11,7 @@ import {
   UserOutlined
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import styles from './Sidebar.module.css';
 
@@ -24,13 +25,13 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const screens = useBreakpoint();
 
-  // TODO: 실제 사용자 역할에 따라 메뉴 아이템 필터링
-  // 현재는 임시로 admin 설정, 추후 AuthContext에서 가져올 예정
-  const userRole = 'admin';
+  // 사용자 역할 (기본값: operator)
+  const userRole = user?.role || 'operator';
 
   // 역할별 메뉴 아이템 정의
   const getMenuItems = () => {
@@ -87,7 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             label: t('nav.reports'),
           },
           {
-            key: '/management',
+            key: '/admin',
             icon: <UserOutlined />,
             label: t('nav.management'),
           }

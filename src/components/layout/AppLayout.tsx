@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, Dropdown, Typography, Grid } from 'antd';
+import { Layout, Button, Dropdown, Typography, Grid, message } from 'antd';
 import { 
   MenuFoldOutlined, 
   MenuUnfoldOutlined, 
@@ -9,6 +9,9 @@ import {
   UserOutlined 
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { NotificationBadge, NotificationPanel } from '@/components/notifications';
 import Sidebar from './Sidebar';
 import LanguageToggle from './LanguageToggle';
 import styles from './AppLayout.module.css';
@@ -23,7 +26,17 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
+  const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
   const { t } = useLanguage();
+  const { user, logout } = useAuth();
+  const { 
+    notifications, 
+    unreadCount, 
+    acknowledgeNotification, 
+    resolveNotification, 
+    clearNotification, 
+    clearAllNotifications 
+  } = useNotifications();
   const screens = useBreakpoint();
 
   // 모바일에서는 기본적으로 사이드바를 접음
@@ -37,16 +50,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
 
 
-  // 사용자 메뉴 아이템 (임시)
+  // 로그아웃 처리
+  const handleLogout = async () => {
+    try {
+      await logout();
+      message.success(t('auth.logoutSuccess'));
+    } catch (error) {
+      console.error('Logout error:', error);
+      message.error(t('auth.logoutFailed'));
+    }
+  };
+
+  // 사용자 메뉴 아이템
   const userItems = [
     {
       key: 'logout',
       label: t('auth.logout'),
       icon: <LogoutOutlined />,
-      onClick: () => {
-        // TODO: 로그아웃 로직 구현
-        console.log('Logout clicked');
-      },
+      onClick: handleLogout,
     },
   ];
 
@@ -73,6 +94,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
           
           <div className={styles.headerActions}>
+            {/* 알림 배지 */}
+            <NotificationBadge
+              count={unreadCount}
+              severity={notifications.find(n => n.status === 'active' && n.severity === 'critical') ? 'critical' : 'medium'}
+              onClick={() => setNotificationPanelOpen(true)}
+              size={screens.xs ? 'small' : 'default'}
+            />
+            
             {/* 언어 전환 컴포넌트 */}
             <LanguageToggle size={screens.xs ? 'small' : 'middle'} />
             
@@ -83,7 +112,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 icon={<UserOutlined />}
                 size={screens.xs ? 'small' : 'middle'}
               >
-                {!screens.xs && '사용자'} {/* TODO: 실제 사용자 이름으로 교체 */}
+                {!screens.xs && (user?.name || user?.email || '사용자')}
               </Button>
             </Dropdown>
           </div>
@@ -93,6 +122,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           {children}
         </Content>
       </Layout>
+
+      {/* 알림 패널 */}
+      <NotificationPanel
+        open={notificationPanelOpen}
+        onClose={() => setNotificationPanelOpen(false)}
+        notifications={notifications}
+        onAcknowledge={acknowledgeNotification}
+        onResolve={resolveNotification}
+        onDelete={clearNotification}
+        onClearAll={clearAllNotifications}
+      />
     </Layout>
   );
 };

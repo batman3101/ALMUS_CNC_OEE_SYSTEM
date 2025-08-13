@@ -5,6 +5,9 @@ import { ConfigProvider } from 'antd';
 import koKR from 'antd/locale/ko_KR';
 import viVN from 'antd/locale/vi_VN';
 import { LanguageProvider, useLanguage } from '@/contexts/LanguageContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
+import { ToastNotificationProvider } from '@/components/notifications';
 import '@/lib/i18n'; // i18n 초기화
 
 // Ant Design 테마 설정
@@ -94,9 +97,15 @@ const AntdConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 export const Providers: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <LanguageProvider>
-      <AntdConfigProvider>
-        {children}
-      </AntdConfigProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <ToastNotificationProvider>
+            <AntdConfigProvider>
+              {children}
+            </AntdConfigProvider>
+          </ToastNotificationProvider>
+        </NotificationProvider>
+      </AuthProvider>
     </LanguageProvider>
   );
 };

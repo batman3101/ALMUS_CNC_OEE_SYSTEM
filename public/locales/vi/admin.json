@@ -1,0 +1,61 @@
+{
+  "machineManagement": {
+    "title": "Quản lý thiết bị",
+    "addMachine": "Thêm thiết bị",
+    "editMachine": "Chỉnh sửa thiết bị",
+    "deleteMachine": "Xóa thiết bị",
+    "machineList": "Danh sách thiết bị",
+    "machineDetails": "Chi tiết thiết bị",
+    "confirmDelete": "Bạn có chắc chắn muốn xóa thiết bị này?",
+    "deleteSuccess": "Thiết bị đã được xóa thành công",
+    "deleteError": "Có lỗi xảy ra khi xóa thiết bị",
+    "saveSuccess": "Thông tin thiết bị đã được lưu thành công",
+    "saveError": "Có lỗi xảy ra khi lưu thông tin thiết bị",
+    "validation": {
+      "nameRequired": "Tên thiết bị là bắt buộc",
+      "locationRequired": "Vị trí là bắt buộc",
+      "tactTimeRequired": "Tact Time là bắt buộc",
+      "tactTimePositive": "Tact Time phải là số dương"
+    }
+  },
+  "userManagement": {
+    "title": "Quản lý người dùng",
+    "addUser": "Thêm người dùng",
+    "editUser": "Chỉnh sửa người dùng",
+    "deleteUser": "Xóa người dùng",
+    "userList": "Danh sách người dùng",
+    "userDetails": "Chi tiết người dùng",
+    "assignMachines": "Phân công thiết bị",
+    "availableMachines": "Thiết bị có sẵn",
+    "assignedMachines": "Thiết bị được phân công",
+    "confirmDelete": "Bạn có chắc chắn muốn xóa người dùng này?",
+    "deleteSuccess": "Người dùng đã được xóa thành công",
+    "deleteError": "Có lỗi xảy ra khi xóa người dùng",
+    "saveSuccess": "Thông tin người dùng đã được lưu thành công",
+    "saveError": "Có lỗi xảy ra khi lưu thông tin người dùng",
+    "validation": {
+      "nameRequired": "Tên là bắt buộc",
+      "emailRequired": "Email là bắt buộc",
+      "emailInvalid": "Vui lòng nhập địa chỉ email hợp lệ",
+      "roleRequired": "Vui lòng chọn vai trò",
+      "passwordRequired": "Mật khẩu là bắt buộc",
+      "passwordMinLength": "Mật khẩu phải có ít nhất 6 ký tự"
+    }
+  },
+  "common": {
+    "active": "Hoạt động",
+    "inactive": "Không hoạt động",
+    "enable": "Kích hoạt",
+    "disable": "Vô hiệu hóa",
+    "status": "Trạng thái",
+    "actions": "Hành động",
+    "noData": "Không có dữ liệu",
+    "loading": "Đang tải...",
+    "search": "Tìm kiếm",
+    "filter": "Lọc",
+    "all": "Tất cả",
+    "createdAt": "Ngày tạo",
+    "updatedAt": "Ngày cập nhật",
+    "assignedMachinesCount": " thiết bị"
+  }
+}

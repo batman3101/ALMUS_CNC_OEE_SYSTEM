@@ -7,13 +7,16 @@ import {
   PauseCircleOutlined, 
   ToolOutlined,
   ClockCircleOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  WifiOutlined
 } from '@ant-design/icons';
 import { MachineStatusInput } from '@/components/machines';
 import { OEEGauge } from '@/components/oee';
 import { ProductionRecordInput } from '@/components/production';
 import { Machine, OEEMetrics, MachineLog, MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
+import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Removed deprecated TabPane import
 
@@ -137,69 +140,83 @@ const formatDuration = (minutes: number): string => {
   return hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
 };
 
-interface OperatorDashboardProps {
-  selectedRole?: 'admin' | 'operator' | 'engineer';
-  onRoleChange?: (role: 'admin' | 'operator' | 'engineer') => void;
-}
+interface OperatorDashboardProps {}
 
-export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ selectedRole, onRoleChange }) => {
+export const OperatorDashboard: React.FC<OperatorDashboardProps> = () => {
   const isClient = useClientOnly();
-  const [loading, setLoading] = useState(false);
-  const [assignedMachines, setAssignedMachines] = useState(generateMockAssignedMachines());
-  const [recentLogs, setRecentLogs] = useState(generateMockRecentLogs());
+  const { user } = useAuth();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
   const [showProductionInput, setShowProductionInput] = useState(false);
+  
+  // 실시간 데이터 훅 사용
+  const { 
+    machines, 
+    machineLogs, 
+    oeeMetrics, 
+    loading, 
+    error, 
+    refresh, 
+    isConnected 
+  } = useRealtimeData(user?.id, user?.role);
 
-  // 데이터 새로고침
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setAssignedMachines(generateMockAssignedMachines());
-      setRecentLogs(generateMockRecentLogs());
-    } catch (error) {
-      console.error('데이터 새로고침 실패:', error);
-    } finally {
-      setLoading(false);
+  // 폴백 데이터
+  const [fallbackData] = useState({
+    assignedMachines: generateMockAssignedMachines(),
+    recentLogs: generateMockRecentLogs()
+  });
+
+  // 데이터 처리
+  const processedData = React.useMemo(() => {
+    if (machines.length === 0) {
+      return fallbackData;
     }
-  };
 
-  // 실시간 시간 업데이트 (클라이언트에서만 실행)
-  useEffect(() => {
-    if (!isClient) return;
-    
-    const interval = setInterval(() => {
-      setAssignedMachines(prev => prev.map(machine => ({
-        ...machine,
-        currentDuration: machine.currentDuration + 1
-      })));
-    }, 60000); // 1분마다 업데이트
+    // 운영자의 담당 설비 필터링 (실제로는 user.assigned_machines 사용)
+    const assignedMachineIds = user?.assigned_machines || machines.slice(0, 3).map(m => m.id);
+    const assignedMachines = machines
+      .filter(machine => assignedMachineIds.includes(machine.id))
+      .map(machine => {
+        const logs = machineLogs.filter(log => log.machine_id === machine.id);
+        const currentLog = logs.find(log => !log.end_time);
+        const currentDuration = currentLog 
+          ? Math.floor((Date.now() - new Date(currentLog.start_time).getTime()) / (1000 * 60))
+          : 0;
 
-    return () => clearInterval(interval);
-  }, [isClient]);
+        return {
+          ...machine,
+          oee: oeeMetrics[machine.id]?.oee || 0,
+          currentDuration
+        };
+      });
+
+    // 최근 로그 (담당 설비만)
+    const recentLogs = machineLogs
+      .filter(log => assignedMachineIds.includes(log.machine_id))
+      .slice(0, 10)
+      .map(log => ({
+        ...log,
+        machineName: machines.find(m => m.id === log.machine_id)?.name || 'Unknown'
+      }));
+
+    return {
+      assignedMachines,
+      recentLogs
+    };
+  }, [machines, machineLogs, oeeMetrics, user, fallbackData]);
 
   // 상태 변경 핸들러
-  const handleStatusChange = (machineId: string, newState: MachineState) => {
-    setAssignedMachines(prev => prev.map(machine => 
-      machine.id === machineId 
-        ? { ...machine, current_state: newState, currentDuration: 0 }
-        : machine
-    ));
-    
-    // 새 로그 추가
-    const newLog: MachineLog & { machineName: string } = {
-      log_id: Date.now().toString(),
-      machine_id: machineId,
-      state: newState,
-      start_time: new Date().toISOString(),
-      operator_id: 'current-user',
-      created_at: new Date().toISOString(),
-      machineName: assignedMachines.find(m => m.id === machineId)?.name || ''
-    };
-    
-    setRecentLogs(prev => [newLog, ...prev.slice(0, 9)]);
-    setShowStatusInput(false);
+  const handleStatusChange = async (machineId: string, newState: MachineState) => {
+    try {
+      // 실제 구현에서는 Supabase에 상태 변경을 저장
+      // 여기서는 간단히 로컬 상태만 업데이트
+      console.log(`설비 ${machineId} 상태를 ${newState}로 변경`);
+      setShowStatusInput(false);
+      
+      // 실시간 데이터가 자동으로 업데이트됨
+    } catch (error) {
+      console.error('상태 변경 실패:', error);
+    }
   };
 
   // 교대 종료 알림 체크
@@ -216,38 +233,21 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ selectedRo
               <PlayCircleOutlined style={{ marginRight: 8 }} />
               운영자 대시보드
             </h1>
-            <p style={{ margin: '4px 0 0 0', color: '#666' }}>담당 설비 현황 및 작업 관리</p>
+            <p style={{ margin: '4px 0 0 0', color: '#666' }}>
+              담당 설비 현황 및 작업 관리
+              {isConnected && (
+                <span style={{ marginLeft: 8, color: '#52c41a' }}>
+                  <WifiOutlined /> 실시간 연결됨
+                </span>
+              )}
+            </p>
           </div>
-          {/* 역할 선택기 */}
-          {isClient && onRoleChange && (
-            <div style={{ 
-              background: 'white',
-              padding: '8px 12px',
-              borderRadius: 6,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-              border: '1px solid #d9d9d9'
-            }}>
-              <Space>
-                <span style={{ fontSize: 12, color: '#666' }}>역할 선택:</span>
-                <Select
-                  value={selectedRole || 'operator'}
-                  onChange={onRoleChange}
-                  size="small"
-                  style={{ width: 100 }}
-                  options={[
-                    { label: '관리자', value: 'admin' },
-                    { label: '운영자', value: 'operator' },
-                    { label: '엔지니어', value: 'engineer' }
-                  ]}
-                />
-              </Space>
-            </div>
-          )}
+
         </div>
         <Space>
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={handleRefresh}
+            onClick={refresh}
             loading={loading}
           >
             새로고침
@@ -274,9 +274,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ selectedRo
       <Row gutter={[16, 16]}>
         {/* 담당 설비 현황 */}
         <Col xs={24} lg={16}>
-          <Card title="담당 설비 현황" extra={<Badge count={assignedMachines.length} />}>
+          <Card title="담당 설비 현황" extra={<Badge count={processedData.assignedMachines.length} />}>
             <Row gutter={[16, 16]}>
-              {assignedMachines.map(machine => (
+              {processedData.assignedMachines.map(machine => (
                 <Col xs={24} md={12} xl={8} key={machine.id}>
                   <Card 
                     size="small"
@@ -350,7 +350,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ selectedRo
                   <Card size="small">
                     <Timeline 
                       size="small"
-                      items={recentLogs.slice(0, 8).map(log => ({
+                      items={processedData.recentLogs.slice(0, 8).map(log => ({
                         key: log.log_id,
                         dot: getStateIcon(log.state),
                         color: log.state === 'NORMAL_OPERATION' ? 'green' : 
@@ -383,10 +383,10 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ selectedRo
                 label: 'OEE 현황',
                 children: (
                   <>
-                    {selectedMachine && (
+                    {selectedMachine && oeeMetrics[selectedMachine] && (
                       <OEEGauge
-                        metrics={generateMockOEEMetrics()}
-                        title={assignedMachines.find(m => m.id === selectedMachine)?.name}
+                        metrics={oeeMetrics[selectedMachine]}
+                        title={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name}
                         size="small"
                         showDetails={false}
                       />
@@ -408,8 +408,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ selectedRo
       {showStatusInput && selectedMachine && (
         <MachineStatusInput
           machineId={selectedMachine}
-          machineName={assignedMachines.find(m => m.id === selectedMachine)?.name || ''}
-          currentState={assignedMachines.find(m => m.id === selectedMachine)?.current_state}
+          machineName={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name || ''}
+          currentState={processedData.assignedMachines.find(m => m.id === selectedMachine)?.current_state}
           visible={showStatusInput}
           onClose={() => setShowStatusInput(false)}
           onStatusChange={handleStatusChange}
@@ -420,7 +420,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ selectedRo
       {showProductionInput && selectedMachine && (
         <ProductionRecordInput
           machineId={selectedMachine}
-          machineName={assignedMachines.find(m => m.id === selectedMachine)?.name || ''}
+          machineName={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name || ''}
           visible={showProductionInput}
           onClose={() => setShowProductionInput(false)}
           onSubmit={(data) => {

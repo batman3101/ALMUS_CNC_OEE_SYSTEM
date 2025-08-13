@@ -108,7 +108,7 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
         </Button>,
       ]}
       width={500}
-      destroyOnClose
+      destroyOnHidden
     >
       <div style={{ marginBottom: 16 }}>
         <Title level={5}>설비 정보</Title>

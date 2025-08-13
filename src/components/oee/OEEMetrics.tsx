@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tabs, DatePicker, Select, Space, Button, Spin } from 'antd';
-import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DownloadOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { OEEGauge } from './OEEGauge';
 import { OEETrendChart } from './OEETrendChart';
 import { DowntimeChart } from './DowntimeChart';
 import { ProductionChart } from './ProductionChart';
+import { ReportGenerator } from '@/components/reports';
 import { OEECalculator, RealTimeOEECalculator } from '@/utils/oeeCalculator';
 import { OEEMetrics as OEEMetricsType, MachineLog, ProductionRecord } from '@/types';
 
@@ -156,6 +157,36 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  // 보고서 생성용 데이터 준비
+  const getReportData = () => {
+    const mockMachine = {
+      id: machineId,
+      name: machineName,
+      location: 'Production Floor',
+      model_type: 'CNC Machine',
+      default_tact_time: 60,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const mockProductionRecords = productionData.map((prod, index) => ({
+      record_id: `record_${index}`,
+      machine_id: machineId,
+      date: prod.date,
+      shift: prod.shift,
+      output_qty: prod.output_qty,
+      defect_qty: prod.defect_qty,
+      created_at: new Date().toISOString()
+    }));
+
+    return {
+      machines: [mockMachine],
+      oeeData: [oeeMetrics],
+      productionData: mockProductionRecords
+    };
+  };
+
   return (
     <div>
       {/* 컨트롤 패널 */}
@@ -197,13 +228,19 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
                   icon={<DownloadOutlined />}
                   onClick={handleExport}
                 >
-                  내보내기
+                  JSON 내보내기
                 </Button>
               </Space>
             </Col>
           </Row>
         </Card>
       )}
+
+      {/* 보고서 생성 */}
+      <ReportGenerator
+        {...getReportData()}
+        className="mb-4"
+      />
 
       {/* 메인 콘텐츠 */}
       <Spin spinning={loading}>

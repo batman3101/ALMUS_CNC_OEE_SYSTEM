@@ -7,11 +7,16 @@ import {
   DesktopOutlined, 
   WarningOutlined,
   RiseOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  WifiOutlined
 } from '@ant-design/icons';
 import { OEEGauge, OEETrendChart } from '@/components/oee';
+import { DashboardAlerts } from '@/components/notifications';
 import { OEEMetrics, Machine } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
+import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 
 
@@ -66,65 +71,110 @@ const generateMockTrendData = () => {
   return data;
 };
 
-interface AdminDashboardProps {
-  selectedRole?: 'admin' | 'operator' | 'engineer';
-  onRoleChange?: (role: 'admin' | 'operator' | 'engineer') => void;
-}
+interface AdminDashboardProps {}
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, onRoleChange }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = () => {
   const isClient = useClientOnly();
-  const [loading, setLoading] = useState(false);
-  const [overallMetrics, setOverallMetrics] = useState<OEEMetrics>(generateMockOverallMetrics());
-  const [machineList, setMachineList] = useState(generateMockMachineList());
-  const [alerts, setAlerts] = useState(generateMockAlerts());
-  const [trendData, setTrendData] = useState(generateMockTrendData());
+  const { user } = useAuth();
+  const { notifications, acknowledgeNotification } = useNotifications();
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
+  
+  // 실시간 데이터 훅 사용
+  const { 
+    machines, 
+    machineLogs, 
+    productionRecords, 
+    oeeMetrics, 
+    loading, 
+    error, 
+    refresh, 
+    isConnected 
+  } = useRealtimeData(user?.id, user?.role);
 
-  // 데이터 새로고침 (클라이언트에서만 실행)
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      // 새로고침 시에만 약간의 변화를 주되, 하이드레이션 오류를 방지하기 위해 고정값 사용
-      const refreshedMetrics = {
-        ...generateMockOverallMetrics(),
-        oee: 0.69 + (Date.now() % 100) / 1000 // 시간 기반으로 약간의 변화
-      };
-      setOverallMetrics(refreshedMetrics);
-      setMachineList(generateMockMachineList());
-      setAlerts(generateMockAlerts());
-      setTrendData(generateMockTrendData());
-    } catch (error) {
-      console.error('데이터 새로고침 실패:', error);
-    } finally {
-      setLoading(false);
+  // 폴백 데이터 (실시간 데이터가 없을 때)
+  const [fallbackData, setFallbackData] = useState({
+    overallMetrics: generateMockOverallMetrics(),
+    machineList: generateMockMachineList(),
+    alerts: generateMockAlerts(),
+    trendData: generateMockTrendData()
+  });
+
+  // 데이터 처리 및 계산
+  const processedData = React.useMemo(() => {
+    if (machines.length === 0) {
+      return fallbackData;
     }
-  };
 
-  // 실시간 데이터 업데이트 (클라이언트에서만 실행)
-  useEffect(() => {
-    if (!isClient) return;
+    // 실제 데이터에서 전체 OEE 계산
+    const totalOEE = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.oee, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
+    const totalAvailability = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.availability, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
+    const totalPerformance = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.performance, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
+    const totalQuality = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.quality, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
     
-    const interval = setInterval(() => {
-      // 시간 기반으로 약간의 변화를 주되 일관성 유지
-      const timeBasedSeed = Math.floor(Date.now() / 60000); // 1분마다 변경
-      const refreshedMetrics = {
-        ...generateMockOverallMetrics(),
-        oee: 0.69 + (timeBasedSeed % 10) / 100 // 0.69 ~ 0.78 범위
-      };
-      setOverallMetrics(refreshedMetrics);
-      setMachineList(generateMockMachineList());
-    }, 60000); // 1분마다 업데이트
+    const overallMetrics: OEEMetrics = {
+      availability: totalAvailability,
+      performance: totalPerformance,
+      quality: totalQuality,
+      oee: totalOEE,
+      actual_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.actual_runtime, 0),
+      planned_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.planned_runtime, 0),
+      ideal_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.ideal_runtime, 0),
+      output_qty: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.output_qty, 0),
+      defect_qty: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.defect_qty, 0)
+    };
 
-    return () => clearInterval(interval);
-  }, [isClient]);
+    // 설비 목록에 OEE 정보 추가
+    const machineList = machines.map(machine => ({
+      ...machine,
+      oee: oeeMetrics[machine.id]?.oee || 0,
+      status: getStatusText(machine.current_state)
+    }));
+
+    // 알림 생성 (OEE 기반)
+    const alerts = machineList
+      .filter(machine => machine.oee < 0.6 || !machine.current_state || machine.current_state !== 'NORMAL_OPERATION')
+      .slice(0, 5)
+      .map((machine, index) => ({
+        id: index + 1,
+        machine: machine.name,
+        message: machine.oee < 0.6 ? 'OEE 60% 미만 지속' : 
+                 machine.current_state === 'MAINTENANCE' ? '점검 시간 초과' : 
+                 '설비 상태 확인 필요',
+        severity: machine.oee < 0.5 ? 'error' as const : 'warning' as const,
+        time: '실시간'
+      }));
+
+    // 추이 데이터 (최근 7일)
+    const trendData = generateMockTrendData(); // 실제로는 productionRecords에서 계산
+
+    return {
+      overallMetrics,
+      machineList,
+      alerts,
+      trendData
+    };
+  }, [machines, oeeMetrics, fallbackData]);
+
+  // 상태 텍스트 변환 함수
+  const getStatusText = (state?: string) => {
+    const stateMap: Record<string, string> = {
+      'NORMAL_OPERATION': '정상',
+      'MAINTENANCE': '점검중',
+      'MODEL_CHANGE': '모델교체',
+      'PLANNED_STOP': '계획정지',
+      'PROGRAM_CHANGE': '프로그램교체',
+      'TOOL_CHANGE': '공구교환',
+      'TEMPORARY_STOP': '일시정지'
+    };
+    return stateMap[state || ''] || '알 수 없음';
+  };
 
   // 설비 상태별 통계
   const machineStats = {
-    total: machineList.length,
-    running: machineList.filter(m => m.current_state === 'NORMAL_OPERATION').length,
-    maintenance: machineList.filter(m => m.current_state === 'MAINTENANCE').length,
-    stopped: machineList.filter(m => ['TEMPORARY_STOP', 'PLANNED_STOP'].includes(m.current_state || '')).length,
+    total: processedData.machineList.length,
+    running: processedData.machineList.filter(m => m.current_state === 'NORMAL_OPERATION').length,
+    maintenance: processedData.machineList.filter(m => m.current_state === 'MAINTENANCE').length,
+    stopped: processedData.machineList.filter(m => ['TEMPORARY_STOP', 'PLANNED_STOP'].includes(m.current_state || '')).length,
   };
 
   // 테이블 컬럼 정의
@@ -178,33 +228,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, on
               <DashboardOutlined style={{ marginRight: 8 }} />
               관리자 대시보드
             </h1>
-            <p style={{ margin: '4px 0 0 0', color: '#666' }}>전체 설비 현황 및 운영 지표</p>
+            <p style={{ margin: '4px 0 0 0', color: '#666' }}>
+              전체 설비 현황 및 운영 지표
+              {isConnected && (
+                <span style={{ marginLeft: 8, color: '#52c41a' }}>
+                  <WifiOutlined /> 실시간 연결됨
+                </span>
+              )}
+            </p>
           </div>
-          {/* 역할 선택기 */}
-          {isClient && onRoleChange && (
-            <div style={{ 
-              background: 'white',
-              padding: '8px 12px',
-              borderRadius: 6,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-              border: '1px solid #d9d9d9'
-            }}>
-              <Space>
-                <span style={{ fontSize: 12, color: '#666' }}>역할 선택:</span>
-                <Select
-                  value={selectedRole || 'admin'}
-                  onChange={onRoleChange}
-                  size="small"
-                  style={{ width: 100 }}
-                  options={[
-                    { label: '관리자', value: 'admin' },
-                    { label: '운영자', value: 'operator' },
-                    { label: '엔지니어', value: 'engineer' }
-                  ]}
-                />
-              </Space>
-            </div>
-          )}
         </div>
         <Space>
           <Select
@@ -219,7 +251,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, on
           />
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={handleRefresh}
+            onClick={refresh}
             loading={loading}
           >
             새로고침
@@ -266,11 +298,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, on
           <Card>
             <Statistic
               title="전체 OEE"
-              value={(overallMetrics.oee * 100).toFixed(1)}
+              value={(processedData.overallMetrics.oee * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ 
-                color: overallMetrics.oee >= 0.85 ? '#52c41a' : 
-                       overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f' 
+                color: processedData.overallMetrics.oee >= 0.85 ? '#52c41a' : 
+                       processedData.overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f' 
               }}
             />
           </Card>
@@ -282,7 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, on
         {/* 전체 OEE 게이지 */}
         <Col xs={24} lg={8}>
           <OEEGauge
-            metrics={overallMetrics}
+            metrics={processedData.overallMetrics}
             title="전체 OEE 현황"
             size="large"
             showDetails={true}
@@ -292,7 +324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, on
         {/* OEE 추이 차트 */}
         <Col xs={24} lg={16}>
           <OEETrendChart
-            data={trendData}
+            data={processedData.trendData}
             title="전체 OEE 추이 (최근 7일)"
             height={400}
             showControls={false}
@@ -306,7 +338,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, on
           <Card title="설비 현황" extra={<span style={{ fontSize: 12, color: '#666' }}>실시간 업데이트</span>}>
             <Table
               columns={machineColumns}
-              dataSource={machineList}
+              dataSource={processedData.machineList}
               rowKey="id"
               pagination={{ pageSize: 10, showSizeChanger: false }}
               size="small"
@@ -317,20 +349,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ selectedRole, on
 
         {/* 알림 및 경고 */}
         <Col xs={24} lg={8}>
-          <Card title="알림 및 경고" extra={<span style={{ color: '#ff4d4f' }}>{alerts.length}건</span>}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              {alerts.map(alert => (
-                <Alert
-                  key={alert.id}
-                  message={`${alert.machine}: ${alert.message}`}
-                  description={alert.time}
-                  type={alert.severity === 'error' ? 'error' : 'warning'}
-                  size="small"
-                  showIcon
-                />
-              ))}
-            </Space>
-          </Card>
+          <DashboardAlerts
+            notifications={notifications}
+            maxDisplay={5}
+            onAcknowledge={acknowledgeNotification}
+            onViewAll={() => {
+              // 알림 패널 열기 로직은 상위 컴포넌트에서 처리
+              console.log('View all notifications');
+            }}
+          />
         </Col>
       </Row>
     </div>

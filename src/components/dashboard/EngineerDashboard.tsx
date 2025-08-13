@@ -8,11 +8,14 @@ import {
   FilterOutlined,
   ReloadOutlined,
   RiseOutlined,
-  FallOutlined
+  FallOutlined,
+  WifiOutlined
 } from '@ant-design/icons';
 import { OEEGauge, OEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
 import { OEEMetrics } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
+import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
@@ -112,42 +115,116 @@ const generateMockOverallMetrics = (): OEEMetrics => ({
   defect_qty: 2736
 });
 
-interface EngineerDashboardProps {
-  selectedRole?: 'admin' | 'operator' | 'engineer';
-  onRoleChange?: (role: 'admin' | 'operator' | 'engineer') => void;
-}
+interface EngineerDashboardProps {}
 
-export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRole, onRoleChange }) => {
+export const EngineerDashboard: React.FC<EngineerDashboardProps> = () => {
   const isClient = useClientOnly();
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
   const [selectedMachines, setSelectedMachines] = useState<string[]>(['all']);
   const [chartType, setChartType] = useState<'bar' | 'line'>('line');
   
-  // 데이터 상태
-  const [overallMetrics, setOverallMetrics] = useState<OEEMetrics>(generateMockOverallMetrics());
-  const [analysisData, setAnalysisData] = useState(generateMockAnalysisData());
-  const [trendData, setTrendData] = useState(generateMockTrendData());
-  const [downtimeData, setDowntimeData] = useState(generateMockDowntimeData());
-  const [productionData, setProductionData] = useState(generateMockProductionData());
+  // 실시간 데이터 훅 사용
+  const { 
+    machines, 
+    machineLogs, 
+    productionRecords, 
+    oeeMetrics, 
+    loading, 
+    error, 
+    refresh, 
+    isConnected 
+  } = useRealtimeData(user?.id, user?.role);
 
-  // 데이터 새로고침
-  const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setOverallMetrics(generateMockOverallMetrics());
-      setAnalysisData(generateMockAnalysisData());
-      setTrendData(generateMockTrendData());
-      setDowntimeData(generateMockDowntimeData());
-      setProductionData(generateMockProductionData());
-    } catch (error) {
-      console.error('데이터 새로고침 실패:', error);
-    } finally {
-      setLoading(false);
+  // 폴백 데이터
+  const [fallbackData] = useState({
+    overallMetrics: generateMockOverallMetrics(),
+    analysisData: generateMockAnalysisData(),
+    trendData: generateMockTrendData(),
+    downtimeData: generateMockDowntimeData(),
+    productionData: generateMockProductionData()
+  });
+
+  // 데이터 처리 및 분석
+  const processedData = React.useMemo(() => {
+    if (machines.length === 0) {
+      return fallbackData;
     }
-  };
+
+    // 전체 OEE 계산
+    const totalOEE = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.oee, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
+    const totalAvailability = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.availability, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
+    const totalPerformance = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.performance, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
+    const totalQuality = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.quality, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
+    
+    const overallMetrics: OEEMetrics = {
+      availability: totalAvailability,
+      performance: totalPerformance,
+      quality: totalQuality,
+      oee: totalOEE,
+      actual_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.actual_runtime, 0),
+      planned_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.planned_runtime, 0),
+      ideal_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.ideal_runtime, 0),
+      output_qty: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.output_qty, 0),
+      defect_qty: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.defect_qty, 0)
+    };
+
+    // 설비별 분석 데이터
+    const analysisData = machines.map(machine => {
+      const metrics = oeeMetrics[machine.id];
+      const logs = machineLogs.filter(log => log.machine_id === machine.id);
+      const downtimeHours = logs
+        .filter(log => log.state !== 'NORMAL_OPERATION' && log.duration)
+        .reduce((sum, log) => sum + (log.duration || 0), 0) / 60;
+
+      return {
+        key: machine.id,
+        machine: machine.name,
+        location: machine.location,
+        avgOEE: metrics?.oee || 0,
+        availability: metrics?.availability || 0,
+        performance: metrics?.performance || 0,
+        quality: metrics?.quality || 0,
+        downtimeHours: Math.round(downtimeHours),
+        defectRate: metrics ? (metrics.defect_qty / Math.max(metrics.output_qty, 1)) : 0,
+        trend: Math.random() > 0.5 ? 'up' as const : 'down' as const,
+        trendValue: Math.random() * 10
+      };
+    });
+
+    // 다운타임 분석
+    const downtimeAnalysis = machineLogs
+      .filter(log => log.state !== 'NORMAL_OPERATION' && log.duration)
+      .reduce((acc, log) => {
+        const existing = acc.find(item => item.state === log.state);
+        if (existing) {
+          existing.duration += log.duration || 0;
+          existing.count += 1;
+        } else {
+          acc.push({
+            state: log.state,
+            duration: log.duration || 0,
+            count: 1,
+            percentage: 0
+          });
+        }
+        return acc;
+      }, [] as Array<{ state: string; duration: number; count: number; percentage: number }>);
+
+    const totalDowntime = downtimeAnalysis.reduce((sum, item) => sum + item.duration, 0);
+    downtimeAnalysis.forEach(item => {
+      item.percentage = totalDowntime > 0 ? (item.duration / totalDowntime) * 100 : 0;
+    });
+
+    return {
+      overallMetrics,
+      analysisData,
+      trendData: fallbackData.trendData, // 실제로는 productionRecords에서 계산
+      downtimeData: downtimeAnalysis.slice(0, 5),
+      productionData: fallbackData.productionData // 실제로는 productionRecords에서 계산
+    };
+  }, [machines, machineLogs, oeeMetrics, fallbackData]);
 
   // 데이터 내보내기
   const handleExport = () => {
@@ -155,11 +232,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
       timestamp: new Date().toISOString(),
       period: selectedPeriod,
       machines: selectedMachines,
-      overallMetrics,
-      analysisData,
-      trendData,
-      downtimeData,
-      productionData
+      ...processedData
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -269,33 +342,16 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
               <BarChartOutlined style={{ marginRight: 8 }} />
               엔지니어 대시보드
             </h1>
-            <p style={{ margin: '4px 0 0 0', color: '#666' }}>설비 성능 분석 및 개선 지표</p>
+            <p style={{ margin: '4px 0 0 0', color: '#666' }}>
+              설비 성능 분석 및 개선 지표
+              {isConnected && (
+                <span style={{ marginLeft: 8, color: '#52c41a' }}>
+                  <WifiOutlined /> 실시간 연결됨
+                </span>
+              )}
+            </p>
           </div>
-          {/* 역할 선택기 */}
-          {isClient && onRoleChange && (
-            <div style={{ 
-              background: 'white',
-              padding: '8px 12px',
-              borderRadius: 6,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
-              border: '1px solid #d9d9d9'
-            }}>
-              <Space>
-                <span style={{ fontSize: 12, color: '#666' }}>역할 선택:</span>
-                <Select
-                  value={selectedRole || 'engineer'}
-                  onChange={onRoleChange}
-                  size="small"
-                  style={{ width: 100 }}
-                  options={[
-                    { label: '관리자', value: 'admin' },
-                    { label: '운영자', value: 'operator' },
-                    { label: '엔지니어', value: 'engineer' }
-                  ]}
-                />
-              </Space>
-            </div>
-          )}
+
         </div>
         <Space>
           <Select
@@ -313,7 +369,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
           </Button>
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={handleRefresh}
+            onClick={refresh}
             loading={loading}
           >
             새로고침
@@ -333,11 +389,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
           <Card>
             <Statistic
               title="평균 OEE"
-              value={(overallMetrics.oee * 100).toFixed(1)}
+              value={(processedData.overallMetrics.oee * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ 
-                color: overallMetrics.oee >= 0.85 ? '#52c41a' : 
-                       overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f' 
+                color: processedData.overallMetrics.oee >= 0.85 ? '#52c41a' : 
+                       processedData.overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f' 
               }}
             />
           </Card>
@@ -346,7 +402,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
           <Card>
             <Statistic
               title="평균 가동률"
-              value={(overallMetrics.availability * 100).toFixed(1)}
+              value={(processedData.overallMetrics.availability * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ color: '#1890ff' }}
             />
@@ -356,7 +412,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
           <Card>
             <Statistic
               title="평균 성능"
-              value={(overallMetrics.performance * 100).toFixed(1)}
+              value={(processedData.overallMetrics.performance * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ color: '#52c41a' }}
             />
@@ -366,7 +422,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
           <Card>
             <Statistic
               title="평균 품질"
-              value={(overallMetrics.quality * 100).toFixed(1)}
+              value={(processedData.overallMetrics.quality * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ color: '#faad14' }}
             />
@@ -386,7 +442,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={8}>
                   <OEEGauge
-                    metrics={overallMetrics}
+                    metrics={processedData.overallMetrics}
                     title="전체 OEE 현황"
                     size="large"
                     showDetails={true}
@@ -394,7 +450,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
                 </Col>
                 <Col xs={24} lg={16}>
                   <OEETrendChart
-                    data={trendData}
+                    data={processedData.trendData}
                     title="OEE 추이 분석"
                     height={400}
                     showControls={true}
@@ -428,7 +484,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
               }>
                 <Table
                   columns={analysisColumns}
-                  dataSource={analysisData}
+                  dataSource={processedData.analysisData}
                   pagination={{ pageSize: 10 }}
                   scroll={{ x: 1000 }}
                   size="small"
@@ -442,7 +498,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
             label: '다운타임 분석',
             children: (
               <DowntimeChart
-                data={downtimeData}
+                data={processedData.downtimeData}
                 title="다운타임 원인 분석"
                 height={500}
                 showTable={true}
@@ -456,7 +512,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ selectedRo
               <Row gutter={[16, 16]}>
                 <Col xs={24}>
                   <ProductionChart
-                    data={productionData}
+                    data={processedData.productionData}
                     title="생산성 추이 분석"
                     height={400}
                     chartType={chartType}

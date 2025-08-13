@@ -1,0 +1,37 @@
+{
+  "recordInput": {
+    "title": "생산 실적 입력",
+    "machineInfo": "설비 정보",
+    "machineName": "설비명",
+    "location": "위치",
+    "date": "날짜",
+    "shift": "교대",
+    "shiftA": "A조",
+    "shiftB": "B조",
+    "totalOutput": "총 생산 수량",
+    "defectQty": "불량 수량",
+    "outputPlaceholder": "생산된 총 수량을 입력하세요",
+    "defectPlaceholder": "불량품 수량을 입력하세요",
+    "estimatedOutput": "Tact Time 기반 추정 생산량",
+    "useEstimated": "사용하기",
+    "pieces": "개",
+    "cancel": "취소",
+    "submit": "입력 완료",
+    "success": "생산 실적이 성공적으로 입력되었습니다",
+    "error": "생산 실적 입력 중 오류가 발생했습니다",
+    "validateError": "입력 데이터를 확인해주세요",
+    "validation": {
+      "outputRequired": "생산 수량을 입력해주세요",
+      "outputPositive": "생산 수량은 0 이상이어야 합니다",
+      "defectRequired": "불량 수량을 입력해주세요",
+      "defectPositive": "불량 수량은 0 이상이어야 합니다",
+      "defectExceedsOutput": "불량 수량은 생산 수량보다 클 수 없습니다"
+    },
+    "notes": {
+      "title": "참고사항",
+      "outputNote": "생산 수량은 해당 교대에서 실제로 생산된 총 수량을 입력하세요",
+      "defectNote": "불량 수량은 생산된 제품 중 불량으로 판정된 수량을 입력하세요",
+      "limitNote": "불량 수량은 생산 수량보다 클 수 없습니다"
+    }
+  }
+}

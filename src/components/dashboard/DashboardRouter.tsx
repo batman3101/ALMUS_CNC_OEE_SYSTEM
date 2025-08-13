@@ -4,20 +4,16 @@ import React from 'react';
 import { AdminDashboard } from './AdminDashboard';
 import { OperatorDashboard } from './OperatorDashboard';
 import { EngineerDashboard } from './EngineerDashboard';
+import { RoleSwitcher } from './RoleSwitcher';
 import { User } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 
 interface DashboardRouterProps {
-  user?: User | null;
-  selectedRole?: 'admin' | 'operator' | 'engineer';
-  onRoleChange?: (role: 'admin' | 'operator' | 'engineer') => void;
+  user: User | null;
 }
 
-export const DashboardRouter: React.FC<DashboardRouterProps> = ({ user, selectedRole, onRoleChange }) => {
+export const DashboardRouter: React.FC<DashboardRouterProps> = ({ user }) => {
   const isClient = useClientOnly();
-  
-  // 클라이언트에서만 사용자 역할 확인
-  const userRole = isClient ? (selectedRole || user?.role || 'admin') : 'admin';
 
   // 서버 사이드에서는 기본 로딩 상태 표시
   if (!isClient) {
@@ -35,14 +31,40 @@ export const DashboardRouter: React.FC<DashboardRouterProps> = ({ user, selected
     );
   }
 
-  switch (userRole) {
-    case 'admin':
-      return <AdminDashboard selectedRole={selectedRole} onRoleChange={onRoleChange} />;
-    case 'operator':
-      return <OperatorDashboard selectedRole={selectedRole} onRoleChange={onRoleChange} />;
-    case 'engineer':
-      return <EngineerDashboard selectedRole={selectedRole} onRoleChange={onRoleChange} />;
-    default:
-      return <AdminDashboard selectedRole={selectedRole} onRoleChange={onRoleChange} />;
+  // 사용자가 없는 경우 (인증되지 않음)
+  if (!user) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '400px',
+        fontSize: 16,
+        color: '#666'
+      }}>
+        사용자 정보를 불러오는 중입니다...
+      </div>
+    );
   }
+
+  // 사용자 역할에 따른 대시보드 렌더링
+  const renderDashboard = () => {
+    switch (user.role) {
+      case 'admin':
+        return <AdminDashboard />;
+      case 'operator':
+        return <OperatorDashboard />;
+      case 'engineer':
+        return <EngineerDashboard />;
+      default:
+        return <AdminDashboard />;
+    }
+  };
+
+  return (
+    <>
+      {renderDashboard()}
+      <RoleSwitcher />
+    </>
+  );
 };

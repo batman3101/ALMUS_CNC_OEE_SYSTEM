@@ -1,3 +1,6 @@
+// Database types
+export * from './database';
+
 // 사용자 관련 타입
 export interface User {
   id: string;

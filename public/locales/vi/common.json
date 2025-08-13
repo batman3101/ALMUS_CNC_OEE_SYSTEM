@@ -12,7 +12,8 @@
     "add": "Thêm",
     "search": "Tìm kiếm",
     "filter": "Lọc",
-    "refresh": "Làm mới"
+    "refresh": "Làm mới",
+    "goBack": "Quay lại"
   },
   "nav": {
     "dashboard": "Bảng điều khiển",
@@ -28,6 +29,8 @@
     "logout": "Đăng xuất",
     "email": "Email",
     "password": "Mật khẩu",
+    "name": "Tên",
+    "role": "Vai trò",
     "loginButton": "Đăng nhập",
     "loginFailed": "Đăng nhập thất bại",
     "logoutSuccess": "Đã đăng xuất"
@@ -36,5 +39,53 @@
     "admin": "Quản trị viên",
     "operator": "Người vận hành",
     "engineer": "Kỹ sư"
+  },
+  "notifications": {
+    "title": "Thông báo",
+    "dashboardTitle": "Thông báo và Cảnh báo",
+    "activeCount": "mục",
+    "empty": "Không có thông báo",
+    "noActiveAlerts": "Hiện tại không có cảnh báo nào",
+    "viewAll": "Xem tất cả",
+    "currentValue": "Giá trị hiện tại",
+    "threshold": "Ngưỡng",
+    "acknowledged": "Đã xác nhận",
+    "acknowledgedMessage": "Thông báo đã được xác nhận",
+    "acknowledgeError": "Không thể xác nhận thông báo",
+    "resolved": "Đã giải quyết",
+    "resolvedMessage": "Thông báo đã được giải quyết",
+    "resolveError": "Không thể giải quyết thông báo",
+    "deleted": "Đã xóa",
+    "deletedMessage": "Thông báo đã được xóa",
+    "deleteError": "Không thể xóa thông báo",
+    "allCleared": "Đã xóa tất cả",
+    "allClearedMessage": "Tất cả thông báo đã được xóa",
+    "clearAllError": "Không thể xóa tất cả thông báo",
+    "filter": {
+      "label": "Lọc",
+      "all": "Tất cả",
+      "active": "Hoạt động",
+      "acknowledged": "Đã xác nhận",
+      "resolved": "Đã giải quyết"
+    },
+    "severity": {
+      "label": "Mức độ",
+      "all": "Tất cả",
+      "critical": "Khẩn cấp",
+      "high": "Cao",
+      "medium": "Trung bình",
+      "low": "Thấp"
+    },
+    "status": {
+      "active": "Hoạt động",
+      "acknowledged": "Đã xác nhận",
+      "resolved": "Đã giải quyết"
+    },
+    "actions": {
+      "acknowledge": "Xác nhận",
+      "resolve": "Giải quyết",
+      "delete": "Xóa",
+      "clearAll": "Xóa tất cả"
+    }
   }
 }
