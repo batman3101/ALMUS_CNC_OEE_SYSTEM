@@ -6,12 +6,13 @@
 
 .header {
   padding: 0 16px;
-  background: #fff;
+  background: var(--ant-color-bg-container, #fff);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #f0f0f0;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  border-bottom: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  box-shadow: var(--ant-box-shadow, 0 1px 4px rgba(0, 21, 41, 0.08));
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
 }
 
 .headerLeft {
@@ -32,7 +33,7 @@
 .content {
   margin: 16px;
   padding: 24px;
-  background: #fff;
+  background: var(--ant-color-bg-container, #fff);
   border-radius: 8px;
   min-height: calc(100vh - 112px);
   overflow: auto;

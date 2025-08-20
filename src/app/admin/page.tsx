@@ -35,17 +35,15 @@ const AdminPage: React.FC = () => {
 
   return (
     <RoleGuard allowedRoles={['admin']}>
-      <div style={{ padding: '24px' }}>
-        <Card>
-          <h1 style={{ marginBottom: '24px' }}>
-            사용자 및 설비 관리
-          </h1>
-          <Tabs
-            defaultActiveKey="machines"
-            items={tabItems}
-            size="large"
-          />
-        </Card>
+      <div>
+        <h1 style={{ marginBottom: '24px' }}>
+          사용자 및 설비 관리
+        </h1>
+        <Tabs
+          defaultActiveKey="machines"
+          items={tabItems}
+          size="large"
+        />
       </div>
     </RoleGuard>
   );

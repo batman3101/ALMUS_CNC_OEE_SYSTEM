@@ -27,6 +27,7 @@ export interface Machine {
   name: string;
   location: string;
   model_type: string;
+  processing_step: string;
   default_tact_time: number;
   is_active: boolean;
   current_state?: MachineState;
@@ -83,6 +84,7 @@ export interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
+  error: string | null;
 }
 
 // 언어 컨텍스트 타입

@@ -2,12 +2,12 @@
 
 import React from 'react';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
-import SystemSettingsDemo from '@/components/demo/SystemSettingsDemo';
+import SystemSettingsDebug from '@/components/debug/SystemSettingsDebug';
 
-export default function SettingsDemoPage() {
+export default function SystemSettingsDebugPage() {
   return (
     <ProtectedRoute>
-      <SystemSettingsDemo />
+      <SystemSettingsDebug />
     </ProtectedRoute>
   );
 }

@@ -14,7 +14,8 @@ import {
   Col,
   ColorPicker,
   Alert,
-  Divider
+  Divider,
+  Select
 } from 'antd';
 import { SaveOutlined, EyeOutlined, BgColorsOutlined } from '@ant-design/icons';
 import type { Color } from 'antd/es/color-picker';
@@ -37,6 +38,7 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
   useEffect(() => {
     if (settings) {
       form.setFieldsValue({
+        theme_mode: settings.theme_mode || 'light',
         theme_primary_color: settings.theme_primary_color || '#1890ff',
         theme_success_color: settings.theme_success_color || '#52c41a',
         theme_warning_color: settings.theme_warning_color || '#faad14',
@@ -44,7 +46,8 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
         dashboard_refresh_interval_seconds: settings.dashboard_refresh_interval_seconds || 30,
         chart_animation_enabled: settings.chart_animation_enabled !== false,
         compact_mode: settings.compact_mode || false,
-        show_machine_images: settings.show_machine_images !== false
+        show_machine_images: settings.show_machine_images !== false,
+        sidebar_collapsed: settings.sidebar_collapsed || false
       });
     }
   }, [settings, form]);
@@ -169,7 +172,7 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
               title={
                 <span>
                   <BgColorsOutlined style={{ marginRight: '8px' }} />
-                  {t('settings.display.themeColors')}
+                  {t('settings.display.theme')}
                 </span>
               } 
               size="small"
@@ -179,6 +182,17 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
                 </Button>
               }
             >
+              <Form.Item
+                name="theme_mode"
+                label={t('settings.display.themeMode')}
+              >
+                <Select
+                  options={[
+                    { label: t('settings.display.lightMode'), value: 'light' },
+                    { label: t('settings.display.darkMode'), value: 'dark' }
+                  ]}
+                />
+              </Form.Item>
               <Form.Item
                 name="theme_primary_color"
                 label={t('settings.display.primaryColor')}
@@ -289,6 +303,14 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
                 <Switch />
               </Form.Item>
 
+              <Form.Item
+                name="sidebar_collapsed"
+                label={t('settings.display.sidebarCollapsed')}
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+
               <Alert
                 message={t('settings.display.interfaceHint')}
                 type="info"
@@ -353,6 +375,7 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
             <Text strong>{t('settings.display.currentSettings')}: </Text>
             <br />
             <Text>
+              {t('settings.display.themeMode')}: {formValues.theme_mode === 'dark' ? t('settings.display.darkMode') : t('settings.display.lightMode')} | 
               {t('settings.display.refreshInterval')}: {formValues.dashboard_refresh_interval_seconds || 30}{t('common.seconds')} | 
               {t('settings.display.chartAnimation')}: {formValues.chart_animation_enabled ? t('common.enabled') : t('common.disabled')} | 
               {t('settings.display.compactMode')}: {formValues.compact_mode ? t('common.enabled') : t('common.disabled')} | 

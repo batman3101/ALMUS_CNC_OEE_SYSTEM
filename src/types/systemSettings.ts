@@ -9,13 +9,16 @@ export interface SystemSetting {
   category: SettingCategory;
   setting_key: string;
   setting_value: any;
-  value_type: SettingValueType;
+  default_value: any;
   description?: string;
-  is_system: boolean;
+  data_type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+  validation_rules?: any;
   is_active: boolean;
+  is_system: boolean;
   created_at: string;
   updated_at: string;
-  updated_by?: string;
+  created_by?: string | null;
+  updated_by?: string | null;
 }
 
 export interface SystemSettingAudit {
@@ -80,6 +83,7 @@ export interface NotificationSettings {
 }
 
 export interface DisplaySettings {
+  theme_mode: 'light' | 'dark';
   theme_primary_color: string;
   theme_success_color: string;
   theme_warning_color: string;
@@ -88,6 +92,7 @@ export interface DisplaySettings {
   chart_animation_enabled: boolean;
   compact_mode: boolean;
   show_machine_images: boolean;
+  sidebar_collapsed: boolean;
 }
 
 export interface AllSystemSettings {
@@ -113,6 +118,27 @@ export interface SettingDefinition {
   value_type: SettingValueType;
   default_value: any;
   description: string;
+  validation?: SettingValidationRule;
+  is_system: boolean;
+}
+
+// API 응답 타입들
+export interface SettingsResponse {
+  success: boolean;
+  data?: SystemSetting[];
+  error?: string;
+}
+
+export interface SettingUpdateResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface SettingsAuditResponse {
+  success: boolean;
+  data?: SystemSettingAudit[];
+  error?: string;
   is_system: boolean;
   validation?: SettingValidationRule;
   options?: Array<{ label: string; value: any }>;

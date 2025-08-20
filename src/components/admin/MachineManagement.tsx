@@ -9,32 +9,37 @@ import {
   Switch, 
   Tag, 
   Popconfirm, 
-  message,
   Card,
   Row,
-  Col
+  Col,
+  App,
+  Modal
 } from 'antd';
 import { 
   PlusOutlined, 
   EditOutlined, 
   DeleteOutlined, 
   SearchOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  UploadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
 import type { Machine } from '@/types';
 import MachineForm from './MachineForm';
+import { MachinesBulkUpload } from '@/components/machines';
 
 const { Search } = Input;
 
 const MachineManagement: React.FC = () => {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const { loading, fetchMachines, deleteMachine, updateMachine } = useAdminOperations();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [searchText, setSearchText] = useState('');
   const [formVisible, setFormVisible] = useState(false);
+  const [bulkUploadVisible, setBulkUploadVisible] = useState(false);
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
 
   const loadMachines = async () => {
@@ -99,7 +104,8 @@ const MachineManagement: React.FC = () => {
   const filteredMachines = machines.filter(machine =>
     machine.name.toLowerCase().includes(searchText.toLowerCase()) ||
     machine.location.toLowerCase().includes(searchText.toLowerCase()) ||
-    (machine.model_type && machine.model_type.toLowerCase().includes(searchText.toLowerCase()))
+    (machine.model_type && machine.model_type.toLowerCase().includes(searchText.toLowerCase())) ||
+    (machine.processing_step && machine.processing_step.toLowerCase().includes(searchText.toLowerCase()))
   );
 
   const columns: ColumnsType<Machine> = [
@@ -120,6 +126,13 @@ const MachineManagement: React.FC = () => {
       dataIndex: 'model_type',
       key: 'model_type',
       render: (text) => text || '-',
+    },
+    {
+      title: '가공 공정',
+      dataIndex: 'processing_step',
+      key: 'processing_step',
+      render: (text) => text || '-',
+      sorter: (a, b) => (a.processing_step || '').localeCompare(b.processing_step || ''),
     },
     {
       title: 'Tact Time (초)',
@@ -203,6 +216,12 @@ const MachineManagement: React.FC = () => {
                 새로고침
               </Button>
               <Button
+                icon={<UploadOutlined />}
+                onClick={() => setBulkUploadVisible(true)}
+              >
+                일괄 등록
+              </Button>
+              <Button
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={handleAdd}
@@ -231,6 +250,18 @@ const MachineManagement: React.FC = () => {
           scroll={{ x: 1000 }}
         />
       </Card>
+
+      {/* 일괄 업로드 모달 */}
+      <Modal
+        title="설비 일괄 등록"
+        open={bulkUploadVisible}
+        onCancel={() => setBulkUploadVisible(false)}
+        footer={null}
+        width={1200}
+        style={{ top: 20 }}
+      >
+        <MachinesBulkUpload />
+      </Modal>
 
       <MachineForm
         visible={formVisible}

@@ -9,38 +9,52 @@ interface EnvConfig {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   NEXT_PUBLIC_APP_NAME?: string;
   NEXT_PUBLIC_DEFAULT_LANGUAGE?: string;
+  USE_MOCK_AUTH?: boolean;
 }
 
 export function validateEnv(): EnvConfig {
-  // 개발 환경에서 사용할 기본값들
-  const defaultSupabaseUrl = 'https://demo.supabase.co';
-  const defaultSupabaseKey = 'demo-key';
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // 플레이스홀더 값들을 체크하고 기본값으로 대체
+  // 플레이스홀더 값들을 체크
   const isPlaceholderUrl = !supabaseUrl || 
     supabaseUrl === 'your_supabase_project_url' || 
-    supabaseUrl.includes('your_supabase');
+    supabaseUrl.includes('your_supabase') ||
+    supabaseUrl.length < 10;
   
   const isPlaceholderKey = !supabaseKey || 
     supabaseKey === 'your_supabase_anon_key' || 
-    supabaseKey.includes('your_supabase');
+    supabaseKey.includes('your_supabase') ||
+    supabaseKey.length < 50;
 
-  if (isPlaceholderUrl || isPlaceholderKey) {
+  // 실제 Supabase URL 패턴 검증
+  const isValidSupabaseUrl = supabaseUrl && 
+    (supabaseUrl.includes('.supabase.co') || supabaseUrl.includes('localhost'));
+
+  const useMockAuth = isPlaceholderUrl || isPlaceholderKey || !isValidSupabaseUrl;
+
+  if (useMockAuth) {
     console.warn(
-      '⚠️  Supabase environment variables are not properly configured. Using demo values.\n' +
-      'Please update your .env.local file with actual Supabase credentials for production use.'
+      '🔧 Development Mode: Using mock authentication system\n' +
+      'Reason: Supabase credentials are not properly configured\n' +
+      `- URL valid: ${!isPlaceholderUrl && isValidSupabaseUrl}\n` +
+      `- Key valid: ${!isPlaceholderKey}\n` +
+      'Configure .env.local with actual Supabase credentials for production use.'
+    );
+  } else {
+    console.info(
+      '🔗 Production Mode: Using Supabase authentication\n' +
+      `Connected to: ${supabaseUrl}`
     );
   }
 
   return {
-    NEXT_PUBLIC_SUPABASE_URL: isPlaceholderUrl ? defaultSupabaseUrl : supabaseUrl!,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: isPlaceholderKey ? defaultSupabaseKey : supabaseKey!,
+    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl || 'https://placeholder.supabase.co',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseKey || 'placeholder-key',
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'CNC OEE Monitoring System',
-    NEXT_PUBLIC_DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || 'ko'
+    NEXT_PUBLIC_DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || 'ko',
+    USE_MOCK_AUTH: useMockAuth
   };
 }
 

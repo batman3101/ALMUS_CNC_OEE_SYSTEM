@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tabs, Select, DatePicker, Button, Space, Table, Statistic } from 'antd';
 import { 
   BarChartOutlined, 
@@ -115,9 +115,11 @@ const generateMockOverallMetrics = (): OEEMetrics => ({
   defect_qty: 2736
 });
 
-interface EngineerDashboardProps {}
+interface EngineerDashboardProps {
+  onError?: (error: Error) => void;
+}
 
-export const EngineerDashboard: React.FC<EngineerDashboardProps> = () => {
+export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError }) => {
   const isClient = useClientOnly();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
@@ -146,11 +148,19 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = () => {
     productionData: generateMockProductionData()
   });
 
+  // 에러 핸들링
+  useEffect(() => {
+    if (error && onError) {
+      onError(new Error(`EngineerDashboard: ${error}`));
+    }
+  }, [error, onError]);
+
   // 데이터 처리 및 분석
   const processedData = React.useMemo(() => {
-    if (machines.length === 0) {
-      return fallbackData;
-    }
+    try {
+      if (machines.length === 0) {
+        return fallbackData;
+      }
 
     // 전체 OEE 계산
     const totalOEE = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.oee, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
@@ -217,14 +227,21 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = () => {
       item.percentage = totalDowntime > 0 ? (item.duration / totalDowntime) * 100 : 0;
     });
 
-    return {
-      overallMetrics,
-      analysisData,
-      trendData: fallbackData.trendData, // 실제로는 productionRecords에서 계산
-      downtimeData: downtimeAnalysis.slice(0, 5),
-      productionData: fallbackData.productionData // 실제로는 productionRecords에서 계산
-    };
-  }, [machines, machineLogs, oeeMetrics, fallbackData]);
+      return {
+        overallMetrics,
+        analysisData,
+        trendData: fallbackData.trendData, // 실제로는 productionRecords에서 계산
+        downtimeData: downtimeAnalysis.slice(0, 5),
+        productionData: fallbackData.productionData // 실제로는 productionRecords에서 계산
+      };
+    } catch (error) {
+      console.error('Error processing engineer dashboard data:', error);
+      if (onError) {
+        onError(error as Error);
+      }
+      return fallbackData;
+    }
+  }, [machines, machineLogs, oeeMetrics, fallbackData, onError]);
 
   // 데이터 내보내기
   const handleExport = () => {

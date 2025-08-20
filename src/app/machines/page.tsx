@@ -1,176 +1,84 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Button, Space, Modal } from 'antd';
-import { Machine, MachineState } from '@/types';
-import { MachineList, MachineDetail, MachineStatusInput } from '@/components/machines';
+import React, { useState, useEffect } from 'react';
+import { Typography } from 'antd';
+import { useTranslation } from '@/hooks/useTranslation';
+import MachineList from '@/components/machines/MachineList';
+import { ProtectedRoute } from '@/components/auth';
+import { Machine } from '@/types';
 
-// 임시 설비 데이터
-const mockMachines: Machine[] = [
-  {
-    id: '1',
-    name: 'CNC-001',
-    location: 'A동 1층',
-    model_type: 'MAZAK-VTC-200',
-    default_tact_time: 120,
-    is_active: true,
-    current_state: 'NORMAL_OPERATION',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-15T08:00:00Z'
-  },
-  {
-    id: '2',
-    name: 'CNC-002',
-    location: 'A동 1층',
-    model_type: 'MAZAK-VTC-200',
-    default_tact_time: 110,
-    is_active: true,
-    current_state: 'MAINTENANCE',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-15T10:00:00Z'
-  },
-  {
-    id: '3',
-    name: 'CNC-003',
-    location: 'A동 2층',
-    model_type: 'OKUMA-LB-300',
-    default_tact_time: 90,
-    is_active: true,
-    current_state: 'TEMPORARY_STOP',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-15T14:30:00Z'
-  },
-  {
-    id: '4',
-    name: 'CNC-004',
-    location: 'B동 1층',
-    model_type: 'HAAS-VF-2',
-    default_tact_time: 150,
-    is_active: false,
-    current_state: 'PLANNED_STOP',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-15T16:00:00Z'
-  },
-  {
-    id: '5',
-    name: 'CNC-005',
-    location: 'B동 1층',
-    model_type: 'HAAS-VF-2',
-    default_tact_time: 140,
-    is_active: true,
-    current_state: 'TOOL_CHANGE',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-15T15:45:00Z'
-  },
-  {
-    id: '6',
-    name: 'CNC-006',
-    location: 'B동 2층',
-    model_type: 'DMG-MORI-CTX',
-    default_tact_time: 200,
-    is_active: true,
-    current_state: 'MODEL_CHANGE',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-15T13:20:00Z'
-  }
-];
+const { Title, Paragraph } = Typography;
 
-const MachinesPage: React.FC = () => {
-  const [machines, setMachines] = useState<Machine[]>(mockMachines);
-  const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
-  const [showStatusInput, setShowStatusInput] = useState(false);
-  const [showDetail, setShowDetail] = useState(false);
-  const [language] = useState<'ko' | 'vi'>('ko');
+export default function MachinesPage() {
+  const { t } = useTranslation();
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // 임시 더미 데이터 - 실제로는 API 호출로 대체
+    const mockMachines: Machine[] = [
+      {
+        id: 'machine_1',
+        name: 'CNC-001',
+        location: '1공장 A라인',
+        model_type: 'Mazak VTC-800',
+        default_tact_time: 60,
+        is_active: true,
+        current_state: 'NORMAL_OPERATION',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z'
+      },
+      {
+        id: 'machine_2',
+        name: 'CNC-002',
+        location: '1공장 B라인',
+        model_type: 'DMG Mori NLX2500',
+        default_tact_time: 45,
+        is_active: true,
+        current_state: 'MAINTENANCE',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z'
+      },
+      {
+        id: 'machine_3',
+        name: 'CNC-003',
+        location: '2공장 A라인',
+        model_type: 'Okuma Genos L250',
+        default_tact_time: 75,
+        is_active: false,
+        current_state: 'PLANNED_STOP',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z'
+      }
+    ];
+    
+    setMachines(mockMachines);
+    setLoading(false);
+  }, []);
 
   const handleMachineClick = (machine: Machine) => {
-    setSelectedMachine(machine);
-    setShowDetail(true);
-  };
-
-  const handleStatusChange = (machine: Machine) => {
-    setSelectedMachine(machine);
-    setShowStatusInput(true);
-  };
-
-  const handleStatusUpdate = async (machineId: string, newState: MachineState) => {
-    // 실제로는 API 호출
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setMachines(prev => prev.map(machine => 
-      machine.id === machineId 
-        ? { ...machine, current_state: newState, updated_at: new Date().toISOString() }
-        : machine
-    ));
-    
-    if (selectedMachine?.id === machineId) {
-      setSelectedMachine(prev => prev ? { ...prev, current_state: newState } : null);
-    }
-  };
-
-  const handleRefresh = () => {
-    // 실제로는 API에서 데이터 새로고침
-    console.log('Refreshing machine data...');
+    console.log('Machine clicked:', machine);
+    // 상세 페이지로 이동 또는 모달 표시
   };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <Space>
-          <Button 
-            type="primary" 
-            onClick={() => setShowDetail(!showDetail)}
-          >
-            {showDetail ? '목록 보기' : '상세 보기 (CNC-001)'}
-          </Button>
-        </Space>
-      </div>
+    <ProtectedRoute>
+      <div>
+        <div style={{ marginBottom: '24px' }}>
+          <Title level={2}>
+            {t('machines.title')}
+          </Title>
+          <Paragraph type="secondary">
+            {t('machines.description')}
+          </Paragraph>
+        </div>
 
-      {showDetail && selectedMachine ? (
-        <MachineDetail
-          machine={selectedMachine}
-          onStatusChange={handleStatusChange}
-          onRefresh={handleRefresh}
-          language={language}
-        />
-      ) : (
-        <MachineList
+        <MachineList 
           machines={machines}
+          loading={loading}
           onMachineClick={handleMachineClick}
-          language={language}
         />
-      )}
-
-      {/* 상태 변경 모달 */}
-      {selectedMachine && (
-        <MachineStatusInput
-          machine={selectedMachine}
-          visible={showStatusInput}
-          onClose={() => setShowStatusInput(false)}
-          onStatusChange={handleStatusUpdate}
-          language={language}
-        />
-      )}
-
-      {/* 상세 보기 모달 */}
-      <Modal
-        title="설비 상세 정보"
-        open={showDetail && !showStatusInput}
-        onCancel={() => setShowDetail(false)}
-        footer={null}
-        width="90%"
-        style={{ top: 20 }}
-      >
-        {selectedMachine && (
-          <MachineDetail
-            machine={selectedMachine}
-            onStatusChange={handleStatusChange}
-            onRefresh={handleRefresh}
-            language={language}
-          />
-        )}
-      </Modal>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
-};
-
-export default MachinesPage;
+}

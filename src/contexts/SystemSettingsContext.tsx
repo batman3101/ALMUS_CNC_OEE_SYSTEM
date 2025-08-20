@@ -55,11 +55,20 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
       setError(null);
 
       const structuredSettings = await systemSettingsService.getStructuredSettings();
-      setSettings(structuredSettings);
-      setLastUpdated(new Date());
+      
+      // 설정이 비어있지 않은지 확인
+      if (structuredSettings && Object.keys(structuredSettings).length > 0) {
+        setSettings(structuredSettings);
+        setLastUpdated(new Date());
+      } else {
+        console.warn('No settings loaded, using empty state');
+        setSettings({});
+      }
     } catch (err) {
       console.error('Error loading system settings:', err);
       setError('Failed to load system settings');
+      // 오류 발생 시에도 빈 설정으로 초기화
+      setSettings({});
     } finally {
       setIsLoading(false);
     }

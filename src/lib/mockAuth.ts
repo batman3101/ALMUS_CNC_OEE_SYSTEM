@@ -5,36 +5,38 @@
 
 import { User } from '@/types';
 
-// 개발용 사용자 계정들
-export const MOCK_USERS: Array<User & { password: string }> = [
+// 개발용 사용자 계정들 - 환경 변수에서 로드
+const getMockUsers = (): Array<User & { password: string }> => [
   {
     id: 'dev-admin-001',
-    email: 'zetooo1972@gmail.com',
+    email: process.env.DEV_ADMIN_EMAIL || 'admin@example.com',
     name: '개발자 관리자',
     role: 'admin',
     assigned_machines: [],
     created_at: new Date().toISOString(),
-    password: 'youkillme-1972'
+    password: process.env.DEV_ADMIN_PASSWORD || 'default-admin-password'
   },
   {
     id: 'dev-operator-001',
-    email: 'operator@test.com',
+    email: process.env.DEV_OPERATOR_EMAIL || 'operator@example.com',
     name: '테스트 운영자',
     role: 'operator',
     assigned_machines: ['1', '2', '3'],
     created_at: new Date().toISOString(),
-    password: 'test123'
+    password: process.env.DEV_OPERATOR_PASSWORD || 'default-operator-password'
   },
   {
     id: 'dev-engineer-001',
-    email: 'engineer@test.com',
+    email: process.env.DEV_ENGINEER_EMAIL || 'engineer@example.com',
     name: '테스트 엔지니어',
     role: 'engineer',
     assigned_machines: [],
     created_at: new Date().toISOString(),
-    password: 'test123'
+    password: process.env.DEV_ENGINEER_PASSWORD || 'default-engineer-password'
   }
 ];
+
+export const MOCK_USERS = getMockUsers();
 
 // 로컬 스토리지 키
 const AUTH_STORAGE_KEY = 'cnc_oee_auth_user';
@@ -111,7 +113,9 @@ export class MockAuthService {
     // 개발 환경에서 기본 관리자 계정으로 자동 로그인
     if (process.env.NODE_ENV === 'development') {
       try {
-        return await this.login('zetooo1972@gmail.com', 'youkillme-1972');
+        const adminEmail = process.env.DEV_ADMIN_EMAIL || 'admin@example.com';
+        const adminPassword = process.env.DEV_ADMIN_PASSWORD || 'default-admin-password';
+        return await this.login(adminEmail, adminPassword);
       } catch (error) {
         console.warn('자동 로그인 실패:', error);
         return null;
@@ -142,8 +146,29 @@ export class MockAuthService {
 
 // 개발 환경 확인
 export const isDevelopment = () => {
-  return process.env.NODE_ENV === 'development' || 
-         process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('demo') ||
-         !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-         process.env.NEXT_PUBLIC_SUPABASE_URL.includes('your_supabase');
+  // 환경 변수에서 직접 체크
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // 명시적 개발 모드
+  if (process.env.NODE_ENV === 'development') {
+    return true;
+  }
+
+  // Supabase 설정이 없거나 플레이스홀더인 경우
+  const isInvalidConfig = !supabaseUrl || 
+    !supabaseKey ||
+    supabaseUrl.includes('placeholder') ||
+    supabaseUrl.includes('demo') ||
+    supabaseUrl.includes('your_supabase') ||
+    supabaseKey.includes('placeholder') ||
+    supabaseKey.includes('your_supabase') ||
+    supabaseUrl.length < 10 ||
+    supabaseKey.length < 50;
+
+  // 유효한 Supabase URL 형식이 아닌 경우
+  const isValidSupabaseUrl = supabaseUrl && 
+    (supabaseUrl.includes('.supabase.co') || supabaseUrl.includes('localhost'));
+
+  return isInvalidConfig || !isValidSupabaseUrl;
 };

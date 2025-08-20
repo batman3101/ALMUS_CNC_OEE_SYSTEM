@@ -28,21 +28,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
   const loadInitialData = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
-
-      // Supabase가 제대로 설정되지 않은 경우 모의 데이터 사용
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      if (!supabaseUrl || supabaseUrl.includes('demo') || supabaseUrl.includes('your_supabase')) {
-        console.warn('Using mock data - Supabase not configured');
-        setState({
-          machines: [],
-          machineLogs: [],
-          productionRecords: [],
-          oeeMetrics: {},
-          loading: false,
-          error: null
-        });
-        return;
-      }
+      console.info('실제 Supabase 데이터 로드 시작');
 
       // 설비 데이터 로드
       const { data: machines, error: machinesError } = await supabase
@@ -169,7 +155,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           
           setState(prev => {
             let newRecords = [...prev.productionRecords];
-            let newOeeMetrics = { ...prev.oeeMetrics };
+            const newOeeMetrics = { ...prev.oeeMetrics };
             
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const record = payload.new as ProductionRecord;

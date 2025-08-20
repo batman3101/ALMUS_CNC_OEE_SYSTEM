@@ -140,9 +140,11 @@ const formatDuration = (minutes: number): string => {
   return hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
 };
 
-interface OperatorDashboardProps {}
+interface OperatorDashboardProps {
+  onError?: (error: Error) => void;
+}
 
-export const OperatorDashboard: React.FC<OperatorDashboardProps> = () => {
+export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
   const isClient = useClientOnly();
   const { user } = useAuth();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
@@ -166,11 +168,19 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = () => {
     recentLogs: generateMockRecentLogs()
   });
 
+  // 에러 핸들링
+  useEffect(() => {
+    if (error && onError) {
+      onError(new Error(`OperatorDashboard: ${error}`));
+    }
+  }, [error, onError]);
+
   // 데이터 처리
   const processedData = React.useMemo(() => {
-    if (machines.length === 0) {
-      return fallbackData;
-    }
+    try {
+      if (machines.length === 0) {
+        return fallbackData;
+      }
 
     // 운영자의 담당 설비 필터링 (실제로는 user.assigned_machines 사용)
     const assignedMachineIds = user?.assigned_machines || machines.slice(0, 3).map(m => m.id);
@@ -199,11 +209,18 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = () => {
         machineName: machines.find(m => m.id === log.machine_id)?.name || 'Unknown'
       }));
 
-    return {
-      assignedMachines,
-      recentLogs
-    };
-  }, [machines, machineLogs, oeeMetrics, user, fallbackData]);
+      return {
+        assignedMachines,
+        recentLogs
+      };
+    } catch (error) {
+      console.error('Error processing operator dashboard data:', error);
+      if (onError) {
+        onError(error as Error);
+      }
+      return fallbackData;
+    }
+  }, [machines, machineLogs, oeeMetrics, user, fallbackData, onError]);
 
   // 상태 변경 핸들러
   const handleStatusChange = async (machineId: string, newState: MachineState) => {

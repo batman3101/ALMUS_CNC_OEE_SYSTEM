@@ -9,16 +9,20 @@ const nextConfig: NextConfig = {
     // Allow production builds to complete even if there are TypeScript errors
     ignoreBuildErrors: true,
   },
-  experimental: {
-    // Enable turbopack for faster development
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
       },
     },
+  },
+  // React compiler and optimizations
+  compiler: {
+    // Suppress specific warnings
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error']
+    } : false,
   },
 };
 

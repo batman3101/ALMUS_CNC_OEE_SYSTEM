@@ -47,7 +47,14 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
   }, [settings, form]);
 
   // 설정 저장
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: {
+    shift_a_start: dayjs.Dayjs;
+    shift_a_end: dayjs.Dayjs;
+    shift_b_start: dayjs.Dayjs;
+    shift_b_end: dayjs.Dayjs;
+    break_time_minutes: number;
+    shift_change_buffer_minutes?: number;
+  }) => {
     try {
       setLoading(true);
       
@@ -102,7 +109,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
   const formValues = Form.useWatch([], form) || {};
 
   // 교대 시간 계산
-  const calculateShiftDuration = (start: any, end: any, isNightShift = false) => {
+  const calculateShiftDuration = (start: dayjs.Dayjs | undefined, end: dayjs.Dayjs | undefined, isNightShift = false): number => {
     if (!start || !end) return 0;
     
     let duration;

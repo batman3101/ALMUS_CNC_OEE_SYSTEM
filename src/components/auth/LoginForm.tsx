@@ -48,7 +48,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onError }) => {
       console.error('Login error:', err);
       
       let errorMessage = t('auth.loginFailed');
-      let errorCode = ErrorCodes.AUTHENTICATION_FAILED;
+      const errorCode = ErrorCodes.AUTHENTICATION_FAILED;
 
       if (err.message?.includes('Invalid login credentials') || 
           err.message?.includes('이메일 또는 비밀번호가 올바르지 않습니다')) {

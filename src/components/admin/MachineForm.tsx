@@ -17,6 +17,7 @@ interface MachineFormData {
   name: string;
   location: string;
   model_type: string;
+  processing_step: string;
   default_tact_time: number;
   is_active: boolean;
 }
@@ -39,6 +40,7 @@ const MachineForm: React.FC<MachineFormProps> = ({
         name: machine.name,
         location: machine.location,
         model_type: machine.model_type,
+        processing_step: machine.processing_step,
         default_tact_time: machine.default_tact_time,
         is_active: machine.is_active
       });
@@ -107,8 +109,26 @@ const MachineForm: React.FC<MachineFormProps> = ({
         <Form.Item
           name="model_type"
           label="모델 타입"
+          rules={[
+            { required: true, message: '모델은 필수입니다' }
+          ]}
         >
           <Input placeholder="모델 타입" />
+        </Form.Item>
+
+        <Form.Item
+          name="processing_step"
+          label="가공 공정"
+          rules={[
+            { required: true, message: '가공 공정은 필수입니다' }
+          ]}
+        >
+          <Select placeholder="가공 공정을 선택하세요">
+            <Select.Option value="1 공정">1 공정</Select.Option>
+            <Select.Option value="2 공정">2 공정</Select.Option>
+            <Select.Option value="3 공정">3 공정</Select.Option>
+            <Select.Option value="4 공정">4 공정</Select.Option>
+          </Select>
         </Form.Item>
 
         <Form.Item

@@ -1,17 +1,19 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, Dropdown, Typography, Grid, message } from 'antd';
+import { Layout, Button, Dropdown, Typography, Grid, Spin, App } from 'antd';
 import { 
   MenuFoldOutlined, 
   MenuUnfoldOutlined, 
   LogoutOutlined,
   UserOutlined 
 } from '@ant-design/icons';
+import { usePathname } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { NotificationBadge, NotificationPanel } from '@/components/notifications';
+import { LoginForm } from '@/components/auth/LoginForm';
 import Sidebar from './Sidebar';
 import LanguageToggle from './LanguageToggle';
 import styles from './AppLayout.module.css';
@@ -27,8 +29,10 @@ interface AppLayoutProps {
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
+  const pathname = usePathname();
   const { t } = useLanguage();
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
+  const { message } = App.useApp();
   const { 
     notifications, 
     unreadCount, 
@@ -39,12 +43,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   } = useNotifications();
   const screens = useBreakpoint();
 
-  // 모바일에서는 기본적으로 사이드바를 접음
+  // 로그인 페이지인지 확인
+  const isLoginPage = pathname === '/login';
+
+  // 모바일에서만 사이드바를 접음 (데스크탑에서는 항상 펼침)
   useEffect(() => {
     if (screens.xs || screens.sm) {
       setCollapsed(true);
-    } else if (screens.md || screens.lg || screens.xl) {
-      setCollapsed(false);
+    } else {
+      setCollapsed(false); // 데스크탑에서는 항상 펼침
     }
   }, [screens]);
 
@@ -71,18 +78,40 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     },
   ];
 
+  // 로딩 중일 때
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh',
+        background: 'var(--ant-color-bg-layout, #f5f5f5)'
+      }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  // 로그인 페이지이거나 사용자가 로그인하지 않은 경우
+  if (isLoginPage || !user) {
+    return <>{children}</>;
+  }
+
   return (
     <Layout className={styles.appLayout}>
       <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
       <Layout>
         <Header className={styles.header}>
           <div className={styles.headerLeft}>
-            <Button
-              type="text"
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
-              className={styles.menuToggle}
-            />
+            {(screens.xs || screens.sm) && (
+              <Button
+                type="text"
+                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={() => setCollapsed(!collapsed)}
+                className={styles.menuToggle}
+              />
+            )}
             {!screens.xs && (
               <Text 
                 strong 

@@ -113,6 +113,12 @@ const SystemSettingsDemo: React.FC = () => {
                 <Text>{displaySettings.refreshInterval}초</Text>
               </div>
               <div>
+                <Text strong>테마 모드: </Text>
+                <Tag color={displaySettings.mode === 'dark' ? 'purple' : 'blue'}>
+                  {displaySettings.mode === 'dark' ? '다크 모드' : '라이트 모드'}
+                </Tag>
+              </div>
+              <div>
                 <Text strong>컴팩트 모드: </Text>
                 <Tag color={displaySettings.compactMode ? 'green' : 'default'}>
                   {displaySettings.compactMode ? '활성화' : '비활성화'}

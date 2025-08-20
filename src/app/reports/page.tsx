@@ -50,7 +50,7 @@ export default function ReportsPage() {
   }, []);
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div>
       {/* 브레드크럼 */}
       <Breadcrumb 
         style={{ marginBottom: '16px' }}
@@ -75,7 +75,7 @@ export default function ReportsPage() {
       />
 
       {/* 페이지 제목 */}
-      <Card style={{ marginBottom: '24px' }}>
+      <div style={{ marginBottom: '24px' }}>
         <Title level={2} style={{ margin: 0 }}>
           <FileTextOutlined style={{ marginRight: '8px' }} />
           보고서 생성 및 내보내기
@@ -83,7 +83,7 @@ export default function ReportsPage() {
         <p style={{ margin: '8px 0 0 0', color: '#666' }}>
           OEE 지표, 생산 실적, 다운타임 분석 등의 보고서를 PDF 또는 Excel 형식으로 생성할 수 있습니다.
         </p>
-      </Card>
+      </div>
 
       {/* 보고서 대시보드 */}
       <ReportDashboard machines={machines} />

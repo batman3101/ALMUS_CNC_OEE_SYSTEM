@@ -1,19 +1,37 @@
 'use client';
 
-import React from 'react';
-import AppLayout from '@/components/layout/AppLayout';
-import { DashboardRouter } from '@/components/dashboard/DashboardRouter';
-import { ProtectedRoute } from '@/components/auth';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { Spin } from 'antd';
 
 export default function Home() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, loading } = useAuth();
 
-  return (
-    <ProtectedRoute>
-      <AppLayout>
-        <DashboardRouter user={user} />
-      </AppLayout>
-    </ProtectedRoute>
-  );
+  useEffect(() => {
+    if (!loading) {
+      if (user) {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/login');
+      }
+    }
+  }, [router, user, loading]);
+
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh',
+        background: 'var(--ant-color-bg-layout, #f5f5f5)'
+      }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return null;
 }

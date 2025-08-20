@@ -286,7 +286,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
             dataSource={sortedData.map((item, index) => ({ ...item, key: index }))}
             pagination={false}
             size="small"
-            bordered
+            variant="outlined"
           />
         </div>
       )}

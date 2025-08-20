@@ -15,6 +15,8 @@ export interface Database {
           name: string
           role: 'admin' | 'operator' | 'engineer'
           assigned_machines: string[] | null
+          email: string | null
+          is_active: boolean | null
           created_at: string
           updated_at: string
         }
@@ -23,6 +25,8 @@ export interface Database {
           name: string
           role: 'admin' | 'operator' | 'engineer'
           assigned_machines?: string[] | null
+          email?: string | null
+          is_active?: boolean | null
           created_at?: string
           updated_at?: string
         }
@@ -31,6 +35,8 @@ export interface Database {
           name?: string
           role?: 'admin' | 'operator' | 'engineer'
           assigned_machines?: string[] | null
+          email?: string | null
+          is_active?: boolean | null
           created_at?: string
           updated_at?: string
         }
@@ -43,6 +49,8 @@ export interface Database {
           model_type: string | null
           default_tact_time: number
           is_active: boolean
+          current_state: string | null
+          processing_step: string
           created_at: string
           updated_at: string
         }
@@ -53,6 +61,8 @@ export interface Database {
           model_type?: string | null
           default_tact_time: number
           is_active?: boolean
+          current_state?: string | null
+          processing_step: string
           created_at?: string
           updated_at?: string
         }
@@ -63,6 +73,8 @@ export interface Database {
           model_type?: string | null
           default_tact_time?: number
           is_active?: boolean
+          current_state?: string | null
+          processing_step?: string
           created_at?: string
           updated_at?: string
         }
@@ -147,6 +159,120 @@ export interface Database {
           quality?: number | null
           oee?: number | null
           created_at?: string
+        }
+      }
+      audit_log: {
+        Row: {
+          id: string
+          table_name: string
+          record_id: string
+          action: string
+          old_values: Json | null
+          new_values: Json | null
+          changed_by: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          table_name: string
+          record_id: string
+          action: string
+          old_values?: Json | null
+          new_values?: Json | null
+          changed_by?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          table_name?: string
+          record_id?: string
+          action?: string
+          old_values?: Json | null
+          new_values?: Json | null
+          changed_by?: string | null
+          created_at?: string | null
+        }
+      }
+      system_settings: {
+        Row: {
+          id: string
+          setting_key: string
+          setting_value: Json
+          default_value: Json
+          description: string | null
+          category: string
+          data_type: string
+          validation_rules: Json | null
+          is_active: boolean | null
+          is_system: boolean | null
+          created_at: string | null
+          updated_at: string | null
+          created_by: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          setting_key: string
+          setting_value: Json
+          default_value: Json
+          description?: string | null
+          category?: string
+          data_type?: string
+          validation_rules?: Json | null
+          is_active?: boolean | null
+          is_system?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          default_value?: Json
+          description?: string | null
+          category?: string
+          data_type?: string
+          validation_rules?: Json | null
+          is_active?: boolean | null
+          is_system?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
+          updated_by?: string | null
+        }
+      }
+      oee_calculations: {
+        Row: {
+          id: string
+          machine_id: string | null
+          calculation_date: string
+          availability: number | null
+          performance: number | null
+          quality: number | null
+          oee: number | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          machine_id?: string | null
+          calculation_date: string
+          availability?: number | null
+          performance?: number | null
+          quality?: number | null
+          oee?: number | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          machine_id?: string | null
+          calculation_date?: string
+          availability?: number | null
+          performance?: number | null
+          quality?: number | null
+          oee?: number | null
+          created_at?: string | null
         }
       }
     }

@@ -8,10 +8,10 @@ import {
   Input, 
   Tag, 
   Popconfirm, 
-  message,
   Card,
   Row,
-  Col
+  Col,
+  App
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -34,6 +34,7 @@ interface UserWithProfile extends User {
 
 const UserManagement: React.FC = () => {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const { loading, fetchUsers, deleteUser } = useAdminOperations();
   const [users, setUsers] = useState<UserWithProfile[]>([]);
   const [searchText, setSearchText] = useState('');

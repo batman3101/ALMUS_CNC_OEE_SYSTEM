@@ -37,7 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const getMenuItems = () => {
     const menuItems = [
       {
-        key: '/',
+        key: '/dashboard',
         icon: <DashboardOutlined />,
         label: t('nav.dashboard'),
       },
@@ -53,9 +53,9 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             label: t('nav.myMachines'),
           },
           {
-            key: '/log-input',
+            key: '/data-input',
             icon: <EditOutlined />,
-            label: t('nav.logInput'),
+            label: t('nav.dataInput'),
           }
         );
         break;
@@ -66,6 +66,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             key: '/machines',
             icon: <DesktopOutlined />,
             label: t('nav.machines'),
+          },
+          {
+            key: '/data-input',
+            icon: <EditOutlined />,
+            label: t('nav.dataInput'),
           },
           {
             key: '/reports',
@@ -81,6 +86,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             key: '/machines',
             icon: <DesktopOutlined />,
             label: t('nav.machines'),
+          },
+          {
+            key: '/data-input',
+            icon: <EditOutlined />,
+            label: t('nav.dataInput'),
           },
           {
             key: '/reports',
@@ -117,10 +127,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   return (
     <Sider 
       trigger={null} 
-      collapsible 
+      collapsible={false} // 데스크탑에서는 접기 비활성화
       collapsed={collapsed}
       width={240}
-      collapsedWidth={screens.xs ? 0 : 80}
+      collapsedWidth={screens.xs ? 0 : 240} // 데스크탑에서는 항상 240px
       className={`${styles.sidebar} ${screens.xs && !collapsed ? styles.sidebarMobile : ''}`}
       breakpoint="lg"
       onBreakpoint={() => {
@@ -128,26 +138,19 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       }}
     >
       <div className={`${styles.logo} ${screens.xs ? styles.logoMobile : ''}`}>
-        {!collapsed && (
-          <span className={`${styles.logoText} ${screens.xs ? styles.logoTextMobile : ''}`}>
-            CNC OEE
-          </span>
-        )}
-        {collapsed && (
-          <span className={styles.logoTextCollapsed}>
-            CNC
-          </span>
-        )}
+        <span className={`${styles.logoText} ${screens.xs ? styles.logoTextMobile : ''}`}>
+          CNC OEE
+        </span>
       </div>
       
       <Menu
         theme="dark"
         mode="inline"
-        selectedKeys={[pathname]}
+        selectedKeys={[pathname.startsWith('/dashboard') ? '/dashboard' : pathname]}
         items={getMenuItems()}
         onClick={handleMenuClick}
         className={`${styles.menu} ${screens.xs ? styles.menuMobile : ''}`}
-        inlineCollapsed={collapsed}
+        inlineCollapsed={false} // 데스크탑에서는 항상 펼침
       />
       
       {/* 모바일에서 사이드바가 열려있을 때 배경 오버레이 */}

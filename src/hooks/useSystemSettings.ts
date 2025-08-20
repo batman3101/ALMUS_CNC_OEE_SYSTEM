@@ -73,6 +73,7 @@ export function useSystemSettings() {
      * 화면 설정 조회
      */
     getDisplaySettings: () => ({
+      mode: context.getSetting('display', 'theme_mode') || 'light',
       theme: {
         primary: context.getSetting('display', 'theme_primary_color') || '#1890ff',
         success: context.getSetting('display', 'theme_success_color') || '#52c41a',
@@ -82,7 +83,8 @@ export function useSystemSettings() {
       refreshInterval: context.getSetting('display', 'dashboard_refresh_interval_seconds') || 30,
       chartAnimation: context.getSetting('display', 'chart_animation_enabled') || true,
       compactMode: context.getSetting('display', 'compact_mode') || false,
-      showMachineImages: context.getSetting('display', 'show_machine_images') || true
+      showMachineImages: context.getSetting('display', 'show_machine_images') || true,
+      sidebarCollapsed: context.getSetting('display', 'sidebar_collapsed') || false
     }),
 
     /**

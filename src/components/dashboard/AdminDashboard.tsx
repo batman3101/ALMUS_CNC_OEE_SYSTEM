@@ -47,6 +47,20 @@ const generateMockAlerts = () => [
   { id: 3, machine: 'CNC-007', message: '불량률 5% 초과', severity: 'warning', time: '1시간 전' },
 ];
 
+// 상태 텍스트 변환 함수 (hoisting 문제 해결을 위해 상단 이동)
+const getStatusText = (state?: string) => {
+  const stateMap: Record<string, string> = {
+    'NORMAL_OPERATION': '정상',
+    'MAINTENANCE': '점검중',
+    'MODEL_CHANGE': '모델교체',
+    'PLANNED_STOP': '계획정지',
+    'PROGRAM_CHANGE': '프로그램교체',
+    'TOOL_CHANGE': '공구교환',
+    'TEMPORARY_STOP': '일시정지'
+  };
+  return stateMap[state || ''] || '알 수 없음';
+};
+
 const generateMockTrendData = () => {
   // 고정된 시드 값을 사용하여 일관된 데이터 생성
   const fixedValues = [
@@ -71,9 +85,11 @@ const generateMockTrendData = () => {
   return data;
 };
 
-interface AdminDashboardProps {}
+interface AdminDashboardProps {
+  onError?: (error: Error) => void;
+}
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = () => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const isClient = useClientOnly();
   const { user } = useAuth();
   const { notifications, acknowledgeNotification } = useNotifications();
@@ -99,11 +115,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = () => {
     trendData: generateMockTrendData()
   });
 
+  // 에러 핸들링
+  useEffect(() => {
+    if (error && onError) {
+      onError(new Error(`AdminDashboard: ${error}`));
+    }
+  }, [error, onError]);
+
   // 데이터 처리 및 계산
   const processedData = React.useMemo(() => {
-    if (machines.length === 0) {
-      return fallbackData;
-    }
+    try {
+      if (machines.length === 0) {
+        return fallbackData;
+      }
 
     // 실제 데이터에서 전체 OEE 계산
     const totalOEE = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.oee, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
@@ -147,27 +171,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = () => {
     // 추이 데이터 (최근 7일)
     const trendData = generateMockTrendData(); // 실제로는 productionRecords에서 계산
 
-    return {
-      overallMetrics,
-      machineList,
-      alerts,
-      trendData
-    };
+      return {
+        overallMetrics,
+        machineList,
+        alerts,
+        trendData
+      };
+    } catch (error) {
+      console.error('Error processing admin dashboard data:', error);
+      return fallbackData;
+    }
   }, [machines, oeeMetrics, fallbackData]);
-
-  // 상태 텍스트 변환 함수
-  const getStatusText = (state?: string) => {
-    const stateMap: Record<string, string> = {
-      'NORMAL_OPERATION': '정상',
-      'MAINTENANCE': '점검중',
-      'MODEL_CHANGE': '모델교체',
-      'PLANNED_STOP': '계획정지',
-      'PROGRAM_CHANGE': '프로그램교체',
-      'TOOL_CHANGE': '공구교환',
-      'TEMPORARY_STOP': '일시정지'
-    };
-    return stateMap[state || ''] || '알 수 없음';
-  };
 
   // 설비 상태별 통계
   const machineStats = {

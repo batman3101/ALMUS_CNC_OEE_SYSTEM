@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, App, theme } from 'antd';
 import koKR from 'antd/locale/ko_KR';
 import viVN from 'antd/locale/vi_VN';
 import { LanguageProvider, useLanguage } from '@/contexts/LanguageContext';
@@ -21,7 +21,9 @@ const AntdConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   
   return (
     <ConfigProvider theme={antdTheme} locale={locale}>
-      {children}
+      <App>
+        {children}
+      </App>
     </ConfigProvider>
   );
 };
