@@ -152,18 +152,37 @@ export class SystemSettingsService {
         return { success: false, error: validationResult.error };
       }
 
+      // Prepare value for database - convert to string for RPC function
+      let valueToSave: string;
+      if (typeof update.setting_value === 'string') {
+        valueToSave = update.setting_value;
+      } else {
+        valueToSave = JSON.stringify(update.setting_value);
+      }
+
       const { data, error } = await supabase
         .rpc('update_system_setting', {
           p_category: update.category,
           p_key: update.setting_key,
-          p_value: JSON.stringify(update.setting_value),
+          p_value: valueToSave,
           p_reason: update.change_reason
         });
 
       if (error) {
-        console.error('Error updating system setting:', error);
-        return { success: false, error: error.message };
+        console.error('Error updating system setting:', {
+          error,
+          update,
+          valueToSave
+        });
+        return { success: false, error: error.message || 'Failed to update setting' };
       }
+
+      // Log successful update
+      log.info('System setting updated successfully', {
+        category: update.category,
+        key: update.setting_key,
+        value: update.setting_value
+      }, LogCategories.SETTINGS);
 
       // 캐시 무효화
       this.invalidateCache();
@@ -241,13 +260,23 @@ export class SystemSettingsService {
           structured[setting.category] = {};
         }
         
-        // JSON 값 파싱
+        // Extract value from the database structure
         let value = setting.setting_value;
+        
+        // Handle the database structure {value: actual_value}
+        if (value && typeof value === 'object' && 'value' in value) {
+          value = value.value;
+        }
+        
+        // Additional JSON parsing if needed
         if (typeof value === 'string') {
           try {
-            value = JSON.parse(value);
+            // Try to parse as JSON for complex values
+            if (value.startsWith('{') || value.startsWith('[') || value.startsWith('"')) {
+              value = JSON.parse(value);
+            }
           } catch {
-            // JSON이 아닌 경우 그대로 사용
+            // Keep as string if not valid JSON
           }
         }
 
@@ -318,10 +347,18 @@ export class SystemSettingsService {
       const cacheKey = `${setting.category}.${setting.setting_key}`;
       let value = setting.setting_value;
       
+      // Handle the database structure {value: actual_value}
+      if (value && typeof value === 'object' && 'value' in value) {
+        value = value.value;
+      }
+      
       // JSON 문자열인 경우 파싱
       if (typeof value === 'string') {
         try {
-          value = JSON.parse(value);
+          // Try to parse as JSON for complex values
+          if (value.startsWith('{') || value.startsWith('[') || value.startsWith('"')) {
+            value = JSON.parse(value);
+          }
         } catch {
           // JSON이 아닌 경우 그대로 사용
         }

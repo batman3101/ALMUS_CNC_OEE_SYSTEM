@@ -2,56 +2,80 @@
 if (typeof window !== 'undefined') {
   const originalError = console.error;
   const originalWarn = console.warn;
+  const originalLog = console.log;
 
+  // console.error 오버라이드
   console.error = (...args) => {
-    const message = typeof args[0] === 'string' ? args[0] : String(args[0]);
+    // 첫 번째 인자를 문자열로 변환
+    const message = args.map(arg => {
+      if (typeof arg === 'string') return arg;
+      if (arg && typeof arg === 'object' && arg.message) return arg.message;
+      return String(arg);
+    }).join(' ');
     
     // Ant Design React 19 호환성 경고 억제
     if (
       message.includes('antd v5 support React is 16 ~ 18') ||
       message.includes('see https://u.ant.design/v5-for-19') ||
       message.includes('Static function can not consume context') ||
-      message.includes('[antd: compatible]')
+      message.includes('[antd: compatible]') ||
+      message.includes('Warning: [antd:')
     ) {
       return;
     }
     originalError.apply(console, args);
   };
 
+  // console.warn 오버라이드
   console.warn = (...args) => {
-    const message = typeof args[0] === 'string' ? args[0] : String(args[0]);
+    const message = args.map(arg => {
+      if (typeof arg === 'string') return arg;
+      if (arg && typeof arg === 'object' && arg.message) return arg.message;
+      return String(arg);
+    }).join(' ');
     
     // 특정 경고 메시지 억제
     if (
       message.includes('antd v5 support React is 16 ~ 18') ||
       message.includes('Static function can not consume context') ||
       message.includes('[antd: compatible]') ||
-      message.includes('see https://u.ant.design/v5-for-19')
+      message.includes('see https://u.ant.design/v5-for-19') ||
+      message.includes('Warning: [antd:')
     ) {
       return;
     }
     originalWarn.apply(console, args);
   };
-
-  // 런타임 시점에서도 경고 억제
-  const suppressAntdWarnings = () => {
-    if (window && (window as any).antd) {
-      const antd = (window as any).antd;
-      if (antd.version && antd.version.startsWith('5')) {
-        // Ant Design v5 React 호환성 체크 비활성화
-        Object.defineProperty(React, 'version', {
-          value: '18.3.1',
-          writable: false,
-          configurable: false
-        });
-      }
+  
+  // console.log 오버라이드 (일부 경고가 log로 출력될 수 있음)
+  console.log = (...args) => {
+    const message = args.map(arg => {
+      if (typeof arg === 'string') return arg;
+      if (arg && typeof arg === 'object' && arg.message) return arg.message;
+      return String(arg);
+    }).join(' ');
+    
+    if (
+      message.includes('antd v5 support React is 16 ~ 18') ||
+      message.includes('[antd: compatible]')
+    ) {
+      return;
     }
+    originalLog.apply(console, args);
   };
 
-  // DOM 로드 후 실행
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', suppressAntdWarnings);
-  } else {
-    suppressAntdWarnings();
+  // 전역 React 객체 버전 패치 (Ant Design 호환성용)
+  if (typeof (window as any).React !== 'undefined') {
+    try {
+      const ReactObj = (window as any).React;
+      if (ReactObj.version && ReactObj.version.startsWith('19')) {
+        Object.defineProperty(ReactObj, 'version', {
+          get() { return '18.3.1'; },
+          configurable: true
+        });
+      }
+    } catch (e) {
+      // 에러 무시
+    }
   }
 }

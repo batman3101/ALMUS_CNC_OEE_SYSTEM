@@ -6,7 +6,6 @@ import {
   InputNumber, 
   Button, 
   Space, 
-  message, 
   Card,
   Typography,
   Row,
@@ -18,6 +17,7 @@ import {
 import { SaveOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useOEESettings } from '@/hooks/useSystemSettings';
+import { useMessage } from '@/hooks/useMessage';
 
 const { Title, Text } = Typography;
 
@@ -28,6 +28,7 @@ interface OEESettingsTabProps {
 const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => {
   const { t } = useLanguage();
   const { settings, updateSetting } = useOEESettings();
+  const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -53,12 +54,12 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
       
       // 값 검증
       if (values.critical_oee_threshold >= values.low_oee_threshold) {
-        message.error(t('settings.oee.thresholdValidation'));
+        showError(t('settings.oee.thresholdValidation'));
         return;
       }
 
       if (values.low_oee_threshold >= values.target_oee) {
-        message.error(t('settings.oee.targetValidation'));
+        showError(t('settings.oee.targetValidation'));
         return;
       }
 
@@ -75,11 +76,11 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
         }
       }
 
-      message.success(t('settings.saveSuccess'));
+      showSuccess(t('settings.saveSuccess'));
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving OEE settings:', error);
-      message.error(t('settings.saveError'));
+      showError(t('settings.saveError'));
     } finally {
       setLoading(false);
     }
@@ -110,6 +111,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
 
   return (
     <div>
+      {contextHolder}
       <Title level={4} style={{ marginBottom: '24px' }}>
         {t('settings.oee.title')}
       </Title>

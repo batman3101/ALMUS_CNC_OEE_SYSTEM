@@ -8,7 +8,6 @@ import {
   Button, 
   Space, 
   Upload, 
-  message, 
   Card,
   Typography,
   Row,
@@ -17,6 +16,7 @@ import {
 import { UploadOutlined, SaveOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useGeneralSettings } from '@/hooks/useSystemSettings';
+import { useMessage } from '@/hooks/useMessage';
 import type { UploadFile } from 'antd/es/upload/interface';
 
 const { Title, Text } = Typography;
@@ -29,6 +29,7 @@ interface GeneralSettingsTabProps {
 const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChange }) => {
   const { t } = useLanguage();
   const { settings, updateSetting } = useGeneralSettings();
+  const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
@@ -75,11 +76,11 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         }
       }
 
-      message.success(t('settings.saveSuccess'));
+      showSuccess(t('settings.saveSuccess'));
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving general settings:', error);
-      message.error(t('settings.saveError'));
+      showError(t('settings.saveError'));
     } finally {
       setLoading(false);
     }
@@ -105,9 +106,9 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
     if (info.file.status === 'done') {
       const logoUrl = info.file.response?.url || info.file.url;
       form.setFieldValue('company_logo_url', logoUrl);
-      message.success(t('settings.logoUploadSuccess'));
+      showSuccess(t('settings.logoUploadSuccess'));
     } else if (info.file.status === 'error') {
-      message.error(t('settings.logoUploadError'));
+      showError(t('settings.logoUploadError'));
     }
   };
 
@@ -152,6 +153,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
 
   return (
     <div>
+      {contextHolder}
       <Title level={4} style={{ marginBottom: '24px' }}>
         {t('settings.general.title')}
       </Title>
@@ -193,12 +195,12 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
                     beforeUpload={(file) => {
                       const isImage = file.type?.startsWith('image/');
                       if (!isImage) {
-                        message.error(t('settings.general.logoImageOnly'));
+                        showError(t('settings.general.logoImageOnly'));
                         return false;
                       }
                       const isLt2M = file.size / 1024 / 1024 < 2;
                       if (!isLt2M) {
-                        message.error(t('settings.general.logoSizeLimit'));
+                        showError(t('settings.general.logoSizeLimit'));
                         return false;
                       }
                       return true;

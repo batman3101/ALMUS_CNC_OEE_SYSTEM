@@ -45,3 +45,6 @@ next-env.d.ts
 # MCP configuration (contains tokens)
 .mcp.json
 .claude/
+
+# Windows special files
+nul

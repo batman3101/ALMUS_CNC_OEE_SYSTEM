@@ -139,26 +139,4 @@ export interface SettingsAuditResponse {
   success: boolean;
   data?: SystemSettingAudit[];
   error?: string;
-  is_system: boolean;
-  validation?: SettingValidationRule;
-  options?: Array<{ label: string; value: any }>;
-}
-
-// API 응답 타입
-export interface SettingsResponse {
-  success: boolean;
-  data?: SystemSetting[];
-  error?: string;
-}
-
-export interface SettingUpdateResponse {
-  success: boolean;
-  data?: SystemSetting;
-  error?: string;
-}
-
-export interface SettingsAuditResponse {
-  success: boolean;
-  data?: SystemSettingAudit[];
-  error?: string;
 }

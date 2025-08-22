@@ -68,14 +68,25 @@ export async function safeSupabaseOperation<T>(
     }
     
     return await operation(supabase);
-  } catch (error) {
-    console.error('Supabase operation failed:', error);
+  } catch (error: any) {
+    // 에러 정보를 더 상세히 로깅
+    const errorInfo = {
+      message: error?.message || 'Unknown error',
+      code: error?.code || 'UNKNOWN_CODE',
+      details: error?.details || null,
+      hint: error?.hint || null,
+      status: error?.status || null
+    };
+    
+    console.error('Supabase operation failed:', errorInfo);
     
     if (fallbackValue !== undefined) {
+      console.warn('Returning fallback value due to error:', errorInfo.message);
       return fallbackValue;
     }
     
-    throw error;
+    // 원본 에러가 아닌 구체적인 정보를 포함한 에러 던지기
+    throw new Error(`Supabase operation failed: ${errorInfo.message} (Code: ${errorInfo.code})`);
   }
 }
 

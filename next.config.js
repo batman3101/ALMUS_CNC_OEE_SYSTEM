@@ -1,6 +1,5 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   eslint: {
     // Allow production builds to complete even if there are ESLint errors
     ignoreDuringBuilds: true,
@@ -8,14 +7,6 @@ const nextConfig: NextConfig = {
   typescript: {
     // Allow production builds to complete even if there are TypeScript errors
     ignoreBuildErrors: true,
-  },
-  turbopack: {
-    rules: {
-      '*.svg': {
-        loaders: ['@svgr/webpack'],
-        as: '*.js',
-      },
-    },
   },
   // React compiler and optimizations
   compiler: {
@@ -26,4 +17,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

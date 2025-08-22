@@ -24,10 +24,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // 사용자 프로필 정보 가져오기
   const fetchUserProfile = async (supabaseUser: SupabaseUser): Promise<User | null> => {
     try {
+      console.log('🔍 fetchUserProfile 시작:', { userId: supabaseUser.id, email: supabaseUser.email });
+      
       // Supabase 연결 상태 확인
       const connected = await checkSupabaseConnection();
+      console.log('🌐 Supabase 연결 상태:', connected);
+      
       if (!connected) {
         log.warn('Supabase not connected, using fallback user profile', {}, LogCategories.AUTH);
+        console.warn('⚠️ Supabase 연결 실패 - 기본 operator 역할로 설정됨');
         return {
           id: supabaseUser.id,
           email: supabaseUser.email || '',
@@ -37,25 +42,87 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
-      const profile = await safeSupabaseOperation(
-        async (client) => {
-          const { data, error } = await client
-            .from('user_profiles')
-            .select('*')
-            .eq('user_id', supabaseUser.id)
-            .single();
-          
-          if (error) {
-            throw error;
+      // 먼저 서버 API를 통해 Service Role로 프로필 조회 시도
+      let profile = null;
+      
+      try {
+        console.log('📋 서버 API를 통해 사용자 프로필 조회 중:', supabaseUser.id);
+        
+        // 서버 API 엔드포인트를 통해 Service Role 사용
+        const response = await fetch(`/api/auth/profile-admin?user_id=${supabaseUser.id}`);
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.profile) {
+            console.log('✅ 서버 API로 프로필 조회 성공:', result.profile);
+            profile = result.profile;
+          } else {
+            console.warn('⚠️ 서버 API에서 프로필을 찾을 수 없음');
           }
-          
-          return data;
-        },
-        null // fallback value
-      );
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.warn('⚠️ 서버 API 조회 실패, 일반 클라이언트로 재시도:', {
+            status: response.status,
+            error: errorData.error || 'Unknown error'
+          });
+        }
+      } catch (apiError) {
+        console.warn('⚠️ 서버 API 사용 불가, 일반 클라이언트로 조회:', apiError);
+      }
+      
+      // Service Role이 실패한 경우 일반 클라이언트로 재시도
+      if (!profile) {
+        profile = await safeSupabaseOperation(
+          async (client) => {
+            console.log('📋 일반 클라이언트로 사용자 프로필 조회 중:', supabaseUser.id);
+            
+            // 세션 정보 확인
+            const session = await client.auth.getSession();
+            console.log('🔑 현재 세션 상태:', { 
+              hasSession: !!session.data.session,
+              userId: session.data.session?.user?.id,
+              targetUserId: supabaseUser.id
+            });
+            
+            const { data, error } = await client
+              .from('user_profiles')
+              .select('*')
+              .eq('user_id', supabaseUser.id)
+              .single();
+            
+            if (error) {
+              const errorInfo = {
+                code: error.code,
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                userId: supabaseUser.id,
+                sessionInfo: session.data.session ? {
+                  userId: session.data.session.user.id,
+                  role: session.data.session.user.role,
+                  aud: session.data.session.user.aud
+                } : null
+              };
+              console.error('❌ 프로필 조회 오류:', errorInfo);
+              
+              // RLS 정책 관련 오류인지 확인
+              if (error.code === '42501' || error.message?.includes('RLS')) {
+                console.error('🔒 RLS 정책에 의해 접근이 차단되었습니다. 정책을 확인하세요.');
+              }
+              
+              throw error;
+            }
+            
+            console.log('✅ 프로필 조회 성공:', data);
+            return data;
+          },
+          null // fallback value
+        );
+      }
 
       if (!profile) {
         log.warn('No user profile found, using default profile', { userId: supabaseUser.id }, LogCategories.AUTH);
+        console.warn('❌ 사용자 프로필이 존재하지 않음 - 기본 operator 역할로 설정됨');
         // 프로필이 없는 경우 기본 사용자 정보 반환
         return {
           id: supabaseUser.id,
@@ -66,7 +133,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         };
       }
 
-      return {
+      const userProfile = {
         id: profile.user_id,
         email: supabaseUser.email || '',
         name: profile.name,
@@ -74,6 +141,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         assigned_machines: profile.assigned_machines,
         created_at: profile.created_at
       };
+      
+      console.log('🎉 최종 사용자 프로필:', userProfile);
+      return userProfile;
     } catch (error) {
       log.error('Error in fetchUserProfile', error, LogCategories.AUTH);
       // 에러 발생 시 기본 프로필 반환
