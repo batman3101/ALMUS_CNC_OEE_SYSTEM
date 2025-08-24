@@ -17,6 +17,8 @@ export const useCommonTranslation = () => useTranslation('common');
 export const useMachinesTranslation = () => useTranslation('machines');
 export const useDashboardTranslation = () => useTranslation('dashboard');
 export const useAuthTranslation = () => useTranslation('auth');
+export const useAdminTranslation = () => useTranslation('admin');
+export const useProductionTranslation = () => useTranslation('production');
 
 // 다중 네임스페이스 지원 훅
 export const useMultipleTranslation = (namespaces: string[]) => {
