@@ -89,20 +89,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       if (!profile) {
-        log.warn('No user profile found, creating default profile', { userId: supabaseUser.id }, LogCategories.AUTH);
-        console.warn('❌ 사용자 프로필이 존재하지 않음 - 기본 프로필을 반환합니다.');
+        log.warn('No user profile found, user needs to be set up', { userId: supabaseUser.id }, LogCategories.AUTH);
+        console.warn('❌ 사용자 프로필이 존재하지 않음 - 관리자가 설정해야 합니다.');
         
-        // 프로필이 없는 경우 기본 사용자 정보 반환
-        const defaultProfile = {
-          id: supabaseUser.id,
-          email: supabaseUser.email || '',
-          name: supabaseUser.user_metadata?.name || supabaseUser.email || 'Unknown User',
-          role: 'operator' as const, // 기본 역할
-          created_at: supabaseUser.created_at
-        };
-        
-        console.log('🔄 기본 프로필 반환:', defaultProfile);
-        return defaultProfile;
+        // 프로필이 없는 경우 null 반환하여 로그인으로 리다이렉트
+        return null;
       }
 
       const userProfile = {
@@ -120,17 +111,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('❌ fetchUserProfile 전체 오류:', error);
       log.error('Error in fetchUserProfile', error, LogCategories.AUTH);
       
-      // 에러 발생 시 기본 프로필 반환
-      const fallbackProfile = {
-        id: supabaseUser.id,
-        email: supabaseUser.email || '',
-        name: supabaseUser.user_metadata?.name || supabaseUser.email || 'Unknown User',
-        role: 'operator' as const,
-        created_at: supabaseUser.created_at
-      };
-      
-      console.log('🔄 오류로 인한 기본 프로필 반환:', fallbackProfile);
-      return fallbackProfile;
+      // 에러 발생 시 null 반환하여 로그인으로 리다이렉트
+      console.log('🔄 오류로 인해 null 반환 - 로그인 필요');
+      return null;
     }
   };
 
@@ -183,6 +166,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // 사용자 프로필 정보 가져오기
       const userProfile = await fetchUserProfile(data.user);
+      if (!userProfile) {
+        await supabase.auth.signOut();
+        throw new Error('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
+      }
       setUser(userProfile);
       
       console.log('🎉 로그인 및 프로필 로딩 완료:', userProfile.email);
@@ -290,9 +277,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (session?.user) {
           console.log('✅ 유효한 세션 발견, 사용자 프로필 로딩 중...');
           const userProfile = await fetchUserProfile(session.user);
-          setUser(userProfile);
-          setError(null);
-          console.log('🎉 인증 초기화 성공');
+          if (userProfile) {
+            setUser(userProfile);
+            setError(null);
+            console.log('🎉 인증 초기화 성공');
+          } else {
+            console.log('❌ 프로필이 없어서 세션 종료');
+            await supabase.auth.signOut();
+            setUser(null);
+            setError('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
+          }
         } else {
           console.log('ℹ️ 세션이 없음 - 로그인 필요');
           setUser(null);
@@ -332,8 +326,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (event === 'SIGNED_IN' && session?.user) {
             console.log('✅ SIGNED_IN 이벤트 - 프로필 로딩 중...');
             const userProfile = await fetchUserProfile(session.user);
-            setUser(userProfile);
-            setError(null);
+            if (userProfile) {
+              setUser(userProfile);
+              setError(null);
+            } else {
+              console.log('❌ 프로필이 없어서 세션 종료');
+              await supabase.auth.signOut();
+              setUser(null);
+              setError('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
+            }
           } else if (event === 'SIGNED_OUT') {
             console.log('🚪 SIGNED_OUT 이벤트 - 사용자 로그아웃');
             setUser(null);
@@ -341,8 +342,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
             console.log('🔄 TOKEN_REFRESHED 이벤트 - 프로필 재로딩');
             const userProfile = await fetchUserProfile(session.user);
-            setUser(userProfile);
-            setError(null);
+            if (userProfile) {
+              setUser(userProfile);
+              setError(null);
+            } else {
+              console.log('❌ 프로필이 없어서 세션 종료');
+              await supabase.auth.signOut();
+              setUser(null);
+              setError('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
+            }
           }
         } catch (error) {
           console.error('❌ 인증 상태 변경 처리 오류:', error);

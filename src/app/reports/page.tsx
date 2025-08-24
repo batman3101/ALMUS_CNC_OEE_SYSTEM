@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, Typography, Breadcrumb } from 'antd';
-import { HomeOutlined, FileTextOutlined } from '@ant-design/icons';
+import { Card, Typography, message } from 'antd';
 import { ReportDashboard } from '@/components/reports';
 import { Machine } from '@/types';
 
@@ -10,83 +9,45 @@ const { Title } = Typography;
 
 export default function ReportsPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 모의 설비 데이터 생성
+  // 실제 설비 데이터 가져오기
   useEffect(() => {
-    const mockMachines: Machine[] = [
-      {
-        id: 'machine_1',
-        name: 'CNC-001',
-        location: '1공장 A라인',
-        model_type: 'Mazak VTC-800',
-        default_tact_time: 60,
-        is_active: true,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z'
-      },
-      {
-        id: 'machine_2',
-        name: 'CNC-002',
-        location: '1공장 B라인',
-        model_type: 'DMG Mori NLX2500',
-        default_tact_time: 45,
-        is_active: true,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z'
-      },
-      {
-        id: 'machine_3',
-        name: 'CNC-003',
-        location: '2공장 A라인',
-        model_type: 'Okuma Genos L250',
-        default_tact_time: 75,
-        is_active: true,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z'
+    const fetchMachines = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/machines');
+        if (response.ok) {
+          const data = await response.json();
+          setMachines(data.machines || []);
+        } else {
+          throw new Error('Failed to fetch machines');
+        }
+      } catch (error) {
+        console.error('Error fetching machines:', error);
+        message.error('설비 데이터를 불러오는데 실패했습니다');
+      } finally {
+        setLoading(false);
       }
-    ];
+    };
 
-    setMachines(mockMachines);
+    fetchMachines();
   }, []);
 
   return (
     <div>
-      {/* 브레드크럼 */}
-      <Breadcrumb 
-        style={{ marginBottom: '16px' }}
-        items={[
-          {
-            title: (
-              <>
-                <HomeOutlined />
-                <span>홈</span>
-              </>
-            )
-          },
-          {
-            title: (
-              <>
-                <FileTextOutlined />
-                <span>보고서</span>
-              </>
-            )
-          }
-        ]}
-      />
-
       {/* 페이지 제목 */}
       <div style={{ marginBottom: '24px' }}>
-        <Title level={2} style={{ margin: 0 }}>
-          <FileTextOutlined style={{ marginRight: '8px' }} />
-          보고서 생성 및 내보내기
+        <Title level={2}>
+          통계 리포트
         </Title>
-        <p style={{ margin: '8px 0 0 0', color: '#666' }}>
+        <Typography.Paragraph type="secondary">
           OEE 지표, 생산 실적, 다운타임 분석 등의 보고서를 PDF 또는 Excel 형식으로 생성할 수 있습니다.
-        </p>
+        </Typography.Paragraph>
       </div>
 
       {/* 보고서 대시보드 */}
-      <ReportDashboard machines={machines} />
+      <ReportDashboard machines={machines} loading={loading} />
     </div>
   );
 }

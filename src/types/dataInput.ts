@@ -2,19 +2,11 @@
 
 export interface MachineDataInput {
   // 기본 정보
-  machine_name: string;
-  machine_number: string;
-  model_type?: string; // Legacy field, kept for backward compatibility
+  machine_id: string; // machine_name -> machine_id로 변경
   
   // 새로운 모델/공정 정보
   model_id?: string;
   process_id?: string;
-  
-  // 공정 정보 (Legacy)
-  process_1?: string;
-  process_2?: string;
-  process_3?: string;
-  process_4?: string;
   
   // 생산 정보
   tact_time: number; // 초 단위
@@ -27,12 +19,30 @@ export interface MachineDataInput {
   
   // 비가동 정보
   downtime_minutes: number;
-  downtime_reason: string;
   
   // 메타 정보
   input_date: string;
-  shift: 'A' | 'B';
+  shift: 'DAY' | 'NIGHT';
   operator_id?: string;
+  operator_name?: string;
+}
+
+// 교대별 생산 데이터
+export interface ShiftProductionData {
+  shift: 'DAY' | 'NIGHT';
+  shift_name: string; // '주간조' | '야간조'
+  start_time: string; // '08:00'
+  end_time: string; // '20:00'
+  operator_name: string;
+  
+  // 생산 실적
+  actual_production: number;
+  defect_quantity: number;
+  good_quantity: number; // actual - defect
+  
+  // 비가동 시간
+  downtime_entries: DowntimeEntry[];
+  total_downtime_minutes: number;
 }
 
 export interface DowntimeEntry {
@@ -51,13 +61,39 @@ export interface ProductionEntry {
   id?: string;
   machine_id: string;
   date: string;
-  shift: 'A' | 'B';
+  shift: 'DAY' | 'NIGHT';
   planned_production: number;
   actual_production: number;
   defect_quantity: number;
   good_quantity?: number; // actual_production - defect_quantity
   operator_id?: string;
+  operator_name?: string;
   created_at?: string;
+}
+
+// 일일 생산 데이터 (주간조 + 야간조 합산)
+export interface DailyProductionData {
+  machine_id: string;
+  date: string;
+  
+  // 주간조 데이터
+  day_shift: ShiftProductionData;
+  
+  // 야간조 데이터  
+  night_shift: ShiftProductionData;
+  
+  // 일일 합계
+  total_production: number;
+  total_defects: number;
+  total_good_quantity: number;
+  total_downtime_minutes: number;
+  
+  // OEE 계산 (모델 무관)
+  planned_capacity: number; // 일일 계획 생산량
+  availability: number; // 가용성
+  performance: number; // 성능
+  quality: number; // 품질
+  oee: number; // 종합효율
 }
 
 export interface MachineProcess {

@@ -10,7 +10,8 @@ import {
   Typography, 
   Empty,
   Spin,
-  Card
+  Card,
+  Pagination
 } from 'antd';
 import { 
   SearchOutlined, 
@@ -55,6 +56,10 @@ const MachineList: React.FC<MachineListProps> = ({
   });
   const [statusDescriptions, setStatusDescriptions] = useState<any[]>([]);
   const [statusLoading, setStatusLoading] = useState(false);
+  
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(20);
 
   // 데이터베이스에서 상태 설명 가져오기
   useEffect(() => {
@@ -106,9 +111,9 @@ const MachineList: React.FC<MachineListProps> = ({
         if (machine.location !== filters.locationFilter) return false;
       }
 
-      // 모델 필터
+      // 생산 모델 필터
       if (filters.modelFilter !== 'all') {
-        if (machine.model_type !== filters.modelFilter) return false;
+        if (machine.production_model?.model_name !== filters.modelFilter) return false;
       }
 
       // 활성 상태 필터
@@ -122,15 +127,28 @@ const MachineList: React.FC<MachineListProps> = ({
     });
   }, [machines, filters]);
 
+  // 페이지네이션을 위한 데이터 슬라이싱
+  const paginatedMachines = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredMachines.slice(startIndex, endIndex);
+  }, [filteredMachines, currentPage, pageSize]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
   // 고유한 위치 목록 추출
   const uniqueLocations = useMemo(() => {
     const locations = machines.map(m => m.location);
     return [...new Set(locations)].sort();
   }, [machines]);
 
-  // 고유한 모델 목록 추출
-  const uniqueModels = useMemo(() => {
-    const models = machines.map(m => m.model_type);
+  // 고유한 생산 모델 목록 추출
+  const uniqueProductionModels = useMemo(() => {
+    const models = machines
+      .map(m => m.production_model?.model_name)
+      .filter(Boolean) as string[];
     return [...new Set(models)].sort();
   }, [machines]);
 
@@ -162,6 +180,7 @@ const MachineList: React.FC<MachineListProps> = ({
       ...prev,
       [key]: value
     }));
+    setCurrentPage(1); // 필터 변경 시 첫 페이지로
   };
 
   const clearFilters = () => {
@@ -172,6 +191,7 @@ const MachineList: React.FC<MachineListProps> = ({
       modelFilter: 'all',
       activeFilter: 'all'
     });
+    setCurrentPage(1); // 필터 초기화 시 첫 페이지로
   };
 
   if (loading) {
@@ -257,7 +277,7 @@ const MachineList: React.FC<MachineListProps> = ({
             <Col xs={24} sm={12} md={6}>
               <div>
                 <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>
-                  {t('filters.modelLabel')}
+                  생산 모델
                 </div>
                 <Select
                   placeholder={t('filters.modelPlaceholder')}
@@ -267,9 +287,9 @@ const MachineList: React.FC<MachineListProps> = ({
                   suffixIcon={<SettingOutlined />}
                 >
                   <Option value="all">
-                    {t('filterOptions.allModels')}
+                    모든 모델
                   </Option>
-                  {uniqueModels.map(model => (
+                  {uniqueProductionModels.map(model => (
                     <Option key={model} value={model}>
                       {model}
                     </Option>
@@ -324,17 +344,36 @@ const MachineList: React.FC<MachineListProps> = ({
           description={t('emptyMessage')}
         />
       ) : (
-        <Row gutter={[16, 16]}>
-          {filteredMachines.map(machine => (
-            <Col key={machine.id} xs={24} sm={12} md={8} lg={6}>
-              <MachineCard
-                machine={machine}
-                onClick={onMachineClick}
-                language={language}
+        <>
+          <Row gutter={[16, 16]}>
+            {paginatedMachines.map(machine => (
+              <Col key={machine.id} xs={24} sm={12} md={8} lg={6}>
+                <MachineCard
+                  machine={machine}
+                  onClick={onMachineClick}
+                  language={language}
+                />
+              </Col>
+            ))}
+          </Row>
+          
+          {/* 페이지네이션 */}
+          {filteredMachines.length > pageSize && (
+            <div style={{ textAlign: 'center', marginTop: '32px' }}>
+              <Pagination
+                current={currentPage}
+                total={filteredMachines.length}
+                pageSize={pageSize}
+                onChange={handlePageChange}
+                showSizeChanger={false}
+                showQuickJumper
+                showTotal={(total, range) => 
+                  `${range[0]}-${range[1]} / 총 ${total}개`
+                }
               />
-            </Col>
-          ))}
-        </Row>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

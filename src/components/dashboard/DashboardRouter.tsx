@@ -27,7 +27,9 @@ export const DashboardRouter: React.FC<DashboardRouterProps> = ({ user }) => {
   
   // 대시보드 로드 에러 핸들러
   const handleDashboardError = (error: Error) => {
-    console.error('Dashboard error:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Dashboard error:', error);
+    }
     setDashboardError('대시보드를 불러오는 중 오류가 발생했습니다.');
   };
 
@@ -127,7 +129,9 @@ export const DashboardRouter: React.FC<DashboardRouterProps> = ({ user }) => {
         case 'engineer':
           return <EngineerDashboard onError={handleDashboardError} />;
         default:
-          console.warn('Unknown user role:', user.role, 'defaulting to admin dashboard');
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Unknown user role:', user.role, 'defaulting to admin dashboard');
+          }
           return <AdminDashboard onError={handleDashboardError} />;
       }
     } catch (error) {

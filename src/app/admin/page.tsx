@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Tabs, Card } from 'antd';
+import { Tabs, Typography } from 'antd';
 import { SettingOutlined, UserOutlined } from '@ant-design/icons';
 import { useTranslation } from '@/hooks/useTranslation';
 import { RoleGuard } from '@/components/auth';
 import { MachineManagement, UserManagement } from '@/components/admin';
+
+const { Title, Paragraph } = Typography;
 
 const AdminPage: React.FC = () => {
   const { t } = useTranslation();
@@ -36,9 +38,14 @@ const AdminPage: React.FC = () => {
   return (
     <RoleGuard allowedRoles={['admin']}>
       <div>
-        <h1 style={{ marginBottom: '24px' }}>
-          사용자 및 설비 관리
-        </h1>
+        <div style={{ marginBottom: '24px' }}>
+          <Title level={2}>
+            사용자 및 설비 관리
+          </Title>
+          <Paragraph type="secondary">
+            시스템 사용자와 설비를 관리합니다
+          </Paragraph>
+        </div>
         <Tabs
           defaultActiveKey="machines"
           items={tabItems}

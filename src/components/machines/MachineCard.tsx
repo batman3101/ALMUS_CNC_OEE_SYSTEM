@@ -109,17 +109,7 @@ const MachineCard: React.FC<MachineCardProps> = ({
           '#d9d9d9'
         }`
       }}
-      actions={[
-        <Tooltip key="location" title={language === 'ko' ? '위치' : 'Vị trí'}>
-          <Space>
-            <EnvironmentOutlined />
-            <Text type="secondary">{machine.location}</Text>
-          </Space>
-        </Tooltip>,
-        <Tooltip key="model" title={language === 'ko' ? '모델' : 'Mô hình'}>
-          <Text type="secondary">{machine.model_type}</Text>
-        </Tooltip>
-      ]}
+      actions={[]}
     >
       <div className="machine-card-content">
         <div className="machine-header">
@@ -161,9 +151,19 @@ const MachineCard: React.FC<MachineCardProps> = ({
           <Space direction="vertical" size="small" style={{ width: '100%' }}>
             <div className="info-row">
               <Text type="secondary">
-                {language === 'ko' ? 'Tact Time:' : 'Thời gian Tact:'}
+                {language === 'ko' ? '생산 모델:' : 'Mô hình sản xuất:'}
               </Text>
-              <Text strong>{machine.default_tact_time}s</Text>
+              <Text strong>
+                {machine.production_model?.model_name || (language === 'ko' ? '설정 없음' : 'Chưa thiết lập')}
+              </Text>
+            </div>
+            <div className="info-row">
+              <Text type="secondary">
+                {language === 'ko' ? '가공 공정:' : 'Quy trình gia công:'}
+              </Text>
+              <Text strong>
+                {machine.current_process?.process_name || (language === 'ko' ? '설정 없음' : 'Chưa thiết lập')}
+              </Text>
             </div>
           </Space>
         </div>

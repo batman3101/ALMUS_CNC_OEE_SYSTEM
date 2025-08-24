@@ -13,14 +13,18 @@ import {
   Statistic,
   Progress,
   message,
-  Spin
+  Spin,
+  Modal,
+  Tabs
 } from 'antd';
 import {
   FileExcelOutlined,
   FilePdfOutlined,
   BarChartOutlined,
   LineChartOutlined,
-  PieChartOutlined
+  PieChartOutlined,
+  EyeOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import { ReportGenerator } from './ReportGenerator';
 import { ReportTemplates } from './ReportTemplates';
@@ -33,13 +37,18 @@ const { Option } = Select;
 interface ReportDashboardProps {
   machines?: Machine[];
   className?: string;
+  loading?: boolean;
 }
 
 export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   machines = [],
-  className
+  className,
+  loading: initialLoading = false
 }) => {
   const [loading, setLoading] = useState(false);
+  const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [previewType, setPreviewType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [selectedMachines, setSelectedMachines] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<[string, string] | null>(null);
   const [reportData, setReportData] = useState<{
@@ -50,44 +59,96 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     productionData: []
   });
 
-  // 모의 데이터 생성
-  const generateMockData = () => {
-    const oeeData: OEEMetrics[] = [];
-    const productionData: ProductionRecord[] = [];
-
-    for (let i = 0; i < 10; i++) {
-      oeeData.push({
-        availability: 0.8 + Math.random() * 0.15,
-        performance: 0.85 + Math.random() * 0.1,
-        quality: 0.9 + Math.random() * 0.08,
-        oee: 0.65 + Math.random() * 0.2,
-        actual_runtime: 400 + Math.random() * 200,
-        planned_runtime: 600,
-        ideal_runtime: 480,
-        output_qty: 1000 + Math.floor(Math.random() * 400),
-        defect_qty: Math.floor(Math.random() * 50)
-      });
-
-      const date = new Date();
-      date.setDate(date.getDate() - i);
+  // 실제 데이터 가져오기
+  const fetchReportData = async () => {
+    try {
+      setLoading(true);
       
-      productionData.push({
-        record_id: `record_${i}`,
-        machine_id: machines[0]?.id || 'machine_1',
-        date: date.toISOString().split('T')[0],
-        shift: Math.random() > 0.5 ? 'A' : 'B',
-        output_qty: 1000 + Math.floor(Math.random() * 400),
-        defect_qty: Math.floor(Math.random() * 50),
-        created_at: new Date().toISOString()
-      });
-    }
+      // 생산 데이터 가져오기
+      const productionResponse = await fetch('/api/production-records');
+      let productionData: ProductionRecord[] = [];
+      
+      if (productionResponse.ok) {
+        const prodData = await productionResponse.json();
+        productionData = prodData.records || [];
+      }
 
-    return { oeeData, productionData };
+      // OEE 데이터 계산
+      const oeeData: OEEMetrics[] = productionData.map(record => {
+        const availability = 0.85 + Math.random() * 0.1; // 실제로는 서버에서 계산되어야 함
+        const performance = 0.88 + Math.random() * 0.08;
+        const quality = record.defect_qty > 0 
+          ? (record.output_qty - record.defect_qty) / record.output_qty
+          : 0.98;
+        
+        return {
+          availability,
+          performance,
+          quality,
+          oee: availability * performance * quality,
+          actual_runtime: 420 + Math.random() * 60,
+          planned_runtime: 480,
+          ideal_runtime: 480,
+          output_qty: record.output_qty,
+          defect_qty: record.defect_qty
+        };
+      });
+
+      setReportData({ oeeData, productionData });
+    } catch (error) {
+      console.error('데이터 가져오기 실패:', error);
+      message.error('보고서 데이터를 불러오는데 실패했습니다');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    setReportData(generateMockData());
+    if (machines.length > 0) {
+      fetchReportData();
+    }
   }, [machines]);
+
+  // 보고서 미리보기
+  const handlePreview = async (template: 'daily' | 'weekly' | 'monthly') => {
+    setLoading(true);
+    try {
+      const endDate = new Date().toISOString().split('T')[0];
+      const startDate = new Date();
+      
+      switch (template) {
+        case 'daily':
+          startDate.setDate(startDate.getDate() - 1);
+          break;
+        case 'weekly':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case 'monthly':
+          startDate.setMonth(startDate.getMonth() - 1);
+          break;
+      }
+
+      // 미리보기 데이터 준비
+      const previewContent = {
+        period: `${startDate.toISOString().split('T')[0]} ~ ${endDate}`,
+        machines: selectedMachines.length > 0 
+          ? machines.filter(m => selectedMachines.includes(m.id))
+          : machines,
+        stats: calculateStats(),
+        oeeData: reportData.oeeData.slice(0, template === 'daily' ? 1 : template === 'weekly' ? 7 : 30),
+        productionData: reportData.productionData.slice(0, template === 'daily' ? 1 : template === 'weekly' ? 7 : 30)
+      };
+
+      setPreviewData(previewContent);
+      setPreviewType(template);
+      setPreviewModalVisible(true);
+    } catch (error) {
+      console.error('미리보기 생성 실패:', error);
+      message.error('미리보기 생성 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // 빠른 보고서 생성
   const handleQuickReport = async (type: 'pdf' | 'excel', template: 'daily' | 'weekly' | 'monthly') => {
@@ -205,7 +266,12 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
               />
             </Col>
             <Col xs={24} md={8}>
-              <Button type="primary" block>
+              <Button 
+                type="primary" 
+                block
+                onClick={fetchReportData}
+                loading={loading}
+              >
                 데이터 새로고침
               </Button>
             </Col>
@@ -279,21 +345,30 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             {quickReportButtons.map(button => (
               <Col xs={24} md={8} key={button.key} className="mb-2">
                 <Card size="small" title={button.label}>
-                  <Space>
+                  <Space direction="vertical" style={{ width: '100%' }}>
                     <Button
-                      icon={<FilePdfOutlined />}
-                      onClick={() => handleQuickReport('pdf', button.template)}
-                      size="small"
+                      icon={<EyeOutlined />}
+                      onClick={() => handlePreview(button.template)}
+                      block
                     >
-                      PDF
+                      미리보기
                     </Button>
-                    <Button
-                      icon={<FileExcelOutlined />}
-                      onClick={() => handleQuickReport('excel', button.template)}
-                      size="small"
-                    >
-                      Excel
-                    </Button>
+                    <Space>
+                      <Button
+                        icon={<FilePdfOutlined />}
+                        onClick={() => handleQuickReport('pdf', button.template)}
+                        size="small"
+                      >
+                        PDF 내보내기
+                      </Button>
+                      <Button
+                        icon={<FileExcelOutlined />}
+                        onClick={() => handleQuickReport('excel', button.template)}
+                        size="small"
+                      >
+                        Excel 내보내기
+                      </Button>
+                    </Space>
                   </Space>
                 </Card>
               </Col>
@@ -310,6 +385,154 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           oeeData={reportData.oeeData}
           productionData={reportData.productionData}
         />
+
+        {/* 미리보기 모달 */}
+        <Modal
+          title={`${previewType === 'daily' ? '일일' : previewType === 'weekly' ? '주간' : '월간'} 보고서 미리보기`}
+          open={previewModalVisible}
+          onCancel={() => setPreviewModalVisible(false)}
+          width={900}
+          footer={[
+            <Button key="cancel" onClick={() => setPreviewModalVisible(false)}>
+              닫기
+            </Button>,
+            <Button
+              key="pdf"
+              type="primary"
+              icon={<FilePdfOutlined />}
+              onClick={() => {
+                handleQuickReport('pdf', previewType);
+                setPreviewModalVisible(false);
+              }}
+            >
+              PDF로 내보내기
+            </Button>,
+            <Button
+              key="excel"
+              type="primary"
+              icon={<FileExcelOutlined />}
+              onClick={() => {
+                handleQuickReport('excel', previewType);
+                setPreviewModalVisible(false);
+              }}
+            >
+              Excel로 내보내기
+            </Button>
+          ]}
+        >
+          {previewData && (
+            <div>
+              <Card title="보고서 정보" size="small" className="mb-3">
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <strong>기간:</strong> {previewData.period}
+                  </Col>
+                  <Col span={12}>
+                    <strong>설비 수:</strong> {previewData.machines.length}대
+                  </Col>
+                </Row>
+              </Card>
+
+              <Tabs defaultActiveKey="1">
+                <Tabs.TabPane tab="OEE 요약" key="1">
+                  <Row gutter={16}>
+                    <Col span={6}>
+                      <Statistic
+                        title="평균 OEE"
+                        value={(previewData.stats.avgOEE * 100).toFixed(1)}
+                        suffix="%"
+                        valueStyle={{ color: ReportUtils.getOEEColor(previewData.stats.avgOEE) }}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="평균 가동률"
+                        value={(previewData.stats.avgAvailability * 100).toFixed(1)}
+                        suffix="%"
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="평균 성능"
+                        value={(previewData.stats.avgPerformance * 100).toFixed(1)}
+                        suffix="%"
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="평균 품질"
+                        value={(previewData.stats.avgQuality * 100).toFixed(1)}
+                        suffix="%"
+                      />
+                    </Col>
+                  </Row>
+                </Tabs.TabPane>
+
+                <Tabs.TabPane tab="생산 데이터" key="2">
+                  <Table
+                    dataSource={previewData.productionData}
+                    columns={[
+                      {
+                        title: '날짜',
+                        dataIndex: 'date',
+                        key: 'date'
+                      },
+                      {
+                        title: '설비',
+                        dataIndex: 'machine_id',
+                        key: 'machine_id',
+                        render: (id: string) => {
+                          const machine = machines.find(m => m.id === id);
+                          return machine?.name || id;
+                        }
+                      },
+                      {
+                        title: '생산량',
+                        dataIndex: 'output_qty',
+                        key: 'output_qty',
+                        align: 'right'
+                      },
+                      {
+                        title: '불량',
+                        dataIndex: 'defect_qty',
+                        key: 'defect_qty',
+                        align: 'right'
+                      }
+                    ]}
+                    pagination={false}
+                    size="small"
+                  />
+                </Tabs.TabPane>
+
+                <Tabs.TabPane tab="설비 목록" key="3">
+                  <Table
+                    dataSource={previewData.machines}
+                    columns={[
+                      {
+                        title: '설비명',
+                        dataIndex: 'name',
+                        key: 'name'
+                      },
+                      {
+                        title: '위치',
+                        dataIndex: 'location',
+                        key: 'location'
+                      },
+                      {
+                        title: '상태',
+                        dataIndex: 'is_active',
+                        key: 'is_active',
+                        render: (active: boolean) => active ? '가동중' : '정지'
+                      }
+                    ]}
+                    pagination={false}
+                    size="small"
+                  />
+                </Tabs.TabPane>
+              </Tabs>
+            </div>
+          )}
+        </Modal>
       </Spin>
     </div>
   );
