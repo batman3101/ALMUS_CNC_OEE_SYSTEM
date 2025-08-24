@@ -28,7 +28,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
 import type { Machine } from '@/types';
 import MachineForm from './MachineForm';
-import { MachinesBulkUpload } from '@/components/machines';
+import MachinesBulkUpload from '@/components/machines/MachinesBulkUpload';
 
 const { Search } = Input;
 
@@ -122,24 +122,31 @@ const MachineManagement: React.FC = () => {
       sorter: (a, b) => a.location.localeCompare(b.location),
     },
     {
-      title: '모델 타입',
-      dataIndex: 'model_type',
-      key: 'model_type',
+      title: '설비 타입',
+      dataIndex: 'equipment_type',
+      key: 'equipment_type',
       render: (text) => text || '-',
+    },
+    {
+      title: '생산 모델',
+      dataIndex: 'production_model_name',
+      key: 'production_model_name',
+      render: (text, record) => text ? `${text} - ${record.production_model_description || ''}` : '-',
+      sorter: (a, b) => (a.production_model_name || '').localeCompare(b.production_model_name || ''),
     },
     {
       title: '가공 공정',
-      dataIndex: 'processing_step',
-      key: 'processing_step',
+      dataIndex: 'current_process_name',
+      key: 'current_process_name',
       render: (text) => text || '-',
-      sorter: (a, b) => (a.processing_step || '').localeCompare(b.processing_step || ''),
+      sorter: (a, b) => (a.current_process_name || '').localeCompare(b.current_process_name || ''),
     },
     {
       title: 'Tact Time (초)',
-      dataIndex: 'default_tact_time',
-      key: 'default_tact_time',
-      sorter: (a, b) => a.default_tact_time - b.default_tact_time,
-      render: (value) => value.toLocaleString(),
+      dataIndex: 'current_tact_time',
+      key: 'current_tact_time',
+      sorter: (a, b) => (a.current_tact_time || 0) - (b.current_tact_time || 0),
+      render: (value) => value ? value.toLocaleString() : '-',
     },
     {
       title: '상태',

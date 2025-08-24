@@ -8,7 +8,8 @@ import {
   EditOutlined,
   BarChartOutlined,
   SettingOutlined,
-  UserOutlined
+  UserOutlined,
+  AppstoreOutlined
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -91,6 +92,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             key: '/data-input',
             icon: <EditOutlined />,
             label: t('nav.dataInput'),
+          },
+          {
+            key: '/model-info',
+            icon: <AppstoreOutlined />,
+            label: t('nav.modelInfo'),
           },
           {
             key: '/reports',

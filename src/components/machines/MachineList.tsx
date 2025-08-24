@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Row, 
   Col, 
@@ -20,6 +20,8 @@ import {
 } from '@ant-design/icons';
 import { Machine, MachineState } from '@/types';
 import MachineCard from './MachineCard';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { supabase } from '@/lib/supabase';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -28,7 +30,6 @@ interface MachineListProps {
   machines: Machine[];
   loading?: boolean;
   onMachineClick?: (machine: Machine) => void;
-  language?: 'ko' | 'vi';
 }
 
 interface FilterOptions {
@@ -42,9 +43,9 @@ interface FilterOptions {
 const MachineList: React.FC<MachineListProps> = ({
   machines,
   loading = false,
-  onMachineClick,
-  language = 'ko'
+  onMachineClick
 }) => {
+  const { t, language } = useMachinesTranslation();
   const [filters, setFilters] = useState<FilterOptions>({
     searchText: '',
     statusFilter: 'all',
@@ -52,6 +53,34 @@ const MachineList: React.FC<MachineListProps> = ({
     modelFilter: 'all',
     activeFilter: 'all'
   });
+  const [statusDescriptions, setStatusDescriptions] = useState<any[]>([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  // 데이터베이스에서 상태 설명 가져오기
+  useEffect(() => {
+    const fetchStatusDescriptions = async () => {
+      try {
+        setStatusLoading(true);
+        const { data, error } = await supabase
+          .from('machine_status_descriptions')
+          .select('*')
+          .order('display_order');
+
+        if (error) {
+          console.error('Error fetching status descriptions:', error);
+          return;
+        }
+
+        setStatusDescriptions(data || []);
+      } catch (error) {
+        console.error('Error in fetchStatusDescriptions:', error);
+      } finally {
+        setStatusLoading(false);
+      }
+    };
+
+    fetchStatusDescriptions();
+  }, []);
 
   // 필터링된 설비 목록
   const filteredMachines = useMemo(() => {
@@ -105,17 +134,28 @@ const MachineList: React.FC<MachineListProps> = ({
     return [...new Set(models)].sort();
   }, [machines]);
 
-  // 상태별 옵션
-  const statusOptions = [
-    { value: 'all', label: language === 'ko' ? '전체' : 'Tất cả' },
-    { value: 'NORMAL_OPERATION', label: language === 'ko' ? '정상가동' : 'Hoạt động bình thường' },
-    { value: 'MAINTENANCE', label: language === 'ko' ? '점검중' : 'Bảo trì' },
-    { value: 'MODEL_CHANGE', label: language === 'ko' ? '모델교체' : 'Thay đổi mô hình' },
-    { value: 'PLANNED_STOP', label: language === 'ko' ? '계획정지' : 'Dừng theo kế hoạch' },
-    { value: 'PROGRAM_CHANGE', label: language === 'ko' ? '프로그램 교체' : 'Thay đổi chương trình' },
-    { value: 'TOOL_CHANGE', label: language === 'ko' ? '공구교환' : 'Thay đổi công cụ' },
-    { value: 'TEMPORARY_STOP', label: language === 'ko' ? '일시정지' : 'Dừng tạm thời' }
-  ];
+  // 데이터베이스 기반 상태별 옵션
+  const statusOptions = useMemo(() => {
+    const options = [{ value: 'all', label: t('filterOptions.all') }];
+    
+    statusDescriptions.forEach(status => {
+      let label = '';
+      if (language === 'ko') {
+        label = status.description_ko;
+      } else if (language === 'vi') {
+        label = status.description_vi || status.description_ko;
+      } else {
+        label = status.description_en || status.description_ko;
+      }
+      
+      options.push({
+        value: status.status,
+        label: label
+      });
+    });
+    
+    return options;
+  }, [statusDescriptions, language, t]);
 
   const handleFilterChange = (key: keyof FilterOptions, value: any) => {
     setFilters(prev => ({
@@ -147,7 +187,7 @@ const MachineList: React.FC<MachineListProps> = ({
       {/* 헤더 */}
       <div style={{ marginBottom: 24 }}>
         <Title level={3}>
-          {language === 'ko' ? '설비 목록' : 'Danh sách thiết bị'}
+          {t('listTitle')}
           <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: 8 }}>
             ({filteredMachines.length}/{machines.length})
           </span>
@@ -159,7 +199,7 @@ const MachineList: React.FC<MachineListProps> = ({
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           {/* 검색 */}
           <Input
-            placeholder={language === 'ko' ? '설비명, 위치, 모델로 검색...' : 'Tìm kiếm theo tên, vị trí, mô hình...'}
+            placeholder={t('filters.search')}
             prefix={<SearchOutlined />}
             value={filters.searchText}
             onChange={(e) => handleFilterChange('searchText', e.target.value)}
@@ -170,76 +210,96 @@ const MachineList: React.FC<MachineListProps> = ({
           {/* 필터 옵션들 */}
           <Row gutter={[16, 16]}>
             <Col xs={24} sm={12} md={6}>
-              <Select
-                placeholder={language === 'ko' ? '상태 선택' : 'Chọn trạng thái'}
-                value={filters.statusFilter}
-                onChange={(value) => handleFilterChange('statusFilter', value)}
-                style={{ width: '100%' }}
-                suffixIcon={<FilterOutlined />}
-              >
-                {statusOptions.map(option => (
-                  <Option key={option.value} value={option.value}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Select>
+              <div>
+                <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>
+                  {t('filters.statusLabel')}
+                </div>
+                <Select
+                  placeholder={t('filters.statusPlaceholder')}
+                  value={filters.statusFilter}
+                  onChange={(value) => handleFilterChange('statusFilter', value)}
+                  style={{ width: '100%' }}
+                  suffixIcon={<FilterOutlined />}
+                >
+                  {statusOptions.map(option => (
+                    <Option key={option.value} value={option.value}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
             </Col>
 
             <Col xs={24} sm={12} md={6}>
-              <Select
-                placeholder={language === 'ko' ? '위치 선택' : 'Chọn vị trí'}
-                value={filters.locationFilter}
-                onChange={(value) => handleFilterChange('locationFilter', value)}
-                style={{ width: '100%' }}
-                suffixIcon={<EnvironmentOutlined />}
-              >
-                <Option value="all">
-                  {language === 'ko' ? '전체 위치' : 'Tất cả vị trí'}
-                </Option>
-                {uniqueLocations.map(location => (
-                  <Option key={location} value={location}>
-                    {location}
+              <div>
+                <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>
+                  {t('filters.locationLabel')}
+                </div>
+                <Select
+                  placeholder={t('filters.locationPlaceholder')}
+                  value={filters.locationFilter}
+                  onChange={(value) => handleFilterChange('locationFilter', value)}
+                  style={{ width: '100%' }}
+                  suffixIcon={<EnvironmentOutlined />}
+                >
+                  <Option value="all">
+                    {t('filterOptions.allLocations')}
                   </Option>
-                ))}
-              </Select>
+                  {uniqueLocations.map(location => (
+                    <Option key={location} value={location}>
+                      {location}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
             </Col>
 
             <Col xs={24} sm={12} md={6}>
-              <Select
-                placeholder={language === 'ko' ? '모델 선택' : 'Chọn mô hình'}
-                value={filters.modelFilter}
-                onChange={(value) => handleFilterChange('modelFilter', value)}
-                style={{ width: '100%' }}
-                suffixIcon={<SettingOutlined />}
-              >
-                <Option value="all">
-                  {language === 'ko' ? '전체 모델' : 'Tất cả mô hình'}
-                </Option>
-                {uniqueModels.map(model => (
-                  <Option key={model} value={model}>
-                    {model}
+              <div>
+                <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>
+                  {t('filters.modelLabel')}
+                </div>
+                <Select
+                  placeholder={t('filters.modelPlaceholder')}
+                  value={filters.modelFilter}
+                  onChange={(value) => handleFilterChange('modelFilter', value)}
+                  style={{ width: '100%' }}
+                  suffixIcon={<SettingOutlined />}
+                >
+                  <Option value="all">
+                    {t('filterOptions.allModels')}
                   </Option>
-                ))}
-              </Select>
+                  {uniqueModels.map(model => (
+                    <Option key={model} value={model}>
+                      {model}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
             </Col>
 
             <Col xs={24} sm={12} md={6}>
-              <Select
-                placeholder={language === 'ko' ? '활성 상태' : 'Trạng thái hoạt động'}
-                value={filters.activeFilter}
-                onChange={(value) => handleFilterChange('activeFilter', value)}
-                style={{ width: '100%' }}
-              >
-                <Option value="all">
-                  {language === 'ko' ? '전체' : 'Tất cả'}
-                </Option>
-                <Option value="active">
-                  {language === 'ko' ? '활성' : 'Hoạt động'}
-                </Option>
-                <Option value="inactive">
-                  {language === 'ko' ? '비활성' : 'Không hoạt động'}
-                </Option>
-              </Select>
+              <div>
+                <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>
+                  {t('filters.activeLabel')}
+                </div>
+                <Select
+                  placeholder={t('filters.activePlaceholder')}
+                  value={filters.activeFilter}
+                  onChange={(value) => handleFilterChange('activeFilter', value)}
+                  style={{ width: '100%' }}
+                >
+                  <Option value="all">
+                    {t('filterOptions.all')}
+                  </Option>
+                  <Option value="active">
+                    {t('filterOptions.active')}
+                  </Option>
+                  <Option value="inactive">
+                    {t('filterOptions.inactive')}
+                  </Option>
+                </Select>
+              </div>
             </Col>
           </Row>
 
@@ -251,7 +311,7 @@ const MachineList: React.FC<MachineListProps> = ({
             filters.activeFilter !== 'all') && (
             <div>
               <a onClick={clearFilters}>
-                {language === 'ko' ? '필터 초기화' : 'Xóa bộ lọc'}
+                {t('filters.clearFilters')}
               </a>
             </div>
           )}
@@ -261,11 +321,7 @@ const MachineList: React.FC<MachineListProps> = ({
       {/* 설비 카드 그리드 */}
       {filteredMachines.length === 0 ? (
         <Empty
-          description={
-            language === 'ko' 
-              ? '조건에 맞는 설비가 없습니다' 
-              : 'Không có thiết bị nào phù hợp với điều kiện'
-          }
+          description={t('emptyMessage')}
         />
       ) : (
         <Row gutter={[16, 16]}>

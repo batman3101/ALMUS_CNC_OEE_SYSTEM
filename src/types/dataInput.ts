@@ -4,9 +4,13 @@ export interface MachineDataInput {
   // 기본 정보
   machine_name: string;
   machine_number: string;
-  model_type: string;
+  model_type?: string; // Legacy field, kept for backward compatibility
   
-  // 공정 정보
+  // 새로운 모델/공정 정보
+  model_id?: string;
+  process_id?: string;
+  
+  // 공정 정보 (Legacy)
   process_1?: string;
   process_2?: string;
   process_3?: string;

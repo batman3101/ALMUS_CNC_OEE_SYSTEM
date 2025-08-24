@@ -275,6 +275,61 @@ export interface Database {
           created_at?: string | null
         }
       }
+      product_models: {
+        Row: {
+          id: string
+          model_name: string
+          description: string | null
+          is_active: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          model_name: string
+          description?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          model_name?: string
+          description?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
+      model_processes: {
+        Row: {
+          id: string
+          model_id: string
+          process_name: string
+          process_order: number
+          tact_time_seconds: number
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          model_id: string
+          process_name: string
+          process_order: number
+          tact_time_seconds?: number
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          model_id?: string
+          process_name?: string
+          process_order?: number
+          tact_time_seconds?: number
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never

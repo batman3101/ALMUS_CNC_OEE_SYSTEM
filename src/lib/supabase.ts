@@ -18,6 +18,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Export createClient function for components that need fresh instances
+export const createSupabaseClient = () => {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true
+    }
+  });
+};
+
 // Supabase 연결 상태 확인 함수
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {

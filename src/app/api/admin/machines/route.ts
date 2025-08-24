@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 export async function GET() {
   try {
     const { data: machines, error } = await supabaseAdmin
-      .from('machines')
+      .from('machines_with_production_info')
       .select('*')
       .order('created_at', { ascending: false });
 
@@ -27,15 +27,16 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, location, model_type, default_tact_time, is_active } = body;
+    const { name, location, equipment_type, production_model_id, current_process_id, is_active } = body;
 
     const { data: machine, error } = await supabaseAdmin
       .from('machines')
       .insert([{
         name,
         location,
-        model_type,
-        default_tact_time: default_tact_time || 60,
+        equipment_type,
+        production_model_id,
+        current_process_id,
         is_active: is_active !== undefined ? is_active : true,
         current_state: 'NORMAL_OPERATION'
       }])

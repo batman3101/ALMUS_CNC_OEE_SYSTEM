@@ -1,4 +1,27 @@
 {
+  "title": "Quản lý thiết bị",
+  "description": "Giám sát và quản lý tình trạng thiết bị CNC theo thời gian thực",
+  "listTitle": "Danh sách thiết bị",
+  "filters": {
+    "search": "Tìm kiếm theo tên, vị trí, mô hình...",
+    "statusLabel": "Bộ lọc trạng thái",
+    "statusPlaceholder": "Chọn trạng thái",
+    "locationLabel": "Bộ lọc vị trí",
+    "locationPlaceholder": "Chọn vị trí",
+    "modelLabel": "Bộ lọc mô hình",
+    "modelPlaceholder": "Chọn mô hình",
+    "activeLabel": "Bộ lọc trạng thái hoạt động",
+    "activePlaceholder": "Trạng thái hoạt động",
+    "clearFilters": "Xóa bộ lọc"
+  },
+  "filterOptions": {
+    "all": "Tất cả",
+    "allLocations": "Tất cả vị trí",
+    "allModels": "Tất cả mô hình",
+    "active": "Hoạt động",
+    "inactive": "Không hoạt động"
+  },
+  "emptyMessage": "Không có thiết bị nào phù hợp với điều kiện",
   "states": {
     "NORMAL_OPERATION": "Hoạt động bình thường",
     "MAINTENANCE": "Bảo trì",

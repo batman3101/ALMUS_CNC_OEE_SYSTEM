@@ -55,22 +55,29 @@ export class SystemSettingsService {
         return { success: false, error: error.message };
       }
 
-      // 데이터가 없는 경우 기본값 반환
+      // 데이터가 없는 경우
       if (!data || data.length === 0) {
-        // 더 상세한 디버그 정보 추가
+        // Service Role을 사용해서 다시 시도 (RLS 우회)
+        try {
+          console.log('📋 No settings found with regular client, trying with service role...');
+          
+          const { data: serviceData, error: serviceError } = await this.getSettingsWithServiceRole();
+          
+          if (serviceData && serviceData.length > 0) {
+            console.log('✅ Settings retrieved with service role:', serviceData.length);
+            this.updateCache(serviceData);
+            return { success: true, data: serviceData };
+          }
+        } catch (serviceRoleError) {
+          console.warn('⚠️ Service role fetch failed:', serviceRoleError);
+        }
+        
+        // 정말로 데이터가 없는 경우에만 기본값 반환
         log.info('No system settings found in database, using default values', { 
           dataLength: data?.length,
           errorDetails: error ? error.message : 'No error',
           supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20) + '...'
         }, LogCategories.SETTINGS);
-        
-        // 개발 환경에서 RLS 정책 문제 힌트 제공
-        if (process.env.NODE_ENV === 'development') {
-          console.log('💡 Hint: If you see this message repeatedly, check:');
-          console.log('1. Run fix-system-settings-rls-v2.sql in Supabase SQL Editor');
-          console.log('2. Run quick-fix-settings.sql to add initial data');
-          console.log('3. Verify RLS policies allow authenticated users to read system_settings');
-        }
         
         return this.getDefaultSettingsResponse();
       }
@@ -82,6 +89,51 @@ export class SystemSettingsService {
     } catch (error) {
       log.error('Error in getAllSettings', error, LogCategories.SETTINGS);
       return this.getDefaultSettingsResponse();
+    }
+  }
+
+  /**
+   * Service Role을 사용하여 설정 조회 (RLS 우회)
+   */
+  private async getSettingsWithServiceRole(): Promise<{ data: SystemSetting[] | null; error: any }> {
+    try {
+      // 서버 사이드에서만 실행 가능
+      if (typeof window !== 'undefined') {
+        // 클라이언트 사이드에서는 API 라우트를 통해 조회
+        const response = await fetch('/api/system-settings/service-role');
+        if (response.ok) {
+          const result = await response.json();
+          return { data: result.data, error: null };
+        }
+        return { data: null, error: 'Failed to fetch with service role' };
+      }
+      
+      // 서버 사이드에서는 직접 Service Role 사용
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!serviceRoleKey) {
+        return { data: null, error: 'Service role key not available' };
+      }
+      
+      const { createClient } = await import('@supabase/supabase-js');
+      const serviceClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        serviceRoleKey,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
+        }
+      );
+      
+      return await serviceClient
+        .from('system_settings')
+        .select('*')
+        .eq('is_active', true)
+        .order('category, setting_key');
+    } catch (error) {
+      console.error('Error in getSettingsWithServiceRole:', error);
+      return { data: null, error };
     }
   }
 

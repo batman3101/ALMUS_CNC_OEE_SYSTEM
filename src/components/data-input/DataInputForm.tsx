@@ -18,23 +18,32 @@ import {
   TimePicker,
   Table,
   Modal,
-  Popconfirm
+  Popconfirm,
+  Spin,
+  Alert
 } from 'antd';
 import {
   SaveOutlined,
   PlusOutlined,
   DeleteOutlined,
   CalculatorOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined,
+  LoadingOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useProductModels } from '@/hooks/useProductModels';
+import { useModelProcesses } from '@/hooks/useModelProcesses';
 import type { MachineDataInput, DowntimeEntry, MachineProcess } from '@/types/dataInput';
+import type { Database } from '@/types/database';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
+
+type ProductModel = Database['public']['Tables']['product_models']['Row'];
+type ModelProcess = Database['public']['Tables']['model_processes']['Row'];
 
 const DataInputForm: React.FC = () => {
   const { t } = useLanguage();
@@ -42,11 +51,22 @@ const DataInputForm: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [downtimeEntries, setDowntimeEntries] = useState<DowntimeEntry[]>([]);
-  const [processes, setProcesses] = useState<MachineProcess[]>([]);
   const [downtimeModalVisible, setDowntimeModalVisible] = useState(false);
-  const [processModalVisible, setProcessModalVisible] = useState(false);
   const [downtimeForm] = Form.useForm();
-  const [processForm] = Form.useForm();
+
+  // Product models and processes state
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
+  
+  // Hooks for fetching data
+  const { models, loading: modelsLoading, error: modelsError } = useProductModels();
+  const { 
+    processes: modelProcesses, 
+    loading: processesLoading, 
+    error: processesError, 
+    fetchProcesses,
+    clearProcesses
+  } = useModelProcesses();
 
   // 비가동 사유 목록 가져오기
   const downtimeReasons = getSetting('general', 'downtime_reasons') || [
@@ -57,6 +77,35 @@ const DataInputForm: React.FC = () => {
   const calculateDailyCapacity = (operatingHours: number, tactTime: number) => {
     if (!operatingHours || !tactTime) return 0;
     return Math.floor((operatingHours * 3600) / tactTime); // 시간을 초로 변환 후 계산
+  };
+
+  // 모델 선택 핸들러
+  const handleModelSelect = async (modelId: string) => {
+    setSelectedModelId(modelId);
+    setSelectedProcessId(null);
+    form.setFieldValue('process_id', undefined);
+    form.setFieldValue('tact_time', undefined);
+    
+    // 선택된 모델의 공정 목록 가져오기
+    await fetchProcesses(modelId);
+  };
+
+  // 공정 선택 핸들러
+  const handleProcessSelect = (processId: string) => {
+    setSelectedProcessId(processId);
+    
+    // 선택된 공정의 Tact Time 자동 설정
+    const selectedProcess = modelProcesses.find(p => p.id === processId);
+    if (selectedProcess) {
+      form.setFieldValue('tact_time', selectedProcess.tact_time_seconds);
+      
+      // Tact Time이 변경되었으므로 용량 재계산
+      const operatingHours = form.getFieldValue('daily_operating_hours');
+      if (operatingHours) {
+        const capacity = calculateDailyCapacity(operatingHours, selectedProcess.tact_time_seconds);
+        form.setFieldValue('daily_capacity', capacity);
+      }
+    }
   };
 
   // 폼 값 변경 시 자동 계산
@@ -92,22 +141,6 @@ const DataInputForm: React.FC = () => {
     message.success('비가동 시간이 추가되었습니다');
   };
 
-  // 공정 추가
-  const addProcess = (values: { process_name: string; description?: string; standard_time?: number }) => {
-    const newProcess: MachineProcess = {
-      id: Date.now().toString(),
-      machine_id: form.getFieldValue('machine_number') || '',
-      process_order: processes.length + 1,
-      process_name: values.process_name,
-      description: values.description || '',
-      standard_time: values.standard_time || 0
-    };
-
-    setProcesses(prev => [...prev, newProcess]);
-    setProcessModalVisible(false);
-    processForm.resetFields();
-    message.success('공정이 추가되었습니다');
-  };
 
   // 비가동 시간 삭제
   const removeDowntimeEntry = (id: string) => {
@@ -115,11 +148,6 @@ const DataInputForm: React.FC = () => {
     message.success('비가동 시간이 삭제되었습니다');
   };
 
-  // 공정 삭제
-  const removeProcess = (id: string) => {
-    setProcesses(prev => prev.filter(process => process.id !== id));
-    message.success('공정이 삭제되었습니다');
-  };
 
   // 데이터 저장
   const handleSave = async (values: MachineDataInput) => {
@@ -210,45 +238,6 @@ const DataInputForm: React.FC = () => {
     }
   ];
 
-  // 공정 테이블 컬럼
-  const processColumns = [
-    {
-      title: '순서',
-      dataIndex: 'process_order',
-      key: 'process_order'
-    },
-    {
-      title: '공정명',
-      dataIndex: 'process_name',
-      key: 'process_name'
-    },
-    {
-      title: '설명',
-      dataIndex: 'description',
-      key: 'description'
-    },
-    {
-      title: '표준 시간(초)',
-      dataIndex: 'standard_time',
-      key: 'standard_time'
-    },
-    {
-      title: '작업',
-      key: 'actions',
-      render: (_: any, record: MachineProcess) => (
-        <Popconfirm
-          title="이 공정을 삭제하시겠습니까?"
-          onConfirm={() => removeProcess(record.id!)}
-          okText="삭제"
-          cancelText="취소"
-        >
-          <Button type="link" danger icon={<DeleteOutlined />} size="small">
-            삭제
-          </Button>
-        </Popconfirm>
-      )
-    }
-  ];
 
   return (
     <div>
@@ -262,7 +251,7 @@ const DataInputForm: React.FC = () => {
         {/* 기본 정보 */}
         <Card title="설비 기본 정보" size="small" style={{ marginBottom: '16px' }}>
           <Row gutter={[16, 0]}>
-            <Col xs={24} sm={12} md={8}>
+            <Col xs={24} sm={12}>
               <Form.Item
                 name="machine_name"
                 label="설비명"
@@ -271,22 +260,13 @@ const DataInputForm: React.FC = () => {
                 <Input placeholder="예: CNC-001" />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12} md={8}>
+            <Col xs={24} sm={12}>
               <Form.Item
                 name="machine_number"
                 label="설비번호"
                 rules={[{ required: true, message: '설비번호를 입력하세요' }]}
               >
                 <Input placeholder="예: M001" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Item
-                name="model_type"
-                label="모델"
-                rules={[{ required: true, message: '모델을 입력하세요' }]}
-              >
-                <Input placeholder="예: MAZAK-VTC-200" />
               </Form.Item>
             </Col>
           </Row>
@@ -297,25 +277,99 @@ const DataInputForm: React.FC = () => {
           title="공정 정보" 
           size="small" 
           style={{ marginBottom: '16px' }}
-          extra={
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />} 
-              size="small"
-              onClick={() => setProcessModalVisible(true)}
-            >
-              공정 추가
-            </Button>
-          }
         >
-          <Table
-            dataSource={processes}
-            columns={processColumns}
-            rowKey="id"
-            size="small"
-            pagination={false}
-            locale={{ emptyText: '등록된 공정이 없습니다' }}
-          />
+          {/* 모델 및 공정 선택 */}
+          <Row gutter={[16, 0]} style={{ marginBottom: 16 }}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="model_id"
+                label="생산 모델"
+                rules={[{ required: true, message: '생산 모델을 선택하세요' }]}
+              >
+                <Select
+                  placeholder="모델을 선택하세요"
+                  loading={modelsLoading}
+                  onChange={handleModelSelect}
+                  showSearch
+                  optionFilterProp="children"
+                  filterOption={(input, option) =>
+                    (option?.children as unknown as string)
+                      ?.toLowerCase()
+                      .includes(input.toLowerCase()) ?? false
+                  }
+                  notFoundContent={modelsLoading ? <Spin size="small" /> : '데이터가 없습니다'}
+                >
+                  {models.map((model) => (
+                    <Option key={model.id} value={model.id}>
+                      {model.model_name}
+                      {model.description && (
+                        <span style={{ color: '#8c8c8c', fontSize: '12px' }}>
+                          {' '}- {model.description}
+                        </span>
+                      )}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              {modelsError && (
+                <Alert 
+                  message="모델 로딩 오류" 
+                  description={modelsError} 
+                  type="error" 
+                  showIcon 
+                  style={{ marginTop: 8 }} 
+                />
+              )}
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="process_id"
+                label="공정 선택"
+                rules={[{ required: true, message: '공정을 선택하세요' }]}
+              >
+                <Select
+                  placeholder={selectedModelId ? '공정을 선택하세요' : '먼저 모델을 선택하세요'}
+                  loading={processesLoading}
+                  onChange={handleProcessSelect}
+                  disabled={!selectedModelId}
+                  showSearch
+                  optionFilterProp="children"
+                  filterOption={(input, option) =>
+                    (option?.children as unknown as string)
+                      ?.toLowerCase()
+                      .includes(input.toLowerCase()) ?? false
+                  }
+                  notFoundContent={
+                    processesLoading ? (
+                      <Spin size="small" />
+                    ) : !selectedModelId ? (
+                      '모델을 먼저 선택하세요'
+                    ) : (
+                      '해당 모델에 공정이 없습니다'
+                    )
+                  }
+                >
+                  {modelProcesses.map((process) => (
+                    <Option key={process.id} value={process.id}>
+                      {process.process_order}. {process.process_name}
+                      <span style={{ color: '#8c8c8c', fontSize: '12px' }}>
+                        {' '}({process.tact_time_seconds}초)
+                      </span>
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+              {processesError && (
+                <Alert 
+                  message="공정 로딩 오류" 
+                  description={processesError} 
+                  type="error" 
+                  showIcon 
+                  style={{ marginTop: 8 }} 
+                />
+              )}
+            </Col>
+          </Row>
         </Card>
 
         {/* 생산 정보 */}
@@ -324,7 +378,16 @@ const DataInputForm: React.FC = () => {
             <Col xs={24} sm={12} md={8}>
               <Form.Item
                 name="tact_time"
-                label="Tact Time (초)"
+                label={
+                  <span>
+                    Tact Time (초)
+                    {selectedProcessId && (
+                      <span style={{ color: '#52c41a', fontSize: '12px', marginLeft: '8px' }}>
+                        공정에서 자동 설정됨
+                      </span>
+                    )}
+                  </span>
+                }
                 rules={[
                   { required: true, message: 'Tact Time을 입력하세요' },
                   { type: 'number', min: 1, message: '1초 이상 입력하세요' }
@@ -332,7 +395,7 @@ const DataInputForm: React.FC = () => {
               >
                 <InputNumber
                   style={{ width: '100%' }}
-                  placeholder="120"
+                  placeholder={selectedProcessId ? '공정에서 자동 설정' : '120'}
                   addonAfter="초"
                 />
               </Form.Item>
@@ -537,60 +600,6 @@ const DataInputForm: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 공정 추가 모달 */}
-      <Modal
-        title="공정 추가"
-        open={processModalVisible}
-        onCancel={() => setProcessModalVisible(false)}
-        footer={null}
-      >
-        <Form
-          form={processForm}
-          layout="vertical"
-          onFinish={addProcess}
-        >
-          <Form.Item
-            name="process_name"
-            label="공정명"
-            rules={[{ required: true, message: '공정명을 입력하세요' }]}
-          >
-            <Input placeholder="예: 조립, 가공, 검사" />
-          </Form.Item>
-
-          <Form.Item
-            name="description"
-            label="공정 설명"
-          >
-            <TextArea
-              rows={2}
-              placeholder="공정에 대한 상세 설명"
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="standard_time"
-            label="표준 시간 (초)"
-          >
-            <InputNumber
-              style={{ width: '100%' }}
-              placeholder="60"
-              addonAfter="초"
-              min={0}
-            />
-          </Form.Item>
-
-          <div style={{ textAlign: 'right' }}>
-            <Space>
-              <Button onClick={() => setProcessModalVisible(false)}>
-                취소
-              </Button>
-              <Button type="primary" htmlType="submit">
-                추가
-              </Button>
-            </Space>
-          </div>
-        </Form>
-      </Modal>
     </div>
   );
 };

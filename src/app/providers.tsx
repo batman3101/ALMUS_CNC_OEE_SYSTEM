@@ -9,18 +9,17 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { SystemSettingsProvider } from '@/contexts/SystemSettingsContext';
 import { ToastNotificationProvider } from '@/components/notifications';
-import { useThemeSettings } from '@/hooks/useThemeSettings';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import '@/lib/i18n'; // i18n 초기화
 
-// Ant Design 로케일 및 테마 설정을 위한 내부 컴포넌트
+// Ant Design 로케일 설정을 위한 내부 컴포넌트
 const AntdConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { language } = useLanguage();
-  const { antdTheme } = useThemeSettings();
   
   const locale = language === 'ko' ? koKR : viVN;
   
   return (
-    <ConfigProvider theme={antdTheme} locale={locale}>
+    <ConfigProvider locale={locale}>
       <App>
         {children}
       </App>
@@ -35,9 +34,11 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
         <SystemSettingsProvider>
           <NotificationProvider>
             <ToastNotificationProvider>
-              <AntdConfigProvider>
-                {children}
-              </AntdConfigProvider>
+              <ThemeProvider>
+                <AntdConfigProvider>
+                  {children}
+                </AntdConfigProvider>
+              </ThemeProvider>
             </ToastNotificationProvider>
           </NotificationProvider>
         </SystemSettingsProvider>

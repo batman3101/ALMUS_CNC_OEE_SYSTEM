@@ -182,12 +182,19 @@ export function useSystemSettings() {
  * 특정 카테고리 설정만 사용하는 훅
  */
 export function useCategorySettings<T extends SettingCategory>(category: T) {
-  const { getSettingsByCategory, updateSetting, resetCategory } = useSystemSettings();
+  const { getSettingsByCategory, updateSetting, updateMultipleSettings, resetCategory } = useSystemSettings();
   
   return {
     settings: getSettingsByCategory(category) as AllSystemSettings[T],
     updateSetting: (key: string, value: any, reason?: string) => 
       updateSetting({ category, setting_key: key, setting_value: value, change_reason: reason }),
+    updateMultipleSettings: (updates: Array<{ key: string; value: any; reason?: string }>) =>
+      updateMultipleSettings(updates.map(update => ({
+        category,
+        setting_key: update.key,
+        setting_value: update.value,
+        change_reason: update.reason
+      }))),
     resetSettings: () => resetCategory(category)
   };
 }

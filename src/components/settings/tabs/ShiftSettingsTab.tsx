@@ -7,7 +7,6 @@ import {
   InputNumber, 
   Button, 
   Space, 
-  message, 
   Card,
   Typography,
   Row,
@@ -19,6 +18,7 @@ import { SaveOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useShiftSettings } from '@/hooks/useSystemSettings';
+import { useMessage } from '@/hooks/useMessage';
 
 const { Title, Text } = Typography;
 
@@ -29,6 +29,7 @@ interface ShiftSettingsTabProps {
 const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange }) => {
   const { t } = useLanguage();
   const { settings, updateSetting } = useShiftSettings();
+  const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -76,7 +77,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
       // A교대 시간 검증 (같은 날)
       if (aStart.isAfter(aEnd)) {
-        message.error(t('settings.shift.aShiftTimeError'));
+        showError(t('settings.shift.aShiftTimeError'));
         return;
       }
 
@@ -95,11 +96,11 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
         }
       }
 
-      message.success(t('settings.saveSuccess'));
+      showSuccess(t('settings.saveSuccess'));
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving shift settings:', error);
-      message.error(t('settings.saveError'));
+      showError(t('settings.saveError'));
     } finally {
       setLoading(false);
     }
@@ -135,6 +136,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
   return (
     <div>
+      {contextHolder}
       <Title level={4} style={{ marginBottom: '24px' }}>
         {t('settings.shift.title')}
       </Title>

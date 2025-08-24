@@ -11,10 +11,12 @@ export interface User {
   created_at: string;
 }
 
-// 설비 상태 타입
+// 설비 상태 타입 (데이터베이스 enum과 일치)
 export type MachineState = 
   | 'NORMAL_OPERATION'    // 정상가동
-  | 'MAINTENANCE'         // 점검중
+  | 'INSPECTION'          // 점검중  
+  | 'BREAKDOWN_REPAIR'    // 고장수리중
+  | 'PM_MAINTENANCE'      // PM중
   | 'MODEL_CHANGE'        // 모델교체
   | 'PLANNED_STOP'        // 계획정지
   | 'PROGRAM_CHANGE'      // 프로그램 교체
@@ -26,13 +28,20 @@ export interface Machine {
   id: string;
   name: string;
   location: string;
-  model_type: string;
-  processing_step: string;
-  default_tact_time: number;
+  equipment_type?: string;           // 설비 타입 (선택사항)
+  production_model_id?: string;      // 생산 모델 ID
+  current_process_id?: string;       // 현재 공정 ID
   is_active: boolean;
   current_state?: MachineState;
   created_at: string;
   updated_at: string;
+  
+  // 조인된 정보들 (뷰에서 가져올 때)
+  production_model_name?: string;
+  production_model_description?: string;
+  current_process_name?: string;
+  current_process_order?: number;
+  current_tact_time?: number;
 }
 
 // 설비 로그 타입

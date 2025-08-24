@@ -8,7 +8,6 @@ import {
   InputNumber, 
   Button, 
   Space, 
-  message, 
   Card,
   Typography,
   Row,
@@ -19,6 +18,7 @@ import {
 import { SaveOutlined, BellOutlined, MailOutlined, SoundOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useNotificationSettings } from '@/hooks/useSystemSettings';
+import { useMessage } from '@/hooks/useMessage';
 
 const { Title, Text } = Typography;
 
@@ -29,6 +29,7 @@ interface NotificationSettingsTabProps {
 const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSettingsChange }) => {
   const { t } = useLanguage();
   const { settings, updateSetting } = useNotificationSettings();
+  const { success: showSuccess, error: showError, warning: showWarning, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
@@ -62,7 +63,7 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
       if (values.email_notifications_enabled && values.notification_email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(values.notification_email)) {
-          message.error(t('settings.notification.invalidEmail'));
+          showError(t('settings.notification.invalidEmail'));
           return;
         }
       }
@@ -80,11 +81,11 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
         }
       }
 
-      message.success(t('settings.saveSuccess'));
+      showSuccess(t('settings.saveSuccess'));
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving notification settings:', error);
-      message.error(t('settings.saveError'));
+      showError(t('settings.saveError'));
     } finally {
       setLoading(false);
     }
@@ -98,18 +99,18 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
         setBrowserPermission(permission);
         
         if (permission === 'granted') {
-          message.success(t('settings.notification.permissionGranted'));
+          showSuccess(t('settings.notification.permissionGranted'));
           // 테스트 알림 표시
           new Notification(t('settings.notification.testTitle'), {
             body: t('settings.notification.testBody'),
             icon: '/favicon.ico'
           });
         } else {
-          message.warning(t('settings.notification.permissionDenied'));
+          showWarning(t('settings.notification.permissionDenied'));
         }
       } catch (error) {
         console.error('Error requesting notification permission:', error);
-        message.error(t('settings.notification.permissionError'));
+        showError(t('settings.notification.permissionError'));
       }
     }
   };
@@ -121,9 +122,9 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
         body: t('settings.notification.testBody'),
         icon: '/favicon.ico'
       });
-      message.success(t('settings.notification.testSent'));
+      showSuccess(t('settings.notification.testSent'));
     } else {
-      message.warning(t('settings.notification.permissionRequired'));
+      showWarning(t('settings.notification.permissionRequired'));
     }
   };
 
@@ -132,6 +133,7 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
 
   return (
     <div>
+      {contextHolder}
       <Title level={4} style={{ marginBottom: '24px' }}>
         {t('settings.notification.title')}
       </Title>

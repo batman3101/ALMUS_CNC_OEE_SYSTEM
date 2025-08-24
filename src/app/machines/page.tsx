@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Typography } from 'antd';
-import { useTranslation } from '@/hooks/useTranslation';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 import MachineList from '@/components/machines/MachineList';
 import { ProtectedRoute } from '@/components/auth';
 import { Machine } from '@/types';
@@ -10,7 +10,7 @@ import { Machine } from '@/types';
 const { Title, Paragraph } = Typography;
 
 export default function MachinesPage() {
-  const { t } = useTranslation();
+  const { t } = useMachinesTranslation();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,10 +66,10 @@ export default function MachinesPage() {
       <div>
         <div style={{ marginBottom: '24px' }}>
           <Title level={2}>
-            {t('machines.title')}
+            {t('title')}
           </Title>
           <Paragraph type="secondary">
-            {t('machines.description')}
+            {t('description')}
           </Paragraph>
         </div>
 

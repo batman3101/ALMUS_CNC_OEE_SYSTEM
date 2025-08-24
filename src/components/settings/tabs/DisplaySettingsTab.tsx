@@ -7,7 +7,6 @@ import {
   InputNumber, 
   Button, 
   Space, 
-  message, 
   Card,
   Typography,
   Row,
@@ -21,6 +20,7 @@ import { SaveOutlined, EyeOutlined, BgColorsOutlined } from '@ant-design/icons';
 import type { Color } from 'antd/es/color-picker';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useSystemSettings';
+import { useMessage } from '@/hooks/useMessage';
 
 const { Title, Text } = Typography;
 
@@ -31,6 +31,7 @@ interface DisplaySettingsTabProps {
 const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChange }) => {
   const { t } = useLanguage();
   const { settings, updateSetting } = useDisplaySettings();
+  const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -90,11 +91,11 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
       // 테마 색상 즉시 적용
       applyThemeColors(processedValues);
 
-      message.success(t('settings.saveSuccess'));
+      showSuccess(t('settings.saveSuccess'));
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving display settings:', error);
-      message.error(t('settings.saveError'));
+      showError(t('settings.saveError'));
     } finally {
       setLoading(false);
     }
@@ -120,7 +121,7 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
 
     form.setFieldsValue(defaultColors);
     applyThemeColors(defaultColors);
-    message.success(t('settings.display.colorsReset'));
+    showSuccess(t('settings.display.colorsReset'));
   };
 
   // 색상 미리보기
@@ -149,6 +150,7 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
 
   return (
     <div>
+      {contextHolder}
       <Title level={4} style={{ marginBottom: '24px' }}>
         {t('settings.display.title')}
       </Title>

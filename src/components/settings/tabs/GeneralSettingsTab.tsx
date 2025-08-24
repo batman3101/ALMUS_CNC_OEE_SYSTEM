@@ -28,7 +28,7 @@ interface GeneralSettingsTabProps {
 
 const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChange }) => {
   const { t } = useLanguage();
-  const { settings, updateSetting } = useGeneralSettings();
+  const { settings, updateSetting, updateMultipleSettings } = useGeneralSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -69,11 +69,10 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         reason: `Updated ${key} setting`
       }));
 
-      for (const update of updates) {
-        const success = await updateSetting(update.key, update.value, update.reason);
-        if (!success) {
-          throw new Error(`Failed to update ${update.key}`);
-        }
+      // Use updateMultipleSettings instead of sequential updates
+      const success = await updateMultipleSettings(updates);
+      if (!success) {
+        throw new Error('Failed to update settings');
       }
 
       showSuccess(t('settings.saveSuccess'));

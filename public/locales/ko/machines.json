@@ -1,4 +1,27 @@
 {
+  "title": "설비 관리",
+  "description": "CNC 설비 현황을 실시간으로 모니터링하고 관리합니다",
+  "listTitle": "설비 목록",
+  "filters": {
+    "search": "설비명, 위치, 모델로 검색...",
+    "statusLabel": "상태 필터",
+    "statusPlaceholder": "상태 선택",
+    "locationLabel": "위치 필터", 
+    "locationPlaceholder": "위치 선택",
+    "modelLabel": "모델 필터",
+    "modelPlaceholder": "모델 선택",
+    "activeLabel": "활성 상태 필터",
+    "activePlaceholder": "활성 상태",
+    "clearFilters": "필터 초기화"
+  },
+  "filterOptions": {
+    "all": "전체",
+    "allLocations": "전체 위치",
+    "allModels": "전체 모델",
+    "active": "활성",
+    "inactive": "비활성"
+  },
+  "emptyMessage": "조건에 맞는 설비가 없습니다",
   "states": {
     "NORMAL_OPERATION": "정상가동",
     "MAINTENANCE": "점검중",

@@ -13,6 +13,9 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "CNC OEE 모니터링 시스템",
   description: "CNC 설비 OEE 모니터링 및 관리 시스템",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { MachinesBulkUpload } from '@/components/machines/MachinesBulkUpload';
+import MachinesBulkUpload from '@/components/machines/MachinesBulkUpload';
 import { ProtectedRoute } from '@/components/auth';
 
 export default function BulkUploadPage() {

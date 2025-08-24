@@ -9,7 +9,6 @@ import {
   Button, 
   Space, 
   Modal, 
-  message,
   Typography 
 } from 'antd';
 import { 
@@ -25,6 +24,7 @@ import {
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useMessage } from '@/hooks/useMessage';
 import GeneralSettingsTab from './tabs/GeneralSettingsTab';
 import OEESettingsTab from './tabs/OEESettingsTab';
 import ShiftSettingsTab from './tabs/ShiftSettingsTab';
@@ -38,6 +38,7 @@ const { confirm } = Modal;
 const SystemSettings: React.FC = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const { 
     settings, 
     isLoading, 
@@ -145,11 +146,11 @@ const SystemSettings: React.FC = () => {
   const handleRefresh = async () => {
     try {
       await refreshSettings();
-      message.success(t('settings.refreshSuccess'));
+      showSuccess(t('settings.refreshSuccess'));
       setHasUnsavedChanges(false);
     } catch (error) {
       console.error('Error refreshing settings:', error);
-      message.error(t('settings.refreshError'));
+      showError(t('settings.refreshError'));
     }
   };
 
@@ -166,14 +167,14 @@ const SystemSettings: React.FC = () => {
         try {
           const success = await resetAllSettings();
           if (success) {
-            message.success(t('settings.resetAllSuccess'));
+            showSuccess(t('settings.resetAllSuccess'));
             setHasUnsavedChanges(false);
           } else {
-            message.error(t('settings.resetAllError'));
+            showError(t('settings.resetAllError'));
           }
         } catch (error) {
           console.error('Error resetting all settings:', error);
-          message.error(t('settings.resetAllError'));
+          showError(t('settings.resetAllError'));
         }
       },
     });
@@ -201,17 +202,21 @@ const SystemSettings: React.FC = () => {
   // 권한 없음 메시지
   if (!isAdmin) {
     return (
-      <Alert
-        message={t('settings.accessDenied')}
-        description={t('settings.adminRequired')}
-        type="warning"
-        showIcon
-      />
+      <div>
+        {contextHolder}
+        <Alert
+          message={t('settings.accessDenied')}
+          description={t('settings.adminRequired')}
+          type="warning"
+          showIcon
+        />
+      </div>
     );
   }
 
   return (
     <div>
+      {contextHolder}
       {/* 헤더 영역 */}
       <div style={{ 
         display: 'flex', 
