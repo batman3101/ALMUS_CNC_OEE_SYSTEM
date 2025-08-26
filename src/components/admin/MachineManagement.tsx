@@ -13,7 +13,8 @@ import {
   Row,
   Col,
   App,
-  Modal
+  Modal,
+  Select
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -38,6 +39,7 @@ const MachineManagement: React.FC = () => {
   const { loading, fetchMachines, deleteMachine, updateMachine } = useAdminOperations();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [formVisible, setFormVisible] = useState(false);
   const [bulkUploadVisible, setBulkUploadVisible] = useState(false);
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
@@ -101,12 +103,20 @@ const MachineManagement: React.FC = () => {
     setEditingMachine(null);
   };
 
-  const filteredMachines = machines.filter(machine =>
-    machine.name.toLowerCase().includes(searchText.toLowerCase()) ||
-    machine.location.toLowerCase().includes(searchText.toLowerCase()) ||
-    (machine.model_type && machine.model_type.toLowerCase().includes(searchText.toLowerCase())) ||
-    (machine.processing_step && machine.processing_step.toLowerCase().includes(searchText.toLowerCase()))
-  );
+  const filteredMachines = machines.filter(machine => {
+    // 텍스트 검색 필터
+    const matchesSearch = machine.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      machine.location.toLowerCase().includes(searchText.toLowerCase()) ||
+      (machine.model_type && machine.model_type.toLowerCase().includes(searchText.toLowerCase())) ||
+      (machine.processing_step && machine.processing_step.toLowerCase().includes(searchText.toLowerCase()));
+    
+    // 상태 필터
+    const matchesStatus = statusFilter === 'all' || 
+      (statusFilter === 'active' && machine.is_active) ||
+      (statusFilter === 'inactive' && !machine.is_active);
+    
+    return matchesSearch && matchesStatus;
+  });
 
   const columns: ColumnsType<Machine> = [
     {
@@ -208,6 +218,16 @@ const MachineManagement: React.FC = () => {
           </Col>
           <Col>
             <Space>
+              <Select
+                value={statusFilter}
+                onChange={setStatusFilter}
+                style={{ width: 120 }}
+                options={[
+                  { label: '전체', value: 'all' },
+                  { label: '활성', value: 'active' },
+                  { label: '비활성', value: 'inactive' }
+                ]}
+              />
               <Search
                 placeholder={t('table.search')}
                 allowClear
