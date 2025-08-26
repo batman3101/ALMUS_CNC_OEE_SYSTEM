@@ -26,6 +26,7 @@ import {
   SettingOutlined
 } from '@ant-design/icons';
 import { createSupabaseClient } from '@/lib/supabase';
+import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import type { ProductModel, ModelProcess } from '@/types/modelInfo';
 
 const { Title, Text } = Typography;
@@ -34,6 +35,7 @@ const { TextArea } = Input;
 interface ModelInfoManagerProps {}
 
 const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
+  const { t } = useModelInfoTranslation();
   const [models, setModels] = useState<ProductModel[]>([]);
   const [processes, setProcesses] = useState<ModelProcess[]>([]);
   const [loading, setLoading] = useState(false);
@@ -252,19 +254,19 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   // 모델 테이블 컬럼
   const modelColumns = [
     {
-      title: '모델명',
+      title: t('컴럼.모델명'),
       dataIndex: 'model_name',
       key: 'model_name',
       render: (text: string) => <Text strong>{text}</Text>
     },
     {
-      title: '설명',
+      title: t('컴럼.설명'),
       dataIndex: 'description',
       key: 'description',
       render: (text: string) => text || '-'
     },
     {
-      title: '공정 수',
+      title: t('컴럼.공정수'),
       key: 'process_count',
       render: (_: any, record: ProductModel) => {
         const count = processes.filter(p => p.model_id === record.id).length;
@@ -272,13 +274,13 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       }
     },
     {
-      title: '등록일',
+      title: t('컴럼.등록일'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (date: string) => new Date(date).toLocaleDateString('ko-KR')
     },
     {
-      title: '작업',
+      title: t('컴럼.작업'),
       key: 'actions',
       render: (_: any, record: ProductModel) => (
         <Space>
@@ -299,7 +301,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             onClick={() => openModelModal(record)}
             size="small"
           >
-            수정
+            {t('버튼.수정')}
           </Button>
           <Popconfirm
             title="이 모델을 삭제하시겠습니까?"
@@ -309,7 +311,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             cancelText="취소"
           >
             <Button type="link" danger icon={<DeleteOutlined />} size="small">
-              삭제
+              {t('버튼.삭제')}
             </Button>
           </Popconfirm>
         </Space>
@@ -320,14 +322,14 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   // 공정 테이블 컬럼
   const processColumns = [
     {
-      title: '순서',
+      title: t('컴럼.순서'),
       dataIndex: 'process_order',
       key: 'process_order',
       width: 80,
       render: (order: number) => <Tag color="blue">{order}</Tag>
     },
     {
-      title: '공정명',
+      title: t('컴럼.공정명'),
       dataIndex: 'process_name',
       key: 'process_name',
       render: (text: string) => <Text strong>{text}</Text>
@@ -339,12 +341,12 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       render: (seconds: number) => `${seconds}초`
     },
     {
-      title: '모델',
+      title: t('컴럼.모델'),
       key: 'model_name',
       render: (record: ModelProcess) => record.product_models?.model_name || '-'
     },
     {
-      title: '작업',
+      title: t('컴럼.작업'),
       key: 'actions',
       render: (_: any, record: ModelProcess) => (
         <Space>
@@ -354,7 +356,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             onClick={() => openProcessModal(record)}
             size="small"
           >
-            수정
+            {t('버튼.수정')}
           </Button>
           <Popconfirm
             title="이 공정을 삭제하시겠습니까?"
@@ -363,7 +365,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             cancelText="취소"
           >
             <Button type="link" danger icon={<DeleteOutlined />} size="small">
-              삭제
+              {t('버튼.삭제')}
             </Button>
           </Popconfirm>
         </Space>
@@ -378,9 +380,9 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
         title={
           <div>
             <Title level={4} style={{ margin: 0 }}>
-              생산 모델 관리
+              {t('생산모델관리')}
             </Title>
-            <Text type="secondary">생산할 제품 모델을 관리합니다</Text>
+            <Text type="secondary">{t('생산모델설명')}</Text>
           </div>
         }
         extra={
@@ -389,7 +391,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             icon={<PlusOutlined />}
             onClick={() => openModelModal()}
           >
-            모델 추가
+            {t('버튼.모델추가')}
           </Button>
         }
         style={{ marginBottom: '24px' }}
@@ -408,12 +410,12 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
         title={
           <div>
             <Title level={4} style={{ margin: 0 }}>
-              공정 관리
+              {t('공정관리')}
             </Title>
             <Text type="secondary">
               {selectedModel 
-                ? `${selectedModel.model_name} 모델의 공정을 관리합니다`
-                : '모델별 가공 공정과 Tact Time을 관리합니다'
+                ? t('선택된모델공정설명', { modelName: selectedModel.model_name })
+                : t('공정설명')
               }
             </Text>
           </div>
@@ -421,7 +423,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
         extra={
           <Space>
             {selectedModel && (
-              <Tag color="green">선택된 모델: {selectedModel.model_name}</Tag>
+              <Tag color="green">{t('선택된모델')}: {selectedModel.model_name}</Tag>
             )}
             <Select
               placeholder="모델 선택"

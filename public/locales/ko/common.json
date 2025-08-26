@@ -354,5 +354,46 @@
     "machineSelectPlaceholder": "설비를 선택하세요",
     "selectedDate": "선택 날짜",
     "machineInfo": "설비 정보"
+  },
+  "reports": {
+    "title": "통계 리포트",
+    "description": "OEE 지표, 생산 실적, 다운타임 분석 등의 보고서를 PDF 또는 Excel 형식으로 생성할 수 있습니다.",
+    "settings": "보고서 설정",
+    "refreshData": "데이터 새로고침",
+    "quickReports": "빠른 보고서 생성",
+    "reportGeneration": "보고서 생성",
+    "quickExport": "빠른 내보내기",
+    "customReport": "사용자 정의 보고서",
+    "filters": {
+      "machineSelectPlaceholder": "설비 선택 (모델 설비 시 미리보기로)",
+      "startDate": "시작일",
+      "endDate": "종료일"
+    },
+    "units": {
+      "pieces": "개"
+    },
+    "metrics": {
+      "averageOEE": "평균 OEE",
+      "averageAvailability": "평균 가동률",
+      "totalProduction": "총 생산량",
+      "defectRate": "불량률"
+    },
+    "types": {
+      "daily": "일일 보고서",
+      "weekly": "주간 보고서", 
+      "monthly": "월간 보고서"
+    },
+    "buttons": {
+      "preview": "미리보기",
+      "pdfExport": "PDF 내보내기",
+      "excelExport": "Excel 내보내기",
+      "pdfCustom": "PDF 사용자 설정",
+      "excelCustom": "Excel 사용자 설정"
+    },
+    "previewModal": {
+      "daily": "일일 보고서 미리보기",
+      "weekly": "주간 보고서 미리보기",
+      "monthly": "월간 보고서 미리보기"
+    }
   }
 }

@@ -3,11 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Typography, message } from 'antd';
 import { ReportDashboard } from '@/components/reports';
+import { useReportsTranslation } from '@/hooks/useTranslation';
 import { Machine } from '@/types';
 
 const { Title } = Typography;
 
 export default function ReportsPage() {
+  const { t } = useReportsTranslation();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,10 +41,10 @@ export default function ReportsPage() {
       {/* 페이지 제목 */}
       <div style={{ marginBottom: '24px' }}>
         <Title level={2}>
-          통계 리포트
+          {t('reports.title')}
         </Title>
         <Typography.Paragraph type="secondary">
-          OEE 지표, 생산 실적, 다운타임 분석 등의 보고서를 PDF 또는 Excel 형식으로 생성할 수 있습니다.
+          {t('reports.description')}
         </Typography.Paragraph>
       </div>
 

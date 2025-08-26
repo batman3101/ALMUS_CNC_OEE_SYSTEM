@@ -5,6 +5,7 @@ import { Card, Button, Space, message } from 'antd';
 import { FileExcelOutlined, FilePdfOutlined, DownloadOutlined } from '@ant-design/icons';
 import { ReportExportModal } from './ReportExportModal';
 import { ReportTemplates } from './ReportTemplates';
+import { useReportsTranslation } from '@/hooks/useTranslation';
 import { OEEMetrics, Machine, ProductionRecord } from '@/types';
 
 interface ReportGeneratorProps {
@@ -20,6 +21,7 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
   productionData = [],
   className
 }) => {
+  const { t } = useReportsTranslation();
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'excel'>('pdf');
   const [loading, setLoading] = useState(false);
@@ -44,10 +46,10 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
 
   return (
     <div className={className}>
-      <Card title="보고서 생성" size="small">
+      <Card title={t('reports.reportGeneration')} size="small">
         <Space direction="vertical" style={{ width: '100%' }}>
           <div>
-            <h4>빠른 내보내기</h4>
+            <h4>{t('reports.quickExport')}</h4>
             <Space>
               <Button
                 icon={<FilePdfOutlined />}
@@ -67,21 +69,21 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
           </div>
 
           <div>
-            <h4>사용자 정의 보고서</h4>
+            <h4>{t('reports.customReport')}</h4>
             <Space>
               <Button
                 icon={<FilePdfOutlined />}
                 onClick={() => handleExportClick('pdf')}
                 type="primary"
               >
-                PDF 사용자 정의
+                {t('reports.buttons.pdfCustom')}
               </Button>
               <Button
                 icon={<FileExcelOutlined />}
                 onClick={() => handleExportClick('excel')}
                 type="primary"
               >
-                Excel 사용자 정의
+                {t('reports.buttons.excelCustom')}
               </Button>
             </Space>
           </div>

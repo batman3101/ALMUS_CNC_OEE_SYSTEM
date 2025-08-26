@@ -411,5 +411,46 @@
     "machineSelectPlaceholder": "Vui lòng chọn thiết bị",
     "selectedDate": "Ngày đã chọn",
     "machineInfo": "Thông tin thiết bị"
+  },
+  "reports": {
+    "title": "Báo cáo thống kê",
+    "description": "Có thể tạo báo cáo về chỉ số OEE, kết quả sản xuất, phân tích thời gian ngừng hoạt động v.v. dưới định dạng PDF hoặc Excel.",
+    "settings": "Cài đặt báo cáo",
+    "refreshData": "Làm mới dữ liệu",
+    "quickReports": "Tạo báo cáo nhanh",
+    "reportGeneration": "Tạo báo cáo",
+    "quickExport": "Xuất nhanh",
+    "customReport": "Báo cáo tùy chỉnh người dùng",
+    "filters": {
+      "machineSelectPlaceholder": "Chọn thiết bị (xem trước khi chọn thiết bị mẫu)",
+      "startDate": "Ngày bắt đầu",
+      "endDate": "Ngày kết thúc"
+    },
+    "units": {
+      "pieces": "cái"
+    },
+    "metrics": {
+      "averageOEE": "OEE trung bình",
+      "averageAvailability": "Tỷ lệ hoạt động trung bình",
+      "totalProduction": "Tổng sản lượng",
+      "defectRate": "Tỷ lệ lỗi"
+    },
+    "types": {
+      "daily": "Báo cáo hàng ngày",
+      "weekly": "Báo cáo hàng tuần",
+      "monthly": "Báo cáo hàng tháng"
+    },
+    "buttons": {
+      "preview": "Xem trước",
+      "pdfExport": "Xuất PDF",
+      "excelExport": "Xuất Excel", 
+      "pdfCustom": "Tùy chỉnh PDF",
+      "excelCustom": "Tùy chỉnh Excel"
+    },
+    "previewModal": {
+      "daily": "Xem trước báo cáo hàng ngày",
+      "weekly": "Xem trước báo cáo hàng tuần",
+      "monthly": "Xem trước báo cáo hàng tháng"
+    }
   }
 }

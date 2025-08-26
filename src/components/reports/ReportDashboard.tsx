@@ -28,6 +28,7 @@ import {
 } from '@ant-design/icons';
 import { ReportGenerator } from './ReportGenerator';
 import { ReportTemplates } from './ReportTemplates';
+import { useReportsTranslation } from '@/hooks/useTranslation';
 import { OEEMetrics, Machine, ProductionRecord } from '@/types';
 import { ReportUtils } from '@/utils/reportUtils';
 
@@ -45,6 +46,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   className,
   loading: initialLoading = false
 }) => {
+  const { t } = useReportsTranslation();
   const [loading, setLoading] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [previewData, setPreviewData] = useState<any>(null);
@@ -228,21 +230,21 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const stats = calculateStats();
 
   const quickReportButtons = [
-    { key: 'daily', label: '일일 보고서', template: 'daily' as const },
-    { key: 'weekly', label: '주간 보고서', template: 'weekly' as const },
-    { key: 'monthly', label: '월간 보고서', template: 'monthly' as const }
+    { key: 'daily', label: t('reports.types.daily'), template: 'daily' as const },
+    { key: 'weekly', label: t('reports.types.weekly'), template: 'weekly' as const },
+    { key: 'monthly', label: t('reports.types.monthly'), template: 'monthly' as const }
   ];
 
   return (
     <div className={className}>
       <Spin spinning={loading}>
         {/* 필터 및 설정 */}
-        <Card title="보고서 설정" className="mb-4">
+        <Card title={t('reports.settings')} className="mb-4">
           <Row gutter={16}>
             <Col xs={24} md={8}>
               <Select
                 mode="multiple"
-                placeholder="설비 선택 (전체 선택 시 비워두세요)"
+                placeholder={t('reports.filters.machineSelectPlaceholder')}
                 style={{ width: '100%' }}
                 value={selectedMachines}
                 onChange={setSelectedMachines}
@@ -259,7 +261,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
               <RangePicker
                 style={{ width: '100%' }}
                 format="YYYY-MM-DD"
-                placeholder={['시작일', '종료일']}
+                placeholder={[t('reports.filters.startDate'), t('reports.filters.endDate')]}
                 onChange={(dates, dateStrings) => {
                   setDateRange(dates ? [dateStrings[0], dateStrings[1]] : null);
                 }}
@@ -272,7 +274,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 onClick={fetchReportData}
                 loading={loading}
               >
-                데이터 새로고침
+                {t('reports.refreshData')}
               </Button>
             </Col>
           </Row>
@@ -283,7 +285,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title="평균 OEE"
+                title={t('reports.metrics.averageOEE')}
                 value={stats.avgOEE * 100}
                 precision={1}
                 suffix="%"
@@ -300,7 +302,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title="평균 가동률"
+                title={t('reports.metrics.averageAvailability')}
                 value={stats.avgAvailability * 100}
                 precision={1}
                 suffix="%"
@@ -317,17 +319,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title="총 생산량"
+                title={t('reports.metrics.totalProduction')}
                 value={stats.totalOutput}
                 formatter={(value) => ReportUtils.formatNumber(Number(value), 0)}
-                suffix="개"
+                suffix={t('reports.units.pieces')}
               />
             </Card>
           </Col>
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title="불량률"
+                title={t('reports.metrics.defectRate')}
                 value={stats.totalDefects / stats.totalOutput * 100}
                 precision={2}
                 suffix="%"
@@ -340,7 +342,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </Row>
 
         {/* 빠른 보고서 생성 */}
-        <Card title="빠른 보고서 생성" className="mb-4">
+        <Card title={t('reports.quickReports')} className="mb-4">
           <Row gutter={16}>
             {quickReportButtons.map(button => (
               <Col xs={24} md={8} key={button.key} className="mb-2">
@@ -351,7 +353,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                       onClick={() => handlePreview(button.template)}
                       block
                     >
-                      미리보기
+                      {t('reports.buttons.preview')}
                     </Button>
                     <Space>
                       <Button
@@ -359,14 +361,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                         onClick={() => handleQuickReport('pdf', button.template)}
                         size="small"
                       >
-                        PDF 내보내기
+                        {t('reports.buttons.pdfExport')}
                       </Button>
                       <Button
                         icon={<FileExcelOutlined />}
                         onClick={() => handleQuickReport('excel', button.template)}
                         size="small"
                       >
-                        Excel 내보내기
+                        {t('reports.buttons.excelExport')}
                       </Button>
                     </Space>
                   </Space>
@@ -388,7 +390,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
         {/* 미리보기 모달 */}
         <Modal
-          title={`${previewType === 'daily' ? '일일' : previewType === 'weekly' ? '주간' : '월간'} 보고서 미리보기`}
+          title={t(`reports.previewModal.${previewType}`)}
           open={previewModalVisible}
           onCancel={() => setPreviewModalVisible(false)}
           width={900}

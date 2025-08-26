@@ -2,19 +2,22 @@
 
 import React from 'react';
 import { Typography } from 'antd';
+import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import ModelInfoManager from '@/components/model-info/ModelInfoManager';
 
 const { Title, Paragraph } = Typography;
 
 export default function ModelInfoPage() {
+  const { t } = useModelInfoTranslation();
+  
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
         <Title level={2}>
-          모델 정보 관리
+          {t('제목')}
         </Title>
         <Paragraph type="secondary">
-          제품 모델 정보를 관리합니다
+          {t('생산모델설명')}
         </Paragraph>
       </div>
       <ModelInfoManager />
