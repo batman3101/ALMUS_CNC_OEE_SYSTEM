@@ -16,7 +16,7 @@ export default function DataInputPage() {
       <div>
         <div style={{ marginBottom: '24px' }}>
           <Title level={2}>
-            데이터 입력
+            {t('nav.dataInput')}
           </Title>
           <Paragraph type="secondary">
             {t('dataInput.title')}

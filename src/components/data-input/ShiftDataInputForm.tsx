@@ -482,13 +482,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   return (
     <div>
       {/* 설비 선택 및 날짜 */}
-      <Card title="설비 선택" size="small" style={{ marginBottom: '16px' }}>
+      <Card title={t('dataInputForm.machineSelection')} size="small" style={{ marginBottom: '16px' }}>
         <Row gutter={[16, 0]} align="middle">
           <Col xs={24} sm={12}>
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Text strong>설비</Text>
+              <Text strong>{t('dataInputForm.machine')}</Text>
               <Select
-                placeholder="설비를 선택하세요"
+                placeholder={t('dataInputForm.machineSelectPlaceholder')}
                 loading={machinesLoading}
                 onChange={handleMachineSelect}
                 value={selectedMachineId}
@@ -513,7 +513,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
           </Col>
           <Col xs={24} sm={12}>
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Text strong>선택 날짜</Text>
+              <Text strong>{t('dataInputForm.selectedDate')}</Text>
               <DatePicker
                 value={dayjs(selectedDate)}
                 onChange={(date) => setSelectedDate(date?.format('YYYY-MM-DD') || dayjs().format('YYYY-MM-DD'))}
@@ -529,7 +529,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       {/* 설비 정보 표시 */}
       {selectedMachine && (
         <Card 
-          title="설비 정보" 
+          title={t('dataInputForm.machineInfo')} 
           size="small" 
           style={{ marginBottom: '16px' }}
         >

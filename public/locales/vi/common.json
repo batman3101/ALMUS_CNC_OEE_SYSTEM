@@ -404,5 +404,12 @@
     "reset": "Khôi phục",
     "saveSuccess": "Dữ liệu đã được lưu",
     "saveError": "Không thể lưu dữ liệu"
+  },
+  "dataInputForm": {
+    "machineSelection": "Lựa chọn thiết bị",
+    "machine": "Thiết bị",
+    "machineSelectPlaceholder": "Vui lòng chọn thiết bị",
+    "selectedDate": "Ngày đã chọn",
+    "machineInfo": "Thông tin thiết bị"
   }
 }

@@ -347,5 +347,12 @@
     "reset": "초기화",
     "saveSuccess": "데이터가 저장되었습니다",
     "saveError": "데이터 저장에 실패했습니다"
+  },
+  "dataInputForm": {
+    "machineSelection": "설비 선택",
+    "machine": "설비",
+    "machineSelectPlaceholder": "설비를 선택하세요",
+    "selectedDate": "선택 날짜",
+    "machineInfo": "설비 정보"
   }
 }
