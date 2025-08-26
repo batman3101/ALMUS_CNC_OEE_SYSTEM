@@ -277,7 +277,7 @@ const MachineList: React.FC<MachineListProps> = ({
             <Col xs={24} sm={12} md={6}>
               <div>
                 <div style={{ marginBottom: 8, fontWeight: 500, color: '#666' }}>
-                  생산 모델
+                  {t('filters.modelLabel')}
                 </div>
                 <Select
                   placeholder={t('filters.modelPlaceholder')}
@@ -287,7 +287,7 @@ const MachineList: React.FC<MachineListProps> = ({
                   suffixIcon={<SettingOutlined />}
                 >
                   <Option value="all">
-                    모든 모델
+                    {t('filterOptions.allModels')}
                   </Option>
                   {uniqueProductionModels.map(model => (
                     <Option key={model} value={model}>

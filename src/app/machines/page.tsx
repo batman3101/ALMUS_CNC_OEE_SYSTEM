@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Typography } from 'antd';
-import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { useMachinesTranslation, useCommonTranslation } from '@/hooks/useTranslation';
 import MachineList from '@/components/machines/MachineList';
 import MachineDetailModal from '@/components/machines/MachineDetailModal';
 import { ProtectedRoute } from '@/components/auth';
@@ -13,6 +13,7 @@ const { Title, Paragraph } = Typography;
 
 export default function MachinesPage() {
   const { t } = useMachinesTranslation();
+  const { t: tCommon } = useCommonTranslation();
   const { machines, loading, error, refetch } = useMachines();
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -36,7 +37,7 @@ export default function MachinesPage() {
       <div>
         <div style={{ marginBottom: '24px' }}>
           <Title level={2}>
-            설비 현황
+            {tCommon('nav.machines')}
           </Title>
           <Paragraph type="secondary">
             {t('description')}

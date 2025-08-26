@@ -1,0 +1,84 @@
+{
+  "제목": "Quản lý thông tin mô hình",
+  "생산모델관리": "Quản lý mô hình sản xuất",
+  "생산모델설명": "Quản lý các mô hình sản phẩm cần sản xuất",
+  "공정관리": "Quản lý quy trình",
+  "공정설명": "Quản lý quy trình gia công và Tact Time theo mô hình",
+  "선택된모델공정설명": "Quản lý quy trình của mô hình {{modelName}}",
+  "선택된모델": "Mô hình đã chọn",
+  "버튼": {
+    "모델추가": "Thêm mô hình",
+    "공정추가": "Thêm quy trình",
+    "수정": "Sửa",
+    "삭제": "Xóa",
+    "추가": "Thêm",
+    "취소": "Hủy"
+  },
+  "모달": {
+    "모델추가": "Thêm mô hình",
+    "모델수정": "Sửa mô hình",
+    "공정추가": "Thêm quy trình",
+    "공정수정": "Sửa quy trình"
+  },
+  "컬럼": {
+    "모델명": "Tên mẫu",
+    "택트타임": "Tact Time",
+    "등록일": "Ngày đăng ký",
+    "작업": "Thao tác",
+    "순서": "Thứ tự",
+    "공정명": "Tên quy trình",
+    "모델": "Mô hình"
+  },
+  "플레이스홀더": {
+    "모델선택": "Chọn mô hình",
+    "모델설명": "Nhập mô tả về mô hình"
+  },
+  "라벨": {
+    "모델명": "Tên mô hình",
+    "설명": "Mô tả",
+    "공정명": "Tên quy trình",
+    "공정순서": "Thứ tự quy trình",
+    "택트타임초": "Tact Time (giây)"
+  },
+  "검증": {
+    "모델명필수": "Vui lòng nhập tên mô hình",
+    "모델명최소길이": "Tên mô hình phải có ít nhất 2 ký tự",
+    "공정명필수": "Vui lòng nhập tên quy trình",
+    "공정순서필수": "Vui lòng nhập thứ tự quy trình",
+    "택트타임필수": "Vui lòng nhập Tact Time"
+  },
+  "에러": {
+    "모델목록조회실패": "Không thể tải danh sách mô hình",
+    "공정목록조회실패": "Không thể tải danh sách quy trình",
+    "모델생성실패": "Không thể tạo mô hình",
+    "모델수정실패": "Không thể cập nhật mô hình",
+    "모델삭제실패": "Không thể xóa mô hình",
+    "공정생성실패": "Không thể tạo quy trình",
+    "공정수정실패": "Không thể cập nhật quy trình",
+    "공정삭제실패": "Không thể xóa quy trình",
+    "중복모델명": "Tên mô hình đã tồn tại",
+    "모델저장실패": "Không thể lưu mô hình",
+    "중복공정명": "Tên quy trình đã tồn tại",
+    "공정저장실패": "Không thể lưu quy trình",
+    "모델선택필요": "Vui lòng chọn mô hình trước"
+  },
+  "메시지": {
+    "모델생성완료": "Đã tạo mô hình thành công",
+    "모델수정완료": "Đã cập nhật mô hình thành công",
+    "모델삭제완료": "Đã xóa mô hình thành công",
+    "공정생성완료": "Đã tạo quy trình thành công",
+    "공정수정완료": "Đã cập nhật quy trình thành công",
+    "공정삭제완료": "Đã xóa quy trình thành công"
+  },
+  "모델저장완료": "Đã lưu mô hình thành công",
+  "공정저장완료": "Đã lưu quy trình thành công",
+  "모델삭제완료": "Đã xóa mô hình thành công",
+  "공정삭제완료": "Đã xóa quy trình thành công",
+  "확인": {
+    "모델삭제": "Bạn có chắc chắn muốn xóa mô hình này không?",
+    "모델삭제설명": "Tất cả các quy trình liên quan cũng sẽ bị xóa.",
+    "공정삭제": "Bạn có chắc chắn muốn xóa quy trình này không?",
+    "삭제": "Xóa",
+    "취소": "Hủy"
+  }
+}

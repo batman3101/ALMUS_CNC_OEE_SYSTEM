@@ -8,7 +8,7 @@
     "statusPlaceholder": "상태 선택",
     "locationLabel": "위치 필터", 
     "locationPlaceholder": "위치 선택",
-    "modelLabel": "모델 필터",
+    "modelLabel": "생산 모델",
     "modelPlaceholder": "모델 선택",
     "activeLabel": "활성 상태 필터",
     "activePlaceholder": "활성 상태",
