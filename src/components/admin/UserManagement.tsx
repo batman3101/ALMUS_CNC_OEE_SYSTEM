@@ -21,7 +21,7 @@ import {
   ReloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { useTranslation } from '@/hooks/useTranslation';
+import { useAdminTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
 import type { User } from '@/types';
 import UserForm from './UserForm';
@@ -33,7 +33,7 @@ interface UserWithProfile extends User {
 }
 
 const UserManagement: React.FC = () => {
-  const { t } = useTranslation();
+  const { t } = useAdminTranslation();
   const { message } = App.useApp();
   const { loading, fetchUsers, deleteUser } = useAdminOperations();
   const [users, setUsers] = useState<UserWithProfile[]>([]);
@@ -47,7 +47,7 @@ const UserManagement: React.FC = () => {
       setUsers(usersData);
     } catch (error) {
       console.error('Error fetching users:', error);
-      message.error('오류가 발생했습니다');
+      message.error(t('userManagement.saveError'));
     }
   };
 
@@ -58,11 +58,11 @@ const UserManagement: React.FC = () => {
   const handleDelete = async (userId: string) => {
     try {
       await deleteUser(userId);
-      message.success('사용자가 성공적으로 삭제되었습니다');
+      message.success(t('userManagement.deleteSuccess'));
       loadUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
-      message.error('사용자 삭제 중 오류가 발생했습니다');
+      message.error(t('userManagement.deleteError'));
     }
   };
 
@@ -104,26 +104,26 @@ const UserManagement: React.FC = () => {
 
   const columns: ColumnsType<UserWithProfile> = [
     {
-      title: '이름',
+      title: t('table.columns.userName'),
       dataIndex: 'name',
       key: 'name',
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
-      title: '이메일',
+      title: t('table.columns.email'),
       dataIndex: 'email',
       key: 'email',
       sorter: (a, b) => a.email.localeCompare(b.email),
     },
     {
-      title: '역할',
+      title: t('table.columns.role'),
       dataIndex: 'role',
       key: 'role',
       render: (role: string) => {
         const roleLabels = {
-          admin: '관리자',
-          engineer: '엔지니어',
-          operator: '운영자'
+          admin: t('roles.admin'),
+          engineer: t('roles.operator'),
+          operator: t('roles.operator')
         };
         return (
           <Tag color={getRoleColor(role)}>
@@ -132,14 +132,14 @@ const UserManagement: React.FC = () => {
         );
       },
       filters: [
-        { text: '관리자', value: 'admin' },
-        { text: '엔지니어', value: 'engineer' },
-        { text: '운영자', value: 'operator' },
+        { text: t('roles.admin'), value: 'admin' },
+        { text: t('roles.operator'), value: 'engineer' },
+        { text: t('roles.operator'), value: 'operator' },
       ],
       onFilter: (value, record) => record.role === value,
     },
     {
-      title: '담당 설비',
+      title: t('table.columns.assignedMachines'),
       dataIndex: 'assigned_machines',
       key: 'assigned_machines',
       render: (machines: string[] | null) => {
@@ -148,20 +148,20 @@ const UserManagement: React.FC = () => {
         }
         return (
           <span>
-            {machines.length}개 설비
+            {machines.length}{t('common.assignedMachinesCount')}
           </span>
         );
       },
     },
     {
-      title: '생성일',
+      title: t('table.columns.createdDate'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (date) => new Date(date).toLocaleDateString(),
       sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     },
     {
-      title: '작업',
+      title: t('table.columns.actions'),
       key: 'actions',
       render: (_, record) => (
         <Space>
@@ -170,10 +170,10 @@ const UserManagement: React.FC = () => {
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           >
-            편집
+            {t('table.actions.edit')}
           </Button>
           <Popconfirm
-            title="이 사용자를 삭제하시겠습니까?"
+            title={t('userManagement.confirmDelete')}
             onConfirm={() => handleDelete(record.id)}
             okText="확인"
             cancelText="취소"
@@ -183,7 +183,7 @@ const UserManagement: React.FC = () => {
               danger
               icon={<DeleteOutlined />}
             >
-              삭제
+              {t('table.actions.delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -196,12 +196,12 @@ const UserManagement: React.FC = () => {
       <Card>
         <Row gutter={[16, 16]} align="middle" justify="space-between">
           <Col>
-            <h2 style={{ margin: 0 }}>사용자 관리</h2>
+            <h2 style={{ margin: 0 }}>{t('userManagement.title')}</h2>
           </Col>
           <Col>
             <Space>
               <Search
-                placeholder="검색"
+                placeholder={t('table.search')}
                 allowClear
                 style={{ width: 250 }}
                 onChange={(e) => setSearchText(e.target.value)}
@@ -212,14 +212,14 @@ const UserManagement: React.FC = () => {
                 onClick={loadUsers}
                 loading={loading}
               >
-                새로고침
+                {t('table.refresh')}
               </Button>
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={handleAdd}
               >
-                사용자 추가
+                {t('table.addUser').substring(2)}
               </Button>
             </Space>
           </Col>
@@ -238,7 +238,7 @@ const UserManagement: React.FC = () => {
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total, range) => 
-              `${range[0]}-${range[1]} / ${total}개 항목`,
+              t('table.pagination.showTotal', { start: range[0], end: range[1], total }),
           }}
           scroll={{ x: 1000 }}
         />

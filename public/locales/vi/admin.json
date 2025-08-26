@@ -42,6 +42,44 @@
       "passwordMinLength": "Mật khẩu phải có ít nhất 6 ký tự"
     }
   },
+  "page": {
+    "title": "Quản lý người dùng và thiết bị",
+    "description": "Quản lý người dùng hệ thống và thiết bị",
+    "tabs": {
+      "machineManagement": "Quản lý thiết bị",
+      "userManagement": "Quản lý người dùng"
+    }
+  },
+  "table": {
+    "search": "Tìm kiếm",
+    "refresh": "Làm mới",
+    "bulkUpload": "Đăng ký hàng loạt",
+    "addMachine": "+ Thêm thiết bị",
+    "addUser": "+ Thêm người dùng",
+    "columns": {
+      "machineName": "Tên thiết bị",
+      "location": "Vị trí",
+      "machineType": "Loại thiết bị", 
+      "productionModel": "Mô hình sản xuất",
+      "processes": "Quy trình gia công",
+      "tactTime": "Tact Time (giây)",
+      "settings": "Cài đặt",
+      "createdDate": "Ngày tạo",
+      "actions": "Hành động",
+      "userName": "Tên",
+      "email": "Email",
+      "role": "Vai trò",
+      "assignedMachines": "Thiết bị được phân công"
+    },
+    "actions": {
+      "edit": "Chỉnh sửa",
+      "delete": "Xóa"
+    },
+    "pagination": {
+      "itemsPerPage": "/ trang",
+      "showTotal": "{{start}}-{{end}} / {{total}} mục"
+    }
+  },
   "common": {
     "active": "Hoạt động",
     "inactive": "Không hoạt động",
@@ -57,5 +95,10 @@
     "createdAt": "Ngày tạo",
     "updatedAt": "Ngày cập nhật",
     "assignedMachinesCount": " thiết bị"
+  },
+  "roles": {
+    "admin": "Quản trị viên",
+    "operator": "Vận hành viên",
+    "user": "Người dùng"
   }
 }

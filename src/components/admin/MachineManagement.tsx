@@ -24,7 +24,7 @@ import {
   UploadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { useTranslation } from '@/hooks/useTranslation';
+import { useAdminTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
 import type { Machine } from '@/types';
 import MachineForm from './MachineForm';
@@ -33,7 +33,7 @@ import MachinesBulkUpload from '@/components/machines/MachinesBulkUpload';
 const { Search } = Input;
 
 const MachineManagement: React.FC = () => {
-  const { t } = useTranslation();
+  const { t } = useAdminTranslation();
   const { message } = App.useApp();
   const { loading, fetchMachines, deleteMachine, updateMachine } = useAdminOperations();
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -110,32 +110,32 @@ const MachineManagement: React.FC = () => {
 
   const columns: ColumnsType<Machine> = [
     {
-      title: '설비명',
+      title: t('table.columns.machineName'),
       dataIndex: 'name',
       key: 'name',
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
-      title: '위치',
+      title: t('table.columns.location'),
       dataIndex: 'location',
       key: 'location',
       sorter: (a, b) => a.location.localeCompare(b.location),
     },
     {
-      title: '설비 타입',
+      title: t('table.columns.machineType'),
       dataIndex: 'equipment_type',
       key: 'equipment_type',
       render: (text) => text || '-',
     },
     {
-      title: '생산 모델',
+      title: t('table.columns.productionModel'),
       dataIndex: 'production_model_name',
       key: 'production_model_name',
       render: (text, record) => text ? `${text} - ${record.production_model_description || ''}` : '-',
       sorter: (a, b) => (a.production_model_name || '').localeCompare(b.production_model_name || ''),
     },
     {
-      title: '가공 공정',
+      title: t('table.columns.processes'),
       dataIndex: 'current_process_name',
       key: 'current_process_name',
       render: (text) => text || '-',
@@ -162,14 +162,14 @@ const MachineManagement: React.FC = () => {
       ),
     },
     {
-      title: '생성일',
+      title: t('table.columns.createdDate'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (date) => new Date(date).toLocaleDateString(),
       sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     },
     {
-      title: '작업',
+      title: t('table.columns.actions'),
       key: 'actions',
       render: (_, record) => (
         <Space>
@@ -178,7 +178,7 @@ const MachineManagement: React.FC = () => {
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           >
-            편집
+            {t('table.actions.edit')}
           </Button>
           <Popconfirm
             title="이 설비를 삭제하시겠습니까?"
@@ -191,7 +191,7 @@ const MachineManagement: React.FC = () => {
               danger
               icon={<DeleteOutlined />}
             >
-              삭제
+              {t('table.actions.delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -209,7 +209,7 @@ const MachineManagement: React.FC = () => {
           <Col>
             <Space>
               <Search
-                placeholder="검색"
+                placeholder={t('table.search')}
                 allowClear
                 style={{ width: 250 }}
                 onChange={(e) => setSearchText(e.target.value)}
@@ -220,20 +220,20 @@ const MachineManagement: React.FC = () => {
                 onClick={loadMachines}
                 loading={loading}
               >
-                새로고침
+                {t('table.refresh')}
               </Button>
               <Button
                 icon={<UploadOutlined />}
                 onClick={() => setBulkUploadVisible(true)}
               >
-                일괄 등록
+                {t('table.bulkUpload')}
               </Button>
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={handleAdd}
               >
-                설비 추가
+                {t('table.addMachine').substring(2)}
               </Button>
             </Space>
           </Col>
@@ -252,7 +252,7 @@ const MachineManagement: React.FC = () => {
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total, range) => 
-              `${range[0]}-${range[1]} / ${total}개 항목`,
+              t('table.pagination.showTotal', { start: range[0], end: range[1], total }),
           }}
           scroll={{ x: 1000 }}
         />
