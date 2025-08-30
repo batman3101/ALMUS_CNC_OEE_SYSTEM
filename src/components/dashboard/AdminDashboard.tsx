@@ -16,6 +16,7 @@ import { OEEMetrics, Machine } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 
 
@@ -46,19 +47,7 @@ const generateMockAlerts = () => [
   { id: 3, machine: 'CNC-007', message: '불량률 5% 초과', severity: 'warning', time: '1시간 전' },
 ];
 
-// 상태 텍스트 변환 함수 (hoisting 문제 해결을 위해 상단 이동)
-const getStatusText = (state?: string) => {
-  const stateMap: Record<string, string> = {
-    'NORMAL_OPERATION': '정상',
-    'MAINTENANCE': '점검중',
-    'MODEL_CHANGE': '모델교체',
-    'PLANNED_STOP': '계획정지',
-    'PROGRAM_CHANGE': '프로그램교체',
-    'TOOL_CHANGE': '공구교환',
-    'TEMPORARY_STOP': '일시정지'
-  };
-  return stateMap[state || ''] || '알 수 없음';
-};
+// 상태 텍스트 변환 함수는 컴포넌트 내부로 이동 (번역 컨텍스트 필요)
 
 const generateMockTrendData = () => {
   // 고정된 시드 값을 사용하여 일관된 데이터 생성
@@ -89,12 +78,27 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
+  const { t } = useDashboardTranslation();
   const isClient = useClientOnly();
   const { user } = useAuth();
   const { notifications, acknowledgeNotification } = useNotifications();
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  
+  // 상태 텍스트 변환 함수 (번역 사용)
+  const getStatusText = (state?: string) => {
+    const stateMap: Record<string, string> = {
+      'NORMAL_OPERATION': t('status.normal'),
+      'MAINTENANCE': t('status.maintenance'),
+      'MODEL_CHANGE': t('status.modelChange'),
+      'PLANNED_STOP': t('status.plannedStop'),
+      'PROGRAM_CHANGE': t('status.programChange'),
+      'TOOL_CHANGE': t('status.toolChange'),
+      'TEMPORARY_STOP': t('status.temporaryStop')
+    };
+    return stateMap[state || ''] || t('status.unknown');
+  };
   
   // 실시간 데이터 훅 사용 (에러 방지를 위해 비활성화)
   const mockRealtimeData = {
@@ -278,7 +282,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                      machine.current_state === 'TEMPORARY_STOP' ? '일시 정지' :
                      '설비 상태 확인 필요',
             severity: machine.oee < 0.5 ? 'error' as const : 'warning' as const,
-            time: '실시간'
+            time: t('time.realTime')
           }));
         
         // 추이 데이터
@@ -329,11 +333,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       .map((machine, index) => ({
         id: index + 1,
         machine: machine.name,
-        message: machine.oee < 0.6 ? 'OEE 60% 미만 지속' : 
-                 machine.current_state === 'MAINTENANCE' ? '점검 시간 초과' : 
-                 '설비 상태 확인 필요',
+        message: machine.oee < 0.6 ? t('alerts.oeeBelowMessage') : 
+                 machine.current_state === 'MAINTENANCE' ? t('alerts.maintenanceTimeoutMessage') : 
+                 t('alerts.statusCheckRequiredMessage'),
         severity: machine.oee < 0.5 ? 'error' as const : 'warning' as const,
-        time: '실시간'
+        time: t('time.realTime')
       }));
 
     // 추이 데이터 (최근 7일)
@@ -364,19 +368,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   // 테이블 컬럼 정의
   const machineColumns = [
     {
-      title: '설비명',
+      title: t('table.machineName'),
       dataIndex: 'name',
       key: 'name',
       width: 120,
     },
     {
-      title: '위치',
+      title: t('table.location'),
       dataIndex: 'location',
       key: 'location',
       width: 120,
     },
     {
-      title: '상태',
+      title: t('table.status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
@@ -415,14 +419,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       }}>
         <Spin size="large" />
         <div style={{ color: '#666', fontSize: '16px' }}>
-          대시보드 데이터를 불러오는 중입니다...
+          {t('adminDashboard.loadingMessage')}
         </div>
       </div>
     );
   }
 
   return (
-    <Spin spinning={dashboardLoading} tip="데이터를 업데이트하는 중...">
+    <Spin spinning={dashboardLoading} tip={t('adminDashboard.updatingMessage')}>
       <div>
       {/* 헤더 */}
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -430,13 +434,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           <div>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 'bold' }}>
               <DashboardOutlined style={{ marginRight: 8 }} />
-              관리자 대시보드
+              {t('adminDashboard.title')}
             </h1>
             <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-              전체 설비 현황 및 운영 지표
+              {t('adminDashboard.description')}
               {isConnected && (
                 <span style={{ marginLeft: 8, color: '#52c41a' }}>
-                  <WifiOutlined /> 실시간 연결됨
+                  <WifiOutlined /> {t('adminDashboard.connectedRealtime')}
                 </span>
               )}
             </p>
@@ -447,9 +451,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             value={selectedPeriod}
             onChange={setSelectedPeriod}
             options={[
-              { label: '오늘', value: 'today' },
-              { label: '이번 주', value: 'week' },
-              { label: '이번 달', value: 'month' }
+              { label: t('filters.today'), value: 'today' },
+              { label: t('filters.thisWeek'), value: 'week' },
+              { label: t('filters.thisMonth'), value: 'month' }
             ]}
             style={{ width: 120 }}
           />
@@ -460,7 +464,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             }}
             loading={dashboardLoading}
           >
-            새로고침
+            {t('adminDashboard.refresh')}
           </Button>
         </Space>
       </div>
@@ -470,10 +474,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="전체 설비"
+              title={t('statistics.totalMachines')}
               value={machineStats.total}
               prefix={<DesktopOutlined />}
-              suffix="대"
+              suffix={t('statistics.unit')}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
@@ -481,10 +485,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="정상 가동"
+              title={t('statistics.runningMachines')}
               value={machineStats.running}
               prefix={<RiseOutlined />}
-              suffix="대"
+              suffix={t('statistics.unit')}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
@@ -492,10 +496,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="점검/정지"
+              title={t('statistics.maintenanceStop')}
               value={machineStats.maintenance + machineStats.stopped}
               prefix={<WarningOutlined />}
-              suffix="대"
+              suffix={t('statistics.unit')}
               valueStyle={{ color: '#faad14' }}
             />
           </Card>
@@ -503,7 +507,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="전체 OEE"
+              title={t('statistics.overallOee')}
               value={(processedData.overallMetrics.oee * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ 
@@ -521,7 +525,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} lg={8}>
           <OEEGauge
             metrics={processedData.overallMetrics}
-            title="전체 OEE 현황"
+            title={t('chart.overallOeeStatus')}
             size="large"
             showDetails={true}
           />
@@ -531,7 +535,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} lg={16}>
           <OEETrendChart
             data={processedData.trendData}
-            title="전체 OEE 추이 (최근 7일)"
+            title={t('chart.overallOeeTrend')}
             height={400}
             showControls={false}
           />
@@ -541,7 +545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         {/* 설비 목록 */}
         <Col xs={24} lg={16}>
-          <Card title="설비 현황" extra={<span style={{ fontSize: 12, color: '#666' }}>실시간 업데이트</span>}>
+          <Card title={t('table.machineStatus')} extra={<span style={{ fontSize: 12, color: '#666' }}>{t('table.realtimeUpdate')}</span>}>
             <Table
               columns={machineColumns}
               dataSource={processedData.machineList}

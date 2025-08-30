@@ -11,6 +11,7 @@ import {
 } from 'chart.js';
 import { Card, Typography, Row, Col, Progress } from 'antd';
 import { OEEMetrics } from '@/types';
+import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -29,6 +30,7 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
   size = 'default',
   showDetails = true
 }) => {
+  const { t } = useDashboardTranslation();
   const { availability, performance, quality, oee } = metrics;
 
   // OEE 수준에 따른 색상 결정
@@ -40,9 +42,9 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
 
   // OEE 수준 텍스트
   const getOEELevel = (value: number): string => {
-    if (value >= 0.85) return '우수';
-    if (value >= 0.65) return '양호';
-    return '개선필요';
+    if (value >= 0.85) return t('oee.level.excellent');
+    if (value >= 0.65) return t('oee.level.good');
+    return t('oee.level.needsImprovement');
   };
 
   // 게이지 차트 데이터
@@ -126,7 +128,7 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
                     format={(percent) => `${percent?.toFixed(1)}%`}
                   />
                   <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-                    가동률
+                    {t('oee.availability')}
                   </div>
                 </div>
               </Col>
@@ -141,7 +143,7 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
                     format={(percent) => `${percent?.toFixed(1)}%`}
                   />
                   <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-                    성능
+                    {t('oee.performance')}
                   </div>
                 </div>
               </Col>
@@ -156,7 +158,7 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
                     format={(percent) => `${percent?.toFixed(1)}%`}
                   />
                   <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-                    품질
+                    {t('oee.quality')}
                   </div>
                 </div>
               </Col>
@@ -166,27 +168,27 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
             <div style={{ marginTop: 16, textAlign: 'left' }}>
               <Row gutter={[16, 8]}>
                 <Col span={12}>
-                  <Text type="secondary">실제 가동시간:</Text>
+                  <Text type="secondary">{t('oee.actualRuntime')}:</Text>
                   <Text strong style={{ marginLeft: 8 }}>
-                    {Math.round(metrics.actual_runtime)}분
+                    {Math.round(metrics.actual_runtime)}{t('time.minutes')}
                   </Text>
                 </Col>
                 <Col span={12}>
-                  <Text type="secondary">계획 가동시간:</Text>
+                  <Text type="secondary">{t('oee.plannedRuntime')}:</Text>
                   <Text strong style={{ marginLeft: 8 }}>
-                    {Math.round(metrics.planned_runtime)}분
+                    {Math.round(metrics.planned_runtime)}{t('time.minutes')}
                   </Text>
                 </Col>
                 <Col span={12}>
-                  <Text type="secondary">생산 수량:</Text>
+                  <Text type="secondary">{t('oee.outputQuantity')}:</Text>
                   <Text strong style={{ marginLeft: 8 }}>
-                    {metrics.output_qty}개
+                    {metrics.output_qty}{t('oee.units.quantity')}
                   </Text>
                 </Col>
                 <Col span={12}>
-                  <Text type="secondary">불량 수량:</Text>
+                  <Text type="secondary">{t('oee.defectQuantity')}:</Text>
                   <Text strong style={{ marginLeft: 8 }}>
-                    {metrics.defect_qty}개
+                    {metrics.defect_qty}{t('oee.units.quantity')}
                   </Text>
                 </Col>
               </Row>

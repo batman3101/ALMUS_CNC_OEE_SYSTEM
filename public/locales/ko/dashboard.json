@@ -17,7 +17,23 @@
     "trend": "추이",
     "daily": "일별",
     "weekly": "주별",
-    "monthly": "월별"
+    "monthly": "월별",
+    "level": {
+      "excellent": "우수",
+      "good": "양호",
+      "needsImprovement": "개선필요"
+    },
+    "actualRuntime": "실제 가동시간",
+    "plannedRuntime": "계획 가동시간",
+    "outputQuantity": "생산 수량",
+    "defectQuantity": "불량 수량",
+    "units": {
+      "quantity": "개"
+    },
+    "average": "평균 OEE",
+    "highest": "최고 OEE",
+    "lowest": "최저 OEE",
+    "excellentDays": "우수 일수"
   },
   "production": {
     "title": "생산 현황",
@@ -41,7 +57,10 @@
     "markAsRead": "읽음 처리",
     "oeeBelow": "OEE 저하",
     "downtimeExceeded": "다운타임 초과",
-    "maintenanceRequired": "점검 필요"
+    "maintenanceRequired": "점검 필요",
+    "oeeBelowMessage": "OEE 60% 미만 지속",
+    "maintenanceTimeoutMessage": "점검 시간 초과",
+    "statusCheckRequiredMessage": "설비 상태 확인 필요"
   },
   "charts": {
     "downtimeReasons": "다운타임 원인",
@@ -73,6 +92,46 @@
     "totalTime": "총 시간",
     "hours": "시간",
     "minutes": "분",
-    "seconds": "초"
+    "seconds": "초",
+    "date": "날짜",
+    "startDate": "시작일",
+    "endDate": "종료일"
+  },
+  "adminDashboard": {
+    "title": "관리자 대시보드",
+    "description": "전체 설비 현황 및 운영 지표",
+    "connectedRealtime": "실시간 연결됨",
+    "refresh": "새로고침",
+    "loadingMessage": "대시보드 데이터를 불러오는 중입니다...",
+    "updatingMessage": "데이터를 업데이트하는 중..."
+  },
+  "statistics": {
+    "totalMachines": "전체 설비",
+    "runningMachines": "정상 가동",
+    "maintenanceStop": "점검/정지",
+    "overallOee": "전체 OEE",
+    "unit": "대"
+  },
+  "status": {
+    "normal": "정상",
+    "maintenance": "점검중",
+    "modelChange": "모델교체",
+    "plannedStop": "계획정지",
+    "programChange": "프로그램교체",
+    "toolChange": "공구교환",
+    "temporaryStop": "일시정지",
+    "unknown": "알 수 없음"
+  },
+  "table": {
+    "machineName": "설비명",
+    "location": "위치",
+    "status": "상태",
+    "machineStatus": "설비 현황",
+    "realtimeUpdate": "실시간 업데이트"
+  },
+  "chart": {
+    "overallOeeStatus": "전체 OEE 현황",
+    "overallOeeTrend": "전체 OEE 추이 (최근 7일)",
+    "percentage": "비율 (%)"
   }
 }

@@ -17,7 +17,23 @@
     "trend": "Xu hướng",
     "daily": "Hàng ngày",
     "weekly": "Hàng tuần",
-    "monthly": "Hàng tháng"
+    "monthly": "Hàng tháng",
+    "level": {
+      "excellent": "Xuất sắc",
+      "good": "Tốt",
+      "needsImprovement": "Cần cải thiện"
+    },
+    "actualRuntime": "Thời gian vận hành thực tế",
+    "plannedRuntime": "Thời gian vận hành kế hoạch",
+    "outputQuantity": "Số lượng sản xuất",
+    "defectQuantity": "Số lượng lỗi",
+    "units": {
+      "quantity": ""
+    },
+    "average": "OEE trung bình",
+    "highest": "OEE cao nhất",
+    "lowest": "OEE thấp nhất",
+    "excellentDays": "Số ngày xuất sắc"
   },
   "production": {
     "title": "Tình hình sản xuất",
@@ -41,7 +57,10 @@
     "markAsRead": "Đánh dấu đã đọc",
     "oeeBelow": "OEE giảm",
     "downtimeExceeded": "Vượt quá thời gian ngừng",
-    "maintenanceRequired": "Cần bảo trì"
+    "maintenanceRequired": "Cần bảo trì",
+    "oeeBelowMessage": "OEE duy trì dưới 60%",
+    "maintenanceTimeoutMessage": "Vượt quá thời gian bảo trì",
+    "statusCheckRequiredMessage": "Cần kiểm tra trạng thái thiết bị"
   },
   "charts": {
     "downtimeReasons": "Nguyên nhân ngừng máy",
@@ -73,6 +92,46 @@
     "totalTime": "Tổng thời gian",
     "hours": "giờ",
     "minutes": "phút",
-    "seconds": "giây"
+    "seconds": "giây",
+    "date": "Ngày",
+    "startDate": "Ngày bắt đầu",
+    "endDate": "Ngày kết thúc"
+  },
+  "adminDashboard": {
+    "title": "Bảng điều khiển quản trị",
+    "description": "Tình hình thiết bị và chỉ số vận hành tổng thể",
+    "connectedRealtime": "Kết nối thời gian thực",
+    "refresh": "Làm mới",
+    "loadingMessage": "Đang tải dữ liệu bảng điều khiển...",
+    "updatingMessage": "Đang cập nhật dữ liệu..."
+  },
+  "statistics": {
+    "totalMachines": "Tổng số thiết bị",
+    "runningMachines": "Hoạt động bình thường",
+    "maintenanceStop": "Bảo trì/Dừng",
+    "overallOee": "OEE tổng thể",
+    "unit": ""
+  },
+  "status": {
+    "normal": "Bình thường",
+    "maintenance": "Đang bảo trì",
+    "modelChange": "Thay đổi mẫu",
+    "plannedStop": "Dừng theo kế hoạch",
+    "programChange": "Thay đổi chương trình",
+    "toolChange": "Thay đổi công cụ",
+    "temporaryStop": "Dừng tạm thời",
+    "unknown": "Không xác định"
+  },
+  "table": {
+    "machineName": "Tên thiết bị",
+    "location": "Vị trí",
+    "status": "Trạng thái",
+    "machineStatus": "Tình hình thiết bị",
+    "realtimeUpdate": "Cập nhật thời gian thực"
+  },
+  "chart": {
+    "overallOeeStatus": "Tình hình OEE tổng thể",
+    "overallOeeTrend": "Xu hướng OEE tổng thể (7 ngày gần đây)",
+    "percentage": "Tỷ lệ (%)"
   }
 }
