@@ -179,7 +179,10 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
                 }}>
                   <div>
                     <div style={{ marginBottom: 4 }}>
-                      <Tag color={user.role === 'admin' ? 'red' : user.role === 'engineer' ? 'blue' : 'green'}>
+                      <Tag 
+                        color={user.role === 'admin' ? 'red' : user.role === 'engineer' ? 'blue' : 'green'}
+                        style={{ color: 'white' }}
+                      >
                         {user.role === 'admin' ? '관리자' : user.role === 'engineer' ? '엔지니어' : '운영자'}
                       </Tag>
                       <Text style={{ fontSize: '13px', fontWeight: 500 }}>
