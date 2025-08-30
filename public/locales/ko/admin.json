@@ -92,6 +92,8 @@
     "search": "검색",
     "filter": "필터",
     "all": "전체",
+    "confirm": "확인",
+    "cancel": "취소",
     "createdAt": "생성일",
     "updatedAt": "수정일",
     "assignedMachinesCount": "개 설비"

@@ -50,7 +50,7 @@ const MachineManagement: React.FC = () => {
       setMachines(data);
     } catch (error) {
       console.error('Error fetching machines:', error);
-      message.error('오류가 발생했습니다');
+      message.error(t('machineManagement.saveError'));
     }
   };
 
@@ -61,11 +61,11 @@ const MachineManagement: React.FC = () => {
   const handleDelete = async (machineId: string) => {
     try {
       await deleteMachine(machineId);
-      message.success('설비가 성공적으로 삭제되었습니다');
+      message.success(t('machineManagement.deleteSuccess'));
       loadMachines();
     } catch (error) {
       console.error('Error deleting machine:', error);
-      message.error('설비 삭제 중 오류가 발생했습니다');
+      message.error(t('machineManagement.deleteError'));
     }
   };
 
@@ -74,11 +74,11 @@ const MachineManagement: React.FC = () => {
       await updateMachine(machine.id, { 
         is_active: !machine.is_active
       });
-      message.success('설비 정보가 성공적으로 저장되었습니다');
+      message.success(t('machineManagement.saveSuccess'));
       loadMachines();
     } catch (error) {
       console.error('Error updating machine status:', error);
-      message.error('설비 정보 저장 중 오류가 발생했습니다');
+      message.error(t('machineManagement.saveError'));
     }
   };
 
@@ -152,22 +152,22 @@ const MachineManagement: React.FC = () => {
       sorter: (a, b) => (a.current_process_name || '').localeCompare(b.current_process_name || ''),
     },
     {
-      title: 'Tact Time (초)',
+      title: t('table.columns.tactTime'),
       dataIndex: 'current_tact_time',
       key: 'current_tact_time',
       sorter: (a, b) => (a.current_tact_time || 0) - (b.current_tact_time || 0),
       render: (value) => value ? value.toLocaleString() : '-',
     },
     {
-      title: '상태',
+      title: t('common.status'),
       dataIndex: 'is_active',
       key: 'is_active',
       render: (isActive: boolean, record) => (
         <Switch
           checked={isActive}
           onChange={() => handleStatusToggle(record)}
-          checkedChildren="활성"
-          unCheckedChildren="비활성"
+          checkedChildren={t('common.active')}
+          unCheckedChildren={t('common.inactive')}
         />
       ),
     },
@@ -191,10 +191,10 @@ const MachineManagement: React.FC = () => {
             {t('table.actions.edit')}
           </Button>
           <Popconfirm
-            title="이 설비를 삭제하시겠습니까?"
+            title={t('machineManagement.confirmDelete')}
             onConfirm={() => handleDelete(record.id)}
-            okText="확인"
-            cancelText="취소"
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
           >
             <Button
               type="link"
@@ -214,7 +214,7 @@ const MachineManagement: React.FC = () => {
       <Card>
         <Row gutter={[16, 16]} align="middle" justify="space-between">
           <Col>
-            <h2 style={{ margin: 0 }}>설비 관리</h2>
+            <h2 style={{ margin: 0 }}>{t('machineManagement.title')}</h2>
           </Col>
           <Col>
             <Space>
@@ -223,9 +223,9 @@ const MachineManagement: React.FC = () => {
                 onChange={setStatusFilter}
                 style={{ width: 120 }}
                 options={[
-                  { label: '전체', value: 'all' },
-                  { label: '활성', value: 'active' },
-                  { label: '비활성', value: 'inactive' }
+                  { label: t('common.all'), value: 'all' },
+                  { label: t('common.active'), value: 'active' },
+                  { label: t('common.inactive'), value: 'inactive' }
                 ]}
               />
               <Search

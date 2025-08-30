@@ -92,6 +92,8 @@
     "search": "Tìm kiếm",
     "filter": "Lọc",
     "all": "Tất cả",
+    "confirm": "Xác nhận",
+    "cancel": "Hủy",
     "createdAt": "Ngày tạo",
     "updatedAt": "Ngày cập nhật",
     "assignedMachinesCount": " thiết bị"

@@ -254,33 +254,33 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   // 모델 테이블 컬럼
   const modelColumns = [
     {
-      title: t('컴럼.모델명'),
+      title: t('컬럼.모델명'),
       dataIndex: 'model_name',
       key: 'model_name',
       render: (text: string) => <Text strong>{text}</Text>
     },
     {
-      title: t('컴럼.설명'),
+      title: t('컬럼.설명'),
       dataIndex: 'description',
       key: 'description',
       render: (text: string) => text || '-'
     },
     {
-      title: t('컴럼.공정수'),
+      title: t('컬럼.공정수'),
       key: 'process_count',
       render: (_: any, record: ProductModel) => {
         const count = processes.filter(p => p.model_id === record.id).length;
-        return <Tag color={count > 0 ? 'blue' : 'default'}>{count}개</Tag>;
+        return <Tag color={count > 0 ? 'blue' : 'default'}>{count}{t('단위.개')}</Tag>;
       }
     },
     {
-      title: t('컴럼.등록일'),
+      title: t('컬럼.등록일'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (date: string) => new Date(date).toLocaleDateString('ko-KR')
     },
     {
-      title: t('컴럼.작업'),
+      title: t('컬럼.작업'),
       key: 'actions',
       render: (_: any, record: ProductModel) => (
         <Space>
@@ -293,7 +293,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             }}
             size="small"
           >
-            공정 관리
+            {t('버튼.공정관리')}
           </Button>
           <Button
             type="link"
@@ -322,14 +322,14 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   // 공정 테이블 컬럼
   const processColumns = [
     {
-      title: t('컴럼.순서'),
+      title: t('컬럼.순서'),
       dataIndex: 'process_order',
       key: 'process_order',
       width: 80,
       render: (order: number) => <Tag color="blue">{order}</Tag>
     },
     {
-      title: t('컴럼.공정명'),
+      title: t('컬럼.공정명'),
       dataIndex: 'process_name',
       key: 'process_name',
       render: (text: string) => <Text strong>{text}</Text>
@@ -341,12 +341,12 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       render: (seconds: number) => `${seconds}초`
     },
     {
-      title: t('컴럼.모델'),
+      title: t('컬럼.모델'),
       key: 'model_name',
       render: (record: ModelProcess) => record.product_models?.model_name || '-'
     },
     {
-      title: t('컴럼.작업'),
+      title: t('컬럼.작업'),
       key: 'actions',
       render: (_: any, record: ModelProcess) => (
         <Space>
@@ -456,7 +456,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
               onClick={() => openProcessModal()}
               disabled={!selectedModel}
             >
-              공정 추가
+              {t('버튼.공정추가')}
             </Button>
           </Space>
         }
