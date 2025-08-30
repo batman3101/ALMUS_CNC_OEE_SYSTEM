@@ -25,6 +25,7 @@ import { Machine } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import MachineEditModal from './MachineEditModal';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
 
@@ -37,35 +38,35 @@ interface MachineDetailModalProps {
 }
 
 // 설비 상태별 색상 및 텍스트 매핑
-const getStateConfig = (state: string) => {
+const getStateConfig = (state: string, t: any) => {
   const configs: Record<string, any> = {
     NORMAL_OPERATION: {
       color: 'success',
-      text: '정상가동'
+      text: t('status.normalOperation')
     },
     MAINTENANCE: {
       color: 'warning',
-      text: '점검중'
+      text: t('status.maintenance')
     },
     MODEL_CHANGE: {
       color: 'processing',
-      text: '모델교체'
+      text: t('status.modelChange')
     },
     PLANNED_STOP: {
       color: 'default',
-      text: '계획정지'
+      text: t('status.plannedStop')
     },
     PROGRAM_CHANGE: {
       color: 'processing',
-      text: '프로그램 교체'
+      text: t('status.programChange')
     },
     TOOL_CHANGE: {
       color: 'processing',
-      text: '공구교환'
+      text: t('status.toolChange')
     },
     TEMPORARY_STOP: {
       color: 'error',
-      text: '일시정지'
+      text: t('status.temporaryStop')
     }
   };
   
@@ -79,15 +80,16 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
   language = 'ko',
   onMachineUpdated
 }) => {
+  const { t } = useMachinesTranslation();
   const [editModalVisible, setEditModalVisible] = useState(false);
 
   if (!machine) return null;
 
-  const stateConfig = getStateConfig(machine.current_state);
+  const stateConfig = getStateConfig(machine.current_state, t);
   
   // 마지막 업데이트 시간
   const getLastUpdateTime = () => {
-    if (!machine.updated_at) return '정보 없음';
+    if (!machine.updated_at) return t('common.noInfo');
     
     return formatDistanceToNow(new Date(machine.updated_at), {
       addSuffix: true,
@@ -116,7 +118,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
         title={
           <Space>
             <SettingOutlined />
-            <span>설비 상세 정보</span>
+            <span>{t('detail.title')}</span>
           </Space>
         }
         open={visible}
@@ -124,10 +126,10 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
         width={800}
         footer={[
           <Button key="edit" type="primary" icon={<EditOutlined />} onClick={handleEditClick}>
-            설비 정보 수정
+            {t('detail.editButton')}
           </Button>,
           <Button key="close" onClick={onClose}>
-            닫기
+            {t('common.close')}
           </Button>
         ]}
       >
@@ -147,13 +149,13 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                     {stateConfig.text}
                   </Tag>
                   <Tag color={machine.is_active ? 'green' : 'red'}>
-                    {machine.is_active ? '활성' : '비활성'}
+                    {machine.is_active ? t('common.active') : t('common.inactive')}
                   </Tag>
                 </Space>
               </Col>
               <Col span={8} style={{ textAlign: 'right' }}>
                 <Text type="secondary">
-                  <ClockCircleOutlined /> 마지막 업데이트: {getLastUpdateTime()}
+                  <ClockCircleOutlined /> {t('detail.lastUpdate')}: {getLastUpdateTime()}
                 </Text>
               </Col>
             </Row>
@@ -163,64 +165,64 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
             {/* 상세 정보 */}
             <Row gutter={24}>
               <Col span={12}>
-                <Card title="기본 정보" size="small">
+                <Card title={t('detail.basicInfo')} size="small">
                   <Descriptions column={1} size="small">
-                    <Descriptions.Item label="설비명">
+                    <Descriptions.Item label={t('fields.name')}>
                       <Text strong>{machine.name}</Text>
                     </Descriptions.Item>
-                    <Descriptions.Item label="위치">
+                    <Descriptions.Item label={t('fields.location')}>
                       <Space>
                         <EnvironmentOutlined />
                         {machine.location}
                       </Space>
                     </Descriptions.Item>
-                    <Descriptions.Item label="설비 유형">
-                      {machine.equipment_type || '정보 없음'}
+                    <Descriptions.Item label={t('fields.equipmentType')}>
+                      {machine.equipment_type || t('common.noInfo')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="활성 상태">
+                    <Descriptions.Item label={t('fields.activeStatus')}>
                       {machine.is_active ? (
-                        <Tag color="green" icon={<CheckCircleOutlined />}>활성</Tag>
+                        <Tag color="green" icon={<CheckCircleOutlined />}>{t('common.active')}</Tag>
                       ) : (
-                        <Tag color="red" icon={<ExclamationCircleOutlined />}>비활성</Tag>
+                        <Tag color="red" icon={<ExclamationCircleOutlined />}>{t('common.inactive')}</Tag>
                       )}
                     </Descriptions.Item>
-                    <Descriptions.Item label="등록일">
-                      {machine.created_at ? new Date(machine.created_at).toLocaleDateString() : '정보 없음'}
+                    <Descriptions.Item label={t('fields.registrationDate')}>
+                      {machine.created_at ? new Date(machine.created_at).toLocaleDateString() : t('common.noInfo')}
                     </Descriptions.Item>
                   </Descriptions>
                 </Card>
               </Col>
 
               <Col span={12}>
-                <Card title="생산 정보" size="small">
+                <Card title={t('detail.productionInfo')} size="small">
                   <Descriptions column={1} size="small">
-                    <Descriptions.Item label="현재 상태">
+                    <Descriptions.Item label={t('fields.currentStatus')}>
                       <Tag color={stateConfig.color as any}>
                         {stateConfig.text}
                       </Tag>
                     </Descriptions.Item>
-                    <Descriptions.Item label="생산 모델">
+                    <Descriptions.Item label={t('fields.productionModel')}>
                       <Text code>
-                        {machine.production_model?.model_name || '설정 없음'}
+                        {machine.production_model?.model_name || t('common.notSet')}
                       </Text>
                     </Descriptions.Item>
-                    <Descriptions.Item label="가공 공정">
+                    <Descriptions.Item label={t('fields.currentProcess')}>
                       <Text code>
-                        {machine.current_process?.process_name || '설정 없음'}
+                        {machine.current_process?.process_name || t('common.notSet')}
                       </Text>
                     </Descriptions.Item>
-                    <Descriptions.Item label="Tact Time">
+                    <Descriptions.Item label={t('fields.tactTime')}>
                       {machine.current_process?.tact_time_seconds ? (
-                        <Text strong>{machine.current_process.tact_time_seconds}초</Text>
+                        <Text strong>{machine.current_process.tact_time_seconds}{t('units.seconds')}</Text>
                       ) : (
-                        <Text type="secondary">설정 없음</Text>
+                        <Text type="secondary">{t('common.notSet')}</Text>
                       )}
                     </Descriptions.Item>
-                    <Descriptions.Item label="공정 순서">
+                    <Descriptions.Item label={t('fields.processOrder')}>
                       {machine.current_process?.process_order ? (
-                        <Text>{machine.current_process.process_order}번째</Text>
+                        <Text>{machine.current_process.process_order}{t('units.orderSuffix')}</Text>
                       ) : (
-                        <Text type="secondary">설정 없음</Text>
+                        <Text type="secondary">{t('common.notSet')}</Text>
                       )}
                     </Descriptions.Item>
                   </Descriptions>

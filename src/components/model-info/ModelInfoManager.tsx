@@ -63,7 +63,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       setModels(data || []);
     } catch (error) {
       console.error('모델 조회 오류:', error);
-      message.error('모델 목록을 불러오는데 실패했습니다');
+      message.error(t('messages.modelLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -113,7 +113,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           .eq('id', editingModel.id);
 
         if (error) throw error;
-        message.success('모델이 수정되었습니다');
+        message.success(t('messages.modelUpdated'));
       } else {
         // 추가
         const { error } = await supabase
@@ -124,7 +124,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           });
 
         if (error) throw error;
-        message.success('모델이 추가되었습니다');
+        message.success(t('messages.modelAdded'));
       }
 
       setModelModalVisible(false);
@@ -134,9 +134,9 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     } catch (error: any) {
       console.error('모델 저장 오류:', error);
       if (error.code === '23505') {
-        message.error('이미 존재하는 모델명입니다');
+        message.error(t('messages.modelNameExists'));
       } else {
-        message.error('모델 저장에 실패했습니다');
+        message.error(t('messages.modelSaveFailed'));
       }
     }
   };
@@ -426,7 +426,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
               <Tag color="green">{t('선택된모델')}: {selectedModel.model_name}</Tag>
             )}
             <Select
-              placeholder="모델 선택"
+              placeholder={t('placeholders.selectModel')}
               style={{ width: 200 }}
               value={selectedModel?.id}
               onChange={(value) => {
@@ -471,7 +471,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
 
       {/* 모델 추가/수정 모달 */}
       <Modal
-        title={editingModel ? '모델 수정' : '모델 추가'}
+        title={editingModel ? t('modal.editModelTitle') : t('modal.addModelTitle')}
         open={modelModalVisible}
         onCancel={() => {
           setModelModalVisible(false);
@@ -488,22 +488,22 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
         >
           <Form.Item
             name="model_name"
-            label="모델명"
+            label={t('fields.modelName')}
             rules={[
-              { required: true, message: '모델명을 입력하세요' },
-              { min: 2, message: '모델명은 최소 2자 이상이어야 합니다' }
+              { required: true, message: t('validation.modelNameRequired') },
+              { min: 2, message: t('validation.modelNameMinLength') }
             ]}
           >
-            <Input placeholder="예: Product-ABC-123" />
+            <Input placeholder={t('placeholders.modelName')} />
           </Form.Item>
 
           <Form.Item
             name="description"
-            label="설명"
+            label={t('fields.description')}
           >
             <TextArea
               rows={3}
-              placeholder="모델에 대한 설명을 입력하세요"
+              placeholder={t('placeholders.description')}
             />
           </Form.Item>
 
@@ -514,10 +514,10 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
                 setEditingModel(null);
                 modelForm.resetFields();
               }}>
-                취소
+                {t('buttons.cancel')}
               </Button>
               <Button type="primary" htmlType="submit">
-                {editingModel ? '수정' : '추가'}
+                {editingModel ? t('buttons.edit') : t('buttons.add')}
               </Button>
             </Space>
           </Form.Item>

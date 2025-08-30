@@ -46,10 +46,10 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
 
   return (
     <div className={className}>
-      <Card title={t('reports.reportGeneration')} size="small">
+      <Card title={t('reportGeneration')} size="small">
         <Space direction="vertical" style={{ width: '100%' }}>
           <div>
-            <h4>{t('reports.quickExport')}</h4>
+            <h4>{t('quickExport')}</h4>
             <Space>
               <Button
                 icon={<FilePdfOutlined />}
@@ -69,21 +69,21 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
           </div>
 
           <div>
-            <h4>{t('reports.customReport')}</h4>
+            <h4>{t('customReport')}</h4>
             <Space>
               <Button
                 icon={<FilePdfOutlined />}
                 onClick={() => handleExportClick('pdf')}
                 type="primary"
               >
-                {t('reports.buttons.pdfCustom')}
+                {t('buttons.pdfCustom')}
               </Button>
               <Button
                 icon={<FileExcelOutlined />}
                 onClick={() => handleExportClick('excel')}
                 type="primary"
               >
-                {t('reports.buttons.excelCustom')}
+                {t('buttons.excelCustom')}
               </Button>
             </Space>
           </div>

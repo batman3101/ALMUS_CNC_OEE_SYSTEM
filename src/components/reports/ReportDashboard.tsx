@@ -230,21 +230,21 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const stats = calculateStats();
 
   const quickReportButtons = [
-    { key: 'daily', label: t('reports.types.daily'), template: 'daily' as const },
-    { key: 'weekly', label: t('reports.types.weekly'), template: 'weekly' as const },
-    { key: 'monthly', label: t('reports.types.monthly'), template: 'monthly' as const }
+    { key: 'daily', label: t('types.daily'), template: 'daily' as const },
+    { key: 'weekly', label: t('types.weekly'), template: 'weekly' as const },
+    { key: 'monthly', label: t('types.monthly'), template: 'monthly' as const }
   ];
 
   return (
     <div className={className}>
       <Spin spinning={loading}>
         {/* 필터 및 설정 */}
-        <Card title={t('reports.settings')} className="mb-4">
+        <Card title={t('settings')} className="mb-4">
           <Row gutter={16}>
             <Col xs={24} md={8}>
               <Select
                 mode="multiple"
-                placeholder={t('reports.filters.machineSelectPlaceholder')}
+                placeholder={t('filters.machineSelectPlaceholder')}
                 style={{ width: '100%' }}
                 value={selectedMachines}
                 onChange={setSelectedMachines}
@@ -261,7 +261,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
               <RangePicker
                 style={{ width: '100%' }}
                 format="YYYY-MM-DD"
-                placeholder={[t('reports.filters.startDate'), t('reports.filters.endDate')]}
+                placeholder={[t('filters.startDate'), t('filters.endDate')]}
                 onChange={(dates, dateStrings) => {
                   setDateRange(dates ? [dateStrings[0], dateStrings[1]] : null);
                 }}
@@ -274,7 +274,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 onClick={fetchReportData}
                 loading={loading}
               >
-                {t('reports.refreshData')}
+                {t('refreshData')}
               </Button>
             </Col>
           </Row>
@@ -285,7 +285,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title={t('reports.metrics.averageOEE')}
+                title={t('metrics.averageOEE')}
                 value={stats.avgOEE * 100}
                 precision={1}
                 suffix="%"
@@ -302,7 +302,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title={t('reports.metrics.averageAvailability')}
+                title={t('metrics.averageAvailability')}
                 value={stats.avgAvailability * 100}
                 precision={1}
                 suffix="%"
@@ -319,17 +319,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title={t('reports.metrics.totalProduction')}
+                title={t('metrics.totalProduction')}
                 value={stats.totalOutput}
                 formatter={(value) => ReportUtils.formatNumber(Number(value), 0)}
-                suffix={t('reports.units.pieces')}
+                suffix={t('units.pieces')}
               />
             </Card>
           </Col>
           <Col xs={12} md={6}>
             <Card>
               <Statistic
-                title={t('reports.metrics.defectRate')}
+                title={t('metrics.defectRate')}
                 value={stats.totalDefects / stats.totalOutput * 100}
                 precision={2}
                 suffix="%"
@@ -342,7 +342,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         </Row>
 
         {/* 빠른 보고서 생성 */}
-        <Card title={t('reports.quickReports')} className="mb-4">
+        <Card title={t('quickReports')} className="mb-4">
           <Row gutter={16}>
             {quickReportButtons.map(button => (
               <Col xs={24} md={8} key={button.key} className="mb-2">
@@ -353,7 +353,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                       onClick={() => handlePreview(button.template)}
                       block
                     >
-                      {t('reports.buttons.preview')}
+                      {t('buttons.preview')}
                     </Button>
                     <Space>
                       <Button
@@ -361,14 +361,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                         onClick={() => handleQuickReport('pdf', button.template)}
                         size="small"
                       >
-                        {t('reports.buttons.pdfExport')}
+                        {t('buttons.pdfExport')}
                       </Button>
                       <Button
                         icon={<FileExcelOutlined />}
                         onClick={() => handleQuickReport('excel', button.template)}
                         size="small"
                       >
-                        {t('reports.buttons.excelExport')}
+                        {t('buttons.excelExport')}
                       </Button>
                     </Space>
                   </Space>
@@ -390,13 +390,13 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
         {/* 미리보기 모달 */}
         <Modal
-          title={t(`reports.previewModal.${previewType}`)}
+          title={t(`previewModal.${previewType}`)}
           open={previewModalVisible}
           onCancel={() => setPreviewModalVisible(false)}
           width={900}
           footer={[
             <Button key="cancel" onClick={() => setPreviewModalVisible(false)}>
-              닫기
+              {t('common.close')}
             </Button>,
             <Button
               key="pdf"
@@ -407,7 +407,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 setPreviewModalVisible(false);
               }}
             >
-              PDF로 내보내기
+              {t('buttons.exportPdf')}
             </Button>,
             <Button
               key="excel"
@@ -418,29 +418,29 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 setPreviewModalVisible(false);
               }}
             >
-              Excel로 내보내기
+              {t('buttons.exportExcel')}
             </Button>
           ]}
         >
           {previewData && (
             <div>
-              <Card title="보고서 정보" size="small" className="mb-3">
+              <Card title={t('preview.reportInfo')} size="small" className="mb-3">
                 <Row gutter={16}>
                   <Col span={12}>
-                    <strong>기간:</strong> {previewData.period}
+                    <strong>{t('preview.period')}:</strong> {previewData.period}
                   </Col>
                   <Col span={12}>
-                    <strong>설비 수:</strong> {previewData.machines.length}대
+                    <strong>{t('preview.machineCount')}:</strong> {previewData.machines.length}{t('units.machines')}
                   </Col>
                 </Row>
               </Card>
 
               <Tabs defaultActiveKey="1">
-                <Tabs.TabPane tab="OEE 요약" key="1">
+                <Tabs.TabPane tab={t('preview.tabs.oeeSummary')} key="1">
                   <Row gutter={16}>
                     <Col span={6}>
                       <Statistic
-                        title="평균 OEE"
+                        title={t('preview.stats.avgOEE')}
                         value={(previewData.stats.avgOEE * 100).toFixed(1)}
                         suffix="%"
                         valueStyle={{ color: ReportUtils.getOEEColor(previewData.stats.avgOEE) }}
@@ -448,21 +448,21 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     </Col>
                     <Col span={6}>
                       <Statistic
-                        title="평균 가동률"
+                        title={t('preview.stats.avgAvailability')}
                         value={(previewData.stats.avgAvailability * 100).toFixed(1)}
                         suffix="%"
                       />
                     </Col>
                     <Col span={6}>
                       <Statistic
-                        title="평균 성능"
+                        title={t('preview.stats.avgPerformance')}
                         value={(previewData.stats.avgPerformance * 100).toFixed(1)}
                         suffix="%"
                       />
                     </Col>
                     <Col span={6}>
                       <Statistic
-                        title="평균 품질"
+                        title={t('preview.stats.avgQuality')}
                         value={(previewData.stats.avgQuality * 100).toFixed(1)}
                         suffix="%"
                       />
@@ -470,17 +470,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                   </Row>
                 </Tabs.TabPane>
 
-                <Tabs.TabPane tab="생산 데이터" key="2">
+                <Tabs.TabPane tab={t('preview.tabs.productionData')} key="2">
                   <Table
                     dataSource={previewData.productionData}
                     columns={[
                       {
-                        title: '날짜',
+                        title: t('preview.columns.date'),
                         dataIndex: 'date',
                         key: 'date'
                       },
                       {
-                        title: '설비',
+                        title: t('preview.columns.machine'),
                         dataIndex: 'machine_id',
                         key: 'machine_id',
                         render: (id: string) => {
@@ -489,13 +489,13 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                         }
                       },
                       {
-                        title: '생산량',
+                        title: t('preview.columns.output'),
                         dataIndex: 'output_qty',
                         key: 'output_qty',
                         align: 'right'
                       },
                       {
-                        title: '불량',
+                        title: t('preview.columns.defects'),
                         dataIndex: 'defect_qty',
                         key: 'defect_qty',
                         align: 'right'
@@ -506,25 +506,25 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                   />
                 </Tabs.TabPane>
 
-                <Tabs.TabPane tab="설비 목록" key="3">
+                <Tabs.TabPane tab={t('preview.tabs.machineList')} key="3">
                   <Table
                     dataSource={previewData.machines}
                     columns={[
                       {
-                        title: '설비명',
+                        title: t('preview.columns.machineName'),
                         dataIndex: 'name',
                         key: 'name'
                       },
                       {
-                        title: '위치',
+                        title: t('preview.columns.location'),
                         dataIndex: 'location',
                         key: 'location'
                       },
                       {
-                        title: '상태',
+                        title: t('preview.columns.status'),
                         dataIndex: 'is_active',
                         key: 'is_active',
-                        render: (active: boolean) => active ? '가동중' : '정지'
+                        render: (active: boolean) => active ? t('common.running') : t('common.stopped')
                       }
                     ]}
                     pagination={false}

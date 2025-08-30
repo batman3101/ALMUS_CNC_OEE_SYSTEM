@@ -6,6 +6,16 @@
   "공정설명": "Quản lý quy trình gia công và Tact Time theo mô hình",
   "선택된모델공정설명": "Quản lý quy trình của mô hình {{modelName}}",
   "선택된모델": "Mô hình đã chọn",
+  "buttons": {
+    "모델추가": "Thêm mô hình",
+    "공정추가": "Thêm quy trình",
+    "공정관리": "Quản lý quy trình",
+    "수정": "Sửa",
+    "삭제": "Xóa",
+    "add": "Thêm",
+    "edit": "Sửa",
+    "cancel": "Hủy"
+  },
   "버튼": {
     "모델추가": "Thêm mô hình",
     "공정추가": "Thêm quy trình",
@@ -14,6 +24,12 @@
     "삭제": "Xóa",
     "추가": "Thêm",
     "취소": "Hủy"
+  },
+  "modal": {
+    "addModelTitle": "Thêm mô hình",
+    "editModelTitle": "Sửa mô hình",
+    "addProcessTitle": "Thêm quy trình",
+    "editProcessTitle": "Sửa quy trình"
   },
   "모달": {
     "모델추가": "Thêm mô hình",
@@ -32,9 +48,18 @@
     "공정명": "Tên quy trình",
     "모델": "Mô hình"
   },
+  "placeholders": {
+    "modelName": "Ví dụ: Product-ABC-123",
+    "description": "Nhập mô tả về mô hình",
+    "selectModel": "Chọn mô hình"
+  },
   "플레이스홀더": {
     "모델선택": "Chọn mô hình",
     "모델설명": "Nhập mô tả về mô hình"
+  },
+  "fields": {
+    "modelName": "Tên mô hình",
+    "description": "Mô tả"
   },
   "라벨": {
     "모델명": "Tên mô hình",
@@ -42,6 +67,10 @@
     "공정명": "Tên quy trình",
     "공정순서": "Thứ tự quy trình",
     "택트타임초": "Tact Time (giây)"
+  },
+  "validation": {
+    "modelNameRequired": "Vui lòng nhập tên mô hình",
+    "modelNameMinLength": "Tên mô hình phải có ít nhất 2 ký tự"
   },
   "검증": {
     "모델명필수": "Vui lòng nhập tên mô hình",
@@ -65,7 +94,14 @@
     "공정저장실패": "Không thể lưu quy trình",
     "모델선택필요": "Vui lòng chọn mô hình trước"
   },
-  "메시지": {
+  "messages": {
+    "modelAdded": "Đã thêm mô hình thành công",
+    "modelUpdated": "Đã cập nhật mô hình thành công",
+    "modelNameExists": "Tên mô hình đã tồn tại",
+    "modelSaveFailed": "Không thể lưu mô hình",
+    "modelLoadFailed": "Không thể tải danh sách mô hình"
+  },
+  "멤시지": {
     "모델생성완료": "Đã tạo mô hình thành công",
     "모델수정완료": "Đã cập nhật mô hình thành công",
     "모델삭제완료": "Đã xóa mô hình thành công",

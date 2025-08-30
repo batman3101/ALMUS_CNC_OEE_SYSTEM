@@ -41,10 +41,10 @@ export default function ReportsPage() {
       {/* 페이지 제목 */}
       <div style={{ marginBottom: '24px' }}>
         <Title level={2}>
-          {t('reports.title')}
+          {t('title')}
         </Title>
         <Typography.Paragraph type="secondary">
-          {t('reports.description')}
+          {t('description')}
         </Typography.Paragraph>
       </div>
 

@@ -52,5 +52,71 @@
     "stateChanged": "설비 상태가 변경되었습니다",
     "stateChangeFailed": "상태 변경에 실패했습니다",
     "confirmStateChange": "설비 상태를 변경하시겠습니까?"
+  },
+  "detail": {
+    "title": "설비 상세 정보",
+    "basicInfo": "기본 정보",
+    "productionInfo": "생산 정보",
+    "editButton": "설비 정보 수정",
+    "lastUpdate": "마지막 업데이트"
+  },
+  "fields": {
+    "name": "설비명",
+    "location": "위치",
+    "equipmentType": "설비 유형",
+    "activeStatus": "활성 상태",
+    "registrationDate": "등록일",
+    "currentStatus": "현재 상태",
+    "productionModel": "생산 모델",
+    "currentProcess": "가공 공정",
+    "tactTime": "Tact Time",
+    "processOrder": "공정 순서"
+  },
+  "status": {
+    "normalOperation": "정상가동",
+    "maintenance": "점검중",
+    "modelChange": "모델교체",
+    "plannedStop": "계획정지",
+    "programChange": "프로그램 교체",
+    "toolChange": "공구교환",
+    "temporaryStop": "일시정지"
+  },
+  "common": {
+    "active": "활성",
+    "inactive": "비활성",
+    "close": "닫기",
+    "noInfo": "정보 없음",
+    "notSet": "설정 없음"
+  },
+  "units": {
+    "seconds": "초",
+    "orderSuffix": "번째"
+  },
+  "edit": {
+    "title": "설비 정보 수정",
+    "basicInfoReadonly": "기본 정보 (수정 불가)",
+    "operationalInfo": "운영 정보",
+    "successMessage": "설비 운영 정보가 성공적으로 수정되었습니다",
+    "errorMessage": "설비 정보 수정 실패",
+    "placeholders": {
+      "name": "예: CNC-001",
+      "location": "예: 1공장 A라인",
+      "equipmentType": "예: CNC 머시닝센터",
+      "status": "상태를 선택하세요",
+      "productionModel": "생산 모델을 선택하세요",
+      "process": "가공 공정을 선택하세요"
+    },
+    "validation": {
+      "selectStatus": "현재 상태를 선택하세요"
+    }
+  },
+  "common": {
+    "active": "활성",
+    "inactive": "비활성",
+    "close": "닫기",
+    "noInfo": "정보 없음",
+    "notSet": "설정 없음",
+    "cancel": "취소",
+    "save": "저장"
   }
 }

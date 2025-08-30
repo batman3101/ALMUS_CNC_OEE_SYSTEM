@@ -52,5 +52,71 @@
     "stateChanged": "Trạng thái thiết bị đã được thay đổi",
     "stateChangeFailed": "Thay đổi trạng thái thất bại",
     "confirmStateChange": "Bạn có muốn thay đổi trạng thái thiết bị không?"
+  },
+  "detail": {
+    "title": "Thông tin chi tiết thiết bị",
+    "basicInfo": "Thông tin cơ bản",
+    "productionInfo": "Thông tin sản xuất",
+    "editButton": "Chỉnh sửa thông tin thiết bị",
+    "lastUpdate": "Cập nhật lần cuối"
+  },
+  "fields": {
+    "name": "Tên thiết bị",
+    "location": "Vị trí",
+    "equipmentType": "Loại thiết bị",
+    "activeStatus": "Trạng thái hoạt động",
+    "registrationDate": "Ngày đăng ký",
+    "currentStatus": "Trạng thái hiện tại",
+    "productionModel": "Mẫu sản xuất",
+    "currentProcess": "Quy trình gia công",
+    "tactTime": "Thời gian Tact",
+    "processOrder": "Thứ tự quy trình"
+  },
+  "status": {
+    "normalOperation": "Hoạt động bình thường",
+    "maintenance": "Bảo trì",
+    "modelChange": "Thay đổi mô hình",
+    "plannedStop": "Dừng theo kế hoạch",
+    "programChange": "Thay đổi chương trình",
+    "toolChange": "Thay dụng cụ",
+    "temporaryStop": "Dừng tạm thời"
+  },
+  "common": {
+    "active": "Hoạt động",
+    "inactive": "Không hoạt động",
+    "close": "Đóng",
+    "noInfo": "Không có thông tin",
+    "notSet": "Chưa thiết lập"
+  },
+  "units": {
+    "seconds": "giây",
+    "orderSuffix": ""
+  },
+  "edit": {
+    "title": "Chỉnh sửa thông tin thiết bị",
+    "basicInfoReadonly": "Thông tin cơ bản (không thể chỉnh sửa)",
+    "operationalInfo": "Thông tin vận hành",
+    "successMessage": "Thông tin vận hành thiết bị đã được cập nhật thành công",
+    "errorMessage": "Cập nhật thông tin thiết bị thất bại",
+    "placeholders": {
+      "name": "Ví dụ: CNC-001",
+      "location": "Ví dụ: Nhà máy 1 Dây chuyền A",
+      "equipmentType": "Ví dụ: Trung tâm gia công CNC",
+      "status": "Chọn trạng thái",
+      "productionModel": "Chọn mẫu sản xuất",
+      "process": "Chọn quy trình gia công"
+    },
+    "validation": {
+      "selectStatus": "Vui lòng chọn trạng thái hiện tại"
+    }
+  },
+  "common": {
+    "active": "Hoạt động",
+    "inactive": "Không hoạt động",
+    "close": "Đóng",
+    "noInfo": "Không có thông tin",
+    "notSet": "Chưa thiết lập",
+    "cancel": "Hủy",
+    "save": "Lưu"
   }
 }

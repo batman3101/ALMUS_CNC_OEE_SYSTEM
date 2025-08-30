@@ -19,6 +19,7 @@ import {
   CloseOutlined
 } from '@ant-design/icons';
 import { Machine } from '@/types';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 const { Option } = Select;
 
@@ -40,14 +41,14 @@ interface EditFormData {
 }
 
 // 설비 상태 옵션
-const machineStates = [
-  { value: 'NORMAL_OPERATION', label: '정상가동' },
-  { value: 'MAINTENANCE', label: '점검중' },
-  { value: 'MODEL_CHANGE', label: '모델교체' },
-  { value: 'PLANNED_STOP', label: '계획정지' },
-  { value: 'PROGRAM_CHANGE', label: '프로그램 교체' },
-  { value: 'TOOL_CHANGE', label: '공구교환' },
-  { value: 'TEMPORARY_STOP', label: '일시정지' }
+const getMachineStates = (t: any) => [
+  { value: 'NORMAL_OPERATION', label: t('status.normalOperation') },
+  { value: 'MAINTENANCE', label: t('status.maintenance') },
+  { value: 'MODEL_CHANGE', label: t('status.modelChange') },
+  { value: 'PLANNED_STOP', label: t('status.plannedStop') },
+  { value: 'PROGRAM_CHANGE', label: t('status.programChange') },
+  { value: 'TOOL_CHANGE', label: t('status.toolChange') },
+  { value: 'TEMPORARY_STOP', label: t('status.temporaryStop') }
 ];
 
 const MachineEditModal: React.FC<MachineEditModalProps> = ({
@@ -56,6 +57,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
   onSuccess,
   onCancel
 }) => {
+  const { t } = useMachinesTranslation();
   const { message } = App.useApp();
   const [form] = Form.useForm<EditFormData>();
   const [loading, setLoading] = useState(false);
@@ -176,12 +178,12 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
       }
 
       const result = await response.json();
-      message.success('설비 운영 정보가 성공적으로 수정되었습니다');
+      message.success(t('edit.successMessage'));
       onSuccess();
 
     } catch (error: any) {
       console.error('Error updating machine:', error);
-      message.error(`설비 정보 수정 실패: ${error.message}`);
+      message.error(`${t('edit.errorMessage')}: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -194,13 +196,13 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
 
   return (
     <Modal
-      title="설비 정보 수정"
+      title={t('edit.title')}
       open={visible}
       onCancel={handleCancel}
       width={800}
       footer={[
         <Button key="cancel" icon={<CloseOutlined />} onClick={handleCancel}>
-          취소
+          {t('common.cancel')}
         </Button>,
         <Button 
           key="submit" 
@@ -209,7 +211,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
           loading={loading}
           onClick={() => form.submit()}
         >
-          저장
+          {t('common.save')}
         </Button>
       ]}
     >
@@ -221,51 +223,51 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
       >
         <Row gutter={24}>
           <Col span={12}>
-            <Card title="기본 정보 (수정 불가)" size="small" style={{ marginBottom: 16 }}>
+            <Card title={t('edit.basicInfoReadonly')} size="small" style={{ marginBottom: 16 }}>
               <Form.Item
                 name="name"
-                label="설비명"
+                label={t('fields.name')}
               >
-                <Input disabled placeholder="예: CNC-001" />
+                <Input disabled placeholder={t('edit.placeholders.name')} />
               </Form.Item>
 
               <Form.Item
                 name="location"
-                label="위치"
+                label={t('fields.location')}
               >
-                <Input disabled placeholder="예: 1공장 A라인" />
+                <Input disabled placeholder={t('edit.placeholders.location')} />
               </Form.Item>
 
               <Form.Item
                 name="equipment_type"
-                label="설비 유형"
+                label={t('fields.equipmentType')}
               >
-                <Input disabled placeholder="예: CNC 머시닝센터" />
+                <Input disabled placeholder={t('edit.placeholders.equipmentType')} />
               </Form.Item>
 
               <Form.Item
                 name="is_active"
-                label="활성 상태"
+                label={t('fields.activeStatus')}
                 valuePropName="checked"
               >
                 <Switch 
                   disabled
-                  checkedChildren="활성" 
-                  unCheckedChildren="비활성"
+                  checkedChildren={t('common.active')} 
+                  unCheckedChildren={t('common.inactive')}
                 />
               </Form.Item>
             </Card>
           </Col>
 
           <Col span={12}>
-            <Card title="운영 정보" size="small" style={{ marginBottom: 16 }}>
+            <Card title={t('edit.operationalInfo')} size="small" style={{ marginBottom: 16 }}>
               <Form.Item
                 name="current_state"
-                label="현재 상태"
-                rules={[{ required: true, message: '현재 상태를 선택하세요' }]}
+                label={t('fields.currentStatus')}
+                rules={[{ required: true, message: t('edit.validation.selectStatus') }]}
               >
-                <Select placeholder="상태를 선택하세요">
-                  {machineStates.map(state => (
+                <Select placeholder={t('edit.placeholders.status')}>
+                  {getMachineStates(t).map(state => (
                     <Option key={state.value} value={state.value}>
                       {state.label}
                     </Option>
@@ -275,10 +277,10 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
 
               <Form.Item
                 name="production_model_id"
-                label="생산 모델"
+                label={t('fields.productionModel')}
               >
                 <Select
-                  placeholder="생산 모델을 선택하세요"
+                  placeholder={t('edit.placeholders.productionModel')}
                   loading={modelsLoading}
                   allowClear
                   onChange={handleProductModelChange}
@@ -300,10 +302,10 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
 
               <Form.Item
                 name="current_process_id"
-                label="가공 공정"
+                label={t('fields.currentProcess')}
               >
                 <Select
-                  placeholder="가공 공정을 선택하세요"
+                  placeholder={t('edit.placeholders.process')}
                   loading={processesLoading}
                   allowClear
                   showSearch
@@ -314,7 +316,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
                       {process.process_name}
                       {process.process_order && (
                         <span style={{ color: '#8c8c8c', fontSize: '12px', marginLeft: '8px' }}>
-                          - {process.process_order}번째
+                          - {process.process_order}{t('units.orderSuffix')}
                         </span>
                       )}
                       {process.tact_time_seconds && (
