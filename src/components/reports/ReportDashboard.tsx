@@ -12,10 +12,10 @@ import {
   Space,
   Statistic,
   Progress,
-  message,
   Spin,
   Modal,
-  Tabs
+  Tabs,
+  App
 } from 'antd';
 import {
   FileExcelOutlined,
@@ -47,6 +47,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   loading: initialLoading = false
 }) => {
   const { t } = useReportsTranslation();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [previewData, setPreviewData] = useState<any>(null);

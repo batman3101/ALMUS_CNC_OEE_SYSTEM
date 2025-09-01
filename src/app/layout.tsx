@@ -10,6 +10,7 @@ const inter = Inter({
   display: 'swap',
 });
 
+
 export const metadata: Metadata = {
   title: "CNC OEE 모니터링 시스템",
   description: "CNC 설비 OEE 모니터링 및 관리 시스템",
@@ -26,6 +27,13 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
+        {/* Google Fonts */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link 
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" 
+          rel="stylesheet" 
+        />
         {/* 테마 깜박임 방지를 위한 초기화 스크립트 */}
         <script
           dangerouslySetInnerHTML={{

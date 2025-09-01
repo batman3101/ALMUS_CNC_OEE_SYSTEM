@@ -50,8 +50,19 @@
 body {
   background: var(--ant-color-bg-layout, var(--background));
   color: var(--ant-color-text, var(--foreground));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-family: "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* PDF 생성을 위한 한국어 폰트 클래스 */
+.korean-text {
+  font-family: "Noto Sans KR", sans-serif !important;
+  font-weight: 400;
+}
+
+.english-text {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-weight: 400;
 }
 
 /* 스크롤바 스타일링 */

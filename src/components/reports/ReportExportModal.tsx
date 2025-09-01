@@ -76,35 +76,72 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
         ...reportConfig
       };
 
-      // 차트 요소들 수집 (실제 구현에서는 ref를 통해 접근)
+      // 차트 요소들 수집 - 다양한 selector 시도
       const chartElements: { [key: string]: HTMLCanvasElement | HTMLElement } = {};
       
-      // OEE 게이지 차트
-      const oeeGaugeElement = document.querySelector('[data-chart="oee-gauge"] canvas') as HTMLCanvasElement;
-      if (oeeGaugeElement && reportConfig.includeCharts && reportConfig.includeOEE) {
-        chartElements['oee-gauge'] = oeeGaugeElement;
-      }
+      // 가능한 차트 selector들
+      const chartSelectors = [
+        '[data-chart="oee-gauge"] canvas',
+        '[data-testid="oee-gauge"] canvas',
+        '.oee-gauge canvas',
+        'canvas[aria-label*="OEE"]',
+        'canvas[aria-label*="게이지"]',
+        '.chart-container canvas',
+        '[class*="gauge"] canvas'
+      ];
 
-      // 추이 차트
-      const trendChartElement = document.querySelector('[data-chart="trend-chart"] canvas') as HTMLCanvasElement;
-      if (trendChartElement && reportConfig.includeCharts) {
-        chartElements['trend-chart'] = trendChartElement;
-      }
+      const trendSelectors = [
+        '[data-chart="trend-chart"] canvas',
+        '[data-testid="trend-chart"] canvas',
+        '.trend-chart canvas',
+        'canvas[aria-label*="추이"]',
+        'canvas[aria-label*="trend"]',
+        '[class*="line-chart"] canvas'
+      ];
 
-      // 다운타임 차트
-      const downtimeChartElement = document.querySelector('[data-chart="downtime-chart"] canvas') as HTMLCanvasElement;
-      if (downtimeChartElement && reportConfig.includeCharts && reportConfig.includeDowntime) {
-        chartElements['downtime-chart'] = downtimeChartElement;
-      }
-
-      if (Object.keys(chartElements).length > 0) {
-        await ReportTemplates.generateAdvancedReport(reportData, exportType, chartElements);
-      } else {
-        if (exportType === 'pdf') {
-          await ReportTemplates.generatePDFReport(reportData);
-        } else {
-          await ReportTemplates.generateExcelReport(reportData);
+      // OEE 게이지 차트 찾기
+      if (reportConfig.includeCharts && reportConfig.includeOEE) {
+        for (const selector of chartSelectors) {
+          const element = document.querySelector(selector) as HTMLCanvasElement;
+          if (element) {
+            chartElements['oee-gauge'] = element;
+            break;
+          }
         }
+      }
+
+      // 추이 차트 찾기
+      if (reportConfig.includeCharts) {
+        for (const selector of trendSelectors) {
+          const element = document.querySelector(selector) as HTMLCanvasElement;
+          if (element) {
+            chartElements['trend-chart'] = element;
+            break;
+          }
+        }
+      }
+
+      // 모든 canvas 요소에서 차트 찾기 (마지막 시도)
+      if (Object.keys(chartElements).length === 0 && reportConfig.includeCharts) {
+        const allCanvas = document.querySelectorAll('canvas');
+        allCanvas.forEach((canvas, index) => {
+          if (canvas.width > 100 && canvas.height > 100) {
+            chartElements[`chart-${index}`] = canvas;
+          }
+        });
+      }
+
+      console.log(`Found ${Object.keys(chartElements).length} chart elements for report`);
+
+      // 차트가 있으면 고급 보고서, 없으면 기본 보고서 생성
+      if (exportType === 'pdf') {
+        if (Object.keys(chartElements).length > 0) {
+          await ReportTemplates.generateAdvancedReport(reportData, exportType, chartElements);
+        } else {
+          await ReportTemplates.generatePDFReport(reportData);
+        }
+      } else {
+        await ReportTemplates.generateExcelReport(reportData);
       }
 
       message.success(`${exportType.toUpperCase()} 보고서가 성공적으로 생성되었습니다.`);
