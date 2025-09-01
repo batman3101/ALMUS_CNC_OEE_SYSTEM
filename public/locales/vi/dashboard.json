@@ -115,6 +115,8 @@
   "status": {
     "normal": "Bình thường",
     "maintenance": "Đang bảo trì",
+    "inspection": "Đang kiểm tra",
+    "breakdownRepair": "Sửa chữa hỏng hóc",
     "modelChange": "Thay đổi mẫu",
     "plannedStop": "Dừng theo kế hoạch",
     "programChange": "Thay đổi chương trình",

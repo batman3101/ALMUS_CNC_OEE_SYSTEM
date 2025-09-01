@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Typography, message } from 'antd';
 import { ReportDashboard } from '@/components/reports';
 import { useReportsTranslation } from '@/hooks/useTranslation';
+import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecords';
 import { Machine } from '@/types';
 
 const { Title } = Typography;
@@ -12,6 +13,15 @@ export default function ReportsPage() {
   const { t } = useReportsTranslation();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 실시간 생산 기록 데이터 구독
+  const {
+    records: productionRecords,
+    loading: recordsLoading,
+    error: recordsError,
+    aggregatedData,
+    refreshRecords
+  } = useRealtimeProductionRecords();
 
   // 실제 설비 데이터 가져오기
   useEffect(() => {
@@ -49,7 +59,13 @@ export default function ReportsPage() {
       </div>
 
       {/* 보고서 대시보드 */}
-      <ReportDashboard machines={machines} loading={loading} />
+      <ReportDashboard 
+        machines={machines} 
+        loading={loading || recordsLoading}
+        productionRecords={productionRecords}
+        aggregatedData={aggregatedData()}
+        onRefreshRecords={refreshRecords}
+      />
     </div>
   );
 }

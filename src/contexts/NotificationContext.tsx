@@ -141,26 +141,123 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     return mockNotifications;
   }, [user?.id]);
 
+  // 실제 데이터베이스 기반 알림 생성
+  const generateRealNotifications = useCallback(async (): Promise<Notification[]> => {
+    try {
+      console.log('🏭 설비 데이터 API 호출 시작');
+      // 실제 설비 데이터 가져오기
+      const machinesResponse = await fetch('/api/machines');
+      console.log('📡 API 응답 상태:', machinesResponse.status);
+      
+      const machinesData = await machinesResponse.json();
+      const machines = Array.isArray(machinesData) ? machinesData : (machinesData.machines || []);
+      console.log('🔧 로딩된 설비 수:', machines.length);
+      
+      const notifications: Notification[] = [];
+      let notificationId = 1;
+
+      // 비정상 상태 설비에 대한 알림 생성
+      console.log('🔍 비정상 상태 설비 검색 중...');
+      
+      const abnormalMachines = machines.filter((m: any) => m.current_state !== 'NORMAL_OPERATION');
+      console.log('⚠️ 비정상 상태 설비 발견:', abnormalMachines.length, '대');
+      
+      machines.forEach((machine: any) => {
+        if (machine.current_state !== 'NORMAL_OPERATION') {
+          console.log(`🚨 알림 생성: ${machine.name} - ${machine.current_state}`);
+          let message = '';
+          let severity: NotificationSeverity = 'warning';
+          
+          switch (machine.current_state) {
+            case 'TEMPORARY_STOP':
+              message = `${machine.name}이(가) 일시정지 상태입니다.`;
+              severity = 'warning';
+              break;
+            case 'MAINTENANCE':
+            case 'PM_MAINTENANCE':
+            case 'INSPECTION':
+              message = `${machine.name}이(가) 점검 중입니다.`;
+              severity = 'info';
+              break;
+            case 'BREAKDOWN_REPAIR':
+              message = `${machine.name}에서 고장이 발생했습니다.`;
+              severity = 'error';
+              break;
+            case 'MODEL_CHANGE':
+              message = `${machine.name}에서 모델 교체 중입니다.`;
+              severity = 'info';
+              break;
+            case 'PROGRAM_CHANGE':
+              message = `${machine.name}에서 프로그램 교체 중입니다.`;
+              severity = 'info';
+              break;
+            case 'TOOL_CHANGE':
+              message = `${machine.name}에서 공구 교환 중입니다.`;
+              severity = 'info';
+              break;
+            case 'PLANNED_STOP':
+              message = `${machine.name}이(가) 계획 정지 상태입니다.`;
+              severity = 'info';
+              break;
+            default:
+              message = `${machine.name}의 상태를 확인해주세요.`;
+              severity = 'warning';
+          }
+          
+          notifications.push({
+            id: notificationId.toString(),
+            type: machine.current_state === 'BREAKDOWN_REPAIR' ? 'EQUIPMENT_ERROR' : 
+                  machine.current_state === 'TEMPORARY_STOP' ? 'OEE_LOW' : 'MAINTENANCE',
+            severity,
+            title: `설비 상태 알림`,
+            message,
+            machine_id: machine.id,
+            machine_name: machine.name,
+            user_id: user?.id || '',
+            created_at: new Date().toISOString(),
+            read: false,
+            acknowledged: false,
+            status: 'active'
+          });
+          
+          notificationId++;
+        }
+      });
+      
+      console.log('📊 최종 생성된 알림 수:', notifications.length);
+      const finalNotifications = notifications.slice(0, 10);
+      console.log('📋 반환할 알림 수:', finalNotifications.length);
+      
+      return finalNotifications; // 최대 10개만 표시
+    } catch (error) {
+      console.error('❌ generateRealNotifications 오류:', error);
+      return [];
+    }
+  }, [user?.id]);
+
   // 알림 목록 새로고침
   const refreshNotifications = useCallback(async () => {
+    console.log('🔄 refreshNotifications 시작');
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      // 실제로는 Supabase에서 알림을 가져옴
-      // const { data, error } = await supabase
-      //   .from('notifications')
-      //   .select('*')
-      //   .order('created_at', { ascending: false });
+      console.log('📞 generateRealNotifications 호출 시작');
+      // 실제 데이터베이스 기반 알림 생성
+      const realNotifications = await generateRealNotifications();
+      console.log('📋 생성된 알림 데이터:', realNotifications);
       
-      const mockNotifications = generateMockNotifications();
-      dispatch({ type: 'SET_NOTIFICATIONS', payload: mockNotifications });
+      dispatch({ type: 'SET_NOTIFICATIONS', payload: realNotifications });
       dispatch({ type: 'SET_ERROR', payload: null });
+      
+      console.log('✅ 실제 데이터베이스 기반 알림 생성 완료:', realNotifications.length, '개');
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      console.error('❌ refreshNotifications 오류:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Failed to fetch notifications' });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
+      console.log('🔄 refreshNotifications 완료');
     }
-  }, [generateMockNotifications]);
+  }, [generateRealNotifications]);
+
 
   // 알림 추가
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'created_at'>) => {
@@ -305,12 +402,15 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   // 읽지 않은 알림 수 계산
   const unreadCount = state.notifications.filter(n => n.status === 'active').length;
 
-  // 초기 데이터 로드
+  // 초기 데이터 로드 - 사용자 로그인 시 실제 알림 로딩
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
+      console.log('🔄 NotificationContext 초기화 - 사용자 ID:', user.id);
       refreshNotifications();
+    } else {
+      console.log('❌ NotificationContext - 사용자 로그인 안됨');
     }
-  }, [user, refreshNotifications]);
+  }, [user?.id, refreshNotifications]);
 
   const contextValue: NotificationContextType = {
     notifications: state.notifications,

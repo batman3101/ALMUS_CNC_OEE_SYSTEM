@@ -43,7 +43,9 @@ interface EditFormData {
 // 설비 상태 옵션
 const getMachineStates = (t: any) => [
   { value: 'NORMAL_OPERATION', label: t('status.normalOperation') },
-  { value: 'MAINTENANCE', label: t('status.maintenance') },
+  { value: 'INSPECTION', label: t('status.inspection') },
+  { value: 'BREAKDOWN_REPAIR', label: t('status.breakdownRepair') },
+  { value: 'PM_MAINTENANCE', label: t('status.maintenance') },
   { value: 'MODEL_CHANGE', label: t('status.modelChange') },
   { value: 'PLANNED_STOP', label: t('status.plannedStop') },
   { value: 'PROGRAM_CHANGE', label: t('status.programChange') },

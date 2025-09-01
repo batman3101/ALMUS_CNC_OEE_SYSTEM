@@ -39,12 +39,27 @@ interface ReportDashboardProps {
   machines?: Machine[];
   className?: string;
   loading?: boolean;
+  productionRecords?: any[];
+  aggregatedData?: {
+    totalProduction: number;
+    totalDefects: number;
+    totalGoodQuantity: number;
+    avgOEE: number;
+    avgAvailability: number;
+    avgPerformance: number;
+    avgQuality: number;
+    recordCount: number;
+  };
+  onRefreshRecords?: () => void;
 }
 
 export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   machines = [],
   className,
-  loading: initialLoading = false
+  loading: initialLoading = false,
+  productionRecords = [],
+  aggregatedData,
+  onRefreshRecords
 }) => {
   const { t } = useReportsTranslation();
   const { message } = App.useApp();
@@ -61,6 +76,29 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     oeeData: [],
     productionData: []
   });
+
+  // 실시간 생산 기록 데이터 업데이트 처리
+  useEffect(() => {
+    if (productionRecords.length > 0) {
+      // OEE 데이터 계산
+      const oeeData: OEEMetrics[] = productionRecords.map(record => ({
+        availability: record.availability || 0,
+        performance: record.performance || 0,
+        quality: record.quality || 0,
+        oee: record.oee || 0,
+        actual_runtime: record.actual_runtime || 0,
+        planned_runtime: record.planned_runtime || 0,
+        ideal_runtime: record.ideal_runtime || 0,
+        output_qty: record.output_qty || 0,
+        defect_qty: record.defect_qty || 0
+      }));
+
+      setReportData({
+        oeeData,
+        productionData: productionRecords
+      });
+    }
+  }, [productionRecords]);
 
   // 실제 데이터 가져오기
   const fetchReportData = async () => {
@@ -198,8 +236,21 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     }
   };
 
-  // 통계 계산
+  // 통계 계산 - 실시간 데이터 우선 사용
   const calculateStats = () => {
+    // 실시간 집계 데이터가 있으면 우선 사용
+    if (aggregatedData) {
+      return {
+        avgOEE: aggregatedData.avgOEE / 100, // 훅에서는 %로, 여기서는 소수로 변환
+        avgAvailability: aggregatedData.avgAvailability / 100,
+        avgPerformance: aggregatedData.avgPerformance / 100,
+        avgQuality: aggregatedData.avgQuality / 100,
+        totalOutput: aggregatedData.totalProduction,
+        totalDefects: aggregatedData.totalDefects
+      };
+    }
+
+    // 실시간 데이터가 없으면 기존 계산 로직 사용
     if (reportData.oeeData.length === 0) {
       return {
         avgOEE: 0,
@@ -272,7 +323,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
               <Button 
                 type="primary" 
                 block
-                onClick={fetchReportData}
+                onClick={onRefreshRecords || fetchReportData}
                 loading={loading}
               >
                 {t('refreshData')}

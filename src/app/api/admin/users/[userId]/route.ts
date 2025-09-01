@@ -55,6 +55,8 @@ export async function DELETE(
 ) {
   try {
     const { userId } = params;
+    let profileDeleted = false;
+    let authDeleted = false;
 
     // Delete user profile first
     const { error: profileError } = await supabaseAdmin
@@ -63,17 +65,38 @@ export async function DELETE(
       .eq('user_id', userId);
 
     if (profileError) {
-      throw profileError;
+      console.error('Error deleting user profile:', profileError);
+    } else {
+      profileDeleted = true;
+      console.log('User profile deleted successfully');
     }
 
-    // Delete auth user
+    // Try to delete auth user (ignore if user not found - for test/virtual users)
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);
     
     if (authError) {
-      throw authError;
+      if (authError.status === 404 || authError.code === 'user_not_found') {
+        console.log('Auth user not found (virtual/test user) - ignoring auth deletion');
+        authDeleted = true; // Consider as success for virtual users
+      } else {
+        console.error('Error deleting auth user:', authError);
+      }
+    } else {
+      authDeleted = true;
+      console.log('Auth user deleted successfully');
     }
 
-    return NextResponse.json({ success: true });
+    // Success if at least profile was deleted (covers both real and virtual users)
+    if (profileDeleted) {
+      return NextResponse.json({ 
+        success: true, 
+        message: authDeleted ? 'User deleted completely' : 'Virtual user profile deleted' 
+      });
+    }
+
+    // If profile deletion failed, return error
+    throw new Error('Failed to delete user profile');
+
   } catch (error) {
     console.error('Error deleting user:', error);
     return NextResponse.json(

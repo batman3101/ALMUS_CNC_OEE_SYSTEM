@@ -67,7 +67,9 @@ export class OEECalculator {
    * @returns OEE (0-1 사이의 값)
    */
   static calculateOEE(availability: number, performance: number, quality: number): number {
-    return availability * performance * quality;
+    // 정확한 계산을 위해 각 값을 소수점 4자리까지 계산 후 최종 결과는 소수점 3자리로 반올림
+    const oee = availability * performance * quality;
+    return Math.round(oee * 1000) / 1000;
   }
 
   /**

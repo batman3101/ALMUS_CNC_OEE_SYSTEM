@@ -115,6 +115,8 @@
   "status": {
     "normal": "정상",
     "maintenance": "점검중",
+    "inspection": "점검중",
+    "breakdownRepair": "고장수리",
     "modelChange": "모델교체",
     "plannedStop": "계획정지",
     "programChange": "프로그램교체",

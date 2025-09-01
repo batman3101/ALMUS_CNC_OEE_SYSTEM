@@ -74,7 +74,9 @@
   },
   "status": {
     "normalOperation": "Hoạt động bình thường",
-    "maintenance": "Bảo trì",
+    "inspection": "Kiểm tra",
+    "breakdownRepair": "Sửa chữa hỏng hóc",
+    "maintenance": "Bảo trì phòng ngừa",
     "modelChange": "Thay đổi mô hình",
     "plannedStop": "Dừng theo kế hoạch",
     "programChange": "Thay đổi chương trình",

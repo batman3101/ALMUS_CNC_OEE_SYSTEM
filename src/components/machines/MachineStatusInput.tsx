@@ -50,13 +50,31 @@ const getStateConfig = (state: MachineState, language: 'ko' | 'vi' = 'ko') => {
         vi: 'Thiết bị đang sản xuất bình thường' 
       }
     },
-    MAINTENANCE: {
+    PM_MAINTENANCE: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: { ko: '점검중', vi: 'Bảo trì' },
+      text: { ko: '예방정비', vi: 'Bảo trì phòng ngừa' },
       description: { 
-        ko: '계획된 점검 또는 보수 작업 중입니다', 
-        vi: 'Đang thực hiện kiểm tra hoặc bảo trì theo kế hoạch' 
+        ko: '계획된 예방정비 작업 중입니다', 
+        vi: 'Đang thực hiện bảo trì phòng ngừa theo kế hoạch' 
+      }
+    },
+    INSPECTION: {
+      color: 'processing',
+      icon: <ExclamationCircleOutlined />,
+      text: { ko: '점검중', vi: 'Kiểm tra' },
+      description: { 
+        ko: '설비 점검 작업 중입니다', 
+        vi: 'Đang thực hiện kiểm tra thiết bị' 
+      }
+    },
+    BREAKDOWN_REPAIR: {
+      color: 'error',
+      icon: <WarningOutlined />,
+      text: { ko: '고장수리', vi: 'Sửa chữa hỏng hóc' },
+      description: { 
+        ko: '설비 고장으로 인한 수리 작업 중입니다', 
+        vi: 'Đang sửa chữa do thiết bị bị hỏng' 
       }
     },
     MODEL_CHANGE: {
@@ -323,7 +341,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
               size="large"
             >
               {Object.entries(getStateConfig('NORMAL_OPERATION')).map(() => 
-                ['NORMAL_OPERATION', 'MAINTENANCE', 'MODEL_CHANGE', 'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP'].map(state => {
+                ['NORMAL_OPERATION', 'INSPECTION', 'BREAKDOWN_REPAIR', 'PM_MAINTENANCE', 'MODEL_CHANGE', 'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP'].map(state => {
                   const config = getStateConfig(state as MachineState, language);
                   return (
                     <Option key={state} value={state}>

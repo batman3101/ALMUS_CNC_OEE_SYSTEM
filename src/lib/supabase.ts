@@ -38,9 +38,9 @@ export async function checkSupabaseConnection(): Promise<boolean> {
       return isConnected;
     }
 
-    // 간단한 쿼리로 연결 상태 확인
+    // 간단한 쿼리로 연결 상태 확인 (production_records 테이블 사용)
     const { error } = await supabase
-      .from('system_settings')
+      .from('production_records')
       .select('count', { count: 'exact', head: true })
       .limit(1);
     
