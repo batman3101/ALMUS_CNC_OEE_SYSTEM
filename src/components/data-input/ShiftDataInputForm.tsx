@@ -32,7 +32,7 @@ import {
   MoonOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useDataInputTranslation } from '@/hooks/useTranslation';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useMachines } from '@/hooks/useMachines';
 import { useUserProfiles } from '@/hooks/useUserProfiles';
@@ -50,7 +50,7 @@ interface ShiftDataInputFormProps {
 const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   initialDate = dayjs().format('YYYY-MM-DD')
 }) => {
-  const { t } = useLanguage();
+  const { t } = useDataInputTranslation();
   const { getSetting } = useSystemSettings();
   const { machines, loading: machinesLoading, error: machinesError } = useMachines();
   const { profiles, loading: profilesLoading, error: profilesError } = useUserProfiles();
@@ -86,7 +86,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   // 교대별 데이터
   const [dayShiftData, setDayShiftData] = useState<ShiftProductionData>({
     shift: 'DAY',
-    shift_name: '주간조',
+    shift_name: t('shift.dayShift'),
     start_time: '08:00',
     end_time: '20:00',
     operator_name: '',
@@ -99,7 +99,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   
   const [nightShiftData, setNightShiftData] = useState<ShiftProductionData>({
     shift: 'NIGHT',
-    shift_name: '야간조',
+    shift_name: t('shift.nightShift'),
     start_time: '20:00',
     end_time: '08:00',
     operator_name: '',
@@ -116,7 +116,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
   // 비가동 사유 목록
   const downtimeReasons = getSetting('general', 'downtime_reasons') || [
-    '설비 고장', '금형 교체', '자재 부족', '품질 불량', '계획 정지', '청소/정리', '기타'
+    t('downtime.reasons.equipmentFailure'),
+    t('downtime.reasons.moldChange'), 
+    t('downtime.reasons.materialShortage'),
+    t('downtime.reasons.qualityDefect'),
+    t('downtime.reasons.plannedStop'),
+    t('downtime.reasons.cleaning'),
+    t('downtime.reasons.other')
   ];
 
   // 현재 교대 데이터 가져오기
@@ -142,7 +148,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const getMachineProductionModel = async (machineId: string) => {
     const machine = machines.find(m => m.id === machineId);
     if (!machine?.production_model_id) {
-      throw new Error('설비에 생산 모델이 설정되어 있지 않습니다.');
+      throw new Error(t('messages.noProductionModel'));
     }
 
     const response = await fetch(`/api/product-models/${machine.production_model_id}`);
@@ -163,7 +169,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const getMachineCurrentProcess = async (machineId: string) => {
     const machine = machines.find(m => m.id === machineId);
     if (!machine?.current_process_id) {
-      throw new Error('설비에 공정이 설정되어 있지 않습니다.');
+      throw new Error(t('messages.noProcess'));
     }
 
     const response = await fetch(`/api/model-processes/${machine.current_process_id}`);
@@ -239,9 +245,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
         // 성공 메시지
         if (productionModel && currentProcess) {
-          message.success(`설비 정보를 성공적으로 로드했습니다`);
+          message.success(t('messages.machineInfoLoadSuccess'));
         } else {
-          message.warning('일부 설비 정보가 설정되어 있지 않습니다');
+          message.warning(t('messages.machineInfoPartialWarning'));
         }
 
       } catch (error: any) {
@@ -249,10 +255,10 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         setMachineDetails(prev => ({
           ...prev,
           loading: false,
-          error: error.message || '설비 정보 로드에 실패했습니다'
+          error: error.message || t('messages.machineInfoLoadFailed')
         }));
         
-        message.error(`설비 정보 로드 실패: ${error.message}`);
+        message.error(`${t('messages.machineInfoLoadFailed')}: ${error.message}`);
       }
     }
   };
@@ -274,7 +280,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   // 비가동 시간 추가
   const addDowntimeEntry = (values: { start_time: string; end_time?: string; reason: string; description?: string }) => {
     if (!selectedMachineId) {
-      message.error('먼저 설비를 선택하세요');
+      message.error(t('messages.selectMachineFirst'));
       return;
     }
 
@@ -303,7 +309,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
     setDowntimeModalVisible(false);
     downtimeForm.resetFields();
-    message.success('비가동 시간이 추가되었습니다');
+    message.success(t('messages.downtimeAdded'));
   };
 
   // 비가동 시간 삭제
@@ -317,7 +323,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       total_downtime_minutes: totalDowntime
     });
 
-    message.success('비가동 시간이 삭제되었습니다');
+    message.success(t('messages.downtimeDeleted'));
   };
 
   // 일일 데이터 계산
@@ -371,7 +377,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   // 데이터 저장
   const handleSave = async () => {
     if (!selectedMachineId) {
-      message.error('설비를 선택하세요');
+      message.error(t('messages.selectMachine'));
       return;
     }
 
@@ -395,13 +401,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       }
 
       const result = await response.json();
-      message.success(result.message || '생산 데이터가 저장되었습니다');
+      message.success(result.message || t('messages.productionDataSaved'));
       
       // 폼 초기화
       setSelectedMachineId(null);
       setDayShiftData({
         shift: 'DAY',
-        shift_name: '주간조',
+        shift_name: t('shift.dayShift'),
         start_time: '08:00',
         end_time: '20:00',
         operator_name: '',
@@ -413,7 +419,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       });
       setNightShiftData({
         shift: 'NIGHT',
-        shift_name: '야간조',
+        shift_name: t('shift.nightShift'),
         start_time: '20:00',
         end_time: '08:00',
         operator_name: '',
@@ -426,7 +432,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
     } catch (error: any) {
       console.error('Error saving data:', error);
-      message.error(`저장 실패: ${error.message}`);
+      message.error(`${t('messages.saveFailed')}: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -435,40 +441,40 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   // 비가동 시간 테이블 컬럼
   const downtimeColumns = [
     {
-      title: '시작 시간',
+      title: t('dataEntry.startTime'),
       dataIndex: 'start_time',
       key: 'start_time',
       render: (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm')
     },
     {
-      title: '종료 시간',
+      title: t('dataEntry.endTime'),
       dataIndex: 'end_time',
       key: 'end_time',
-      render: (time: string) => time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '진행중'
+      render: (time: string) => time ? dayjs(time).format('YYYY-MM-DD HH:mm') : t('dataEntry.ongoing')
     },
     {
-      title: '지속 시간',
+      title: t('dataEntry.downtime'),
       dataIndex: 'duration_minutes',
       key: 'duration_minutes',
-      render: (minutes: number) => `${minutes}분`
+      render: (minutes: number) => `${minutes}${t('schedule.minutes')}`
     },
     {
-      title: '사유',
+      title: t('dataEntry.reason'),
       dataIndex: 'reason',
       key: 'reason'
     },
     {
-      title: '작업',
+      title: t('dataEntry.work'),
       key: 'actions',
       render: (_: any, record: DowntimeEntry) => (
         <Popconfirm
-          title="이 비가동 시간을 삭제하시겠습니까?"
+          title={t('downtime.deleteConfirm')}
           onConfirm={() => removeDowntimeEntry(record.id!)}
-          okText="삭제"
-          cancelText="취소"
+          okText={t('downtime.delete')}
+          cancelText={t('downtime.cancel')}
         >
           <Button type="link" danger icon={<DeleteOutlined />} size="small">
-            삭제
+            {t('downtime.delete')}
           </Button>
         </Popconfirm>
       )
@@ -507,7 +513,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                 ))}
               </Select>
               {machinesError && (
-                <Alert message="설비 로딩 오류" type="error" showIcon />
+                <Alert message={t('messages.machineLoadingError')} type="error" showIcon />
               )}
             </Space>
           </Col>
@@ -535,7 +541,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         >
           {machineDetails.error && (
             <Alert
-              message="설비 정보 로드 오류"
+              message={t('messages.machineInfoLoadFailed')}
               description={machineDetails.error}
               type="error"
               showIcon
@@ -544,18 +550,18 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
           )}
           <Descriptions column={2} size="small">
             {/* 왼쪽 컬럼 */}
-            <Descriptions.Item label="생산 모델" span={1}>
+            <Descriptions.Item label={t('machineInfo.productionModel')} span={1}>
               {machineDetails.loading ? (
-                <Text type="secondary">로딩 중...</Text>
+                <Text type="secondary">{t('machineInfo.loadingText')}</Text>
               ) : machineDetails.productionModel ? (
                 <Text code>{machineDetails.productionModel.model_name}</Text>
               ) : (
-                <Text type="secondary">설정 없음</Text>
+                <Text type="secondary">{t('machineInfo.noSetting')}</Text>
               )}
             </Descriptions.Item>
             
             {/* 오른쪽 컬럼 */}
-            <Descriptions.Item label="주간조 기본 가동 시간" span={1}>
+            <Descriptions.Item label={t('shift.dayShiftBaseOperatingTime')} span={1}>
               <Space direction="vertical" size="small" style={{ width: '100%' }}>
                 <Space>
                   <InputNumber
@@ -563,7 +569,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     onChange={(value) => setDayShiftOperatingMinutes(value || 720)}
                     min={0}
                     max={720}
-                    addonAfter="분"
+                    addonAfter={t('common.minutes')}
                     style={{ width: 120 }}
                     disabled={dayShiftOff}
                   />
@@ -571,37 +577,37 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     checked={dayShiftOff} 
                     onChange={(e) => setDayShiftOff(e.target.checked)}
                   >
-                    휴무
+                    {t('common.off')}
                   </Checkbox>
                 </Space>
                 {!dayShiftOff && (
                   <div>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      ({Math.floor(dayShiftOperatingMinutes / 60)}시간 {dayShiftOperatingMinutes % 60}분)
+                      ({Math.floor(dayShiftOperatingMinutes / 60)}{t('common.hours')} {dayShiftOperatingMinutes % 60}{t('common.minutes')})
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds 
                         ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes)
                         : 0
-                      }개
+                      }{t('common.pieces')}
                     </Text>
                   </div>
                 )}
-                {dayShiftOff && <Text type="secondary"> (휴무)</Text>}
+                {dayShiftOff && <Text type="secondary"> ({t('common.off')})</Text>}
               </Space>
             </Descriptions.Item>
 
-            <Descriptions.Item label="가공 공정" span={1}>
+            <Descriptions.Item label={t('machineInfo.process')} span={1}>
               {machineDetails.loading ? (
-                <Text type="secondary">로딩 중...</Text>
+                <Text type="secondary">{t('machineInfo.loadingText')}</Text>
               ) : machineDetails.currentProcess ? (
                 <Text code>{machineDetails.currentProcess.process_name}</Text>
               ) : (
-                <Text type="secondary">설정 없음</Text>
+                <Text type="secondary">{t('machineInfo.noSetting')}</Text>
               )}
             </Descriptions.Item>
 
-            <Descriptions.Item label="야간조 기본 가동 시간" span={1}>
+            <Descriptions.Item label={t('shift.nightShiftBaseOperatingTime')} span={1}>
               <Space direction="vertical" size="small" style={{ width: '100%' }}>
                 <Space>
                   <InputNumber
@@ -609,7 +615,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     onChange={(value) => setNightShiftOperatingMinutes(value || 720)}
                     min={0}
                     max={720}
-                    addonAfter="분"
+                    addonAfter={t('common.minutes')}
                     style={{ width: 120 }}
                     disabled={nightShiftOff}
                   />
@@ -617,37 +623,37 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     checked={nightShiftOff} 
                     onChange={(e) => setNightShiftOff(e.target.checked)}
                   >
-                    휴무
+                    {t('common.off')}
                   </Checkbox>
                 </Space>
                 {!nightShiftOff && (
                   <div>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      ({Math.floor(nightShiftOperatingMinutes / 60)}시간 {nightShiftOperatingMinutes % 60}분)
+                      ({Math.floor(nightShiftOperatingMinutes / 60)}{t('common.hours')} {nightShiftOperatingMinutes % 60}{t('common.minutes')})
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds 
                         ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes)
                         : 0
-                      }개
+                      }{t('common.pieces')}
                     </Text>
                   </div>
                 )}
-                {nightShiftOff && <Text type="secondary"> (휴무)</Text>}
+                {nightShiftOff && <Text type="secondary"> ({t('common.off')})</Text>}
               </Space>
             </Descriptions.Item>
 
             <Descriptions.Item label="Tact Time" span={1}>
               {machineDetails.loading ? (
-                <Text type="secondary">로딩 중...</Text>
+                <Text type="secondary">{t('machineInfo.loadingText')}</Text>
               ) : machineDetails.currentProcess?.tact_time_seconds ? (
-                <Text code>{machineDetails.currentProcess.tact_time_seconds}초</Text>
+                <Text code>{machineDetails.currentProcess.tact_time_seconds}{t('common.seconds')}</Text>
               ) : (
-                <Text type="secondary">설정 없음</Text>
+                <Text type="secondary">{t('machineInfo.noSetting')}</Text>
               )}
             </Descriptions.Item>
 
-            <Descriptions.Item label="일일 총 CAPA" span={1}>
+            <Descriptions.Item label={t('schedule.dailyTotalCapa')} span={1}>
               <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
                 {machineDetails.currentProcess?.tact_time_seconds 
                   ? (
@@ -655,14 +661,14 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                       (!nightShiftOff ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes) : 0)
                     )
                   : 0
-                }개
+                }{t('common.pieces')}
               </Text>
             </Descriptions.Item>
 
-            <Descriptions.Item label="설비 상태" span={2}>
+            <Descriptions.Item label={t('machineInfo.machineStatus')} span={2}>
               <Badge 
                 status={selectedMachine.current_state === 'NORMAL_OPERATION' ? 'processing' : 'error'} 
-                text={selectedMachine.current_state === 'NORMAL_OPERATION' ? '정상 가동' : '비정상'}
+                text={selectedMachine.current_state === 'NORMAL_OPERATION' ? t('machineInfo.normalOperation') : t('machineInfo.abnormal')}
               />
             </Descriptions.Item>
           </Descriptions>
@@ -672,7 +678,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       {/* 교대별 데이터 입력 */}
       {selectedMachineId && (
         <Card 
-          title="교대별 생산 데이터 입력" 
+          title={t('dataEntry.shiftDataInput')} 
           size="small" 
           style={{ marginBottom: '16px' }}
         >
@@ -685,9 +691,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                 label: (
                   <span>
                     <SunOutlined />
-                    주간조 (08:00-20:00)
+                    {t('shift.dayShiftTime')}
                     {dayShiftOff && (
-                      <Badge status="default" text="휴무" style={{ marginLeft: 8 }} />
+                      <Badge status="default" text={t('common.off')} style={{ marginLeft: 8 }} />
                     )}
                     {!dayShiftOff && dayShiftData.actual_production > 0 && (
                       <Badge count={dayShiftData.actual_production} style={{ marginLeft: 8 }} />
@@ -698,8 +704,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                   <div style={{ opacity: dayShiftOff ? 0.5 : 1 }}>
                     {dayShiftOff && (
                       <Alert
-                        message="주간조 휴무"
-                        description="주간조가 휴무로 설정되어 있습니다. 설비 정보에서 휴무를 해제하면 데이터를 입력할 수 있습니다."
+                        message={t('shift.dayShiftOff')}
+                        description={t('shift.dayShiftOffDescription')}
                         type="info"
                         showIcon
                         style={{ marginBottom: 16 }}
@@ -708,9 +714,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     <Row gutter={[16, 16]}>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>입력자</Text>
+                          <Text strong>{t('dataEntry.operator')}</Text>
                           <Select
-                            placeholder="입력자를 선택하세요"
+                            placeholder={t('dataEntry.selectOperator')}
                             value={dayShiftData.operator_name || undefined}
                             onChange={(value) => updateCurrentShiftData({ operator_name: value })}
                             disabled={dayShiftOff}
@@ -724,7 +730,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                                 {profile.name}
                                 {profile.role && (
                                   <span style={{ color: '#8c8c8c', fontSize: '12px', marginLeft: '8px' }}>
-                                    - {profile.role === 'admin' ? '관리자' : profile.role === 'engineer' ? '엔지니어' : '운영자'}
+                                    - {profile.role === 'admin' ? t('dataEntry.admin') : profile.role === 'engineer' ? t('dataEntry.engineer') : t('dataEntry.operator_role')}
                                   </span>
                                 )}
                               </Option>
@@ -734,13 +740,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                       </Col>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>실제 생산량</Text>
+                          <Text strong>{t('dataEntry.actualProduction')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
                             placeholder="480"
                             value={dayShiftData.actual_production}
                             onChange={(value) => handleProductionChange('actual_production', value || 0)}
-                            addonAfter="개"
+                            addonAfter={t('common.pieces')}
                             disabled={dayShiftOff}
                           />
                         </Space>
@@ -750,24 +756,24 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>불량 수량</Text>
+                          <Text strong>{t('dataEntry.defects')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
                             placeholder="5"
                             value={dayShiftData.defect_quantity}
                             onChange={(value) => handleProductionChange('defect_quantity', value || 0)}
-                            addonAfter="개"
+                            addonAfter={t('common.pieces')}
                             disabled={dayShiftOff}
                           />
                         </Space>
                       </Col>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>양품 수량</Text>
+                          <Text strong>{t('dataEntry.goodQuantity')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
                             value={dayShiftData.good_quantity}
-                            addonAfter="개"
+                            addonAfter={t('common.pieces')}
                             readOnly
                             disabled={dayShiftOff}
                           />
@@ -782,9 +788,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                 label: (
                   <span>
                     <MoonOutlined />
-                    야간조 (20:00-08:00)
+                    {t('shift.nightShiftTime')}
                     {nightShiftOff && (
-                      <Badge status="default" text="휴무" style={{ marginLeft: 8 }} />
+                      <Badge status="default" text={t('common.off')} style={{ marginLeft: 8 }} />
                     )}
                     {!nightShiftOff && nightShiftData.actual_production > 0 && (
                       <Badge count={nightShiftData.actual_production} style={{ marginLeft: 8 }} />
@@ -795,8 +801,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                   <div style={{ opacity: nightShiftOff ? 0.5 : 1 }}>
                     {nightShiftOff && (
                       <Alert
-                        message="야간조 휴무"
-                        description="야간조가 휴무로 설정되어 있습니다. 설비 정보에서 휴무를 해제하면 데이터를 입력할 수 있습니다."
+                        message={t('shift.nightShiftOff')}
+                        description={t('shift.nightShiftOffDescription')}
                         type="info"
                         showIcon
                         style={{ marginBottom: 16 }}
@@ -805,9 +811,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     <Row gutter={[16, 16]}>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>입력자</Text>
+                          <Text strong>{t('dataEntry.operator')}</Text>
                           <Select
-                            placeholder="입력자를 선택하세요"
+                            placeholder={t('dataEntry.selectOperator')}
                             value={nightShiftData.operator_name || undefined}
                             onChange={(value) => updateCurrentShiftData({ operator_name: value })}
                             disabled={nightShiftOff}
@@ -821,7 +827,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                                 {profile.name}
                                 {profile.role && (
                                   <span style={{ color: '#8c8c8c', fontSize: '12px', marginLeft: '8px' }}>
-                                    - {profile.role === 'admin' ? '관리자' : profile.role === 'engineer' ? '엔지니어' : '운영자'}
+                                    - {profile.role === 'admin' ? t('dataEntry.admin') : profile.role === 'engineer' ? t('dataEntry.engineer') : t('dataEntry.operator_role')}
                                   </span>
                                 )}
                               </Option>
@@ -831,13 +837,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                       </Col>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>실제 생산량</Text>
+                          <Text strong>{t('dataEntry.actualProduction')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
                             placeholder="480"
                             value={nightShiftData.actual_production}
                             onChange={(value) => handleProductionChange('actual_production', value || 0)}
-                            addonAfter="개"
+                            addonAfter={t('common.pieces')}
                             disabled={nightShiftOff}
                           />
                         </Space>
@@ -847,24 +853,24 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>불량 수량</Text>
+                          <Text strong>{t('dataEntry.defects')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
                             placeholder="5"
                             value={nightShiftData.defect_quantity}
                             onChange={(value) => handleProductionChange('defect_quantity', value || 0)}
-                            addonAfter="개"
+                            addonAfter={t('common.pieces')}
                             disabled={nightShiftOff}
                           />
                         </Space>
                       </Col>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
-                          <Text strong>양품 수량</Text>
+                          <Text strong>{t('dataEntry.goodQuantity')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
                             value={nightShiftData.good_quantity}
-                            addonAfter="개"
+                            addonAfter={t('common.pieces')}
                             readOnly
                             disabled={nightShiftOff}
                           />
@@ -882,7 +888,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       {/* 비가동 시간 */}
       {selectedMachineId && (
         <Card 
-          title={`비가동 시간 - ${activeShift === 'DAY' ? '주간조' : '야간조'}`}
+          title={`${t('downtime.downtimeTitle')} - ${activeShift === 'DAY' ? t('shift.dayShift') : t('shift.nightShift')}`}
           size="small" 
           style={{ marginBottom: '16px' }}
           extra={
@@ -893,7 +899,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
               onClick={() => setDowntimeModalVisible(true)}
               disabled={(activeShift === 'DAY' && dayShiftOff) || (activeShift === 'NIGHT' && nightShiftOff)}
             >
-              비가동 시간 추가
+              {t('downtime.addDowntime')}
             </Button>
           }
         >
@@ -903,14 +909,14 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
             rowKey="id"
             size="small"
             pagination={false}
-            locale={{ emptyText: '등록된 비가동 시간이 없습니다' }}
+            locale={{ emptyText: t('downtime.noDowntimeRecords') }}
             summary={() => (
               <Table.Summary.Row>
                 <Table.Summary.Cell index={0} colSpan={2}>
-                  <Text strong>총 비가동 시간</Text>
+                  <Text strong>{t('dataEntry.totalDowntime')}</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={2}>
-                  <Text strong>{currentShiftData.total_downtime_minutes}분</Text>
+                  <Text strong>{currentShiftData.total_downtime_minutes}{t('common.minutes')}</Text>
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={3} colSpan={2} />
               </Table.Summary.Row>
@@ -921,29 +927,29 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
       {/* 일일 요약 */}
       {selectedMachineId && (dayShiftData.actual_production > 0 || nightShiftData.actual_production > 0) && (
-        <Card title="일일 생산 요약" size="small" style={{ marginBottom: '24px' }}>
+        <Card title={t('common.dailySummary')} size="small" style={{ marginBottom: '24px' }}>
           <Row gutter={[16, 16]}>
             <Col xs={12} sm={6}>
               <div style={{ textAlign: 'center' }}>
-                <Text type="secondary">총 생산량</Text>
+                <Text type="secondary">{t('dataEntry.production')}</Text>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1890ff' }}>
-                  {dailyData.total_production}개
+                  {dailyData.total_production}{t('common.pieces')}
                 </div>
               </div>
             </Col>
             <Col xs={12} sm={6}>
               <div style={{ textAlign: 'center' }}>
-                <Text type="secondary">총 불량</Text>
+                <Text type="secondary">{t('dataEntry.defects')}</Text>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ff4d4f' }}>
-                  {dailyData.total_defects}개
+                  {dailyData.total_defects}{t('common.pieces')}
                 </div>
               </div>
             </Col>
             <Col xs={12} sm={6}>
               <div style={{ textAlign: 'center' }}>
-                <Text type="secondary">총 비가동</Text>
+                <Text type="secondary">{t('dataEntry.totalDowntime')}</Text>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#faad14' }}>
-                  {dailyData.total_downtime_minutes}분
+                  {dailyData.total_downtime_minutes}{t('common.minutes')}
                 </div>
               </div>
             </Col>
@@ -974,14 +980,14 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
               (!dayShiftOff && !dayShiftData.actual_production && !nightShiftOff && !nightShiftData.actual_production)
             }
           >
-            생산 데이터 저장
+            {t('dataEntry.saveProductionData')}
           </Button>
         </div>
       )}
 
       {/* 비가동 시간 추가 모달 */}
       <Modal
-        title={`비가동 시간 추가 - ${activeShift === 'DAY' ? '주간조' : '야간조'}`}
+        title={`${t('downtime.modalTitle')} - ${activeShift === 'DAY' ? t('shift.dayShift') : t('shift.nightShift')}`}
         open={downtimeModalVisible}
         onCancel={() => setDowntimeModalVisible(false)}
         footer={null}
@@ -993,8 +999,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         >
           <Form.Item
             name="start_time"
-            label="시작 시간"
-            rules={[{ required: true, message: '시작 시간을 선택하세요' }]}
+            label={t('downtime.startTimeLabel')}
+            rules={[{ required: true, message: t('downtime.selectStartTime') }]}
           >
             <Input 
               type="datetime-local" 
@@ -1005,21 +1011,21 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
           
           <Form.Item
             name="end_time"
-            label="종료 시간"
+            label={t('downtime.endTimeLabel')}
           >
             <Input 
               type="datetime-local" 
               style={{ width: '100%' }}
-              placeholder="현재 시간이 기본값입니다"
+              placeholder={t('common.defaultTimeNote')}
             />
           </Form.Item>
 
           <Form.Item
             name="reason"
-            label="비가동 사유"
-            rules={[{ required: true, message: '비가동 사유를 선택하세요' }]}
+            label={t('downtime.selectReason')}
+            rules={[{ required: true, message: t('downtime.selectReason') }]}
           >
-            <Select placeholder="사유를 선택하세요">
+            <Select placeholder={t('downtime.selectReason')}>
               {downtimeReasons.map((reason: string) => (
                 <Option key={reason} value={reason}>
                   {reason}
@@ -1030,21 +1036,21 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
           <Form.Item
             name="description"
-            label="상세 설명"
+            label={t('downtime.detailDescription')}
           >
             <TextArea
               rows={3}
-              placeholder="비가동 상세 내용을 입력하세요"
+              placeholder={t('downtime.detailPlaceholder')}
             />
           </Form.Item>
 
           <div style={{ textAlign: 'right' }}>
             <Space>
               <Button onClick={() => setDowntimeModalVisible(false)}>
-                취소
+                {t('downtime.cancel')}
               </Button>
               <Button type="primary" htmlType="submit">
-                추가
+                {t('downtime.add')}
               </Button>
             </Space>
           </div>

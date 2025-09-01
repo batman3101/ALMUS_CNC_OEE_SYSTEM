@@ -16,6 +16,7 @@ import { NotificationBadge, NotificationPanel } from '@/components/notifications
 import { LoginForm } from '@/components/auth/LoginForm';
 import Sidebar from './Sidebar';
 import LanguageToggle from './LanguageToggle';
+import ThemeToggle from './ThemeToggle';
 import styles from './AppLayout.module.css';
 
 const { Header, Content } = Layout;
@@ -133,6 +134,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             
             {/* 언어 전환 컴포넌트 */}
             <LanguageToggle size={screens.xs ? 'small' : 'middle'} />
+            
+            {/* 테마 전환 컴포넌트 */}
+            <ThemeToggle size={screens.xs ? 'small' : 'middle'} />
             
             {/* 사용자 메뉴 드롭다운 */}
             <Dropdown menu={{ items: userItems }} placement="bottomRight">

@@ -21,6 +21,7 @@ export const useAdminTranslation = () => useTranslation('admin');
 export const useProductionTranslation = () => useTranslation('production');
 export const useModelInfoTranslation = () => useTranslation('modelInfo');
 export const useReportsTranslation = () => useTranslation('reports');
+export const useDataInputTranslation = () => useTranslation('dataInput');
 
 // 다중 네임스페이스 지원 훅
 export const useMultipleTranslation = (namespaces: string[]) => {

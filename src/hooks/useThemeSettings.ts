@@ -14,6 +14,9 @@ export function useThemeSettings() {
   useEffect(() => {
     const displaySettings = getDisplaySettings();
     
+    // 브라우저 환경에서만 실행
+    if (typeof window === 'undefined') return;
+    
     // CSS 변수로 테마 색상 적용
     const root = document.documentElement;
     root.style.setProperty('--ant-primary-color', displaySettings.theme.primary);
@@ -21,21 +24,27 @@ export function useThemeSettings() {
     root.style.setProperty('--ant-warning-color', displaySettings.theme.warning);
     root.style.setProperty('--ant-error-color', displaySettings.theme.error);
 
-    // 테마 모드 적용
+    // 테마 모드 적용 (body와 documentElement 모두)
     document.body.setAttribute('data-theme', displaySettings.mode);
+    document.documentElement.setAttribute('data-theme', displaySettings.mode);
     
     // HTML 클래스 적용 (다른 라이브러리 호환성)
-    if (displaySettings.mode === 'dark') {
+    const isDark = displaySettings.mode === 'dark';
+    if (isDark) {
       document.documentElement.classList.add('dark');
       document.documentElement.classList.remove('light');
+      document.body.classList.add('dark');
+      document.body.classList.remove('light');
     } else {
       document.documentElement.classList.add('light');
       document.documentElement.classList.remove('dark');
+      document.body.classList.add('light');
+      document.body.classList.remove('dark');
     }
 
     // 메타 태그 업데이트 (브라우저 테마 색상)
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    const themeColor = displaySettings.mode === 'dark' ? '#141414' : displaySettings.theme.primary;
+    const themeColor = isDark ? '#141414' : displaySettings.theme.primary;
     
     if (metaThemeColor) {
       metaThemeColor.setAttribute('content', themeColor);
@@ -45,6 +54,24 @@ export function useThemeSettings() {
       meta.content = themeColor;
       document.head.appendChild(meta);
     }
+
+    // 로컬스토리지 동기화 (빠른 초기 로딩을 위해)
+    try {
+      localStorage.setItem('theme-mode', displaySettings.mode);
+      localStorage.setItem('theme-colors', JSON.stringify(displaySettings.theme));
+    } catch (error) {
+      console.warn('Failed to save theme to localStorage:', error);
+    }
+
+    // 전역 이벤트 발생 (다른 컴포넌트에서 구독 가능)
+    window.dispatchEvent(new CustomEvent('theme-changed', {
+      detail: {
+        mode: displaySettings.mode,
+        theme: displaySettings.theme,
+        isDark
+      }
+    }));
+    
   }, [settings.display, getDisplaySettings]);
 
   // Ant Design 테마 객체 생성
