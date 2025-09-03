@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Select, Transfer, message } from 'antd';
+import { Modal, Form, Input, Select, Transfer, App } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
 import type { User, Machine } from '@/types';
@@ -33,6 +33,7 @@ const UserForm: React.FC<UserFormProps> = ({
   onSuccess,
   user
 }) => {
+  const { message } = App.useApp();
   const { t } = useTranslation();
   const [form] = Form.useForm<UserFormData>();
   const { loading, createUser, updateUser, fetchMachines } = useAdminOperations();

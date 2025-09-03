@@ -48,7 +48,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('🔍 받은 요청 데이터:', JSON.stringify(body, null, 2));
     const { email, password, name, role, assigned_machines } = body;
+
+    let authUserId = null;
 
     // Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -58,35 +61,52 @@ export async function POST(request: NextRequest) {
     });
 
     if (authError) {
-      throw authError;
+      console.error('Error creating auth user:', authError);
+      throw new Error(`사용자 인증 계정 생성 실패: ${authError.message}`);
     }
 
     if (!authData.user) {
-      throw new Error('Failed to create user');
+      throw new Error('Failed to create auth user');
     }
 
+    authUserId = authData.user.id;
+    console.log('Auth user created successfully:', authUserId);
+
     // Create user profile
+    const profileInsertData = {
+      user_id: authUserId,
+      name,
+      email,
+      role,
+      assigned_machines: role === 'operator' ? assigned_machines : null
+    };
+    console.log('📋 프로필 삽입 데이터:', JSON.stringify(profileInsertData, null, 2));
+    
     const { data: profileData, error: profileError } = await supabaseAdmin
       .from('user_profiles')
-      .insert([{
-        user_id: authData.user.id,
-        name,
-        role,
-        assigned_machines: role === 'operator' ? assigned_machines : null
-      }])
+      .insert([profileInsertData])
       .select()
       .single();
 
     if (profileError) {
+      console.error('Error creating user profile:', profileError);
       // Rollback: delete the auth user if profile creation fails
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw profileError;
+      if (authUserId) {
+        console.log('Rolling back auth user creation');
+        await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      }
+      throw new Error(`사용자 프로필 생성 실패: ${profileError.message}`);
     }
+
+    console.log('User created successfully:', {
+      authId: authUserId,
+      profileId: profileData.user_id
+    });
 
     return NextResponse.json({
       success: true,
       user: {
-        id: authData.user.id,
+        id: authUserId,
         email: authData.user.email,
         name: profileData.name,
         role: profileData.role,
@@ -95,8 +115,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating user:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create user';
     return NextResponse.json(
-      { error: 'Failed to create user' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

@@ -191,22 +191,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // 로그아웃 함수
   const logout = async (): Promise<void> => {
     try {
+      // 즉시 사용자 상태 초기화 (UI 반응성 개선)
+      setUser(null);
+      setError(null);
+      
       if (isDevelopment()) {
         // 개발 환경: 모의 인증 로그아웃
         await MockAuthService.logout();
-        setUser(null);
         return;
       }
 
       // 프로덕션 환경: Supabase 로그아웃
       const { error } = await supabase.auth.signOut();
       if (error) {
-        throw error;
+        console.warn('로그아웃 중 오류 발생했지만 사용자 상태는 이미 초기화됨:', error);
+        // 에러가 있어도 사용자 상태는 이미 초기화되었으므로 계속 진행
       }
-      setUser(null);
+      
+      // 로그인 페이지로 즉시 이동 (prefetch된 페이지)
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     } catch (error: any) {
       log.error('Logout error', error, LogCategories.AUTH);
-      throw error;
+      // 오류가 있어도 로그인 페이지로 이동
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
   };
 

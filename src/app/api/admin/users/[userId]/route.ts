@@ -11,6 +11,9 @@ export async function PUT(
     const body = await request.json();
     const { email, name, role, assigned_machines, currentEmail } = body;
 
+    let profileUpdated = false;
+    let authUpdated = false;
+
     // Update user profile
     const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
@@ -23,10 +26,13 @@ export async function PUT(
       .eq('user_id', userId);
 
     if (profileError) {
-      throw profileError;
+      console.error('Error updating user profile:', profileError);
+    } else {
+      profileUpdated = true;
+      console.log('User profile updated successfully');
     }
 
-    // Update auth user email if changed
+    // Update auth user email if changed (only for real auth users)
     if (email && email !== currentEmail) {
       const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
         userId,
@@ -34,11 +40,32 @@ export async function PUT(
       );
       
       if (authError) {
-        throw authError;
+        if (authError.status === 404 || authError.code === 'user_not_found') {
+          console.log('Auth user not found (virtual/test user) - skipping email update');
+          authUpdated = true; // Consider as success for virtual users
+        } else {
+          console.error('Error updating auth user:', authError);
+        }
+      } else {
+        authUpdated = true;
+        console.log('Auth user email updated successfully');
       }
+    } else {
+      authUpdated = true; // No email change needed
+      console.log('No email change required');
     }
 
-    return NextResponse.json({ success: true });
+    // Success if profile was updated (covers both real and virtual users)
+    if (profileUpdated) {
+      return NextResponse.json({ 
+        success: true, 
+        message: authUpdated ? 'User updated completely' : 'Virtual user profile updated' 
+      });
+    }
+
+    // If profile update failed, return error
+    throw new Error('Failed to update user profile');
+
   } catch (error) {
     console.error('Error updating user:', error);
     return NextResponse.json(

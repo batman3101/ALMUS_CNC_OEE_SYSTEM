@@ -27,6 +27,10 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
+        {/* 로그인 페이지 prefetch - 로그아웃 시 빠른 로딩을 위해 */}
+        <link rel="prefetch" href="/login" />
+        <link rel="dns-prefetch" href="https://wmtkkefsorrdlzprhlpr.supabase.co" />
+        
         {/* Google Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
