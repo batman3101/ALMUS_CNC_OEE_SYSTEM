@@ -13,9 +13,8 @@ import {
   Legend,
   ChartOptions,
 } from 'chart.js';
-import { Card, Typography, Select, DatePicker, Row, Col } from 'antd';
-import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { Card, Typography, Select, DatePicker, Row, Col, Spin } from 'antd';
+import { useOEEChartData } from '@/hooks/useOEEChartData';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 ChartJS.register(
@@ -31,53 +30,37 @@ ChartJS.register(
 const { Title: AntTitle } = Typography;
 const { RangePicker } = DatePicker;
 
-interface OEETrendData {
-  date: string;
-  availability: number;
-  performance: number;
-  quality: number;
-  oee: number;
-  shift?: 'A' | 'B';
-}
-
-interface OEETrendChartProps {
-  data: OEETrendData[];
+interface IndependentOEETrendChartProps {
   title?: string;
   height?: number;
-  showControls?: boolean;
-  onDateRangeChange?: (dates: [string, string] | null) => void;
-  onPeriodChange?: (period: 'daily' | 'weekly' | 'monthly') => void;
 }
 
-export const OEETrendChart: React.FC<OEETrendChartProps> = ({
-  data,
-  title = 'OEE 추이',
+export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> = ({
+  title = 'OEE 추이 분석',
   height = 400,
-  showControls = true,
-  onDateRangeChange,
-  onPeriodChange
 }) => {
   const { t } = useDashboardTranslation();
   
-  // 데이터 로깅 (디버깅용)
-  React.useEffect(() => {
-    console.log('OEETrendChart 받은 데이터:', { 
-      dataLength: data.length, 
-      sampleData: data.slice(0, 3),
-      title 
-    });
-  }, [data, title]);
-  // 차트 데이터 구성 (하이드레이션 오류 방지를 위해 간단한 포맷 사용)
-  const chartData = {
-    labels: data.map(item => {
-      // 간단한 문자열 조작으로 날짜 포맷팅 (로케일 독립적)
+  const {
+    chartData,
+    loading,
+    error,
+    period,
+    dateRange,
+    handlePeriodChange,
+    handleDateRangeChange
+  } = useOEEChartData('daily');
+
+  // 차트 데이터 구성
+  const chartDataConfig = {
+    labels: chartData.map(item => {
       const dateParts = item.date.split('-');
       return `${dateParts[1]}/${dateParts[2]}`;
     }),
     datasets: [
       {
         label: 'OEE',
-        data: data.map(item => item.oee * 100),
+        data: chartData.map(item => item.oee * 100),
         borderColor: '#1890ff',
         backgroundColor: 'rgba(24, 144, 255, 0.1)',
         borderWidth: 3,
@@ -86,7 +69,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
       },
       {
         label: t('oee.availability'),
-        data: data.map(item => item.availability * 100),
+        data: chartData.map(item => item.availability * 100),
         borderColor: '#52c41a',
         backgroundColor: 'rgba(82, 196, 26, 0.1)',
         borderWidth: 2,
@@ -95,7 +78,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
       },
       {
         label: t('oee.performance'),
-        data: data.map(item => item.performance * 100),
+        data: chartData.map(item => item.performance * 100),
         borderColor: '#faad14',
         backgroundColor: 'rgba(250, 173, 20, 0.1)',
         borderWidth: 2,
@@ -104,7 +87,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
       },
       {
         label: t('oee.quality'),
-        data: data.map(item => item.quality * 100),
+        data: chartData.map(item => item.quality * 100),
         borderColor: '#722ed1',
         backgroundColor: 'rgba(114, 46, 209, 0.1)',
         borderWidth: 2,
@@ -132,14 +115,6 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         callbacks: {
           label: function(context) {
             return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}%`;
-          },
-          afterLabel: function(context) {
-            const dataIndex = context.dataIndex;
-            const item = data[dataIndex];
-            if (item.shift) {
-              return `교대: ${item.shift}`;
-            }
-            return '';
           },
         },
       },
@@ -190,10 +165,20 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
 
   // 기간 선택 옵션
   const periodOptions = [
-    { label: t('oee.daily'), value: 'daily' },
-    { label: t('oee.weekly'), value: 'weekly' },
-    { label: t('oee.monthly'), value: 'monthly' },
+    { label: '일별 (7일)', value: 'daily' },
+    { label: '주별 (30일)', value: 'weekly' },
+    { label: '월별 (90일)', value: 'monthly' },
   ];
+
+  if (error) {
+    return (
+      <Card>
+        <div style={{ textAlign: 'center', padding: '50px', color: '#ff4d4f' }}>
+          오류가 발생했습니다: {error}
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -202,41 +187,51 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         <Row justify="space-between" align="middle">
           <Col>
             <AntTitle level={4} style={{ margin: 0 }}>
-              {title}
+              {title} {loading && <Spin size="small" style={{ marginLeft: 8 }} />}
             </AntTitle>
           </Col>
           
-          {showControls && (
-            <Col>
-              <Row gutter={16} align="middle">
-                <Col>
-                  <Select
-                    defaultValue="daily"
-                    options={periodOptions}
-                    onChange={onPeriodChange}
-                    style={{ width: 100 }}
-                  />
-                </Col>
-                <Col>
-                  <RangePicker
-                    onChange={(dates, dateStrings) => {
-                      if (onDateRangeChange) {
-                        onDateRangeChange(dates ? [dateStrings[0], dateStrings[1]] : null);
-                      }
-                    }}
-                    format="YYYY-MM-DD"
-                    placeholder={[t('time.startDate'), t('time.endDate')]}
-                  />
-                </Col>
-              </Row>
-            </Col>
-          )}
+          <Col>
+            <Row gutter={16} align="middle">
+              <Col>
+                <Select
+                  value={period}
+                  options={periodOptions}
+                  onChange={handlePeriodChange}
+                  style={{ width: 120 }}
+                  loading={loading}
+                />
+              </Col>
+              <Col>
+                <RangePicker
+                  value={dateRange ? [dateRange[0], dateRange[1]] as any : null}
+                  onChange={(dates, dateStrings) => {
+                    handleDateRangeChange(dates ? [dateStrings[0], dateStrings[1]] : null);
+                  }}
+                  format="YYYY-MM-DD"
+                  placeholder={['시작일', '종료일']}
+                  disabled={loading}
+                />
+              </Col>
+            </Row>
+          </Col>
         </Row>
       </div>
 
       {/* 차트 */}
-      <div style={{ height }}>
-        <Line data={chartData} options={options} />
+      <div style={{ height, position: 'relative' }}>
+        {loading && (
+          <div style={{ 
+            position: 'absolute', 
+            top: '50%', 
+            left: '50%', 
+            transform: 'translate(-50%, -50%)',
+            zIndex: 10 
+          }}>
+            <Spin size="large" />
+          </div>
+        )}
+        <Line data={chartDataConfig} options={options} />
       </div>
 
       {/* 통계 요약 */}
@@ -245,36 +240,36 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>
-                {data.length > 0 ? (data.reduce((sum, item) => sum + item.oee, 0) / data.length * 100).toFixed(1) : 0}%
+                {chartData.length > 0 ? (chartData.reduce((sum, item) => sum + item.oee, 0) / chartData.length * 100).toFixed(1) : 0}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.average')}</div>
+              <div style={{ fontSize: 12, color: '#666' }}>평균 OEE</div>
             </div>
           </Col>
           
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#52c41a' }}>
-                {data.length > 0 ? Math.max(...data.map(item => item.oee * 100)).toFixed(1) : 0}%
+                {chartData.length > 0 ? Math.max(...chartData.map(item => item.oee * 100)).toFixed(1) : 0}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.highest')}</div>
+              <div style={{ fontSize: 12, color: '#666' }}>최고 OEE</div>
             </div>
           </Col>
           
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#ff4d4f' }}>
-                {data.length > 0 ? Math.min(...data.map(item => item.oee * 100)).toFixed(1) : 0}%
+                {chartData.length > 0 ? Math.min(...chartData.map(item => item.oee * 100)).toFixed(1) : 0}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.lowest')}</div>
+              <div style={{ fontSize: 12, color: '#666' }}>최저 OEE</div>
             </div>
           </Col>
           
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#722ed1' }}>
-                {data.filter(item => item.oee >= 0.85).length}
+                {chartData.filter(item => item.oee >= 0.85).length}
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.excellentDays')}</div>
+              <div style={{ fontSize: 12, color: '#666' }}>우수한 날</div>
             </div>
           </Col>
         </Row>

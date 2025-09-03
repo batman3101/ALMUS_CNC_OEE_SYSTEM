@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createClient } from '@supabase/supabase-js';
 
 // POST /api/auth/login - 사용자 로그인
 export async function POST(request: NextRequest) {
@@ -14,8 +15,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Supabase Auth를 통한 로그인
-    const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+    // 일반 클라이언트로 인증 (Service Role은 관리 작업용이므로 인증에 부적절)
+    const supabaseClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
       email,
       password,
     });

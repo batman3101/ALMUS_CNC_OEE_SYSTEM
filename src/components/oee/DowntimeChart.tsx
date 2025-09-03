@@ -63,6 +63,15 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   showTable = true
 }) => {
   const { t } = useTranslation();
+  
+  // 데이터 로깅 (디버깅용)
+  React.useEffect(() => {
+    console.log('DowntimeChart 받은 데이터:', { 
+      dataLength: data.length, 
+      sampleData: data.slice(0, 3),
+      title 
+    });
+  }, [data, title]);
   // 다운타임 데이터만 필터링 (정상가동 제외)
   const downtimeData = data.filter(item => item.state !== 'NORMAL_OPERATION');
   

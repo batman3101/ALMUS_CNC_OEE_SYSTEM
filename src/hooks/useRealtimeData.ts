@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Machine, MachineLog, ProductionRecord, OEEMetrics } from '@/types';
 import { calculateOEE } from '@/utils/oeeCalculator';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface RealtimeDataState {
   machines: Machine[];
@@ -12,6 +13,8 @@ interface RealtimeDataState {
   oeeMetrics: Record<string, OEEMetrics>;
   loading: boolean;
   error: string | null;
+  connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
+  lastUpdated: number;
 }
 
 export const useRealtimeData = (userId?: string, userRole?: string) => {
@@ -21,14 +24,44 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     productionRecords: [],
     oeeMetrics: {},
     loading: true,
-    error: null
+    error: null,
+    connectionStatus: 'connecting',
+    lastUpdated: Date.now()
   });
 
-  // 초기 데이터 로드
+  // Realtime 채널 참조 저장
+  const channelsRef = useRef<RealtimeChannel[]>([]);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitializedRef = useRef(false);
+
+  // 연결 상태 업데이트 함수
+  const updateConnectionStatus = useCallback((status: 'connecting' | 'connected' | 'disconnected' | 'error') => {
+    setState(prev => ({ ...prev, connectionStatus: status }));
+  }, []);
+
+  // 자동 재연결 함수
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+    
+    reconnectTimeoutRef.current = setTimeout(() => {
+      console.log('🔄 실시간 연결 재시도...');
+      updateConnectionStatus('connecting');
+      loadInitialData();
+    }, 5000); // 5초 후 재연결 시도
+  }, []);
+
+  // 초기 데이터 로드 (성능 최적화)
   const loadInitialData = useCallback(async () => {
     try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      console.info('실제 Supabase 데이터 로드 시작');
+      setState(prev => ({ 
+        ...prev, 
+        loading: true, 
+        error: null,
+        connectionStatus: 'connecting'
+      }));
+      console.info('📊 실제 Supabase 데이터 로드 시작');
 
       // 설비 데이터 로드
       const { data: machines, error: machinesError } = await supabase
@@ -78,38 +111,73 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         });
       }
 
-      setState({
+      setState(prev => ({
+        ...prev,
         machines: machines || [],
         machineLogs: machineLogs || [],
         productionRecords: productionRecords || [],
         oeeMetrics,
         loading: false,
-        error: null
+        error: null,
+        connectionStatus: 'connected',
+        lastUpdated: Date.now()
+      }));
+
+      console.info('✅ 초기 데이터 로드 완료:', {
+        machines: machines?.length || 0,
+        machineLogs: machineLogs?.length || 0,
+        productionRecords: productionRecords?.length || 0,
+        oeeMetrics: Object.keys(oeeMetrics).length
       });
 
     } catch (error) {
-      console.error('초기 데이터 로드 실패:', error);
+      console.error('❌ 초기 데이터 로드 실패:', error);
       setState(prev => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : '데이터 로드에 실패했습니다.'
+        error: error instanceof Error ? error.message : '데이터 로드에 실패했습니다.',
+        connectionStatus: 'error'
       }));
+      
+      // 에러 발생시 자동 재연결 스케줄
+      scheduleReconnect();
     }
+  }, [scheduleReconnect]);
+
+  // 채널 정리 함수
+  const cleanupChannels = useCallback(() => {
+    channelsRef.current.forEach(channel => {
+      try {
+        channel.unsubscribe();
+      } catch (error) {
+        console.warn('채널 구독 해제 중 오류:', error);
+      }
+    });
+    channelsRef.current = [];
   }, []);
 
-  // 실시간 구독 설정
-  useEffect(() => {
-    loadInitialData();
-
+  // 실시간 구독 설정 (최적화)
+  const setupRealtimeSubscriptions = useCallback(() => {
     // Supabase가 제대로 설정되지 않은 경우 구독 설정하지 않음
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (!supabaseUrl || supabaseUrl.includes('demo') || supabaseUrl.includes('your_supabase')) {
+      console.warn('⚠️ Supabase URL이 설정되지 않아 실시간 구독을 건너뜁니다');
       return;
     }
 
-    // 설비 로그 실시간 구독
+    console.log('🔗 실시간 구독 설정 시작...');
+    
+    // 기존 채널 정리
+    cleanupChannels();
+
+    // 설비 로그 실시간 구독 (최적화)
     const machineLogsChannel = supabase
-      .channel('machine_logs_changes')
+      .channel('machine_logs_changes', {
+        config: {
+          heartbeat_interval: 30000, // 30초마다 heartbeat
+          self_healing: true
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -118,7 +186,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           table: 'machine_logs'
         },
         (payload) => {
-          console.log('Machine log change:', payload);
+          console.log('📊 Machine log 변경:', payload.eventType, payload.new?.log_id);
           
           setState(prev => {
             let newLogs = [...prev.machineLogs];
@@ -134,11 +202,28 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
               newLogs = newLogs.filter(log => log.log_id !== payload.old.log_id);
             }
             
-            return { ...prev, machineLogs: newLogs };
+            return { 
+              ...prev, 
+              machineLogs: newLogs,
+              lastUpdated: Date.now()
+            };
           });
         }
       )
-      .subscribe();
+      .subscribe((status, error) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Machine logs 실시간 구독 성공');
+          updateConnectionStatus('connected');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Machine logs 구독 오류:', error);
+          updateConnectionStatus('error');
+          scheduleReconnect();
+        } else if (status === 'CLOSED') {
+          console.warn('⚠️ Machine logs 구독 연결 종료');
+          updateConnectionStatus('disconnected');
+          scheduleReconnect();
+        }
+      });
 
     // 생산 실적 실시간 구독
     const productionChannel = supabase
@@ -226,18 +311,35 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
       )
       .subscribe();
 
+    // 채널 참조 저장
+    channelsRef.current = [machineLogsChannel, productionChannel, machinesChannel];
+    
+    console.log('🔗 실시간 구독 설정 완료');
+  }, [cleanupChannels, updateConnectionStatus, scheduleReconnect]);
+
+  // 실시간 구독 설정
+  useEffect(() => {
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      loadInitialData();
+      setupRealtimeSubscriptions();
+    }
+
     // 정리 함수
     return () => {
-      machineLogsChannel.unsubscribe();
-      productionChannel.unsubscribe();
-      machinesChannel.unsubscribe();
+      cleanupChannels();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
     };
-  }, [loadInitialData]);
+  }, [loadInitialData, setupRealtimeSubscriptions, cleanupChannels]);
 
-  // 수동 새로고침 함수
+  // 수동 새로고침 함수 (최적화)
   const refresh = useCallback(() => {
+    console.log('🔄 수동 새로고침 시작...');
     loadInitialData();
-  }, [loadInitialData]);
+    setupRealtimeSubscriptions();
+  }, [loadInitialData, setupRealtimeSubscriptions]);
 
   // 역할별 필터링된 데이터 반환
   const getFilteredData = useCallback(() => {
@@ -256,9 +358,14 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     return state;
   }, [state, userId, userRole]);
 
-  return {
+  // 메모화된 반환값 (성능 최적화)
+  const memoizedResult = useMemo(() => ({
     ...getFilteredData(),
     refresh,
-    isConnected: true // Supabase 연결 상태 (실제로는 연결 상태를 추적해야 함)
-  };
+    isConnected: state.connectionStatus === 'connected',
+    connectionStatus: state.connectionStatus,
+    lastUpdated: state.lastUpdated
+  }), [getFilteredData, refresh, state.connectionStatus, state.lastUpdated]);
+
+  return memoizedResult;
 };

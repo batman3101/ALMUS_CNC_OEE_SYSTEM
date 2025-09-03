@@ -11,10 +11,11 @@ import {
   FallOutlined,
   WifiOutlined
 } from '@ant-design/icons';
-import { OEEGauge, OEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
+import { OEEGauge, IndependentOEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
 import { OEEMetrics } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { useEngineerData } from '@/hooks/useEngineerData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -135,11 +136,44 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     machineLogs, 
     productionRecords, 
     oeeMetrics, 
-    loading, 
-    error, 
+    loading: realtimeLoading, 
+    error: realtimeError, 
     refresh, 
     isConnected 
   } = useRealtimeData(user?.id, user?.role);
+
+  // 엔지니어 분석 데이터 훅 사용
+  const {
+    oeeData,
+    downtimeData,
+    productionData,
+    loading: engineerDataLoading,
+    error: engineerDataError,
+    refreshData: refreshEngineerData
+  } = useEngineerData(selectedPeriod, selectedMachines[0] !== 'all' ? selectedMachines[0] : undefined);
+
+  // 데이터 변경 추적을 위한 로깅
+  React.useEffect(() => {
+    console.log('🎛️ EngineerDashboard - 현재 상태:', {
+      selectedPeriod,
+      selectedMachine: selectedMachines[0] !== 'all' ? selectedMachines[0] : 'all',
+      oeeDataLength: oeeData.length,
+      downtimeDataLength: downtimeData.length,
+      productionDataLength: productionData.length,
+      loading: engineerDataLoading,
+      error: engineerDataError
+    });
+    
+    if (oeeData.length > 0) {
+      console.log('📊 OEE 데이터 샘플:', oeeData.slice(0, 3));
+    }
+    if (downtimeData.length > 0) {
+      console.log('⏰ 다운타임 데이터 샘플:', downtimeData.slice(0, 3));
+    }
+  }, [selectedPeriod, oeeData, downtimeData, productionData, engineerDataLoading, engineerDataError, selectedMachines]);
+
+  const loading = realtimeLoading || engineerDataLoading;
+  const error = realtimeError || engineerDataError;
 
   // 폴백 데이터
   const [fallbackData] = useState({
@@ -156,6 +190,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       onError(new Error(`EngineerDashboard: ${error}`));
     }
   }, [error, onError]);
+
+  // 기간 변경시 엔지니어 데이터 새로고침
+  useEffect(() => {
+    refreshEngineerData();
+  }, [selectedPeriod, refreshEngineerData]);
 
   // 데이터 처리 및 분석
   const processedData = React.useMemo(() => {
@@ -232,9 +271,9 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       return {
         overallMetrics,
         analysisData,
-        trendData: fallbackData.trendData, // 실제로는 productionRecords에서 계산
-        downtimeData: downtimeAnalysis.slice(0, 5),
-        productionData: fallbackData.productionData // 실제로는 productionRecords에서 계산
+        trendData: oeeData.length > 0 ? oeeData : fallbackData.trendData, // 실제 API 데이터 우선 사용
+        downtimeData: downtimeData.length > 0 ? downtimeData : downtimeAnalysis.slice(0, 5),
+        productionData: productionData.length > 0 ? productionData : fallbackData.productionData // 실제 API 데이터 우선 사용
       };
     } catch (error) {
       console.error('Error processing engineer dashboard data:', error);
@@ -243,7 +282,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       }
       return fallbackData;
     }
-  }, [machines, machineLogs, oeeMetrics, fallbackData, onError]);
+  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, fallbackData, onError]);
 
   // 데이터 내보내기
   const handleExport = () => {
@@ -375,7 +414,10 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         <Space>
           <Select
             value={selectedPeriod}
-            onChange={setSelectedPeriod}
+            onChange={(value) => {
+              console.log('🔄 기간 변경 요청:', value);
+              setSelectedPeriod(value);
+            }}
             options={[
               { label: t('dashboard:filters.thisWeek'), value: 'week' },
               { label: t('dashboard:engineerDashboard.timeFilter.recent1Month'), value: 'month' },
@@ -388,7 +430,10 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           </Button>
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={refresh}
+            onClick={() => {
+              refresh();
+              refreshEngineerData();
+            }}
             loading={loading}
           >
             {t('dashboard:adminDashboard.refresh')}
@@ -468,11 +513,9 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                   />
                 </Col>
                 <Col xs={24} lg={16}>
-                  <OEETrendChart
-                    data={processedData.trendData}
+                  <IndependentOEETrendChart
                     title={t('dashboard:engineerDashboard.charts.oeeTrendAnalysis')}
                     height={400}
-                    showControls={true}
                   />
                 </Col>
               </Row>
