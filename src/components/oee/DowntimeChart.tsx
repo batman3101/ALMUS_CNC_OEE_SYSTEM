@@ -16,6 +16,7 @@ import {
 } from 'chart.js';
 import { Card, Typography, Table, Row, Col } from 'antd';
 import { MachineState } from '@/types';
+import { useTranslation } from '@/hooks/useTranslation';
 
 ChartJS.register(
   CategoryScale,
@@ -57,10 +58,11 @@ const stateConfig: Record<MachineState, { label: string; color: string }> = {
 
 export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   data,
-  title = '다운타임 원인 분석',
+  title,
   height = 400,
   showTable = true
 }) => {
+  const { t } = useTranslation();
   // 다운타임 데이터만 필터링 (정상가동 제외)
   const downtimeData = data.filter(item => item.state !== 'NORMAL_OPERATION');
   
@@ -84,7 +86,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
     datasets: [
       {
         type: 'bar' as const,
-        label: '다운타임 (분)',
+        label: t('dashboard:chart.downtimeByMinutes'),
         data: chartData.map(item => item.duration),
         backgroundColor: chartData.map(item => stateConfig[item.state].color),
         borderColor: chartData.map(item => stateConfig[item.state].color),
@@ -93,7 +95,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       },
       {
         type: 'line' as const,
-        label: '누적 비율 (%)',
+        label: t('dashboard:chart.cumulativeOccurrence'),
         data: chartData.map(item => item.cumulativePercentage),
         borderColor: '#ff7875',
         backgroundColor: 'rgba(255, 120, 117, 0.1)',
@@ -139,7 +141,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
         display: true,
         title: {
           display: true,
-          text: '다운타임 원인',
+          text: t('dashboard:chart.downtimeCause'),
         },
       },
       y: {
@@ -148,7 +150,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
         position: 'left',
         title: {
           display: true,
-          text: '다운타임 (분)',
+          text: t('dashboard:chart.downtimeByMinutes'),
         },
         beginAtZero: true,
       },
@@ -158,7 +160,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
         position: 'right',
         title: {
           display: true,
-          text: '누적 비율 (%)',
+          text: t('dashboard:chart.cumulativeOccurrence'),
         },
         min: 0,
         max: 100,
@@ -177,14 +179,14 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   // 테이블 컬럼 정의
   const tableColumns = [
     {
-      title: '순위',
+      title: t('dashboard:chart.rank'),
       dataIndex: 'rank',
       key: 'rank',
       width: 60,
       render: (_: any, __: any, index: number) => index + 1,
     },
     {
-      title: '다운타임 원인',
+      title: t('dashboard:chart.downtimeCause'),
       dataIndex: 'state',
       key: 'state',
       render: (state: MachineState) => (
@@ -194,28 +196,28 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       ),
     },
     {
-      title: '지속시간 (분)',
+      title: t('dashboard:chart.durationMinutes'),
       dataIndex: 'duration',
       key: 'duration',
       align: 'right' as const,
       render: (duration: number) => duration.toLocaleString(),
     },
     {
-      title: '발생횟수',
+      title: t('dashboard:chart.occurrenceCount'),
       dataIndex: 'count',
       key: 'count',
       align: 'right' as const,
       render: (count: number) => count.toLocaleString(),
     },
     {
-      title: '비율 (%)',
+      title: t('dashboard:chart.ratio'),
       dataIndex: 'percentage',
       key: 'percentage',
       align: 'right' as const,
       render: (percentage: number) => `${percentage.toFixed(1)}%`,
     },
     {
-      title: '누적비율 (%)',
+      title: t('dashboard:chart.cumulativeRatio'),
       key: 'cumulative',
       align: 'right' as const,
       render: (_: any, __: any, index: number) => {
@@ -243,7 +245,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#ff4d4f' }}>
               {totalDowntime.toLocaleString()}
             </div>
-            <div style={{ fontSize: 12, color: '#666' }}>총 다운타임 (분)</div>
+            <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.totalDowntime')}</div>
           </div>
         </Col>
         
@@ -252,7 +254,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#faad14' }}>
               {downtimeData.reduce((sum, item) => sum + item.count, 0)}
             </div>
-            <div style={{ fontSize: 12, color: '#666' }}>총 발생횟수</div>
+            <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.totalOccurrences')}</div>
           </div>
         </Col>
         
@@ -261,7 +263,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>
               {downtimeData.length > 0 ? (totalDowntime / downtimeData.reduce((sum, item) => sum + item.count, 0)).toFixed(1) : 0}
             </div>
-            <div style={{ fontSize: 12, color: '#666' }}>평균 지속시간 (분)</div>
+            <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.averageDuration')}</div>
           </div>
         </Col>
         
@@ -270,7 +272,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#52c41a' }}>
               {sortedData.length > 0 ? stateConfig[sortedData[0].state].label : '-'}
             </div>
-            <div style={{ fontSize: 12, color: '#666' }}>주요 원인</div>
+            <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.mainCause')}</div>
           </div>
         </Col>
       </Row>
@@ -279,7 +281,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       {showTable && (
         <div>
           <AntTitle level={5} style={{ marginBottom: 16 }}>
-            상세 분석
+            {t('dashboard:chart.detailedAnalysis')}
           </AntTitle>
           <Table
             columns={tableColumns}

@@ -15,6 +15,12 @@
     "refresh": "Làm mới",
     "goBack": "Quay lại"
   },
+  "actions": {
+    "autoRefresh": "Tự động làm mới",
+    "startAutoRefresh": "Bắt đầu tự động làm mới",
+    "stopAutoRefresh": "Dừng tự động làm mới",
+    "manualRefresh": "Làm mới thủ công"
+  },
   "nav": {
     "dashboard": "Bảng điều khiển",
     "machines": "Tình trạng thiết bị",

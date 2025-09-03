@@ -120,5 +120,18 @@
     "notSet": "Chưa thiết lập",
     "cancel": "Hủy",
     "save": "Lưu"
+  },
+  "status": {
+    "autoRefreshing": "Tự động làm mới",
+    "refresh": "Làm mới",
+    "pollingActive": "Polling đang hoạt động",
+    "pollingStopped": "Polling đã dừng",
+    "realtimeConnected": "Kết nối thời gian thực",
+    "realtimeDisconnected": "Mất kết nối thời gian thực",
+    "lastUpdate": "Cập nhật lần cuối",
+    "hybridMode": "Chế độ kết hợp (polling + thời gian thực)",
+    "realtimeMode": "Chế độ thời gian thực",
+    "pollingMode": "Chế độ polling",
+    "manualMode": "Chế độ thủ công"
   }
 }

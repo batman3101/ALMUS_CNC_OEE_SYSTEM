@@ -17,6 +17,7 @@ import { Machine, OEEMetrics, MachineLog, MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Removed deprecated TabPane import
 
@@ -121,15 +122,15 @@ const getStateIcon = (state: MachineState) => {
   }
 };
 
-const getStateText = (state: MachineState) => {
+const getStateText = (state: MachineState, t: any) => {
   const stateMap = {
-    'NORMAL_OPERATION': '정상가동',
-    'MAINTENANCE': '점검중',
-    'MODEL_CHANGE': '모델교체',
-    'PLANNED_STOP': '계획정지',
-    'PROGRAM_CHANGE': '프로그램교체',
-    'TOOL_CHANGE': '공구교환',
-    'TEMPORARY_STOP': '일시정지'
+    'NORMAL_OPERATION': t('dashboard:status.normal'),
+    'MAINTENANCE': t('dashboard:status.maintenance'),
+    'MODEL_CHANGE': t('dashboard:status.modelChange'),
+    'PLANNED_STOP': t('dashboard:status.plannedStop'),
+    'PROGRAM_CHANGE': t('dashboard:status.programChange'),
+    'TOOL_CHANGE': t('dashboard:status.toolChange'),
+    'TEMPORARY_STOP': t('dashboard:status.temporaryStop')
   };
   return stateMap[state] || state;
 };
@@ -147,6 +148,7 @@ interface OperatorDashboardProps {
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
   const isClient = useClientOnly();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
   const [showProductionInput, setShowProductionInput] = useState(false);
@@ -248,13 +250,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           <div>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 'bold' }}>
               <PlayCircleOutlined style={{ marginRight: 8 }} />
-              운영자 대시보드
+              {t('dashboard:operatorDashboard.title')}
             </h1>
             <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-              담당 설비 현황 및 작업 관리
+              {t('dashboard:operatorDashboard.description')}
               {isConnected && (
                 <span style={{ marginLeft: 8, color: '#52c41a' }}>
-                  <WifiOutlined /> 실시간 연결됨
+                  <WifiOutlined /> {t('dashboard:adminDashboard.connectedRealtime')}
                 </span>
               )}
             </p>
@@ -312,7 +314,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                       <div style={{ marginBottom: 12 }}>
                         {getStateIcon(machine.current_state!)}
                         <span style={{ marginLeft: 8 }}>
-                          {getStateText(machine.current_state!)}
+                          {getStateText(machine.current_state!, t)}
                         </span>
                       </div>
                       
@@ -378,7 +380,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                               {log.machineName}
                             </div>
                             <div style={{ color: '#666' }}>
-                              {getStateText(log.state)}
+                              {getStateText(log.state, t)}
                             </div>
                             <div style={{ color: '#999' }}>
                               {new Date(log.start_time).toLocaleString('ko-KR', {

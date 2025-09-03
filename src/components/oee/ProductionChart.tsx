@@ -17,6 +17,7 @@ import {
 import { Card, Typography, Select, Row, Col, Statistic } from 'antd';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { useTranslation } from '@/hooks/useTranslation';
 
 ChartJS.register(
   CategoryScale,
@@ -52,12 +53,13 @@ interface ProductionChartProps {
 
 export const ProductionChart: React.FC<ProductionChartProps> = ({
   data,
-  title = '생산 실적',
+  title,
   height = 400,
   chartType = 'bar',
   showControls = true,
   onChartTypeChange
 }) => {
+  const { t } = useTranslation();
   // 차트 데이터 구성
   const chartData = {
     labels: data.map(item => {
@@ -67,7 +69,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
     datasets: [
       {
         type: chartType as const,
-        label: '양품 수량',
+        label: t('dashboard:chart.goodQuantity'),
         data: data.map(item => item.good_qty),
         backgroundColor: 'rgba(82, 196, 26, 0.8)',
         borderColor: '#52c41a',
@@ -76,7 +78,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
       },
       {
         type: chartType as const,
-        label: '불량 수량',
+        label: t('dashboard:chart.defectQuantity'),
         data: data.map(item => item.defect_qty),
         backgroundColor: 'rgba(255, 77, 79, 0.8)',
         borderColor: '#ff4d4f',
@@ -85,7 +87,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
       },
       ...(data.some(item => item.target_qty) ? [{
         type: 'line' as const,
-        label: '목표 수량',
+        label: t('dashboard:chart.targetQuantity'),
         data: data.map(item => item.target_qty || 0),
         borderColor: '#1890ff',
         backgroundColor: 'rgba(24, 144, 255, 0.1)',
@@ -100,7 +102,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
       }] : []),
       {
         type: 'line' as const,
-        label: '불량률 (%)',
+        label: t('dashboard:chart.defectRate'),
         data: data.map(item => item.defect_rate * 100),
         borderColor: '#faad14',
         backgroundColor: 'rgba(250, 173, 20, 0.1)',
@@ -132,17 +134,17 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
         intersect: false,
         callbacks: {
           label: function(context) {
-            if (context.dataset.label === '불량률 (%)') {
+            if (context.dataset.label === t('dashboard:chart.defectRate')) {
               return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
             } else {
-              return `${context.dataset.label}: ${context.parsed.y.toLocaleString()}개`;
+              return `${context.dataset.label}: ${context.parsed.y.toLocaleString()} ${t('dashboard:chart.pieces')}`;
             }
           },
           afterLabel: function(context) {
             const dataIndex = context.dataIndex;
             const item = data[dataIndex];
             if (item.shift) {
-              return `교대: ${item.shift}`;
+              return `${t('dashboard:chart.shift')}: ${item.shift}`;
             }
             return '';
           },
@@ -172,7 +174,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
         position: 'left',
         title: {
           display: true,
-          text: '수량 (개)',
+          text: t('dashboard:chart.quantityUnit'),
         },
         beginAtZero: true,
         grid: {
@@ -191,7 +193,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
         position: 'right',
         title: {
           display: true,
-          text: '불량률 (%)',
+          text: t('dashboard:chart.defectRatePercent'),
         },
         min: 0,
         grid: {
@@ -257,34 +259,34 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
       <Row gutter={[24, 16]}>
         <Col xs={12} sm={8} md={6}>
           <Statistic
-            title="총 생산량"
+            title={t('dashboard:chart.totalProduction')}
             value={totalOutput}
-            suffix="개"
+            suffix={t('dashboard:chart.pieces')}
             valueStyle={{ color: '#1890ff' }}
           />
         </Col>
         
         <Col xs={12} sm={8} md={6}>
           <Statistic
-            title="양품 수량"
+            title={t('dashboard:chart.goodQuantity')}
             value={totalGood}
-            suffix="개"
+            suffix={t('dashboard:chart.pieces')}
             valueStyle={{ color: '#52c41a' }}
           />
         </Col>
         
         <Col xs={12} sm={8} md={6}>
           <Statistic
-            title="불량 수량"
+            title={t('dashboard:chart.defectQuantity')}
             value={totalDefects}
-            suffix="개"
+            suffix={t('dashboard:chart.pieces')}
             valueStyle={{ color: '#ff4d4f' }}
           />
         </Col>
         
         <Col xs={12} sm={8} md={6}>
           <Statistic
-            title="평균 불량률"
+            title={t('dashboard:chart.averageDefectRate')}
             value={avgDefectRate}
             precision={2}
             suffix="%"
@@ -296,16 +298,16 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
           <>
             <Col xs={12} sm={8} md={6}>
               <Statistic
-                title="목표 수량"
+                title={t('dashboard:chart.targetQuantity')}
                 value={totalTarget}
-                suffix="개"
+                suffix={t('dashboard:chart.pieces')}
                 valueStyle={{ color: '#722ed1' }}
               />
             </Col>
             
             <Col xs={12} sm={8} md={6}>
               <Statistic
-                title="목표 달성률"
+                title={t('dashboard:chart.targetAchievementRate')}
                 value={achievementRate}
                 precision={1}
                 suffix="%"
@@ -323,18 +325,18 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
             <Col>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 16, fontWeight: 'bold', color: '#52c41a' }}>
-                  {Math.max(...data.map(item => item.output_qty)).toLocaleString()}개
+                  {Math.max(...data.map(item => item.output_qty)).toLocaleString()} {t('dashboard:chart.pieces')}
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>최고 생산량</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.highestProduction')}</div>
               </div>
             </Col>
             
             <Col>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 16, fontWeight: 'bold', color: '#ff4d4f' }}>
-                  {Math.min(...data.map(item => item.output_qty)).toLocaleString()}개
+                  {Math.min(...data.map(item => item.output_qty)).toLocaleString()} {t('dashboard:chart.pieces')}
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>최저 생산량</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.lowestProduction')}</div>
               </div>
             </Col>
             
@@ -343,16 +345,16 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
                 <div style={{ fontSize: 16, fontWeight: 'bold', color: '#faad14' }}>
                   {(Math.max(...data.map(item => item.defect_rate)) * 100).toFixed(2)}%
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>최고 불량률</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.highestDefectRate')}</div>
               </div>
             </Col>
             
             <Col>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 16, fontWeight: 'bold', color: '#1890ff' }}>
-                  {data.length > 0 ? (totalOutput / data.length).toFixed(0) : 0}개
+                  {data.length > 0 ? (totalOutput / data.length).toFixed(0) : 0} {t('dashboard:chart.pieces')}
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>일평균 생산량</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.dailyAverageProduction')}</div>
               </div>
             </Col>
           </Row>

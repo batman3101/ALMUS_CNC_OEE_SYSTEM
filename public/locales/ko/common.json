@@ -15,6 +15,12 @@
     "refresh": "새로고침",
     "goBack": "돌아가기"
   },
+  "actions": {
+    "autoRefresh": "자동 새로고침",
+    "startAutoRefresh": "자동 새로고침 시작",
+    "stopAutoRefresh": "자동 새로고침 중지",
+    "manualRefresh": "수동 새로고침"
+  },
   "nav": {
     "dashboard": "대시보드",
     "machines": "설비 현황",

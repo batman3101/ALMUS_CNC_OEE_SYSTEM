@@ -78,23 +78,23 @@ export default function MachinesPage() {
             <div>
               <Space direction="vertical" align="end">
                 <Space>
-                  <Tooltip title={isAutoRefreshing ? "자동 새로고침 중지" : "자동 새로고침 시작"}>
+                  <Tooltip title={isAutoRefreshing ? tCommon('actions.stopAutoRefresh') : tCommon('actions.startAutoRefresh')}>
                     <Button
                       type={isAutoRefreshing ? "primary" : "default"}
                       icon={isAutoRefreshing ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
                       onClick={toggleAutoRefresh}
                     >
-                      {isAutoRefreshing ? "자동 새로고침 중" : "자동 새로고침"}
+                      {isAutoRefreshing ? t('status.autoRefreshing') : tCommon('actions.autoRefresh')}
                     </Button>
                   </Tooltip>
                   
-                  <Tooltip title="수동 새로고침">
+                  <Tooltip title={tCommon('actions.manualRefresh')}>
                     <Button
                       icon={<ReloadOutlined />}
                       onClick={() => refetch()}
                       loading={loading}
                     >
-                      새로고침
+                      {t('status.refresh')}
                     </Button>
                   </Tooltip>
                 </Space>
@@ -102,19 +102,19 @@ export default function MachinesPage() {
                 <div style={{ textAlign: 'right' }}>
                   <Space>
                     <Tag color={isAutoRefreshing ? "green" : "default"}>
-                      {isAutoRefreshing ? "폴링 활성" : "폴링 중지"}
+                      {isAutoRefreshing ? t('status.pollingActive') : t('status.pollingStopped')}
                     </Tag>
                     <Tag color={isRealtimeConnected ? "blue" : "default"}>
-                      {isRealtimeConnected ? "실시간 연결" : "실시간 끊김"}
+                      {isRealtimeConnected ? t('status.realtimeConnected') : t('status.realtimeDisconnected')}
                     </Tag>
                   </Space>
                   <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                    마지막 업데이트: {formatLastUpdated(lastUpdated)}
+                    {t('status.lastUpdate')}: {formatLastUpdated(lastUpdated)}
                   </div>
                   <div style={{ fontSize: '11px', color: '#ccc', marginTop: '2px' }}>
-                    {isRealtimeConnected && isAutoRefreshing ? "하이브리드 모드 (폴링 + 실시간)" :
-                     isRealtimeConnected ? "실시간 모드" :
-                     isAutoRefreshing ? "폴링 모드" : "수동 모드"}
+                    {isRealtimeConnected && isAutoRefreshing ? t('status.hybridMode') :
+                     isRealtimeConnected ? t('status.realtimeMode') :
+                     isAutoRefreshing ? t('status.pollingMode') : t('status.manualMode')}
                   </div>
                 </div>
               </Space>

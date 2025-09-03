@@ -16,6 +16,7 @@ import { OEEMetrics } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
@@ -122,6 +123,7 @@ interface EngineerDashboardProps {
 export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError }) => {
   const isClient = useClientOnly();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
   const [selectedMachines, setSelectedMachines] = useState<string[]>(['all']);
@@ -268,20 +270,20 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   // 분석 테이블 컬럼
   const analysisColumns = [
     {
-      title: '설비명',
+      title: t('dashboard:table.machineName'),
       dataIndex: 'machine',
       key: 'machine',
       width: 100,
       fixed: 'left' as const,
     },
     {
-      title: '위치',
+      title: t('dashboard:table.location'),
       dataIndex: 'location',
       key: 'location',
       width: 120,
     },
     {
-      title: 'OEE',
+      title: t('dashboard:table.oee'),
       dataIndex: 'avgOEE',
       key: 'avgOEE',
       width: 100,
@@ -296,7 +298,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       sorter: (a: { avgOEE: number }, b: { avgOEE: number }) => a.avgOEE - b.avgOEE,
     },
     {
-      title: '가동률',
+      title: t('dashboard:table.availability'),
       dataIndex: 'availability',
       key: 'availability',
       width: 100,
@@ -304,7 +306,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       sorter: (a: { availability: number }, b: { availability: number }) => a.availability - b.availability,
     },
     {
-      title: '성능',
+      title: t('dashboard:table.performance'),
       dataIndex: 'performance',
       key: 'performance',
       width: 100,
@@ -312,7 +314,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       sorter: (a: { performance: number }, b: { performance: number }) => a.performance - b.performance,
     },
     {
-      title: '품질',
+      title: t('dashboard:table.quality'),
       dataIndex: 'quality',
       key: 'quality',
       width: 100,
@@ -320,7 +322,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       sorter: (a: { quality: number }, b: { quality: number }) => a.quality - b.quality,
     },
     {
-      title: '다운타임(시간)',
+      title: t('dashboard:table.downtimeHours'),
       dataIndex: 'downtimeHours',
       key: 'downtimeHours',
       width: 120,
@@ -328,7 +330,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       sorter: (a: { downtimeHours: number }, b: { downtimeHours: number }) => a.downtimeHours - b.downtimeHours,
     },
     {
-      title: '불량률',
+      title: t('dashboard:table.defectRate'),
       dataIndex: 'defectRate',
       key: 'defectRate',
       width: 100,
@@ -336,7 +338,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       sorter: (a: { defectRate: number }, b: { defectRate: number }) => a.defectRate - b.defectRate,
     },
     {
-      title: '추세',
+      title: t('dashboard:table.trend'),
       dataIndex: 'trend',
       key: 'trend',
       width: 100,
@@ -357,13 +359,13 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           <div>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 'bold' }}>
               <BarChartOutlined style={{ marginRight: 8 }} />
-              엔지니어 대시보드
+              {t('dashboard:engineerDashboard.title')}
             </h1>
             <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-              설비 성능 분석 및 개선 지표
+              {t('dashboard:engineerDashboard.description')}
               {isConnected && (
                 <span style={{ marginLeft: 8, color: '#52c41a' }}>
-                  <WifiOutlined /> 실시간 연결됨
+                  <WifiOutlined /> {t('dashboard:adminDashboard.connectedRealtime')}
                 </span>
               )}
             </p>
@@ -375,21 +377,21 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             value={selectedPeriod}
             onChange={setSelectedPeriod}
             options={[
-              { label: '최근 1주', value: 'week' },
-              { label: '최근 1개월', value: 'month' },
-              { label: '최근 3개월', value: 'quarter' }
+              { label: t('dashboard:filters.thisWeek'), value: 'week' },
+              { label: t('dashboard:engineerDashboard.timeFilter.recent1Month'), value: 'month' },
+              { label: t('dashboard:filters.thisMonth') + ' x3', value: 'quarter' }
             ]}
             style={{ width: 120 }}
           />
           <Button icon={<FilterOutlined />}>
-            필터
+            {t('dashboard:engineerDashboard.timeFilter.filter')}
           </Button>
           <Button 
             icon={<ReloadOutlined />} 
             onClick={refresh}
             loading={loading}
           >
-            새로고침
+            {t('dashboard:adminDashboard.refresh')}
           </Button>
           <Button 
             icon={<DownloadOutlined />}
@@ -405,7 +407,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="평균 OEE"
+              title={t('dashboard:engineerDashboard.averageOee')}
               value={(processedData.overallMetrics.oee * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ 
@@ -418,7 +420,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="평균 가동률"
+              title={t('dashboard:engineerDashboard.averageAvailability')}
               value={(processedData.overallMetrics.availability * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ color: '#1890ff' }}
@@ -428,7 +430,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="평균 성능"
+              title={t('dashboard:engineerDashboard.averagePerformance')}
               value={(processedData.overallMetrics.performance * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ color: '#52c41a' }}
@@ -438,7 +440,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
-              title="평균 품질"
+              title={t('dashboard:engineerDashboard.averageQuality')}
               value={(processedData.overallMetrics.quality * 100).toFixed(1)}
               suffix="%"
               valueStyle={{ color: '#faad14' }}
@@ -454,13 +456,13 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         items={[
           {
             key: 'overview',
-            label: '종합 분석',
+            label: t('dashboard:engineerDashboard.analysis.collision'),
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={8}>
                   <OEEGauge
                     metrics={processedData.overallMetrics}
-                    title="전체 OEE 현황"
+                    title={t('dashboard:engineerDashboard.charts.overallOeeStatus')}
                     size="large"
                     showDetails={true}
                   />
@@ -468,7 +470,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                 <Col xs={24} lg={16}>
                   <OEETrendChart
                     data={processedData.trendData}
-                    title="OEE 추이 분석"
+                    title={t('dashboard:engineerDashboard.charts.oeeTrendAnalysis')}
                     height={400}
                     showControls={true}
                   />
@@ -478,18 +480,18 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           },
           {
             key: 'machines',
-            label: '설비별 분석',
+            label: t('dashboard:engineerDashboard.analysis.performance'),
             children: (
-              <Card title="설비별 성능 분석" extra={
+              <Card title={t('dashboard:table.machinePerformanceAnalysis')} extra={
                 <Space>
                   <Select
                     mode="multiple"
                     value={selectedMachines}
                     onChange={setSelectedMachines}
-                    placeholder="설비 선택"
+                    placeholder={t('dashboard:filters.machine')}
                     style={{ minWidth: 200 }}
                     options={[
-                      { label: '전체', value: 'all' },
+                      { label: t('dashboard:table.all'), value: 'all' },
                       { label: 'CNC-001', value: 'CNC-001' },
                       { label: 'CNC-002', value: 'CNC-002' },
                       { label: 'CNC-003', value: 'CNC-003' },
@@ -512,11 +514,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           },
           {
             key: 'downtime',
-            label: '다운타임 분석',
+            label: t('dashboard:engineerDashboard.analysis.downtime'),
             children: (
               <DowntimeChart
                 data={processedData.downtimeData}
-                title="다운타임 원인 분석"
+                title={t('dashboard:chart.downtimeRootCauseAnalysis')}
                 height={500}
                 showTable={true}
               />
@@ -524,13 +526,13 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           },
           {
             key: 'productivity',
-            label: '생산성 분석',
+            label: t('dashboard:engineerDashboard.analysis.productivity'),
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24}>
                   <ProductionChart
                     data={processedData.productionData}
-                    title="생산성 추이 분석"
+                    title={t('dashboard:chart.productivityTrendAnalysis')}
                     height={400}
                     chartType={chartType}
                     showControls={true}
@@ -542,20 +544,20 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           },
           {
             key: 'quality',
-            label: '품질 분석',
+            label: t('dashboard:engineerDashboard.analysis.quality'),
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
-                  <Card title="불량률 추이">
+                  <Card title={t('dashboard:chart.defectRateTrend')}>
                     <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-                      품질 분석 차트 (구현 예정)
+                      {t('dashboard:chart.qualityAnalysisChart')}
                     </div>
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card title="불량 유형별 분석">
+                  <Card title={t('dashboard:chart.defectTypeAnalysis')}>
                     <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-                      불량 유형 차트 (구현 예정)
+                      {t('dashboard:chart.defectTypeChart')}
                     </div>
                   </Card>
                 </Col>
@@ -564,11 +566,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           },
           {
             key: 'comparison',
-            label: '비교 분석',
+            label: t('dashboard:engineerDashboard.analysis.comparison'),
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24}>
-                  <Card title="설비간 성능 비교" extra={
+                  <Card title={t('dashboard:chart.machinePerformanceComparison')} extra={
                     <Space>
                       <RangePicker />
                       <Select

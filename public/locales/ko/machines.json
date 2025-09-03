@@ -120,5 +120,18 @@
     "notSet": "설정 없음",
     "cancel": "취소",
     "save": "저장"
+  },
+  "status": {
+    "autoRefreshing": "자동 새로고침중",
+    "refresh": "새로고침",
+    "pollingActive": "폴링 활성",
+    "pollingStopped": "폴링 중지",
+    "realtimeConnected": "실시간 연결",
+    "realtimeDisconnected": "실시간 끊김",
+    "lastUpdate": "마지막 업데이트",
+    "hybridMode": "하이브리드 모드 (폴링 + 실시간)",
+    "realtimeMode": "실시간 모드",
+    "pollingMode": "폴링 모드",
+    "manualMode": "수동 모드"
   }
 }
