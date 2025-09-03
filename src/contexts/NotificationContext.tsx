@@ -408,7 +408,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.log('🔄 NotificationContext 초기화 - 사용자 ID:', user.id);
       refreshNotifications();
     } else {
-      console.log('❌ NotificationContext - 사용자 로그인 안됨');
+      console.log('❌ NotificationContext - 사용자 로그아웃됨, 알림 초기화');
+      // 사용자 로그아웃 시 알림 초기화
+      dispatch({ type: 'CLEAR_ALL_NOTIFICATIONS' });
+      dispatch({ type: 'SET_LOADING', payload: false });
+      dispatch({ type: 'SET_ERROR', payload: null });
     }
   }, [user?.id, refreshNotifications]);
 

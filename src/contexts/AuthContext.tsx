@@ -198,6 +198,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isDevelopment()) {
         // 개발 환경: 모의 인증 로그아웃
         await MockAuthService.logout();
+        // 개발 환경에서도 로그인 페이지로 리다이렉트
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
         return;
       }
 
