@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Modal, Form, InputNumber, Button, message, Space, Typography, Divider } from 'antd';
+import { Modal, Form, InputNumber, Button, message, Space, Typography, Divider, theme } from 'antd';
 import { ProductionRecord, Machine } from '@/types';
 import { z } from 'zod';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
@@ -42,6 +42,7 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
   estimatedOutput
 }) => {
   const { t } = useMachinesTranslation();
+  const { token } = theme.useToken();
   const [form] = Form.useForm<ProductionInputData>();
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -185,7 +186,13 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
           />
         </Form.Item>
 
-        <div style={{ marginTop: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+        <div style={{ 
+          marginTop: 16, 
+          padding: 12, 
+          backgroundColor: token.colorBgLayout, 
+          borderRadius: 6,
+          border: `1px solid ${token.colorBorderSecondary}`
+        }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
             <strong>{t('productionInput.notes')}:</strong><br />
             • {t('productionInput.note1')}<br />
