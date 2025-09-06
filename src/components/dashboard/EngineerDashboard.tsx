@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { OEEGauge, IndependentOEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
+import { DefectRateTrendChart, DefectTypeAnalysisChart, MachineComparisonChart } from '@/components/quality';
 import { OEEMetrics } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
@@ -946,17 +947,20 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
-                  <Card title={t('dashboard:chart.defectRateTrend')}>
-                    <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-                      {t('dashboard:chart.qualityAnalysisChart')}
-                    </div>
+                  <Card title="불량률 추세 분석">
+                    <DefectRateTrendChart 
+                      data={processedData.productionData}
+                      height={300}
+                      period={selectedPeriod}
+                    />
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card title={t('dashboard:chart.defectTypeAnalysis')}>
-                    <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-                      {t('dashboard:chart.defectTypeChart')}
-                    </div>
+                  <Card title="불량 유형별 분석">
+                    <DefectTypeAnalysisChart 
+                      data={processedData.productionData}
+                      height={300}
+                    />
                   </Card>
                 </Col>
               </Row>
@@ -968,9 +972,20 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24}>
-                  <Card title={t('dashboard:chart.machinePerformanceComparison')} extra={
+                  <Card title="설비간 성능 비교 분석" extra={
                     <Space>
-                      <RangePicker />
+                      <RangePicker
+                        value={customDateRange ? [dayjs(customDateRange[0]), dayjs(customDateRange[1])] : null}
+                        onChange={(dates, dateStrings) => {
+                          if (dates && dates[0] && dates[1] && dateStrings[0] && dateStrings[1]) {
+                            setCustomDateRange([dateStrings[0], dateStrings[1]]);
+                          } else {
+                            setCustomDateRange(null);
+                          }
+                        }}
+                        format="YYYY-MM-DD"
+                        placeholder={['시작일', '종료일']}
+                      />
                       <Select
                         value={chartType}
                         onChange={setChartType}
@@ -978,12 +993,17 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                           { label: '막대 차트', value: 'bar' },
                           { label: '선 차트', value: 'line' }
                         ]}
+                        style={{ width: 100 }}
                       />
                     </Space>
                   }>
-                    <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-                      설비간 비교 차트 (구현 예정)
-                    </div>
+                    <MachineComparisonChart
+                      data={filteredAnalysisData}
+                      height={550}
+                      chartType={chartType}
+                      onChartTypeChange={setChartType}
+                      selectedMachines={selectedMachines}
+                    />
                   </Card>
                 </Col>
               </Row>

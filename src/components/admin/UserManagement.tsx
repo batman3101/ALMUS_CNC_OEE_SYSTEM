@@ -122,7 +122,7 @@ const UserManagement: React.FC = () => {
       render: (role: string) => {
         const roleLabels = {
           admin: t('roles.admin'),
-          engineer: t('roles.operator'),
+          engineer: t('roles.engineer'),
           operator: t('roles.operator')
         };
         return (
@@ -133,7 +133,7 @@ const UserManagement: React.FC = () => {
       },
       filters: [
         { text: t('roles.admin'), value: 'admin' },
-        { text: t('roles.operator'), value: 'engineer' },
+        { text: t('roles.engineer'), value: 'engineer' },
         { text: t('roles.operator'), value: 'operator' },
       ],
       onFilter: (value, record) => record.role === value,
