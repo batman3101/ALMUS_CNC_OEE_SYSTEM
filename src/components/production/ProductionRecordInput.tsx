@@ -4,22 +4,23 @@ import React, { useState } from 'react';
 import { Modal, Form, InputNumber, Button, message, Space, Typography, Divider } from 'antd';
 import { ProductionRecord, Machine } from '@/types';
 import { z } from 'zod';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
 
-// 생산 실적 입력 데이터 검증 스키마
-const productionInputSchema = z.object({
-  output_qty: z.number().min(0, '생산 수량은 0 이상이어야 합니다'),
-  defect_qty: z.number().min(0, '불량 수량은 0 이상이어야 합니다'),
+// 생산 실적 입력 데이터 검증 스키마 - 동적으로 생성됨
+const createProductionInputSchema = (t: any) => z.object({
+  output_qty: z.number().min(0, t('productionInput.outputQtyMin')),
+  defect_qty: z.number().min(0, t('productionInput.defectQtyMin')),
 }).refine((data) => data.defect_qty <= data.output_qty, {
-  message: '불량 수량은 생산 수량보다 클 수 없습니다',
+  message: t('productionInput.defectQtyMax'),
   path: ['defect_qty'],
 });
 
 interface ProductionRecordInputProps {
   visible: boolean;
   onClose: () => void;
-  machine: Machine;
+  machine: Machine | null;
   shift: 'A' | 'B';
   date: string;
   onSubmit: (data: { output_qty: number; defect_qty: number }) => Promise<void>;
@@ -40,6 +41,7 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
   onSubmit,
   estimatedOutput
 }) => {
+  const { t } = useMachinesTranslation();
   const [form] = Form.useForm<ProductionInputData>();
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -53,12 +55,12 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
       const values = await form.validateFields();
       
       // Zod 스키마로 데이터 검증
-      const validatedData = productionInputSchema.parse(values);
+      const validatedData = createProductionInputSchema(t).parse(values);
 
       // 부모 컴포넌트로 데이터 전달
       await onSubmit(validatedData);
       
-      message.success('생산 실적이 성공적으로 입력되었습니다');
+      message.success(t('productionInput.successMessage'));
       form.resetFields();
       onClose();
     } catch (error) {
@@ -71,10 +73,10 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
           }
         });
         setValidationErrors(errors);
-        message.error('입력 데이터를 확인해주세요');
+        message.error(t('productionInput.validationError'));
       } else {
         console.error('생산 실적 입력 오류:', error);
-        message.error('생산 실적 입력 중 오류가 발생했습니다');
+        message.error(t('productionInput.errorMessage'));
       }
     } finally {
       setLoading(false);
@@ -96,27 +98,27 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
 
   return (
     <Modal
-      title="생산 실적 입력"
+      title={t('productionInput.title')}
       open={visible}
       onCancel={handleCancel}
       footer={[
         <Button key="cancel" onClick={handleCancel}>
-          취소
+          {t('productionInput.cancel')}
         </Button>,
         <Button key="submit" type="primary" loading={loading} onClick={handleSubmit}>
-          입력 완료
+          {t('productionInput.submit')}
         </Button>,
       ]}
       width={500}
       destroyOnHidden
     >
       <div style={{ marginBottom: 16 }}>
-        <Title level={5}>설비 정보</Title>
+        <Title level={5}>{t('productionInput.machineInfo')}</Title>
         <Space direction="vertical" size="small">
-          <Text><strong>설비명:</strong> {machine.name}</Text>
-          <Text><strong>위치:</strong> {machine.location}</Text>
-          <Text><strong>날짜:</strong> {date}</Text>
-          <Text><strong>교대:</strong> {shift}조</Text>
+          <Text><strong>{t('productionInput.machineName')}:</strong> {machine?.name || t('productionInput.noMachineInfo')}</Text>
+          <Text><strong>{t('productionInput.location')}:</strong> {machine?.location || t('productionInput.noLocationInfo')}</Text>
+          <Text><strong>{t('productionInput.date')}:</strong> {date}</Text>
+          <Text><strong>{t('productionInput.shift')}:</strong> {shift}{t('productionInput.shiftSuffix')}</Text>
         </Space>
       </div>
 
@@ -128,18 +130,18 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
         initialValues={{ output_qty: 0, defect_qty: 0 }}
       >
         <Form.Item
-          label="총 생산 수량"
+          label={t('productionInput.outputQty')}
           name="output_qty"
           rules={[
-            { required: true, message: '생산 수량을 입력해주세요' },
-            { type: 'number', min: 0, message: '생산 수량은 0 이상이어야 합니다' }
+            { required: true, message: t('productionInput.outputQtyRequired') },
+            { type: 'number', min: 0, message: t('productionInput.outputQtyMin') }
           ]}
           validateStatus={validationErrors.output_qty ? 'error' : ''}
           help={validationErrors.output_qty}
         >
           <InputNumber
             style={{ width: '100%' }}
-            placeholder="생산된 총 수량을 입력하세요"
+            placeholder={t('productionInput.outputQtyPlaceholder')}
             min={0}
             precision={0}
             formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
@@ -150,7 +152,7 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
         {estimatedOutput && (
           <div style={{ marginBottom: 16 }}>
             <Text type="secondary">
-              Tact Time 기반 추정 생산량: {estimatedOutput.toLocaleString()}개
+              {t('productionInput.estimatedOutput')}: {estimatedOutput.toLocaleString()}{t('productionInput.piece')}
             </Text>
             <Button 
               type="link" 
@@ -158,24 +160,24 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
               onClick={useEstimatedOutput}
               style={{ marginLeft: 8 }}
             >
-              사용하기
+              {t('productionInput.useEstimated')}
             </Button>
           </div>
         )}
 
         <Form.Item
-          label="불량 수량"
+          label={t('productionInput.defectQty')}
           name="defect_qty"
           rules={[
-            { required: true, message: '불량 수량을 입력해주세요' },
-            { type: 'number', min: 0, message: '불량 수량은 0 이상이어야 합니다' }
+            { required: true, message: t('productionInput.defectQtyRequired') },
+            { type: 'number', min: 0, message: t('productionInput.defectQtyMin') }
           ]}
           validateStatus={validationErrors.defect_qty ? 'error' : ''}
           help={validationErrors.defect_qty}
         >
           <InputNumber
             style={{ width: '100%' }}
-            placeholder="불량품 수량을 입력하세요"
+            placeholder={t('productionInput.defectQtyPlaceholder')}
             min={0}
             precision={0}
             formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
@@ -185,10 +187,10 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
 
         <div style={{ marginTop: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            <strong>참고사항:</strong><br />
-            • 생산 수량은 해당 교대에서 실제로 생산된 총 수량을 입력하세요<br />
-            • 불량 수량은 생산된 제품 중 불량으로 판정된 수량을 입력하세요<br />
-            • 불량 수량은 생산 수량보다 클 수 없습니다
+            <strong>{t('productionInput.notes')}:</strong><br />
+            • {t('productionInput.note1')}<br />
+            • {t('productionInput.note2')}<br />
+            • {t('productionInput.note3')}
           </Text>
         </div>
       </Form>

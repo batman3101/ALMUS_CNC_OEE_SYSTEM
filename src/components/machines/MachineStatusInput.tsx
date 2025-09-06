@@ -25,102 +25,70 @@ import {
 import { Machine, MachineState } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { confirm } = Modal;
 
 interface MachineStatusInputProps {
-  machine: Machine;
+  machine: Machine | null;
   visible: boolean;
   onClose: () => void;
   onStatusChange: (machineId: string, newState: MachineState) => Promise<void>;
   language?: 'ko' | 'vi';
 }
 
-// 설비 상태별 설정
-const getStateConfig = (state: MachineState, language: 'ko' | 'vi' = 'ko') => {
+// 설비 상태별 설정 - t 함수를 사용하도록 수정
+const getStateConfig = (state: MachineState, t: any) => {
   const configs = {
     NORMAL_OPERATION: {
       color: 'success',
       icon: <PlayCircleOutlined />,
-      text: { ko: '정상가동', vi: 'Hoạt động bình thường' },
-      description: { 
-        ko: '설비가 정상적으로 생산 중입니다', 
-        vi: 'Thiết bị đang sản xuất bình thường' 
-      }
+      text: t('states.NORMAL_OPERATION'),
+      description: '설비가 정상적으로 생산 중입니다' 
     },
     PM_MAINTENANCE: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: { ko: '예방정비', vi: 'Bảo trì phòng ngừa' },
-      description: { 
-        ko: '계획된 예방정비 작업 중입니다', 
-        vi: 'Đang thực hiện bảo trì phòng ngừa theo kế hoạch' 
-      }
+      text: t('states.PM_MAINTENANCE'),
+      description: '계획된 예방정비 작업 중입니다'
     },
-    INSPECTION: {
-      color: 'processing',
-      icon: <ExclamationCircleOutlined />,
-      text: { ko: '점검중', vi: 'Kiểm tra' },
-      description: { 
-        ko: '설비 점검 작업 중입니다', 
-        vi: 'Đang thực hiện kiểm tra thiết bị' 
-      }
-    },
-    BREAKDOWN_REPAIR: {
-      color: 'error',
-      icon: <WarningOutlined />,
-      text: { ko: '고장수리', vi: 'Sửa chữa hỏng hóc' },
-      description: { 
-        ko: '설비 고장으로 인한 수리 작업 중입니다', 
-        vi: 'Đang sửa chữa do thiết bị bị hỏng' 
-      }
+    MAINTENANCE: {
+      color: 'warning',
+      icon: <ToolOutlined />,
+      text: t('states.MAINTENANCE'),
+      description: '설비 점검 작업 중입니다'
     },
     MODEL_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: { ko: '모델교체', vi: 'Thay đổi mô hình' },
-      description: { 
-        ko: '생산 모델 변경 작업 중입니다', 
-        vi: 'Đang thay đổi mô hình sản xuất' 
-      }
+      text: t('states.MODEL_CHANGE'),
+      description: '생산 모델 변경 작업 중입니다'
     },
     PLANNED_STOP: {
       color: 'default',
       icon: <PauseCircleOutlined />,
-      text: { ko: '계획정지', vi: 'Dừng theo kế hoạch' },
-      description: { 
-        ko: '계획된 생산 중단 상태입니다', 
-        vi: 'Trạng thái dừng sản xuất theo kế hoạch' 
-      }
+      text: t('states.PLANNED_STOP'),
+      description: '계획된 생산 중단 상태입니다'
     },
     PROGRAM_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: { ko: '프로그램 교체', vi: 'Thay đổi chương trình' },
-      description: { 
-        ko: 'CNC 프로그램 변경 작업 중입니다', 
-        vi: 'Đang thay đổi chương trình CNC' 
-      }
+      text: t('states.PROGRAM_CHANGE'),
+      description: 'CNC 프로그램 변경 작업 중입니다'
     },
     TOOL_CHANGE: {
       color: 'processing',
       icon: <ToolOutlined />,
-      text: { ko: '공구교환', vi: 'Thay đổi công cụ' },
-      description: { 
-        ko: '공구 교체 작업 중입니다', 
-        vi: 'Đang thay đổi công cụ' 
-      }
+      text: t('states.TOOL_CHANGE'),
+      description: '공구 교체 작업 중입니다'
     },
     TEMPORARY_STOP: {
       color: 'error',
       icon: <WarningOutlined />,
-      text: { ko: '일시정지', vi: 'Dừng tạm thời' },
-      description: { 
-        ko: '예상치 못한 일시 정지 상태입니다', 
-        vi: 'Trạng thái dừng tạm thời không mong muốn' 
-      }
+      text: t('states.TEMPORARY_STOP'),
+      description: '예상치 못한 일시 정지 상태입니다'
     }
   };
   
@@ -134,17 +102,18 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
   onStatusChange,
   language = 'ko'
 }) => {
+  const { t } = useMachinesTranslation();
   const [selectedState, setSelectedState] = useState<MachineState | undefined>();
   const [loading, setLoading] = useState(false);
 
   // 현재 상태 정보
-  const currentStateConfig = machine.current_state 
-    ? getStateConfig(machine.current_state, language)
+  const currentStateConfig = machine?.current_state 
+    ? getStateConfig(machine.current_state, t)
     : null;
 
   // 현재 상태 지속 시간 (임시 계산)
   const getCurrentStateDuration = () => {
-    if (!machine.current_state) return null;
+    if (!machine?.current_state) return null;
     
     // 실제로는 machine_logs에서 현재 상태의 start_time을 가져와야 함
     const now = new Date();
@@ -159,86 +128,65 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
   // 상태 변경 처리
   const handleStatusChange = async () => {
     if (!selectedState) {
-      message.warning(
-        language === 'ko' 
-          ? '변경할 상태를 선택해주세요' 
-          : 'Vui lòng chọn trạng thái cần thay đổi'
-      );
+      message.warning(t('statusChange.selectWarning'));
       return;
     }
 
-    if (selectedState === machine.current_state) {
-      message.info(
-        language === 'ko' 
-          ? '현재 상태와 동일합니다' 
-          : 'Trạng thái giống với trạng thái hiện tại'
-      );
+    if (selectedState === machine?.current_state) {
+      message.info(t('statusChange.sameState'));
       return;
     }
 
-    const newStateConfig = getStateConfig(selectedState, language);
-    const currentStateText = currentStateConfig?.text[language] || 
-      (language === 'ko' ? '알 수 없음' : 'Không xác định');
+    const newStateConfig = getStateConfig(selectedState, t);
+    const currentStateText = currentStateConfig?.text || t('statusChange.unknown');
 
     // 상태 변경 확인 모달
     confirm({
-      title: language === 'ko' ? '상태 변경 확인' : 'Xác nhận thay đổi trạng thái',
+      title: t('statusChange.confirmTitle'),
       icon: <ExclamationCircleOutlined />,
       content: (
         <div>
           <p>
-            <strong>{machine.name}</strong>{language === 'ko' ? '의 상태를 변경하시겠습니까?' : ' thay đổi trạng thái?'}
+            <strong>{machine?.name || t('statusChange.noMachineInfo')}</strong>{t('statusChange.confirmMessage')}
           </p>
           <div style={{ margin: '16px 0' }}>
             <Space direction="vertical" size="small">
               <div>
                 <Text type="secondary">
-                  {language === 'ko' ? '현재 상태:' : 'Trạng thái hiện tại:'}
+                  {t('statusChange.currentStateLabel')}
                 </Text>
                 <Tag color={currentStateConfig?.color as any} style={{ marginLeft: 8 }}>
-                  {currentStateConfig?.icon} {currentStateText}
+                  {currentStateConfig?.icon} {currentStateConfig?.text}
                 </Tag>
               </div>
               <div>
                 <Text type="secondary">
-                  {language === 'ko' ? '변경할 상태:' : 'Trạng thái mới:'}
+                  {t('statusChange.newStateLabel')}
                 </Text>
                 <Tag color={newStateConfig.color as any} style={{ marginLeft: 8 }}>
-                  {newStateConfig.icon} {newStateConfig.text[language]}
+                  {newStateConfig.icon} {newStateConfig.text}
                 </Tag>
               </div>
             </Space>
           </div>
           <Alert
-            message={
-              language === 'ko' 
-                ? '이전 상태가 자동으로 종료되고 새로운 상태가 시작됩니다.' 
-                : 'Trạng thái trước sẽ tự động kết thúc và trạng thái mới sẽ bắt đầu.'
-            }
+            message={t('statusChange.warningMessage')}
             type="info"
             showIcon
             style={{ marginTop: 12 }}
           />
         </div>
       ),
-      okText: language === 'ko' ? '변경' : 'Thay đổi',
-      cancelText: language === 'ko' ? '취소' : 'Hủy',
+      okText: t('statusChange.change'),
+      cancelText: t('statusChange.cancel'),
       onOk: async () => {
         setLoading(true);
         try {
-          await onStatusChange(machine.id, selectedState);
-          message.success(
-            language === 'ko' 
-              ? '상태가 성공적으로 변경되었습니다' 
-              : 'Trạng thái đã được thay đổi thành công'
-          );
+          await onStatusChange(machine?.id || '', selectedState);
+          message.success(t('statusChange.successMessage'));
           onClose();
         } catch (error) {
-          message.error(
-            language === 'ko' 
-              ? '상태 변경에 실패했습니다' 
-              : 'Thay đổi trạng thái thất bại'
-          );
+          message.error(t('statusChange.errorMessage'));
         } finally {
           setLoading(false);
         }
@@ -256,14 +204,14 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
       title={
         <Space>
           <SettingOutlined />
-          {language === 'ko' ? '설비 상태 변경' : 'Thay đổi trạng thái thiết bị'}
+          {t('statusChange.title')}
         </Space>
       }
       open={visible}
       onCancel={handleCancel}
       footer={[
         <Button key="cancel" onClick={handleCancel}>
-          {language === 'ko' ? '취소' : 'Hủy'}
+          {t('statusChange.cancel')}
         </Button>,
         <Button 
           key="submit" 
@@ -272,7 +220,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
           onClick={handleStatusChange}
           disabled={!selectedState}
         >
-          {language === 'ko' ? '상태 변경' : 'Thay đổi'}
+          {t('statusChange.change')}
         </Button>
       ]}
       width={600}
@@ -282,19 +230,19 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
           {/* 설비 정보 */}
           <div>
             <Title level={4} style={{ margin: 0, marginBottom: 8 }}>
-              {machine.name}
+              {machine?.name || t('statusChange.noMachineInfo')}
             </Title>
             <Space>
-              <Text type="secondary">{machine.location}</Text>
+              <Text type="secondary">{machine?.location || t('statusChange.noLocationInfo')}</Text>
               <Divider type="vertical" />
-              <Text type="secondary">{machine.model_type}</Text>
+              <Text type="secondary">{machine?.model_type || t('statusChange.noModelInfo')}</Text>
             </Space>
           </div>
 
           {/* 현재 상태 */}
           <div>
             <Text strong style={{ display: 'block', marginBottom: 8 }}>
-              {language === 'ko' ? '현재 상태' : 'Trạng thái hiện tại'}
+              {t('statusChange.currentState')}
             </Text>
             {currentStateConfig ? (
               <Space direction="vertical" size="small">
@@ -303,10 +251,10 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
                   icon={currentStateConfig.icon}
                   style={{ padding: '4px 12px', fontSize: '14px' }}
                 >
-                  {currentStateConfig.text[language]}
+                  {currentStateConfig.text}
                 </Tag>
                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                  {currentStateConfig.description[language]}
+                  {currentStateConfig.description}
                 </Text>
                 {getCurrentStateDuration() && (
                   <Space size="small">
@@ -319,7 +267,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
               </Space>
             ) : (
               <Text type="secondary">
-                {language === 'ko' ? '상태 정보 없음' : 'Không có thông tin trạng thái'}
+                {t('statusChange.noStateInfo')}
               </Text>
             )}
           </div>
@@ -327,38 +275,32 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
           {/* 새로운 상태 선택 */}
           <div>
             <Text strong style={{ display: 'block', marginBottom: 8 }}>
-              {language === 'ko' ? '변경할 상태 선택' : 'Chọn trạng thái mới'}
+              {t('statusChange.changeState')}
             </Text>
             <Select
-              placeholder={
-                language === 'ko' 
-                  ? '새로운 상태를 선택하세요' 
-                  : 'Chọn trạng thái mới'
-              }
+              placeholder={t('statusChange.selectPlaceholder')}
               value={selectedState}
               onChange={setSelectedState}
               style={{ width: '100%' }}
               size="large"
             >
-              {Object.entries(getStateConfig('NORMAL_OPERATION')).map(() => 
-                ['NORMAL_OPERATION', 'INSPECTION', 'BREAKDOWN_REPAIR', 'PM_MAINTENANCE', 'MODEL_CHANGE', 'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP'].map(state => {
-                  const config = getStateConfig(state as MachineState, language);
-                  return (
-                    <Option key={state} value={state}>
-                      <Space>
-                        {config.icon}
-                        <span>{config.text[language]}</span>
-                      </Space>
-                    </Option>
-                  );
-                })
-              )}
+              {['NORMAL_OPERATION', 'MAINTENANCE', 'PM_MAINTENANCE', 'MODEL_CHANGE', 'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP'].map(state => {
+                const config = getStateConfig(state as MachineState, t);
+                return (
+                  <Option key={state} value={state}>
+                    <Space>
+                      {config.icon}
+                      <span>{config.text}</span>
+                    </Space>
+                  </Option>
+                );
+              })}
             </Select>
             
             {selectedState && (
               <div style={{ marginTop: 8 }}>
                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                  {getStateConfig(selectedState, language).description[language]}
+                  {getStateConfig(selectedState, t).description}
                 </Text>
               </div>
             )}
@@ -366,16 +308,8 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
 
           {/* 주의사항 */}
           <Alert
-            message={
-              language === 'ko' 
-                ? '상태 변경 시 주의사항' 
-                : 'Lưu ý khi thay đổi trạng thái'
-            }
-            description={
-              language === 'ko' 
-                ? '• 현재 진행 중인 상태가 자동으로 종료됩니다\n• 새로운 상태의 시작 시간이 기록됩니다\n• 변경 후에는 되돌릴 수 없습니다' 
-                : '• Trạng thái hiện tại sẽ tự động kết thúc\n• Thời gian bắt đầu trạng thái mới sẽ được ghi lại\n• Không thể hoàn tác sau khi thay đổi'
-            }
+            message={t('statusChange.notes')}
+            description={`• ${t('statusChange.note1')}\n• ${t('statusChange.note2')}\n• ${t('statusChange.note3')}`}
             type="warning"
             showIcon
             style={{ whiteSpace: 'pre-line' }}

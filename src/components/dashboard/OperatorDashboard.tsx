@@ -17,96 +17,10 @@ import { Machine, OEEMetrics, MachineLog, MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTranslation } from '@/hooks/useTranslation';
+import { useMachinesTranslation, useDashboardTranslation, useMultipleTranslation } from '@/hooks/useTranslation';
 
 // Removed deprecated TabPane import
 
-// 모의 데이터 생성 함수들
-const generateMockAssignedMachines = (): Array<Machine & { oee: number; currentDuration: number }> => [
-  { 
-    id: '1', 
-    name: 'CNC-001', 
-    location: 'A동 1층', 
-    model_type: 'DMG MORI', 
-    default_tact_time: 120, 
-    is_active: true, 
-    current_state: 'NORMAL_OPERATION', 
-    created_at: '2024-01-01', 
-    updated_at: '2024-01-01', 
-    oee: 0.85,
-    currentDuration: 145 // 분
-  },
-  { 
-    id: '2', 
-    name: 'CNC-002', 
-    location: 'A동 1층', 
-    model_type: 'MAZAK', 
-    default_tact_time: 90, 
-    is_active: true, 
-    current_state: 'TOOL_CHANGE', 
-    created_at: '2024-01-01', 
-    updated_at: '2024-01-01', 
-    oee: 0.72,
-    currentDuration: 25
-  },
-  { 
-    id: '3', 
-    name: 'CNC-003', 
-    location: 'A동 2층', 
-    model_type: 'HAAS', 
-    default_tact_time: 150, 
-    is_active: true, 
-    current_state: 'NORMAL_OPERATION', 
-    created_at: '2024-01-01', 
-    updated_at: '2024-01-01', 
-    oee: 0.91,
-    currentDuration: 320
-  },
-];
-
-const generateMockRecentLogs = (): Array<MachineLog & { machineName: string }> => [
-  {
-    log_id: '1',
-    machine_id: '1',
-    state: 'NORMAL_OPERATION',
-    start_time: new Date(Date.now() - 145 * 60 * 1000).toISOString(),
-    operator_id: 'user1',
-    created_at: new Date().toISOString(),
-    machineName: 'CNC-001'
-  },
-  {
-    log_id: '2',
-    machine_id: '2',
-    state: 'TOOL_CHANGE',
-    start_time: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-    operator_id: 'user1',
-    created_at: new Date().toISOString(),
-    machineName: 'CNC-002'
-  },
-  {
-    log_id: '3',
-    machine_id: '1',
-    state: 'TEMPORARY_STOP',
-    start_time: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
-    end_time: new Date(Date.now() - 145 * 60 * 1000).toISOString(),
-    duration: 35,
-    operator_id: 'user1',
-    created_at: new Date().toISOString(),
-    machineName: 'CNC-001'
-  },
-];
-
-const generateMockOEEMetrics = (): OEEMetrics => ({
-  availability: 0.85,
-  performance: 0.89,
-  quality: 0.94,
-  oee: 0.71,
-  actual_runtime: 450,
-  planned_runtime: 480,
-  ideal_runtime: 400,
-  output_qty: 1000,
-  defect_qty: 25
-});
 
 const getStateIcon = (state: MachineState) => {
   switch (state) {
@@ -122,23 +36,27 @@ const getStateIcon = (state: MachineState) => {
   }
 };
 
-const getStateText = (state: MachineState, t: any) => {
+const getStateText = (state: MachineState, machinesT: any) => {
   const stateMap = {
-    'NORMAL_OPERATION': t('dashboard:status.normal'),
-    'MAINTENANCE': t('dashboard:status.maintenance'),
-    'MODEL_CHANGE': t('dashboard:status.modelChange'),
-    'PLANNED_STOP': t('dashboard:status.plannedStop'),
-    'PROGRAM_CHANGE': t('dashboard:status.programChange'),
-    'TOOL_CHANGE': t('dashboard:status.toolChange'),
-    'TEMPORARY_STOP': t('dashboard:status.temporaryStop')
+    'NORMAL_OPERATION': machinesT('states.NORMAL_OPERATION'),
+    'MAINTENANCE': machinesT('states.MAINTENANCE'),
+    'PM_MAINTENANCE': machinesT('states.PM_MAINTENANCE'),
+    'MODEL_CHANGE': machinesT('states.MODEL_CHANGE'),
+    'PLANNED_STOP': machinesT('states.PLANNED_STOP'),
+    'PROGRAM_CHANGE': machinesT('states.PROGRAM_CHANGE'),
+    'TOOL_CHANGE': machinesT('states.TOOL_CHANGE'),
+    'TEMPORARY_STOP': machinesT('states.TEMPORARY_STOP')
   };
   return stateMap[state] || state;
 };
 
-const formatDuration = (minutes: number): string => {
+const formatDuration = (minutes: number, machinesT: any): string => {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  return hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
+  if (hours > 0) {
+    return `${hours}${machinesT('units.hours') || '시간'} ${mins}${machinesT('units.minutes') || '분'}`;
+  }
+  return `${mins}${machinesT('units.minutes') || '분'}`;
 };
 
 interface OperatorDashboardProps {
@@ -148,7 +66,8 @@ interface OperatorDashboardProps {
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
   const isClient = useClientOnly();
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t: machinesT } = useMachinesTranslation();
+  const { t: dashboardT } = useDashboardTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
   const [showProductionInput, setShowProductionInput] = useState(false);
@@ -164,11 +83,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     isConnected 
   } = useRealtimeData(user?.id, user?.role);
 
-  // 폴백 데이터
-  const [fallbackData] = useState({
-    assignedMachines: generateMockAssignedMachines(),
-    recentLogs: generateMockRecentLogs()
-  });
 
   // 에러 핸들링
   useEffect(() => {
@@ -180,36 +94,40 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   // 데이터 처리
   const processedData = React.useMemo(() => {
     try {
-      if (machines.length === 0) {
-        return fallbackData;
+      // 운영자의 담당 설비 필터링 (user.assigned_machines 사용)
+      const assignedMachineIds = user?.assigned_machines || [];
+      
+      if (assignedMachineIds.length === 0 || machines.length === 0) {
+        return {
+          assignedMachines: [],
+          recentLogs: []
+        };
       }
 
-    // 운영자의 담당 설비 필터링 (실제로는 user.assigned_machines 사용)
-    const assignedMachineIds = user?.assigned_machines || machines.slice(0, 3).map(m => m.id);
-    const assignedMachines = machines
-      .filter(machine => assignedMachineIds.includes(machine.id))
-      .map(machine => {
-        const logs = machineLogs.filter(log => log.machine_id === machine.id);
-        const currentLog = logs.find(log => !log.end_time);
-        const currentDuration = currentLog 
-          ? Math.floor((Date.now() - new Date(currentLog.start_time).getTime()) / (1000 * 60))
-          : 0;
+      const assignedMachines = machines
+        .filter(machine => assignedMachineIds.includes(machine.id))
+        .map(machine => {
+          const logs = machineLogs.filter(log => log.machine_id === machine.id);
+          const currentLog = logs.find(log => !log.end_time);
+          const currentDuration = currentLog 
+            ? Math.floor((Date.now() - new Date(currentLog.start_time).getTime()) / (1000 * 60))
+            : 0;
 
-        return {
-          ...machine,
-          oee: oeeMetrics[machine.id]?.oee || 0,
-          currentDuration
-        };
-      });
+          return {
+            ...machine,
+            oee: oeeMetrics[machine.id]?.oee || 0,
+            currentDuration
+          };
+        });
 
-    // 최근 로그 (담당 설비만)
-    const recentLogs = machineLogs
-      .filter(log => assignedMachineIds.includes(log.machine_id))
-      .slice(0, 10)
-      .map(log => ({
-        ...log,
-        machineName: machines.find(m => m.id === log.machine_id)?.name || 'Unknown'
-      }));
+      // 최근 로그 (담당 설비만)
+      const recentLogs = machineLogs
+        .filter(log => assignedMachineIds.includes(log.machine_id))
+        .slice(0, 10)
+        .map(log => ({
+          ...log,
+          machineName: machines.find(m => m.id === log.machine_id)?.name || 'Unknown'
+        }));
 
       return {
         assignedMachines,
@@ -220,21 +138,46 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       if (onError) {
         onError(error as Error);
       }
-      return fallbackData;
+      return {
+        assignedMachines: [],
+        recentLogs: []
+      };
     }
-  }, [machines, machineLogs, oeeMetrics, user, fallbackData, onError]);
+  }, [machines, machineLogs, oeeMetrics, user, onError]);
 
   // 상태 변경 핸들러
   const handleStatusChange = async (machineId: string, newState: MachineState) => {
     try {
-      // 실제 구현에서는 Supabase에 상태 변경을 저장
-      // 여기서는 간단히 로컬 상태만 업데이트
-      console.log(`설비 ${machineId} 상태를 ${newState}로 변경`);
+      console.log(`설비 ${machineId} 상태를 ${newState}로 변경 중...`);
+      
+      // API 호출하여 설비 상태 변경
+      const response = await fetch(`/api/machines/${machineId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          current_state: newState,
+          change_reason: '운영자 수동 변경'
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || '상태 변경에 실패했습니다');
+      }
+
+      console.log('설비 상태 변경 성공:', result.message);
       setShowStatusInput(false);
       
-      // 실시간 데이터가 자동으로 업데이트됨
-    } catch (error) {
+      // 실시간 데이터 강제 새로고침 (Realtime이 동작하지 않을 경우 대비)
+      refresh();
+      
+    } catch (error: any) {
       console.error('상태 변경 실패:', error);
+      // 에러 메시지를 사용자에게 표시 (message는 antd에서 import 필요)
+      alert(`상태 변경 실패: ${error.message}`);
     }
   };
 
@@ -250,13 +193,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           <div>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 'bold' }}>
               <PlayCircleOutlined style={{ marginRight: 8 }} />
-              {t('dashboard:operatorDashboard.title')}
+              {machinesT('operator.title')}
             </h1>
             <p style={{ margin: '4px 0 0 0', color: '#666' }}>
-              {t('dashboard:operatorDashboard.description')}
+              {machinesT('operator.description')}
               {isConnected && (
                 <span style={{ marginLeft: 8, color: '#52c41a' }}>
-                  <WifiOutlined /> {t('dashboard:adminDashboard.connectedRealtime')}
+                  <WifiOutlined /> {machinesT('status.realtimeConnected')}
                 </span>
               )}
             </p>
@@ -269,7 +212,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             onClick={refresh}
             loading={loading}
           >
-            새로고침
+            {machinesT('status.refresh')}
           </Button>
         </Space>
       </div>
@@ -277,13 +220,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       {/* 교대 종료 알림 */}
       {isShiftEnd && (
         <Alert
-          message="교대 종료 시간입니다"
-          description="생산 실적을 입력해주세요."
+          message={machinesT('operator.shiftEndAlert')}
+          description={machinesT('operator.shiftEndDescription')}
           type="warning"
           showIcon
           action={
             <Button size="small" onClick={() => setShowProductionInput(true)}>
-              실적 입력
+              {machinesT('operator.inputRecord')}
             </Button>
           }
           style={{ marginBottom: 16 }}
@@ -293,9 +236,18 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       <Row gutter={[16, 16]}>
         {/* 담당 설비 현황 */}
         <Col xs={24} lg={16}>
-          <Card title="담당 설비 현황" extra={<Badge count={processedData.assignedMachines.length} />}>
-            <Row gutter={[16, 16]}>
-              {processedData.assignedMachines.map(machine => (
+          <Card title={machinesT('operator.assignedMachines')} extra={<Badge count={processedData.assignedMachines.length} />}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <span>데이터를 불러오는 중...</span>
+              </div>
+            ) : processedData.assignedMachines.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
+                <span>배정된 설비가 없습니다</span>
+              </div>
+            ) : (
+              <Row gutter={[16, 16]}>
+                {processedData.assignedMachines.map(machine => (
                 <Col xs={24} md={12} xl={8} key={machine.id}>
                   <Card 
                     size="small"
@@ -314,12 +266,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                       <div style={{ marginBottom: 12 }}>
                         {getStateIcon(machine.current_state!)}
                         <span style={{ marginLeft: 8 }}>
-                          {getStateText(machine.current_state!, t)}
+                          {getStateText(machine.current_state!, machinesT)}
                         </span>
                       </div>
                       
                       <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-                        지속 시간: {formatDuration(machine.currentDuration)}
+                        {machinesT('labels.duration')}: {formatDuration(machine.currentDuration, machinesT)}
                       </div>
                       
                       <div style={{ fontSize: 14, fontWeight: 'bold' }}>
@@ -333,8 +285,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                     </div>
                   </Card>
                 </Col>
-              ))}
-            </Row>
+                ))}
+              </Row>
+            )}
             
             {/* 상태 변경 버튼 */}
             <div style={{ marginTop: 16, textAlign: 'center' }}>
@@ -344,13 +297,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                   onClick={() => setShowStatusInput(true)}
                   disabled={!selectedMachine}
                 >
-                  상태 변경
+                  {machinesT('operator.changeState')}
                 </Button>
                 <Button 
                   onClick={() => setShowProductionInput(true)}
                   disabled={!selectedMachine}
                 >
-                  생산 실적 입력
+                  {machinesT('operator.inputProduction')}
                 </Button>
               </Space>
             </div>
@@ -364,7 +317,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             items={[
               {
                 key: 'logs',
-                label: '최근 작업',
+                label: machinesT('operator.recentWork'),
                 children: (
                   <Card size="small">
                     <Timeline 
@@ -380,15 +333,17 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                               {log.machineName}
                             </div>
                             <div style={{ color: '#666' }}>
-                              {getStateText(log.state, t)}
+                              {getStateText(log.state, machinesT)}
                             </div>
                             <div style={{ color: '#999' }}>
-                              {new Date(log.start_time).toLocaleString('ko-KR', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
+                              {(() => {
+                                const date = new Date(log.start_time);
+                                const month = date.getMonth() + 1;
+                                const day = date.getDate();
+                                const hour = date.getHours().toString().padStart(2, '0');
+                                const minute = date.getMinutes().toString().padStart(2, '0');
+                                return `${month}${machinesT('units.month') || '월'} ${day}${machinesT('units.day') || '일'} ${hour}:${minute}`;
+                              })()}
                             </div>
                           </div>
                         )
@@ -399,7 +354,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
               },
               {
                 key: 'oee',
-                label: 'OEE 현황',
+                label: machinesT('operator.oeeStatus'),
                 children: (
                   <>
                     {selectedMachine && oeeMetrics[selectedMachine] && (
@@ -412,7 +367,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                     )}
                     {!selectedMachine && (
                       <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
-                        설비를 선택해주세요
+                        {machinesT('operator.selectMachine')}
                       </div>
                     )}
                   </>
@@ -426,23 +381,23 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       {/* 상태 입력 모달 */}
       {showStatusInput && selectedMachine && (
         <MachineStatusInput
-          machineId={selectedMachine}
-          machineName={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name || ''}
-          currentState={processedData.assignedMachines.find(m => m.id === selectedMachine)?.current_state}
+          machine={processedData.assignedMachines.find(m => m.id === selectedMachine) || null}
           visible={showStatusInput}
           onClose={() => setShowStatusInput(false)}
           onStatusChange={handleStatusChange}
+          language={machinesT.i18n?.language as 'ko' | 'vi' || 'ko'}
         />
       )}
 
       {/* 생산 실적 입력 모달 */}
       {showProductionInput && selectedMachine && (
         <ProductionRecordInput
-          machineId={selectedMachine}
-          machineName={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name || ''}
+          machine={processedData.assignedMachines.find(m => m.id === selectedMachine) || null}
+          shift="A"
+          date={new Date().toISOString().split('T')[0]}
           visible={showProductionInput}
           onClose={() => setShowProductionInput(false)}
-          onSubmit={(data) => {
+          onSubmit={async (data) => {
             console.log('생산 실적 입력:', data);
             setShowProductionInput(false);
           }}

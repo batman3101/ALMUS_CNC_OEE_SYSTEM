@@ -11,6 +11,7 @@ interface RealtimeDataState {
   machineLogs: MachineLog[];
   productionRecords: ProductionRecord[];
   oeeMetrics: Record<string, OEEMetrics>;
+  userProfile: any | null;
   loading: boolean;
   error: string | null;
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -23,6 +24,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     machineLogs: [],
     productionRecords: [],
     oeeMetrics: {},
+    userProfile: null,
     loading: true,
     error: null,
     connectionStatus: 'connecting',
@@ -62,6 +64,20 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         connectionStatus: 'connecting'
       }));
       console.info('📊 실제 Supabase 데이터 로드 시작');
+
+      // 사용자 프로필 로드 (운영자의 배정된 설비 확인용)
+      let userProfile = null;
+      if (userId) {
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .single();
+        
+        if (!profileError) {
+          userProfile = profile;
+        }
+      }
 
       // 설비 데이터 로드
       const { data: machines, error: machinesError } = await supabase
@@ -117,6 +133,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         machineLogs: machineLogs || [],
         productionRecords: productionRecords || [],
         oeeMetrics,
+        userProfile,
         loading: false,
         error: null,
         connectionStatus: 'connected',
@@ -350,9 +367,36 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     }
 
     if (userRole === 'operator') {
-      // 운영자는 담당 설비만 접근 (실제로는 user_profiles에서 assigned_machines를 가져와야 함)
-      // 여기서는 간단히 처리
-      return state;
+      // 운영자는 담당 설비만 접근
+      const assignedMachineIds = state.userProfile?.assigned_machines || [];
+      
+      if (assignedMachineIds.length === 0) {
+        return {
+          ...state,
+          machines: [],
+          machineLogs: [],
+          productionRecords: []
+        };
+      }
+
+      const filteredMachines = state.machines.filter(machine => 
+        assignedMachineIds.includes(machine.id)
+      );
+      
+      const filteredLogs = state.machineLogs.filter(log => 
+        assignedMachineIds.includes(log.machine_id)
+      );
+      
+      const filteredRecords = state.productionRecords.filter(record => 
+        assignedMachineIds.includes(record.machine_id)
+      );
+
+      return {
+        ...state,
+        machines: filteredMachines,
+        machineLogs: filteredLogs,
+        productionRecords: filteredRecords
+      };
     }
 
     return state;

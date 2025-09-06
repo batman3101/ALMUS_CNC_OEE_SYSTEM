@@ -243,6 +243,39 @@ export async function PATCH(
       const currentTime = new Date();
       const durationMinutes = Math.floor((currentTime.getTime() - previousUpdatedAt.getTime()) / (1000 * 60));
 
+      // 이전 상태 종료를 위한 machine_logs 업데이트
+      const { error: logUpdateError } = await supabaseAdmin
+        .from('machine_logs')
+        .update({
+          end_time: currentTime.toISOString(),
+          duration: durationMinutes
+        })
+        .eq('machine_id', params.machineId)
+        .eq('state', existingMachine.current_state)
+        .is('end_time', null);
+
+      if (logUpdateError) {
+        console.error('Failed to update machine_logs:', logUpdateError);
+      }
+
+      // 새로운 상태 시작을 위한 machine_logs 삽입
+      const { error: logInsertError } = await supabaseAdmin
+        .from('machine_logs')
+        .insert({
+          machine_id: params.machineId,
+          state: current_state,
+          start_time: currentTime.toISOString(),
+          end_time: null,
+          duration: null,
+          created_at: currentTime.toISOString()
+        });
+
+      if (logInsertError) {
+        console.error('Failed to insert machine_logs:', logInsertError);
+      } else {
+        console.log(`Machine log inserted: ${current_state} started at ${currentTime.toISOString()}`);
+      }
+
       // 상태 변경 이력 저장
       const { error: historyError } = await supabaseAdmin
         .from('machine_status_history')
