@@ -75,7 +75,9 @@ interface QualityAnalysisResponse {
 
 export const useEngineerData = (
   selectedPeriod: 'week' | 'month' | 'quarter' = 'month',
-  machineId?: string
+  machineId?: string,
+  customDateRange?: [string, string] | null,
+  selectedShifts?: string[]
 ) => {
   const [oeeData, setOeeData] = useState<OEETrendData[]>([]);
   const [downtimeData, setDowntimeData] = useState<DowntimeData[]>([]);
@@ -83,8 +85,17 @@ export const useEngineerData = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 기간별 날짜 계산
+  // 기간별 날짜 계산 (커스텀 날짜 범위 우선 사용)
   const getDateRange = useCallback((period: 'week' | 'month' | 'quarter') => {
+    // 커스텀 날짜 범위가 있으면 우선 사용
+    if (customDateRange) {
+      return {
+        start_date: customDateRange[0],
+        end_date: customDateRange[1]
+      };
+    }
+
+    // 기본 기간별 계산
     const endDate = new Date();
     const startDate = new Date();
 
@@ -104,7 +115,7 @@ export const useEngineerData = (
       start_date: startDate.toISOString().split('T')[0],
       end_date: endDate.toISOString().split('T')[0]
     };
-  }, []);
+  }, [customDateRange]);
 
   // OEE 추이 데이터 API 호출
   const fetchOEETrendData = useCallback(async (period: 'week' | 'month' | 'quarter') => {
@@ -114,7 +125,10 @@ export const useEngineerData = (
         analysis_type: 'summary',
         start_date,
         end_date,
-        ...(machineId && { machine_id: machineId })
+        ...(machineId && { machine_id: machineId }),
+        ...(selectedShifts && selectedShifts.length > 0 && !selectedShifts.includes('all') && { 
+          shift: selectedShifts.join(',') 
+        })
       });
 
       const response = await fetch(`/api/productivity-analysis?${params}`);
@@ -139,7 +153,7 @@ export const useEngineerData = (
       console.error('Error fetching OEE trend data:', error);
       setError(error instanceof Error ? error.message : 'Unknown error');
     }
-  }, [getDateRange, machineId]);
+  }, [getDateRange, machineId, selectedShifts]);
 
   // 다운타임 분석 데이터 API 호출
   const fetchDowntimeData = useCallback(async (period: 'week' | 'month' | 'quarter') => {
@@ -149,7 +163,10 @@ export const useEngineerData = (
         analysis_type: 'summary',
         start_date,
         end_date,
-        ...(machineId && { machine_id: machineId })
+        ...(machineId && { machine_id: machineId }),
+        ...(selectedShifts && selectedShifts.length > 0 && !selectedShifts.includes('all') && { 
+          shift: selectedShifts.join(',') 
+        })
       });
 
       const response = await fetch(`/api/downtime-analysis?${params}`);
@@ -172,7 +189,7 @@ export const useEngineerData = (
       console.error('Error fetching downtime data:', error);
       setError(error instanceof Error ? error.message : 'Unknown error');
     }
-  }, [getDateRange, machineId]);
+  }, [getDateRange, machineId, selectedShifts]);
 
   // 생산성 데이터 API 호출
   const fetchProductionData = useCallback(async (period: 'week' | 'month' | 'quarter') => {
@@ -182,7 +199,10 @@ export const useEngineerData = (
         analysis_type: 'summary',
         start_date,
         end_date,
-        ...(machineId && { machine_id: machineId })
+        ...(machineId && { machine_id: machineId }),
+        ...(selectedShifts && selectedShifts.length > 0 && !selectedShifts.includes('all') && { 
+          shift: selectedShifts.join(',') 
+        })
       });
 
       const response = await fetch(`/api/quality-analysis?${params}`);
@@ -206,11 +226,13 @@ export const useEngineerData = (
       console.error('Error fetching production data:', error);
       setError(error instanceof Error ? error.message : 'Unknown error');
     }
-  }, [getDateRange, machineId]);
+  }, [getDateRange, machineId, selectedShifts]);
 
   // 모든 데이터 새로고침
   const refreshData = useCallback(async () => {
-    console.log(`🔄 엔지니어 데이터 새로고침 시작 - 기간: ${selectedPeriod}, 설비: ${machineId || 'all'}`);
+    const dateRangeInfo = customDateRange ? `커스텀: ${customDateRange[0]} ~ ${customDateRange[1]}` : `기간: ${selectedPeriod}`;
+    const shiftInfo = selectedShifts && !selectedShifts.includes('all') ? selectedShifts.join(',') : 'all';
+    console.log(`🔄 엔지니어 데이터 새로고침 시작 - ${dateRangeInfo}, 설비: ${machineId || 'all'}, 교대: ${shiftInfo}`);
     setLoading(true);
     setError(null);
 
@@ -227,9 +249,9 @@ export const useEngineerData = (
     } finally {
       setLoading(false);
     }
-  }, [selectedPeriod, machineId, fetchOEETrendData, fetchDowntimeData, fetchProductionData]);
+  }, [selectedPeriod, machineId, customDateRange, selectedShifts, fetchOEETrendData, fetchDowntimeData, fetchProductionData]);
 
-  // 기간 변경시 데이터 재조회
+  // 기간이나 커스텀 날짜 범위 변경시 데이터 재조회
   useEffect(() => {
     refreshData();
   }, [refreshData]);

@@ -26,7 +26,12 @@ interface ProductivityAnalysisResponse {
   };
 }
 
-export const useOEEChartData = (initialPeriod: 'daily' | 'weekly' | 'monthly' = 'daily') => {
+export const useOEEChartData = (
+  initialPeriod: 'daily' | 'weekly' | 'monthly' = 'daily', 
+  externalCustomDateRange?: [string, string] | null,
+  machineId?: string,
+  selectedShifts?: string[]
+) => {
   const [chartData, setChartData] = useState<OEEChartData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,14 +70,20 @@ export const useOEEChartData = (initialPeriod: 'daily' | 'weekly' | 'monthly' = 
       setLoading(true);
       setError(null);
 
-      const { start_date, end_date } = customDateRange 
-        ? { start_date: customDateRange[0], end_date: customDateRange[1] }
+      // 외부에서 전달된 커스텀 날짜 범위를 우선 사용
+      const effectiveCustomRange = externalCustomDateRange || customDateRange;
+      const { start_date, end_date } = effectiveCustomRange 
+        ? { start_date: effectiveCustomRange[0], end_date: effectiveCustomRange[1] }
         : getDateRangeForPeriod(periodType);
 
       const params = new URLSearchParams({
         analysis_type: 'summary',
         start_date,
         end_date,
+        ...(machineId && { machine_id: machineId }),
+        ...(selectedShifts && selectedShifts.length > 0 && !selectedShifts.includes('all') && { 
+          shift: selectedShifts.join(',') 
+        })
       });
 
       console.log('🔍 OEE 차트 데이터 API 호출:', { 
@@ -99,7 +110,8 @@ export const useOEEChartData = (initialPeriod: 'daily' | 'weekly' | 'monthly' = 
 
       console.log('📊 OEE 차트 데이터 처리 완료:', { 
         dataLength: trendData.length, 
-        sampleData: trendData.slice(0, 3) 
+        sampleData: trendData.slice(0, 3),
+        externalCustomRange: externalCustomDateRange
       });
 
       setChartData(trendData);
@@ -110,7 +122,7 @@ export const useOEEChartData = (initialPeriod: 'daily' | 'weekly' | 'monthly' = 
     } finally {
       setLoading(false);
     }
-  }, [getDateRangeForPeriod]);
+  }, [getDateRangeForPeriod, externalCustomDateRange, machineId, selectedShifts]);
 
   // 기간 변경 핸들러
   const handlePeriodChange = useCallback((newPeriod: 'daily' | 'weekly' | 'monthly') => {
@@ -118,19 +130,26 @@ export const useOEEChartData = (initialPeriod: 'daily' | 'weekly' | 'monthly' = 
     setPeriod(newPeriod);
     setDateRange(null); // 사용자 정의 날짜 범위 초기화
     fetchChartData(newPeriod, null);
-  }, [fetchChartData, period]);
+  }, [fetchChartData, period, machineId, selectedShifts]);
 
   // 날짜 범위 변경 핸들러
   const handleDateRangeChange = useCallback((dates: [string, string] | null) => {
     console.log('📅 차트 날짜 범위 변경:', dates);
     setDateRange(dates);
     fetchChartData(period, dates);
-  }, [fetchChartData, period]);
+  }, [fetchChartData, period, machineId, selectedShifts]);
 
   // 초기 데이터 로드
   useEffect(() => {
     fetchChartData(period, dateRange);
   }, []); // 의존성 배열을 비워서 초기화 시에만 호출
+
+  // 외부 커스텀 날짜 범위 변경 감지
+  useEffect(() => {
+    if (externalCustomDateRange) {
+      fetchChartData(period, null); // 외부 범위는 fetchChartData에서 처리
+    }
+  }, [externalCustomDateRange, period, fetchChartData]);
 
   return {
     chartData,

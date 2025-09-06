@@ -33,13 +33,28 @@ const { RangePicker } = DatePicker;
 interface IndependentOEETrendChartProps {
   title?: string;
   height?: number;
+  externalPeriod?: 'week' | 'month' | 'quarter'; // 외부에서 전달받는 기간
+  onPeriodChange?: (period: 'week' | 'month' | 'quarter') => void; // 기간 변경 콜백
+  customDateRange?: [string, string] | null; // 커스텀 날짜 범위
+  machineId?: string; // 설비 필터
+  selectedShifts?: string[]; // 교대 필터
 }
 
 export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> = ({
   title = 'OEE 추이 분석',
   height = 400,
+  externalPeriod,
+  onPeriodChange,
+  customDateRange,
+  machineId,
+  selectedShifts
 }) => {
   const { t } = useDashboardTranslation();
+  
+  // 외부 기간이 제공되면 그것을 사용하고, 그렇지 않으면 내부 상태 사용
+  const initialPeriod = externalPeriod ? 
+    (externalPeriod === 'week' ? 'daily' : 
+     externalPeriod === 'month' ? 'weekly' : 'monthly') : 'daily';
   
   const {
     chartData,
@@ -47,9 +62,33 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
     error,
     period,
     dateRange,
-    handlePeriodChange,
+    handlePeriodChange: internalHandlePeriodChange,
     handleDateRangeChange
-  } = useOEEChartData('daily');
+  } = useOEEChartData(initialPeriod, customDateRange, machineId, selectedShifts);
+  
+  // 기간 변경 핸들러 - 외부 콜백이 있으면 사용
+  const handlePeriodChangeWrapper = React.useCallback((newPeriod: 'daily' | 'weekly' | 'monthly') => {
+    if (onPeriodChange) {
+      // 외부에서 기간을 관리하는 경우, 내부 형식을 외부 형식으로 변환
+      const externalPeriodValue = newPeriod === 'daily' ? 'week' : 
+                                  newPeriod === 'weekly' ? 'month' : 'quarter';
+      onPeriodChange(externalPeriodValue);
+    } else {
+      // 내부에서 기간을 관리하는 경우
+      internalHandlePeriodChange(newPeriod);
+    }
+  }, [onPeriodChange, internalHandlePeriodChange]);
+  
+  // 외부 기간 변경에 따른 내부 차트 데이터 업데이트
+  React.useEffect(() => {
+    if (externalPeriod) {
+      const internalPeriodValue = externalPeriod === 'week' ? 'daily' : 
+                                  externalPeriod === 'month' ? 'weekly' : 'monthly';
+      if (period !== internalPeriodValue) {
+        internalHandlePeriodChange(internalPeriodValue);
+      }
+    }
+  }, [externalPeriod, period, internalHandlePeriodChange]);
 
   // 차트 데이터 구성
   const chartDataConfig = {
@@ -182,40 +221,11 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
 
   return (
     <Card>
-      {/* 제목 및 컨트롤 */}
+      {/* 제목 */}
       <div style={{ marginBottom: 16 }}>
-        <Row justify="space-between" align="middle">
-          <Col>
-            <AntTitle level={4} style={{ margin: 0 }}>
-              {title} {loading && <Spin size="small" style={{ marginLeft: 8 }} />}
-            </AntTitle>
-          </Col>
-          
-          <Col>
-            <Row gutter={16} align="middle">
-              <Col>
-                <Select
-                  value={period}
-                  options={periodOptions}
-                  onChange={handlePeriodChange}
-                  style={{ width: 120 }}
-                  loading={loading}
-                />
-              </Col>
-              <Col>
-                <RangePicker
-                  value={dateRange ? [dateRange[0], dateRange[1]] as any : null}
-                  onChange={(dates, dateStrings) => {
-                    handleDateRangeChange(dates ? [dateStrings[0], dateStrings[1]] : null);
-                  }}
-                  format="YYYY-MM-DD"
-                  placeholder={['시작일', '종료일']}
-                  disabled={loading}
-                />
-              </Col>
-            </Row>
-          </Col>
-        </Row>
+        <AntTitle level={4} style={{ margin: 0 }}>
+          {title} {loading && <Spin size="small" style={{ marginLeft: 8 }} />}
+        </AntTitle>
       </div>
 
       {/* 차트 */}
