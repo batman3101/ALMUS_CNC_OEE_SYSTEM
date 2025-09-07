@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Card, Typography, Row, Col, Space } from 'antd';
+import { Card, Typography } from 'antd';
 import { SettingOutlined, BarChartOutlined, DashboardOutlined } from '@ant-design/icons';
 import { LoginFormInline } from '@/components/auth/LoginFormInline';
 import { useRouter } from 'next/navigation';

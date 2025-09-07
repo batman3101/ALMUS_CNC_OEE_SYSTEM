@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createMachineTemplate } from '@/lib/excel/machineTemplate';
 
 // GET /api/admin/machines/template - Excel 템플릿 다운로드
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Excel 템플릿 생성
     const excelBuffer = createMachineTemplate();

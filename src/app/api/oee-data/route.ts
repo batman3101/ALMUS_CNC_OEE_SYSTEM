@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/oee-data - OEE 데이터 조회
 export async function GET(request: NextRequest) {
   try {
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Mock API 형식에 맞게 데이터 변환
-    let oeeData = (productionData || []).map(record => ({
+    const oeeData = (productionData || []).map(record => ({
       id: record.record_id,
       machine_id: record.machine_id,
       machine_name: record.machines?.name || 'Unknown',

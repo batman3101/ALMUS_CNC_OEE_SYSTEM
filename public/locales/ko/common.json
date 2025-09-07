@@ -51,7 +51,8 @@
     "minutes": "분",
     "seconds": "초",
     "startDate": "시작일",
-    "endDate": "종료일"
+    "endDate": "종료일",
+    "actions": "작업"
   },
   "auth": {
     "login": "로그인",
@@ -241,6 +242,7 @@
       "enableBrowser": "브라우저 알림 활성화",
       "enableEmail": "이메일 알림 활성화",
       "enableSound": "소리 알림 활성화",
+      "soundNotifications": "사운드 알림",
       "permission": "권한 상태",
       "granted": "허용됨",
       "denied": "거부됨",

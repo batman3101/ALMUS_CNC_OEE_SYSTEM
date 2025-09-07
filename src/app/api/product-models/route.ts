@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 
 // GET /api/product-models - 활성화된 제품 모델 목록 조회
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = createServerClient();
     

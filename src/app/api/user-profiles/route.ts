@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // GET /api/user-profiles - 모든 사용자 프로필 조회
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     console.log('GET /api/user-profiles called');
 
@@ -25,13 +25,13 @@ export async function GET(request: NextRequest) {
       count: profiles?.length || 0
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in GET /api/user-profiles:', error);
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to fetch user profiles',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unknown error',
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }

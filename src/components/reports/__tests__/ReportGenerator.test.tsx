@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ReportGenerator } from '../ReportGenerator';
 import { Machine, OEEMetrics, ProductionRecord } from '@/types';
+import { ReportTemplates } from '../ReportTemplates';
 
 // Mock the ReportTemplates
 jest.mock('../ReportTemplates', () => ({
@@ -82,7 +83,6 @@ describe('ReportGenerator', () => {
   });
 
   it('handles PDF quick export', async () => {
-    const { ReportTemplates } = require('../ReportTemplates');
     
     render(
       <ReportGenerator
@@ -107,7 +107,6 @@ describe('ReportGenerator', () => {
   });
 
   it('handles Excel quick export', async () => {
-    const { ReportTemplates } = require('../ReportTemplates');
     
     render(
       <ReportGenerator

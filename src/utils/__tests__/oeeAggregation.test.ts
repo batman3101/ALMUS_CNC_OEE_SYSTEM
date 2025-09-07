@@ -1,4 +1,5 @@
 import { OEEAggregationService, summarizeAggregationResults } from '../oeeAggregation';
+import { supabase } from '@/lib/supabase';
 
 // Mock Supabase
 jest.mock('@/lib/supabase', () => ({
@@ -41,8 +42,7 @@ describe('OEEAggregationService', () => {
         results: []
       };
 
-      const { supabase } = require('@/lib/supabase');
-      supabase.functions.invoke.mockResolvedValue({
+      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
         data: mockResult,
         error: null
       });
@@ -63,8 +63,7 @@ describe('OEEAggregationService', () => {
         results: []
       };
 
-      const { supabase } = require('@/lib/supabase');
-      supabase.functions.invoke.mockResolvedValue({
+      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
         data: mockResult,
         error: null
       });
@@ -75,8 +74,7 @@ describe('OEEAggregationService', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      const { supabase } = require('@/lib/supabase');
-      supabase.functions.invoke.mockResolvedValue({
+      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
         data: null,
         error: { message: 'Function error' }
       });

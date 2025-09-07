@@ -1,5 +1,6 @@
 import { ReportTemplates } from '../ReportTemplates';
 import { OEEMetrics, Machine, ProductionRecord } from '@/types';
+import * as XLSX from 'xlsx';
 
 // Mock jsPDF and xlsx
 jest.mock('jspdf', () => {
@@ -156,7 +157,6 @@ describe('ReportTemplates', () => {
     });
 
     it('should create multiple sheets for different data types', async () => {
-      const XLSX = require('xlsx');
       
       await ReportTemplates.generateExcelReport(mockReportData);
 

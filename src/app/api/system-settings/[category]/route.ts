@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // GET /api/system-settings/[category] - 특정 카테고리 설정 조회
 export async function GET(

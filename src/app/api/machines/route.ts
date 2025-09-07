@@ -1,6 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+// 입력값 검증 및 보안 함수들
+const VALID_LOCATIONS = ['라인1', '라인2', '라인3', '라인4', 'A동', 'B동', 'C동', '조립라인', '검사라인', '포장라인'];
+const VALID_STATES = ['NORMAL_OPERATION', 'MAINTENANCE', 'ERROR', 'IDLE', 'SETUP'];
+const MAX_STRING_LENGTH = 100;
+
+function validateStringInput(input: string | null, fieldName: string): string | null {
+  if (!input) return null;
+  
+  // 길이 제한 검사
+  if (input.length > MAX_STRING_LENGTH) {
+    throw new Error(`${fieldName}는 ${MAX_STRING_LENGTH}자를 초과할 수 없습니다.`);
+  }
+  
+  // 특수문자 필터링 (한글, 영문, 숫자, 일부 특수문자만 허용)
+  const allowedPattern = /^[가-힣a-zA-Z0-9\s\-_]+$/;
+  if (!allowedPattern.test(input.trim())) {
+    throw new Error(`${fieldName}에 허용되지 않는 문자가 포함되어 있습니다.`);
+  }
+  
+  return input.trim();
+}
+
+function validateLocation(location: string | null): string | null {
+  if (!location) return null;
+  
+  const validatedLocation = validateStringInput(location, '위치');
+  if (!validatedLocation) return null;
+  
+  // 화이트리스트 검증
+  if (!VALID_LOCATIONS.includes(validatedLocation)) {
+    throw new Error(`유효하지 않은 위치입니다. 허용된 위치: ${VALID_LOCATIONS.join(', ')}`);
+  }
+  
+  return validatedLocation;
+}
+
+function validateCurrentState(state: string | null): string | null {
+  if (!state) return null;
+  
+  if (!VALID_STATES.includes(state)) {
+    throw new Error(`유효하지 않은 상태입니다. 허용된 상태: ${VALID_STATES.join(', ')}`);
+  }
+  
+  return state;
+}
+
 // GET /api/machines - 모든 설비 목록 조회 (인증된 사용자용)
 export async function GET(request: NextRequest) {
   try {
@@ -8,10 +54,31 @@ export async function GET(request: NextRequest) {
     
     const { searchParams } = new URL(request.url);
     const isActive = searchParams.get('is_active');
-    const location = searchParams.get('location');
-    const currentState = searchParams.get('current_state');
+    const locationParam = searchParams.get('location');
+    const currentStateParam = searchParams.get('current_state');
 
-    console.log('Query params:', { isActive, location, currentState });
+    console.log('Raw query params:', { isActive, location: locationParam, currentState: currentStateParam });
+
+    // 입력값 검증
+    let validatedLocation: string | null = null;
+    let validatedCurrentState: string | null = null;
+
+    try {
+      validatedLocation = validateLocation(locationParam);
+      validatedCurrentState = validateCurrentState(currentStateParam);
+    } catch (validationError) {
+      console.error('Input validation error:', validationError);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: '입력값 검증 실패',
+          message: validationError instanceof Error ? validationError.message : 'Invalid input'
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log('Validated params:', { isActive, location: validatedLocation, currentState: validatedCurrentState });
 
     let query = supabaseAdmin
       .from('machines')
@@ -45,12 +112,12 @@ export async function GET(request: NextRequest) {
       query = query.eq('is_active', true);
     }
 
-    if (location) {
-      query = query.eq('location', location);
+    if (validatedLocation) {
+      query = query.eq('location', validatedLocation);
     }
 
-    if (currentState) {
-      query = query.eq('current_state', currentState);
+    if (validatedCurrentState) {
+      query = query.eq('current_state', validatedCurrentState);
     }
 
     console.log('Executing query...');
@@ -68,13 +135,13 @@ export async function GET(request: NextRequest) {
       machines: machines || [],
       count: machines?.length || 0
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in GET /api/machines:', error);
     return NextResponse.json(
       { 
         success: false,
         error: 'Failed to fetch machines',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unknown error',
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
@@ -89,17 +156,17 @@ export async function POST(request: NextRequest) {
     
     const body = await request.json();
     const {
-      name,
-      location,
-      equipment_type,
+      name: rawName,
+      location: rawLocation,
+      equipment_type: rawEquipmentType,
       is_active = true,
-      current_state = 'NORMAL_OPERATION',
+      current_state: rawCurrentState = 'NORMAL_OPERATION',
       production_model_id,
       current_process_id
     } = body;
 
     // 필수 필드 검증
-    if (!name || !location) {
+    if (!rawName || !rawLocation) {
       return NextResponse.json(
         { 
           success: false, 
@@ -109,8 +176,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 입력값 검증 및 정제
+    let name: string;
+    let location: string;
+    let equipment_type: string | null = null;
+    let current_state: string;
+
+    try {
+      name = validateStringInput(rawName, '설비명') || '';
+      location = validateLocation(rawLocation) || '';
+      current_state = validateCurrentState(rawCurrentState) || 'NORMAL_OPERATION';
+      
+      if (rawEquipmentType) {
+        equipment_type = validateStringInput(rawEquipmentType, '설비 유형');
+      }
+
+      if (!name || !location) {
+        throw new Error('설비명과 위치는 필수 입력 항목입니다.');
+      }
+    } catch (validationError) {
+      console.error('Input validation error:', validationError);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: '입력값 검증 실패',
+          message: validationError instanceof Error ? validationError.message : 'Invalid input'
+        },
+        { status: 400 }
+      );
+    }
+
     // 설비명 중복 확인
-    const { data: existingMachine, error: checkError } = await supabaseAdmin
+    const { data: existingMachine } = await supabaseAdmin
       .from('machines')
       .select('id, name')
       .eq('name', name)
@@ -132,7 +229,7 @@ export async function POST(request: NextRequest) {
       .insert({
         name,
         location,
-        equipment_type: equipment_type || null,
+        equipment_type,
         is_active,
         current_state,
         production_model_id: production_model_id || null,
@@ -179,13 +276,13 @@ export async function POST(request: NextRequest) {
       machine: newMachine
     }, { status: 201 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in POST /api/machines:', error);
     return NextResponse.json(
       { 
         success: false,
         error: '설비 추가 중 오류가 발생했습니다.',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unknown error',
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
@@ -213,7 +310,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 삭제 전 관련 데이터 확인 (생산 기록, 로그 등)
-    const { data: relatedRecords, error: checkError } = await supabaseAdmin
+    const { data: relatedRecords } = await supabaseAdmin
       .from('production_records')
       .select('machine_id')
       .in('machine_id', machineIds)
@@ -252,13 +349,13 @@ export async function DELETE(request: NextRequest) {
       machines: deletedMachines
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in DELETE /api/machines:', error);
     return NextResponse.json(
       { 
         success: false,
         error: '설비 삭제 중 오류가 발생했습니다.',
-        message: error.message,
+        message: error instanceof Error ? error.message : 'Unknown error',
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }

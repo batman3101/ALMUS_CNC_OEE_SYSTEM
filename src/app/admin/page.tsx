@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Tabs, Typography } from 'antd';
 import { SettingOutlined, UserOutlined } from '@ant-design/icons';
 import { useAdminTranslation } from '@/hooks/useTranslation';

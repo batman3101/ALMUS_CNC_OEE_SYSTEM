@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+
+export const dynamic = 'force-dynamic';
 
 // GET /api/system-settings - 모든 시스템 설정 조회
 export async function GET(request: NextRequest) {

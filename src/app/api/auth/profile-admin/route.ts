@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getEnvConfig } from '@/lib/env-validation';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     console.log('🔧 [API] Profile Admin Route - GET request started');
@@ -74,12 +76,12 @@ export async function GET(request: NextRequest) {
       profile: profile
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ [API] Unexpected error in profile admin route:', error);
     return NextResponse.json(
       { 
         error: 'Internal server error',
-        details: error.message || 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );

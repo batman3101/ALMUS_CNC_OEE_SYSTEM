@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Button, Card, Space, Typography, message } from 'antd';
 import { PlusOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { Machine } from '@/types';
-import { ProductionRecordInput } from './ProductionRecordInput';
+import ProductionRecordInput from './ProductionRecordInput';
 import { ShiftEndNotification } from './ShiftEndNotification';
 import { useShiftNotification } from '@/hooks/useShiftNotification';
 import { useProductionRecords } from '@/hooks/useProductionRecords';

@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Service Role Key 확인
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,12 +48,12 @@ export async function GET(request: NextRequest) {
       data: data || []
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Unexpected error in service-role route:', error);
     return NextResponse.json(
       { 
         error: 'Internal server error',
-        details: error.message || 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );

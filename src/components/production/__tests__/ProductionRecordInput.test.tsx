@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { ProductionRecordInput } from '../ProductionRecordInput';
+import ProductionRecordInput from '../ProductionRecordInput';
 import { Machine } from '@/types';
 
 // Mock dependencies

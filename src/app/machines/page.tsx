@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Typography, Space, Button, Tooltip, Tag } from 'antd';
 import { ReloadOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { useMachinesTranslation, useCommonTranslation } from '@/hooks/useTranslation';

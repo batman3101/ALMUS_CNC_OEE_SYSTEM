@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+
+export const dynamic = 'force-dynamic';
 
 // GET /api/oee-data/aggregated - 집계된 OEE 데이터 조회
 export async function GET(request: NextRequest) {
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     // 집계 기간에 따른 데이터 생성
     const generateAggregatedData = (period: string) => {
-      let periods = [];
+      const periods: Array<{period: string; label: string}> = [];
       const now = new Date();
       
       switch (period) {
@@ -91,14 +92,14 @@ export async function GET(request: NextRequest) {
     const aggregatedData = generateAggregatedData(period);
 
     // 트렌드 분석
-    const calculateTrend = (data: any[], key: string) => {
+    const calculateTrend = (data: Record<string, unknown>[], key: string) => {
       if (data.length < 2) return 0;
       
       const recent = data.slice(0, Math.ceil(data.length / 2));
       const older = data.slice(Math.ceil(data.length / 2));
       
-      const recentAvg = recent.reduce((sum, item) => sum + item[key], 0) / recent.length;
-      const olderAvg = older.reduce((sum, item) => sum + item[key], 0) / older.length;
+      const recentAvg = recent.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / recent.length;
+      const olderAvg = older.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / older.length;
       
       return ((recentAvg - olderAvg) / olderAvg) * 100;
     };

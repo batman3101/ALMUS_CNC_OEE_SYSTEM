@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/auth/profile - 현재 사용자 프로필 조회
 export async function GET(request: NextRequest) {
   try {

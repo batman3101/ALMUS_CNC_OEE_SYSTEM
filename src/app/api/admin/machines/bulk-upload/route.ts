@@ -11,7 +11,7 @@ interface ValidationError {
   row: number;
   field: string;
   message: string;
-  value: any;
+  value: unknown;
 }
 
 interface BulkUploadResult {
@@ -23,7 +23,7 @@ interface BulkUploadResult {
   total_rows?: number;
   valid_rows?: number;
   error_rows?: number;
-  inserted_machines?: any[];
+  inserted_machines?: Record<string, unknown>[];
   preview_data?: MachineImportData[];
 }
 

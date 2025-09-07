@@ -63,23 +63,40 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
     try {
       setLoading(true);
       
-      const updates = Object.entries(values).map(([key, value]) => ({
-        key,
-        value,
-        reason: `Updated ${key} setting`
-      }));
+      // 데이터 구조 검증
+      if (!values || typeof values !== 'object') {
+        throw new Error('Invalid form values');
+      }
 
-      // Use updateMultipleSettings instead of sequential updates
+      // SettingUpdate 형태로 변환 (category 포함)
+      const updates = Object.entries(values)
+        .filter(([_, value]) => value !== undefined && value !== null) // null/undefined 값 제외
+        .map(([key, value]) => ({
+          category: 'general' as const,
+          setting_key: key,
+          setting_value: value,
+          change_reason: `일반 설정 업데이트: ${key}`
+        }));
+
+      if (updates.length === 0) {
+        showError('저장할 변경사항이 없습니다.');
+        return;
+      }
+
+      console.log('Updating settings:', updates);
+      
+      // updateMultipleSettings 호출
       const success = await updateMultipleSettings(updates);
       if (!success) {
-        throw new Error('Failed to update settings');
+        throw new Error('시스템 설정 업데이트에 실패했습니다. 네트워크 연결이나 권한을 확인해주세요.');
       }
 
       showSuccess(t('settings.saveSuccess'));
       onSettingsChange?.();
     } catch (error) {
-      console.error('Error saving general settings:', error);
-      showError(t('settings.saveError'));
+      console.error('일반 설정 저장 오류:', error);
+      const errorMessage = error instanceof Error ? error.message : t('settings.saveError');
+      showError(errorMessage);
     } finally {
       setLoading(false);
     }

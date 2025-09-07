@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { Providers } from './providers';
 import AppLayout from '@/components/layout/AppLayout';
@@ -7,6 +7,12 @@ import '@/lib/suppressWarnings'; // 경고 억제
 
 const inter = Inter({
   subsets: ["latin"],
+  display: 'swap',
+});
+
+const notoSansKR = Noto_Sans_KR({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
   display: 'swap',
 });
 
@@ -31,13 +37,6 @@ export default function RootLayout({
         <link rel="prefetch" href="/login" />
         <link rel="dns-prefetch" href="https://wmtkkefsorrdlzprhlpr.supabase.co" />
         
-        {/* Google Fonts */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link 
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" 
-          rel="stylesheet" 
-        />
         {/* 테마 깜박임 방지를 위한 초기화 스크립트 */}
         <script
           dangerouslySetInnerHTML={{
@@ -72,7 +71,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${inter.className} ${notoSansKR.className} antialiased`}>
         <Providers>
           <AppLayout>
             {children}

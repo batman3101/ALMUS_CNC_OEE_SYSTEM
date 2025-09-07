@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import { Modal, Form, InputNumber, Button, message, Space, Typography, Divider, theme } from 'antd';
 import { ProductionRecord, Machine } from '@/types';
 import { z } from 'zod';
@@ -8,8 +8,24 @@ import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
 
+// 타입 정의
+interface TranslationFunction {
+  (key: string): string;
+}
+
+// 상수 정의
+const MODAL_CONFIG = {
+  WIDTH: 500,
+  MARGIN_BOTTOM: 16,
+  MARGIN_TOP: 16,
+  MARGIN_LEFT: 8,
+  PADDING: 12,
+  BORDER_RADIUS: 6,
+  FONT_SIZE: 12,
+} as const;
+
 // 생산 실적 입력 데이터 검증 스키마 - 동적으로 생성됨
-const createProductionInputSchema = (t: any) => z.object({
+const createProductionInputSchema = (t: TranslationFunction) => z.object({
   output_qty: z.number().min(0, t('productionInput.outputQtyMin')),
   defect_qty: z.number().min(0, t('productionInput.defectQtyMin')),
 }).refine((data) => data.defect_qty <= data.output_qty, {
@@ -32,7 +48,7 @@ interface ProductionInputData {
   defect_qty: number;
 }
 
-export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
+const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
   visible,
   onClose,
   machine,
@@ -47,7 +63,46 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  const handleSubmit = async () => {
+  // 스키마 메모이제이션
+  const productionInputSchema = useMemo(() => 
+    createProductionInputSchema(t), [t]
+  );
+
+  // 스타일 객체들 메모이제이션
+  const machineInfoStyle = useMemo(() => ({ 
+    marginBottom: MODAL_CONFIG.MARGIN_BOTTOM 
+  }), []);
+
+  const estimatedOutputStyle = useMemo(() => ({ 
+    marginBottom: MODAL_CONFIG.MARGIN_BOTTOM 
+  }), []);
+
+  const estimatedButtonStyle = useMemo(() => ({ 
+    marginLeft: MODAL_CONFIG.MARGIN_LEFT 
+  }), []);
+
+  const notesStyle = useMemo(() => ({
+    marginTop: MODAL_CONFIG.MARGIN_TOP,
+    padding: MODAL_CONFIG.PADDING,
+    backgroundColor: token.colorBgLayout,
+    borderRadius: MODAL_CONFIG.BORDER_RADIUS,
+    border: `1px solid ${token.colorBorderSecondary}`
+  }), [token.colorBgLayout, token.colorBorderSecondary]);
+
+  const notesTextStyle = useMemo(() => ({ 
+    fontSize: MODAL_CONFIG.FONT_SIZE 
+  }), []);
+
+  const inputStyle = useMemo(() => ({ width: '100%' }), []);
+
+  // formatter/parser 함수들 메모이제이션
+  const numberFormatter = useCallback((value: any) => 
+    `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ','), []);
+  
+  const numberParser = useCallback((value: any) => 
+    value!.replace(/\$\s?|(,*)/g, ''), []);
+
+  const handleSubmit = useCallback(async () => {
     try {
       setLoading(true);
       setValidationErrors({});
@@ -56,7 +111,7 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
       const values = await form.validateFields();
       
       // Zod 스키마로 데이터 검증
-      const validatedData = createProductionInputSchema(t).parse(values);
+      const validatedData = productionInputSchema.parse(values);
 
       // 부모 컴포넌트로 데이터 전달
       await onSubmit(validatedData);
@@ -76,26 +131,28 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
         setValidationErrors(errors);
         message.error(t('productionInput.validationError'));
       } else {
-        console.error('생산 실적 입력 오류:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('생산 실적 입력 오류:', error);
+        }
         message.error(t('productionInput.errorMessage'));
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [productionInputSchema, onSubmit, t, form, onClose]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     form.resetFields();
     setValidationErrors({});
     onClose();
-  };
+  }, [form, onClose]);
 
   // 추정 생산량 사용
-  const useEstimatedOutput = () => {
+  const useEstimatedOutput = useCallback(() => {
     if (estimatedOutput) {
       form.setFieldsValue({ output_qty: estimatedOutput });
     }
-  };
+  }, [estimatedOutput, form]);
 
   return (
     <Modal
@@ -110,10 +167,10 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
           {t('productionInput.submit')}
         </Button>,
       ]}
-      width={500}
+      width={MODAL_CONFIG.WIDTH}
       destroyOnHidden
     >
-      <div style={{ marginBottom: 16 }}>
+      <div style={machineInfoStyle}>
         <Title level={5}>{t('productionInput.machineInfo')}</Title>
         <Space direction="vertical" size="small">
           <Text><strong>{t('productionInput.machineName')}:</strong> {machine?.name || t('productionInput.noMachineInfo')}</Text>
@@ -141,17 +198,17 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
           help={validationErrors.output_qty}
         >
           <InputNumber
-            style={{ width: '100%' }}
+            style={inputStyle}
             placeholder={t('productionInput.outputQtyPlaceholder')}
             min={0}
             precision={0}
-            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-            parser={(value) => value!.replace(/\$\s?|(,*)/g, '')}
+            formatter={numberFormatter}
+            parser={numberParser}
           />
         </Form.Item>
 
         {estimatedOutput && (
-          <div style={{ marginBottom: 16 }}>
+          <div style={estimatedOutputStyle}>
             <Text type="secondary">
               {t('productionInput.estimatedOutput')}: {estimatedOutput.toLocaleString()}{t('productionInput.piece')}
             </Text>
@@ -159,7 +216,7 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
               type="link" 
               size="small" 
               onClick={useEstimatedOutput}
-              style={{ marginLeft: 8 }}
+              style={estimatedButtonStyle}
             >
               {t('productionInput.useEstimated')}
             </Button>
@@ -177,23 +234,17 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
           help={validationErrors.defect_qty}
         >
           <InputNumber
-            style={{ width: '100%' }}
+            style={inputStyle}
             placeholder={t('productionInput.defectQtyPlaceholder')}
             min={0}
             precision={0}
-            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-            parser={(value) => value!.replace(/\$\s?|(,*)/g, '')}
+            formatter={numberFormatter}
+            parser={numberParser}
           />
         </Form.Item>
 
-        <div style={{ 
-          marginTop: 16, 
-          padding: 12, 
-          backgroundColor: token.colorBgLayout, 
-          borderRadius: 6,
-          border: `1px solid ${token.colorBorderSecondary}`
-        }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+        <div style={notesStyle}>
+          <Text type="secondary" style={notesTextStyle}>
             <strong>{t('productionInput.notes')}:</strong><br />
             • {t('productionInput.note1')}<br />
             • {t('productionInput.note2')}<br />
@@ -203,6 +254,8 @@ export const ProductionRecordInput: React.FC<ProductionRecordInputProps> = ({
       </Form>
     </Modal>
   );
-};
+}); // React.memo 종료
+
+ProductionRecordInput.displayName = 'ProductionRecordInput';
 
 export default ProductionRecordInput;

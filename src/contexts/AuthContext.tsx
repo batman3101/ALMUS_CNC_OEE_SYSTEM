@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase, checkSupabaseConnection, safeSupabaseOperation } from '@/lib/supabase';
 import { User, AuthContextType, AppError, ErrorCodes } from '@/types';
@@ -18,28 +18,72 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // 컴포넌트 마운트 상태를 추적하는 ref (메모리 누수 방지)
+  const isMountedRef = useRef(true);
+  
   // 로딩 타임아웃 관리를 위한 ref
   const loadingTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  
+  // AbortController 관리를 위한 ref
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // 사용자 프로필 정보 가져오기 (간소화)
+  // 안전한 상태 업데이트 헬퍼 함수
+  const safeSetState = <T>(setState: React.Dispatch<React.SetStateAction<T>>, value: T | ((prev: T) => T)) => {
+    if (isMountedRef.current) {
+      setState(value);
+    }
+  };
+
+  // 사용자 프로필 정보 가져오기 (메모리 누수 방지 최적화)
   const fetchUserProfile = async (supabaseUser: SupabaseUser): Promise<User | null> => {
+    // 컴포넌트가 언마운트된 경우 early return
+    if (!isMountedRef.current) {
+      return null;
+    }
+
     try {
       console.log('🔍 fetchUserProfile 시작:', { userId: supabaseUser.id, email: supabaseUser.email });
       
       let profile = null;
+      let timeoutId: NodeJS.Timeout | null = null;
 
-      // 서버 API를 통해 Service Role로 프로필 조회 (timeout 적용)
+      // 서버 API를 통해 Service Role로 프로필 조회 (개선된 cleanup 적용)
       try {
         console.log('📋 서버 API를 통해 사용자 프로필 조회 중:', supabaseUser.id);
         
+        // 이전 AbortController가 있다면 정리
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5초 timeout
+        abortControllerRef.current = controller;
+        
+        timeoutId = setTimeout(() => {
+          if (isMountedRef.current && controller) {
+            controller.abort();
+          }
+        }, 5000); // 5초 timeout
         
         const response = await fetch(`/api/auth/profile-admin?user_id=${supabaseUser.id}`, {
           signal: controller.signal
         });
         
-        clearTimeout(timeoutId);
+        // timeout 정리
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        
+        // AbortController 정리
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+        
+        // 컴포넌트가 언마운트된 경우 early return
+        if (!isMountedRef.current) {
+          return null;
+        }
         
         if (response.ok) {
           const result = await response.json();
@@ -51,8 +95,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.warn('⚠️ 서버 API 조회 실패:', response.status);
         }
       } catch (apiError: any) {
+        // timeout 정리 (에러 발생 시)
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        
         if (apiError.name === 'AbortError') {
-          console.warn('⚠️ 서버 API 타임아웃 (5초), 일반 클라이언트로 재시도');
+          console.warn('⚠️ 서버 API 타임아웃 또는 취소됨 (5초), 일반 클라이언트로 재시도');
         } else {
           console.warn('⚠️ 서버 API 오류, 일반 클라이언트로 재시도:', apiError.message);
         }
@@ -86,6 +136,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch (clientError) {
           console.warn('⚠️ 일반 클라이언트 조회 실패:', clientError);
         }
+      }
+
+      // 컴포넌트가 언마운트된 경우 early return
+      if (!isMountedRef.current) {
+        return null;
       }
 
       if (!profile) {
@@ -128,7 +183,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('🧑‍💻 개발 모드: 모의 인증으로 로그인');
         log.info('개발 모드: 모의 인증으로 로그인', { email }, LogCategories.AUTH);
         const mockUser = await MockAuthService.login(email, password);
-        setUser(mockUser);
+        safeSetState(setUser, mockUser);
         console.log('✅ 모의 로그인 성공:', mockUser.email);
         return;
       }
@@ -170,7 +225,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         await supabase.auth.signOut();
         throw new Error('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
       }
-      setUser(userProfile);
+      safeSetState(setUser, userProfile);
       
       console.log('🎉 로그인 및 프로필 로딩 완료:', userProfile.email);
     } catch (error: any) {
@@ -179,9 +234,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // 오류 상태 설정 (로그인 상태는 유지)
       if (typeof error.message === 'string' && error.message.length > 0) {
-        setError(error.message);
+        safeSetState(setError, error.message);
       } else {
-        setError('로그인 중 예기치 못한 오류가 발생했습니다.');
+        safeSetState(setError, '로그인 중 예기치 못한 오류가 발생했습니다.');
       }
       
       throw error;
@@ -192,8 +247,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async (): Promise<void> => {
     try {
       // 즉시 사용자 상태 초기화 (UI 반응성 개선)
-      setUser(null);
-      setError(null);
+      safeSetState(setUser, null);
+      safeSetState(setError, null);
       
       if (isDevelopment()) {
         // 개발 환경: 모의 인증 로그아웃
@@ -232,10 +287,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
     
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('⚠️ 인증 초기화 타임아웃 - 30초 후 강제로 로딩 종료');
-      log.warn('인증 초기화 타임아웃 - 강제로 로딩 종료', {}, LogCategories.AUTH);
-      setLoading(false);
-      setError('인증 시스템 초기화 중 타임아웃이 발생했습니다. 네트워크 연결을 확인하고 페이지를 새로고침해주세요.');
+      if (isMountedRef.current) {
+        console.warn('⚠️ 인증 초기화 타임아웃 - 30초 후 강제로 로딩 종료');
+        log.warn('인증 초기화 타임아웃 - 강제로 로딩 종료', {}, LogCategories.AUTH);
+        safeSetState(setLoading, false);
+        safeSetState(setError, '인증 시스템 초기화 중 타임아웃이 발생했습니다. 네트워크 연결을 확인하고 페이지를 새로고침해주세요.');
+      }
     }, 30000); // 30초 타임아웃으로 증가
   };
 
@@ -260,16 +317,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } catch (error: any) {
         console.error('❌ 인증 초기화 실패:', error);
         log.error('인증 초기화 실패', error, LogCategories.AUTH);
-        setUser(null);
+        safeSetState(setUser, null);
         
         // 더 구체적인 오류 메시지
         if (error.message?.includes('fetch') || error.message?.includes('network')) {
-          setError('네트워크 연결을 확인해주세요. 서버에 연결할 수 없습니다.');
+          safeSetState(setError, '네트워크 연결을 확인해주세요. 서버에 연결할 수 없습니다.');
         } else {
-          setError('인증 시스템 초기화에 실패했습니다. 페이지를 새로고침해주세요.');
+          safeSetState(setError, '인증 시스템 초기화에 실패했습니다. 페이지를 새로고침해주세요.');
         }
         
-        setLoading(false);
+        safeSetState(setLoading, false);
         clearLoadingTimeout();
       }
     };
@@ -293,33 +350,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log('✅ 유효한 세션 발견, 사용자 프로필 로딩 중...');
           const userProfile = await fetchUserProfile(session.user);
           if (userProfile) {
-            setUser(userProfile);
-            setError(null);
+            safeSetState(setUser, userProfile);
+            safeSetState(setError, null);
             console.log('🎉 인증 초기화 성공');
           } else {
             console.log('❌ 프로필이 없어서 세션 종료');
             await supabase.auth.signOut();
-            setUser(null);
-            setError('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
+            safeSetState(setUser, null);
+            safeSetState(setError, '사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
           }
         } else {
           console.log('ℹ️ 세션이 없음 - 로그인 필요');
-          setUser(null);
-          setError(null);
+          safeSetState(setUser, null);
+          safeSetState(setError, null);
         }
       } catch (error: any) {
         console.error('❌ getSession 오류:', error);
         log.error('Error in getSession', error, LogCategories.AUTH);
-        setUser(null);
+        safeSetState(setUser, null);
         
         // 네트워크 연결 문제와 기타 오류를 구분
         if (error.message?.includes('fetch') || error.message?.includes('network')) {
-          setError('네트워크 연결을 확인하고 다시 시도해주세요.');
+          safeSetState(setError, '네트워크 연결을 확인하고 다시 시도해주세요.');
         } else {
-          setError('세션 확인 중 오류가 발생했습니다.');
+          safeSetState(setError, '세션 확인 중 오류가 발생했습니다.');
         }
       } finally {
-        setLoading(false);
+        safeSetState(setLoading, false);
         clearLoadingTimeout();
         console.log('🏁 인증 초기화 완료');
       }
@@ -342,44 +399,57 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.log('✅ SIGNED_IN 이벤트 - 프로필 로딩 중...');
             const userProfile = await fetchUserProfile(session.user);
             if (userProfile) {
-              setUser(userProfile);
-              setError(null);
+              safeSetState(setUser, userProfile);
+              safeSetState(setError, null);
             } else {
               console.log('❌ 프로필이 없어서 세션 종료');
               await supabase.auth.signOut();
-              setUser(null);
-              setError('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
+              safeSetState(setUser, null);
+              safeSetState(setError, '사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
             }
           } else if (event === 'SIGNED_OUT') {
             console.log('🚪 SIGNED_OUT 이벤트 - 사용자 로그아웃');
-            setUser(null);
-            setError(null);
+            safeSetState(setUser, null);
+            safeSetState(setError, null);
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
             console.log('🔄 TOKEN_REFRESHED 이벤트 - 프로필 재로딩');
             const userProfile = await fetchUserProfile(session.user);
             if (userProfile) {
-              setUser(userProfile);
-              setError(null);
+              safeSetState(setUser, userProfile);
+              safeSetState(setError, null);
             } else {
               console.log('❌ 프로필이 없어서 세션 종료');
               await supabase.auth.signOut();
-              setUser(null);
-              setError('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
+              safeSetState(setUser, null);
+              safeSetState(setError, '사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
             }
           }
         } catch (error) {
           console.error('❌ 인증 상태 변경 처리 오류:', error);
           log.error('Auth state change error', error, LogCategories.AUTH);
-          setError('인증 상태 변경 중 오류가 발생했습니다.');
+          safeSetState(setError, '인증 상태 변경 중 오류가 발생했습니다.');
         }
         
-        setLoading(false);
+        safeSetState(setLoading, false);
       }
     );
     const subscription = data.subscription;
 
+    // cleanup 함수
     return () => {
+      // 컴포넌트 언마운트 상태로 설정
+      isMountedRef.current = false;
+      
+      // 모든 타임아웃 정리
       clearLoadingTimeout();
+      
+      // AbortController 정리
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      
+      // Supabase 구독 정리
       if (subscription) {
         subscription.unsubscribe();
       }
