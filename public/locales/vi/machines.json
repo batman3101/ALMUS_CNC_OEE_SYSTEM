@@ -82,7 +82,8 @@
     "plannedStop": "Dừng theo kế hoạch",
     "programChange": "Thay đổi chương trình",
     "toolChange": "Thay dụng cụ",
-    "temporaryStop": "Dừng tạm thời"
+    "temporaryStop": "Dừng tạm thời",
+    "unknown": "Không xác định"
   },
   "common": {
     "active": "Hoạt động",

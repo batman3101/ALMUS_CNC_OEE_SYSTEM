@@ -14,6 +14,7 @@ import {
 import { Machine, MachineState } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 const { Text, Title } = Typography;
 
@@ -24,46 +25,61 @@ interface MachineCardProps {
 }
 
 // 설비 상태별 색상 및 아이콘 매핑
-const getStateConfig = (state: MachineState) => {
+const getStateConfig = (state: MachineState, t: any) => {
   const configs = {
     NORMAL_OPERATION: {
       color: 'success',
       icon: <PlayCircleOutlined />,
-      text: { ko: '정상가동', vi: 'Hoạt động bình thường' }
+      text: t('status.normalOperation')
     },
     MAINTENANCE: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: { ko: '점검중', vi: 'Bảo trì' }
+      text: t('status.maintenance')
+    },
+    PM_MAINTENANCE: {
+      color: 'warning',
+      icon: <ToolOutlined />,
+      text: t('status.maintenance')
+    },
+    INSPECTION: {
+      color: 'warning',
+      icon: <ToolOutlined />,
+      text: t('status.inspection')
+    },
+    BREAKDOWN_REPAIR: {
+      color: 'error',
+      icon: <WarningOutlined />,
+      text: t('status.breakdownRepair')
     },
     MODEL_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: { ko: '모델교체', vi: 'Thay đổi mô hình' }
+      text: t('status.modelChange')
     },
     PLANNED_STOP: {
       color: 'default',
       icon: <PauseCircleOutlined />,
-      text: { ko: '계획정지', vi: 'Dừng theo kế hoạch' }
+      text: t('status.plannedStop')
     },
     PROGRAM_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: { ko: '프로그램 교체', vi: 'Thay đổi chương trình' }
+      text: t('status.programChange')
     },
     TOOL_CHANGE: {
       color: 'processing',
       icon: <ToolOutlined />,
-      text: { ko: '공구교환', vi: 'Thay đổi công cụ' }
+      text: t('status.toolChange')
     },
     TEMPORARY_STOP: {
       color: 'error',
       icon: <WarningOutlined />,
-      text: { ko: '일시정지', vi: 'Dừng tạm thời' }
+      text: t('status.temporaryStop')
     }
   };
   
-  return configs[state] || configs.TEMPORARY_STOP;
+  return configs[state] || { color: 'default', icon: <WarningOutlined />, text: t('status.unknown') };
 };
 
 const MachineCard: React.FC<MachineCardProps> = ({ 
@@ -71,8 +87,10 @@ const MachineCard: React.FC<MachineCardProps> = ({
   onClick,
   language = 'ko' 
 }) => {
+  const { t } = useMachinesTranslation();
+  
   const stateConfig = machine.current_state 
-    ? getStateConfig(machine.current_state)
+    ? getStateConfig(machine.current_state, t)
     : null;
 
   const handleCardClick = () => {
@@ -119,7 +137,7 @@ const MachineCard: React.FC<MachineCardProps> = ({
           
           {!machine.is_active && (
             <Tag color="red">
-              {language === 'ko' ? '비활성' : 'Không hoạt động'}
+              {t('common.inactive')}
             </Tag>
           )}
         </div>
@@ -131,7 +149,7 @@ const MachineCard: React.FC<MachineCardProps> = ({
               icon={stateConfig.icon}
               style={{ marginBottom: 8 }}
             >
-              {stateConfig.text[language]}
+              {stateConfig.text}
             </Tag>
             
             {getStateDuration() && (
@@ -151,18 +169,18 @@ const MachineCard: React.FC<MachineCardProps> = ({
           <Space direction="vertical" size="small" style={{ width: '100%' }}>
             <div className="info-row">
               <Text type="secondary">
-                {language === 'ko' ? '생산 모델:' : 'Mô hình sản xuất:'}
+                {t('fields.productionModel')}:
               </Text>
               <Text strong>
-                {machine.production_model?.model_name || (language === 'ko' ? '설정 없음' : 'Chưa thiết lập')}
+                {machine.production_model?.model_name || t('common.notSet')}
               </Text>
             </div>
             <div className="info-row">
               <Text type="secondary">
-                {language === 'ko' ? '가공 공정:' : 'Quy trình gia công:'}
+                {t('fields.currentProcess')}:
               </Text>
               <Text strong>
-                {machine.current_process?.process_name || (language === 'ko' ? '설정 없음' : 'Chưa thiết lập')}
+                {machine.current_process?.process_name || t('common.notSet')}
               </Text>
             </div>
           </Space>

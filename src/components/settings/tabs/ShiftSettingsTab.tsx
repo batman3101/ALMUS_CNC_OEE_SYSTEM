@@ -12,7 +12,8 @@ import {
   Row,
   Col,
   Alert,
-  Divider
+  Divider,
+  theme
 } from 'antd';
 import { SaveOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -27,6 +28,7 @@ interface ShiftSettingsTabProps {
 }
 
 const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange }) => {
+  const { token } = theme.useToken();
   const { t } = useLanguage();
   const { settings, updateSetting } = useShiftSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
@@ -189,7 +191,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
                 />
               </Form.Item>
 
-              <div style={{ padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
+              <div style={{ padding: '12px', backgroundColor: token.colorFillAlter, borderRadius: '6px' }}>
                 <Text strong>{t('settings.shift.duration')}: </Text>
                 <Text>{Math.floor(aShiftDuration / 60)}시간 {aShiftDuration % 60}분</Text>
                 <br />
@@ -233,7 +235,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
                 />
               </Form.Item>
 
-              <div style={{ padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px' }}>
+              <div style={{ padding: '12px', backgroundColor: token.colorFillAlter, borderRadius: '6px' }}>
                 <Text strong>{t('settings.shift.duration')}: </Text>
                 <Text>{Math.floor(bShiftDuration / 60)}시간 {bShiftDuration % 60}분</Text>
                 <br />
@@ -293,7 +295,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
           <Col xs={24} lg={12}>
             <Card title={t('settings.shift.summary')} size="small">
-              <div style={{ padding: '16px', backgroundColor: '#fafafa', borderRadius: '6px' }}>
+              <div style={{ padding: '16px', backgroundColor: token.colorFillAlter, borderRadius: '6px' }}>
                 <div style={{ marginBottom: '12px' }}>
                   <Text strong>{t('settings.shift.totalCoverage')}: </Text>
                   <Text>24시간</Text>

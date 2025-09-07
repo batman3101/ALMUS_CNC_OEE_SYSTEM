@@ -10,6 +10,7 @@ import { ProductionChart } from './ProductionChart';
 import { ReportGenerator } from '@/components/reports';
 import { OEECalculator, RealTimeOEECalculator } from '@/utils/oeeCalculator';
 import { OEEMetrics as OEEMetricsType, MachineLog, ProductionRecord } from '@/types';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const { RangePicker } = DatePicker;
 // Removed deprecated TabPane import
@@ -35,13 +36,13 @@ const generateMockOEEData = (): OEEMetricsType => ({
   defect_qty: 48
 });
 
-const generateMockTrendData = () => {
+const generateMockTrendData = (formatDate: (date: Date) => string) => {
   const data = [];
   for (let i = 6; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
     data.push({
-      date: date.toISOString().split('T')[0],
+      date: formatDate(date),
       availability: 0.8 + Math.random() * 0.15,
       performance: 0.85 + Math.random() * 0.1,
       quality: 0.9 + Math.random() * 0.08,
@@ -60,7 +61,7 @@ const generateMockDowntimeData = () => [
   { state: 'TEMPORARY_STOP' as const, duration: 25, count: 6, percentage: 7.4 }
 ];
 
-const generateMockProductionData = () => {
+const generateMockProductionData = (formatDate: (date: Date) => string) => {
   const data = [];
   for (let i = 6; i >= 0; i--) {
     const date = new Date();
@@ -68,7 +69,7 @@ const generateMockProductionData = () => {
     const outputQty = 1000 + Math.floor(Math.random() * 400);
     const defectQty = Math.floor(outputQty * (0.02 + Math.random() * 0.06));
     data.push({
-      date: date.toISOString().split('T')[0],
+      date: formatDate(date),
       output_qty: outputQty,
       defect_qty: defectQty,
       good_qty: outputQty - defectQty,
@@ -87,6 +88,7 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
   showControls = true,
   onDataRefresh
 }) => {
+  const { formatDate, formatDateTime, getAntdDateFormat } = useSystemSettings();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [dateRange, setDateRange] = useState<[string, string] | null>(null);
@@ -95,9 +97,9 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
 
   // 데이터 상태
   const [oeeMetrics, setOeeMetrics] = useState<OEEMetricsType>(generateMockOEEData());
-  const [trendData, setTrendData] = useState(generateMockTrendData());
+  const [trendData, setTrendData] = useState(generateMockTrendData(formatDate));
   const [downtimeData, setDowntimeData] = useState(generateMockDowntimeData());
-  const [productionData, setProductionData] = useState(generateMockProductionData());
+  const [productionData, setProductionData] = useState(generateMockProductionData(formatDate));
 
   // 데이터 새로고침
   const handleRefresh = async () => {
@@ -107,9 +109,9 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       setOeeMetrics(generateMockOEEData());
-      setTrendData(generateMockTrendData());
+      setTrendData(generateMockTrendData(formatDate));
       setDowntimeData(generateMockDowntimeData());
-      setProductionData(generateMockProductionData());
+      setProductionData(generateMockProductionData(formatDate));
       
       if (onDataRefresh) {
         onDataRefresh();
@@ -137,7 +139,7 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
     const exportData = {
       machineId,
       machineName,
-      timestamp: new Date().toISOString(),
+      timestamp: formatDateTime(new Date()),
       oeeMetrics,
       trendData,
       downtimeData,
@@ -150,7 +152,7 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `oee-metrics-${machineId}-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `oee-metrics-${machineId}-${formatDate(new Date())}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -166,8 +168,8 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
       model_type: 'CNC Machine',
       default_tact_time: 60,
       is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      created_at: formatDateTime(new Date()),
+      updated_at: formatDateTime(new Date())
     };
 
     const mockProductionRecords = productionData.map((prod, index) => ({
@@ -177,7 +179,7 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
       shift: prod.shift,
       output_qty: prod.output_qty,
       defect_qty: prod.defect_qty,
-      created_at: new Date().toISOString()
+      created_at: formatDateTime(new Date())
     }));
 
     return {
@@ -199,7 +201,7 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
                   onChange={(dates, dateStrings) => {
                     setDateRange(dates ? [dateStrings[0], dateStrings[1]] : null);
                   }}
-                  format="YYYY-MM-DD"
+                  format={getAntdDateFormat()}
                   placeholder={['시작일', '종료일']}
                 />
                 <Select

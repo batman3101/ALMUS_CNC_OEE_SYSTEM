@@ -4,6 +4,7 @@ import React from 'react';
 import { Card, Typography } from 'antd';
 import { SettingOutlined, BarChartOutlined, DashboardOutlined } from '@ant-design/icons';
 import { LoginFormInline } from '@/components/auth/LoginFormInline';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useRouter } from 'next/navigation';
 import styles from './login.module.css';
 
@@ -11,6 +12,8 @@ const { Title, Text, Paragraph } = Typography;
 
 const LoginPage: React.FC = () => {
   const router = useRouter();
+  const { getCompanyInfo, isLoading } = useSystemSettings();
+  const companyInfo = getCompanyInfo();
 
   const handleLoginSuccess = () => {
     router.push('/dashboard');
@@ -28,7 +31,7 @@ const LoginPage: React.FC = () => {
                   <SettingOutlined className={styles.logoIcon} />
                 </div>
                 <Title level={2} className={styles.brandTitle}>
-                  CNC OEE
+                  {isLoading ? 'Loading...' : companyInfo.name}
                 </Title>
                 <Text className={styles.subtitle}>
                   모니터링 시스템
@@ -78,7 +81,7 @@ const LoginPage: React.FC = () => {
 
               <div className={styles.systemInfo}>
                 <Text className={styles.versionInfo} style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                  Version 1.0.0 | 2024 CNC OEE System
+                  Version 1.0.0 | 2024 {isLoading ? 'System' : companyInfo.name} System
                 </Text>
               </div>
             </div>
@@ -93,7 +96,7 @@ const LoginPage: React.FC = () => {
                 시스템 로그인
               </Title>
               <Paragraph className={styles.loginDesc}>
-                CNC OEE 모니터링 시스템에 로그인하세요
+                {isLoading ? 'Loading...' : `${companyInfo.name} 모니터링 시스템에 로그인하세요`}
               </Paragraph>
             </div>
             

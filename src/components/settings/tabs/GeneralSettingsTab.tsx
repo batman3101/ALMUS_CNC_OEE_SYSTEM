@@ -27,22 +27,23 @@ interface GeneralSettingsTabProps {
 }
 
 const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChange }) => {
-  const { t } = useLanguage();
+  const { t, changeLanguage } = useLanguage();
   const { settings, updateSetting, updateMultipleSettings } = useGeneralSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
 
   // 폼 초기값 설정
   useEffect(() => {
     if (settings) {
       form.setFieldsValue({
-        company_name: settings.company_name || 'CNC Manufacturing Co.',
+        company_name: settings.company_name || 'ALMUS TECH',
         company_logo_url: settings.company_logo_url || '',
-        timezone: settings.timezone || 'Asia/Seoul',
-        language: settings.language || 'ko',
-        date_format: settings.date_format || 'YYYY-MM-DD',
+        timezone: settings.timezone || 'Asia/Ho_Chi_Minh',
+        language: settings.language || 'vi',
+        date_format: settings.date_format || 'DD/MM/YYYY',
         time_format: settings.time_format || 'HH:mm:ss'
       });
 
@@ -68,6 +69,11 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         throw new Error('Invalid form values');
       }
 
+      // 언어 변경 사항 확인
+      const currentLanguage = settings?.language || 'ko';
+      const newLanguage = values.language;
+      const languageChanged = currentLanguage !== newLanguage;
+
       // SettingUpdate 형태로 변환 (category 포함)
       const updates = Object.entries(values)
         .filter(([_, value]) => value !== undefined && value !== null) // null/undefined 값 제외
@@ -91,6 +97,12 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         throw new Error('시스템 설정 업데이트에 실패했습니다. 네트워크 연결이나 권한을 확인해주세요.');
       }
 
+      // 언어가 변경된 경우 LanguageContext 업데이트
+      if (languageChanged && newLanguage) {
+        console.log('언어 변경 감지, LanguageContext 업데이트:', newLanguage);
+        await changeLanguage(newLanguage as 'ko' | 'vi');
+      }
+
       showSuccess(t('settings.saveSuccess'));
       onSettingsChange?.();
     } catch (error) {
@@ -103,29 +115,74 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
   };
 
   // 로고 업로드 처리
-  const handleLogoUpload = (info: any) => {
-    let fileList = [...info.fileList];
-
-    // 파일 개수 제한 (1개만)
-    fileList = fileList.slice(-1);
-
-    // 파일 상태 업데이트
-    fileList = fileList.map(file => {
-      if (file.response) {
-        file.url = file.response.url;
+  const handleLogoUpload = async (file: File) => {
+    try {
+      setUploadingLogo(true);
+      
+      // 파일 검증
+      const isImage = file.type?.startsWith('image/');
+      if (!isImage) {
+        showError('이미지 파일만 업로드 가능합니다.');
+        return false;
       }
-      return file;
-    });
+      
+      const isLt5M = file.size / 1024 / 1024 < 5;
+      if (!isLt5M) {
+        showError('파일 크기는 5MB 이하만 가능합니다.');
+        return false;
+      }
 
-    setLogoFileList(fileList);
+      // FormData 생성
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'logo');
 
-    if (info.file.status === 'done') {
-      const logoUrl = info.file.response?.url || info.file.url;
-      form.setFieldValue('company_logo_url', logoUrl);
-      showSuccess(t('settings.logoUploadSuccess'));
-    } else if (info.file.status === 'error') {
-      showError(t('settings.logoUploadError'));
+      // API 호출
+      const response = await fetch('/api/upload/image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: '업로드 실패' }));
+        throw new Error(errorData.error || '업로드에 실패했습니다.');
+      }
+
+      const result = await response.json();
+      
+      if (!result.url) {
+        throw new Error('업로드된 파일 URL을 받을 수 없습니다.');
+      }
+
+      // 성공 시 폼 필드 업데이트
+      form.setFieldValue('company_logo_url', result.url);
+      
+      // 파일 리스트 업데이트
+      setLogoFileList([{
+        uid: '-1',
+        name: file.name,
+        status: 'done',
+        url: result.url,
+      }]);
+
+      showSuccess('로고가 성공적으로 업로드되었습니다.');
+      return false; // 기본 업로드 동작 방지
+      
+    } catch (error) {
+      console.error('로고 업로드 오류:', error);
+      const errorMessage = error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
+      showError(errorMessage);
+      return false;
+    } finally {
+      setUploadingLogo(false);
     }
+  };
+
+  // 업로드 상태 변경 처리
+  const handleUploadChange = (info: any) => {
+    let fileList = [...info.fileList];
+    fileList = fileList.slice(-1); // 파일 개수 제한 (1개만)
+    setLogoFileList(fileList);
   };
 
   // 로고 제거
@@ -206,32 +263,30 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
                     name="logo"
                     listType="picture"
                     fileList={logoFileList}
-                    onChange={handleLogoUpload}
+                    onChange={handleUploadChange}
                     onRemove={handleLogoRemove}
-                    beforeUpload={(file) => {
-                      const isImage = file.type?.startsWith('image/');
-                      if (!isImage) {
-                        showError(t('settings.general.logoImageOnly'));
-                        return false;
-                      }
-                      const isLt2M = file.size / 1024 / 1024 < 2;
-                      if (!isLt2M) {
-                        showError(t('settings.general.logoSizeLimit'));
-                        return false;
-                      }
-                      return true;
-                    }}
+                    beforeUpload={handleLogoUpload}
                     maxCount={1}
+                    disabled={uploadingLogo}
                   >
                     {logoFileList.length === 0 && (
-                      <Button icon={<UploadOutlined />}>
-                        {t('settings.general.uploadLogo')}
+                      <Button 
+                        icon={<UploadOutlined />}
+                        loading={uploadingLogo}
+                        disabled={uploadingLogo}
+                      >
+                        {uploadingLogo ? '업로드 중...' : '로고 업로드'}
                       </Button>
                     )}
                   </Upload>
                   <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
-                    {t('settings.general.logoHint')}
+                    이미지 파일만 가능 (JPG, PNG 등) - 최대 5MB
                   </Text>
+                  {uploadingLogo && (
+                    <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '4px', color: '#1890ff' }}>
+                      업로드 중입니다. 잠시 기다려주세요...
+                    </Text>
+                  )}
                 </div>
               </Form.Item>
             </Card>

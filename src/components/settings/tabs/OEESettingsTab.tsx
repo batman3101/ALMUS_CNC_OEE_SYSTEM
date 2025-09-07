@@ -12,7 +12,8 @@ import {
   Col,
   Slider,
   Progress,
-  Alert
+  Alert,
+  theme
 } from 'antd';
 import { SaveOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -26,6 +27,7 @@ interface OEESettingsTabProps {
 }
 
 const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => {
+  const { token } = theme.useToken();
   const { t } = useLanguage();
   const { settings, updateSetting } = useOEESettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
@@ -334,7 +336,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
               </Form.Item>
 
               {/* OEE 계산 예시 */}
-              <Card size="small" style={{ marginTop: '16px', backgroundColor: '#fafafa' }}>
+              <Card size="small" style={{ marginTop: '16px', backgroundColor: token.colorFillAlter }}>
                 <Text strong>{t('settings.oee.calculationExample')}</Text>
                 <div style={{ marginTop: '8px' }}>
                   <Progress

@@ -1,8 +1,28 @@
 'use client';
 
 import { useSystemSettings as useSystemSettingsContext } from '@/contexts/SystemSettingsContext';
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import type { SettingCategory, AllSystemSettings } from '@/types/systemSettings';
+import { 
+  initializeDateTimeFormatter, 
+  getDateTimeFormatter,
+  formatDate,
+  formatTime,
+  formatDateTime,
+  formatRelative,
+  formatCalendar,
+  formatDateRange,
+  formatCustom,
+  parseDate,
+  parseTime,
+  parseDateTime,
+  isValidDate,
+  getCurrentTime,
+  convertTimezone,
+  getChartTimeFormat,
+  calculateShiftTime,
+  calculateWorkingHours
+} from '@/utils/dateTimeUtils';
 
 /**
  * 시스템 설정 커스텀 훅
@@ -17,10 +37,12 @@ export function useSystemSettings() {
      * 회사 정보 조회
      */
     getCompanyInfo: () => ({
-      name: context.getSetting('general', 'company_name') || 'CNC Manufacturing Co.',
+      name: context.getSetting('general', 'company_name') || 'ALMUS TECH',
       logo: context.getSetting('general', 'company_logo_url') || '',
-      timezone: context.getSetting('general', 'timezone') || 'Asia/Seoul',
-      language: context.getSetting('general', 'language') || 'ko'
+      timezone: context.getSetting('general', 'timezone') || 'Asia/Ho_Chi_Minh',
+      language: context.getSetting('general', 'language') || 'vi',
+      dateFormat: context.getSetting('general', 'date_format') || 'DD/MM/YYYY',
+      timeFormat: context.getSetting('general', 'time_format') || 'HH:mm:ss'
     }),
 
     /**
@@ -132,20 +154,67 @@ export function useSystemSettings() {
     },
 
     /**
-     * 시간대 변환
+     * 날짜/시간 포맷팅 함수들 (시스템 설정 기반)
      */
-    formatTimeWithTimezone: (date: Date) => {
-      const timezone = context.getSetting('general', 'timezone') || 'Asia/Seoul';
-      return new Intl.DateTimeFormat('ko-KR', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      }).format(date);
-    },
+    formatDate: (date: Date | string) => formatDate(date),
+    formatTime: (date: Date | string) => formatTime(date),
+    formatDateTime: (date: Date | string) => formatDateTime(date),
+    formatRelative: (date: Date | string) => formatRelative(date),
+    formatCalendar: (date: Date | string) => formatCalendar(date),
+    formatDateRange: (startDate: Date | string, endDate: Date | string) => 
+      formatDateRange(startDate, endDate),
+    formatCustom: (date: Date | string, format: string) => formatCustom(date, format),
+
+    /**
+     * 날짜/시간 파싱 함수들
+     */
+    parseDate: (dateString: string) => parseDate(dateString),
+    parseTime: (timeString: string) => parseTime(timeString),
+    parseDateTime: (dateTimeString: string) => parseDateTime(dateTimeString),
+    isValidDate: (date: any) => isValidDate(date),
+
+    /**
+     * 현재 시간 조회 (타임존 적용)
+     */
+    getCurrentTime: () => getCurrentTime(),
+
+    /**
+     * 타임존 변환
+     */
+    convertTimezone: (date: Date | string, targetTimezone: string) => 
+      convertTimezone(date, targetTimezone),
+
+    /**
+     * 차트용 시간축 포맷
+     */
+    getChartTimeFormat: (granularity: 'minute' | 'hour' | 'day' | 'month') => 
+      getChartTimeFormat(granularity),
+
+    /**
+     * 교대 시간 계산
+     */
+    calculateShiftTime: (baseDate: Date | string, shiftStart: string, shiftEnd: string) =>
+      calculateShiftTime(baseDate, shiftStart, shiftEnd),
+
+    /**
+     * 업무 시간 계산 (휴식 시간 제외)
+     */
+    calculateWorkingHours: (
+      startTime: Date | string, 
+      endTime: Date | string, 
+      breakMinutes: number = 0
+    ) => calculateWorkingHours(startTime, endTime, breakMinutes),
+
+    /**
+     * Ant Design 컴포넌트용 날짜/시간 형식
+     */
+    getAntdDateFormat: () => getDateTimeFormatter().getAntdDateFormat(),
+    getAntdTimeFormat: () => getDateTimeFormatter().getAntdTimeFormat(),
+
+    /**
+     * 레거시 지원: 기존 formatTimeWithTimezone 함수
+     */
+    formatTimeWithTimezone: (date: Date) => formatDateTime(date),
 
     /**
      * 언어별 포맷팅
@@ -171,6 +240,18 @@ export function useSystemSettings() {
       }
     }
   }), [context]);
+
+  // 시스템 설정이 변경될 때마다 날짜/시간 포맷터 업데이트
+  useEffect(() => {
+    const companyInfo = helpers.getCompanyInfo();
+    
+    initializeDateTimeFormatter({
+      timezone: companyInfo.timezone,
+      dateFormat: companyInfo.dateFormat,
+      timeFormat: companyInfo.timeFormat,
+      language: companyInfo.language
+    });
+  }, [context.settings, helpers]);
 
   return {
     ...context,

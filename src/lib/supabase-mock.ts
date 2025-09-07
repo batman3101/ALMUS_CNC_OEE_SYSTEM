@@ -18,7 +18,7 @@ class MockSupabaseClient {
         id: '1',
         category: 'general',
         setting_key: 'company_name',
-        setting_value: 'CNC Manufacturing Co.',
+        setting_value: 'ALMUS TECH',
         value_type: 'string',
         description: '회사명',
         is_system: true,

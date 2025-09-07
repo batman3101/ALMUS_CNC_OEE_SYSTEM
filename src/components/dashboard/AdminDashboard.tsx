@@ -36,12 +36,13 @@ const generateMockOverallMetrics = (): OEEMetrics => ({
   defect_qty: 2736
 });
 
+// Mock 데이터는 컴포넌트 내부에서 getStatusText로 번역될 예정
 const generateMockMachineList = (): Array<Machine & { oee: number; status: string }> => [
-  { id: '1', name: 'CNC-001', location: 'A동 1층', model_type: 'DMG MORI', default_tact_time: 120, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.85, status: '정상' },
-  { id: '2', name: 'CNC-002', location: 'A동 1층', model_type: 'MAZAK', default_tact_time: 90, is_active: true, current_state: 'MAINTENANCE', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.72, status: '점검중' },
-  { id: '3', name: 'CNC-003', location: 'A동 2층', model_type: 'HAAS', default_tact_time: 150, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.91, status: '정상' },
-  { id: '4', name: 'CNC-004', location: 'B동 1층', model_type: 'DMG MORI', default_tact_time: 110, is_active: true, current_state: 'TEMPORARY_STOP', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.58, status: '일시정지' },
-  { id: '5', name: 'CNC-005', location: 'B동 2층', model_type: 'OKUMA', default_tact_time: 130, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.78, status: '정상' },
+  { id: '1', name: 'CNC-001', location: 'A동 1층', model_type: 'DMG MORI', default_tact_time: 120, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.85, status: 'NORMAL_OPERATION' },
+  { id: '2', name: 'CNC-002', location: 'A동 1층', model_type: 'MAZAK', default_tact_time: 90, is_active: true, current_state: 'MAINTENANCE', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.72, status: 'MAINTENANCE' },
+  { id: '3', name: 'CNC-003', location: 'A동 2층', model_type: 'HAAS', default_tact_time: 150, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.91, status: 'NORMAL_OPERATION' },
+  { id: '4', name: 'CNC-004', location: 'B동 1층', model_type: 'DMG MORI', default_tact_time: 110, is_active: true, current_state: 'TEMPORARY_STOP', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.58, status: 'TEMPORARY_STOP' },
+  { id: '5', name: 'CNC-005', location: 'B동 2층', model_type: 'OKUMA', default_tact_time: 130, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.78, status: 'NORMAL_OPERATION' },
 ];
 
 const generateMockAlerts = () => [
@@ -81,13 +82,14 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
-  const { t } = useDashboardTranslation();
+  const { t, i18n } = useDashboardTranslation();
   const isClient = useClientOnly();
   const { user } = useAuth();
   const { notifications, acknowledgeNotification } = useNotifications();
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [statusDescriptions, setStatusDescriptions] = useState<any[]>([]);
 
   // 실시간 생산 기록 데이터 구독
   const {
@@ -114,30 +116,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [showMachineStatusModal, setShowMachineStatusModal] = useState(false);
   const [selectedStatusType, setSelectedStatusType] = useState<'maintenance' | 'stopped' | null>(null);
+  const [notificationFilter, setNotificationFilter] = useState<'all' | 'critical' | 'unacknowledged'>('all');
 
   const { Text } = Typography;
   
-  // 상태 텍스트 변환 함수 (번역 사용)
+  // 상태 텍스트 변환 함수 (DB의 상태 설명 데이터 사용)
   const getStatusText = (state?: string) => {
-    const stateMap: Record<string, string> = {
-      'NORMAL_OPERATION': t('status.normal'),
-      'MAINTENANCE': t('status.maintenance'),
-      'PM_MAINTENANCE': t('status.maintenance'),
-      'INSPECTION': t('status.inspection'),
-      'BREAKDOWN_REPAIR': t('status.breakdownRepair'),
-      'MODEL_CHANGE': t('status.modelChange'),
-      'PLANNED_STOP': t('status.plannedStop'),
-      'PROGRAM_CHANGE': t('status.programChange'),
-      'TOOL_CHANGE': t('status.toolChange'),
-      'TEMPORARY_STOP': t('status.temporaryStop')
-    };
-    
-    // 디버그 로그 (개발 모드에서만)
-    if (process.env.NODE_ENV === 'development' && !stateMap[state || '']) {
-      console.warn(`Missing translation for machine state: ${state}`);
+    if (!state || statusDescriptions.length === 0) {
+      // 상태 설명 데이터가 없으면 기본 번역 사용
+      const stateMap: Record<string, string> = {
+        'NORMAL_OPERATION': t('status.normalOperation'),
+        'MAINTENANCE': t('status.maintenance'),
+        'PM_MAINTENANCE': t('status.maintenance'),
+        'INSPECTION': t('status.inspection'),
+        'BREAKDOWN_REPAIR': t('status.breakdownRepair'),
+        'MODEL_CHANGE': t('status.modelChange'),
+        'PLANNED_STOP': t('status.plannedStop'),
+        'PROGRAM_CHANGE': t('status.programChange'),
+        'TOOL_CHANGE': t('status.toolChange'),
+        'TEMPORARY_STOP': t('status.temporaryStop')
+      };
+      return stateMap[state || ''] || t('status.unknown');
+    }
+
+    // DB에서 가져온 상태 설명 데이터 사용
+    const statusDesc = statusDescriptions.find(desc => desc.status === state);
+    if (statusDesc) {
+      const language = i18n.language as 'ko' | 'vi';
+      return language === 'vi' ? statusDesc.description_vi : statusDesc.description_ko;
     }
     
-    return stateMap[state || ''] || t('status.unknown');
+    // 디버그 로그 (개발 모드에서만)
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(`Missing status description for machine state: ${state}`);
+    }
+    
+    return t('status.unknown');
   };
   
   // 실시간 OEE 메트릭 계산
@@ -168,7 +182,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       setDashboardLoading(true);
       
       // 병렬로 모든 데이터 가져오기
-      const [machinesRes, productionRes, modelsRes] = await Promise.all([
+      const [machinesRes, productionRes, modelsRes, statusDescRes] = await Promise.all([
         fetch('/api/machines', { 
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
@@ -180,12 +194,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         fetch('/api/product-models', { 
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
+        }),
+        fetch('/api/machine-status-descriptions', { 
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
         })
       ]);
 
       let machinesData = [];
       let productionData = [];
       let modelsData = [];
+      let statusDescriptions = [];
 
       if (machinesRes.ok) {
         try {
@@ -227,6 +246,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       } else {
         console.error('Models API failed:', modelsRes.status);
         modelsData = [];
+      }
+
+      if (statusDescRes.ok) {
+        try {
+          const response = await statusDescRes.json();
+          statusDescriptions = response.success ? (response.data || []) : [];
+          console.log('Status descriptions loaded:', statusDescriptions.length);
+        } catch (error) {
+          console.error('Error parsing status descriptions response:', error);
+          statusDescriptions = [];
+        }
+      } else {
+        console.error('Status descriptions API failed:', statusDescRes.status);
+        statusDescriptions = [];
       }
 
       // OEE 계산 (실제 데이터 기반)
@@ -287,6 +320,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         models: modelsData,
         oeeMetrics: calculatedOeeMetrics
       });
+
+      // 상태 설명 데이터 저장
+      setStatusDescriptions(statusDescriptions);
 
       setDataError(null); // 성공 시 에러 상태 초기화
       
@@ -454,7 +490,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             oee: avgOEE,
-            status: avgOEE > 0.7 ? '정상' : '점검필요'
+            status: getStatusText(avgOEE > 0.7 ? 'NORMAL_OPERATION' : 'MAINTENANCE')
           };
         });
 
@@ -593,9 +629,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       key: 'status',
       width: 100,
       render: (status: string, record: { current_state?: string }) => {
+        const translatedStatus = getStatusText(record.current_state);
         const color = record.current_state === 'NORMAL_OPERATION' ? 'success' : 
-                     record.current_state === 'MAINTENANCE' ? 'warning' : 'error';
-        return <span style={{ color: color === 'success' ? '#52c41a' : color === 'warning' ? '#faad14' : '#ff4d4f' }}>{status}</span>;
+                     ['MAINTENANCE', 'PM_MAINTENANCE', 'INSPECTION'].includes(record.current_state || '') ? 'warning' : 'error';
+        return <span style={{ color: color === 'success' ? '#52c41a' : color === 'warning' ? '#faad14' : '#ff4d4f' }}>{translatedStatus}</span>;
       },
     },
     {
@@ -864,29 +901,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
       {/* 실시간 알림 패널 */}
       <Drawer
-        title={`전체 알림 (${notifications.length + realtimeAlerts.length}개)`}
+        title={`${t('alerts.allAlerts')} (${notifications.length + realtimeAlerts.length}개)`}
         placement="right"
         width={500}
         onClose={() => setShowNotificationPanel(false)}
         open={showNotificationPanel}
+        className="dark-drawer"
+        headerStyle={{
+          backgroundColor: '#1f1f1f',
+          color: '#ffffff',
+          borderBottom: '1px solid #333333'
+        }}
+        bodyStyle={{
+          backgroundColor: '#1f1f1f',
+          color: '#ffffff'
+        }}
+        styles={{
+          header: {
+            backgroundColor: '#1f1f1f !important',
+            color: '#ffffff !important',
+            borderBottom: '1px solid #333333 !important'
+          },
+          body: {
+            backgroundColor: '#1f1f1f !important',
+            color: '#ffffff !important'
+          },
+          content: {
+            backgroundColor: '#1f1f1f !important'
+          },
+          wrapper: {
+            backgroundColor: 'rgba(0, 0, 0, 0.45) !important'
+          }
+        }}
         extra={
           <Space>
             <Badge count={alertStats.critical} size="small">
-              <Button size="small" danger>긴급</Button>
+              <Button 
+                size="small" 
+                danger={notificationFilter === 'critical'}
+                type={notificationFilter === 'critical' ? 'primary' : 'default'}
+                onClick={() => setNotificationFilter(notificationFilter === 'critical' ? 'all' : 'critical')}
+              >
+                {t('alerts.critical')}
+              </Button>
             </Badge>
             <Badge count={alertStats.unacknowledged} size="small">
-              <Button size="small">미확인</Button>
+              <Button 
+                size="small"
+                type={notificationFilter === 'unacknowledged' ? 'primary' : 'default'}
+                onClick={() => setNotificationFilter(notificationFilter === 'unacknowledged' ? 'all' : 'unacknowledged')}
+              >
+                {t('alerts.unacknowledged')}
+              </Button>
             </Badge>
           </Space>
         }
       >
         <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
           <Button onClick={requestNotificationPermission} block>
-            브라우저 알림 허용
+            {t('alerts.allowBrowserNotifications')}
           </Button>
           {alertStats.unacknowledged > 0 && (
             <Button onClick={clearAllAlerts} block>
-              모든 알림 확인 ({alertStats.unacknowledged}개)
+              {t('alerts.clearAll')} ({alertStats.unacknowledged}개)
             </Button>
           )}
         </Space>
@@ -907,9 +984,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             ...realtimeAlerts.map(alert => ({ ...alert, type: 'realtime' }))
           ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-          return allAlerts.length > 0 ? (
+          // 필터링 적용
+          const filteredAlerts = allAlerts.filter(alert => {
+            if (notificationFilter === 'critical') {
+              return alert.priority === 'critical';
+            } else if (notificationFilter === 'unacknowledged') {
+              return !alert.acknowledged;
+            }
+            return true; // 'all'인 경우 모든 알림 표시
+          });
+
+          return filteredAlerts.length > 0 ? (
             <List
-              dataSource={allAlerts}
+              dataSource={filteredAlerts}
               renderItem={(alert) => (
                 <List.Item
                 style={{
@@ -937,7 +1024,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                         }
                       }}
                     >
-                      확인
+                      {t('alerts.acknowledge')}
                     </Button>
                   )
                 ]}
@@ -958,11 +1045,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                         alert.priority === 'critical' ? 'red' :
                         alert.priority === 'high' ? 'orange' : 'blue'
                       }>
-                        {alert.priority === 'critical' ? '긴급' :
-                         alert.priority === 'high' ? '높음' : '보통'}
+                        {alert.priority === 'critical' ? t('alerts.critical') :
+                         alert.priority === 'high' ? t('alerts.high') : t('alerts.medium')}
                       </Tag>
                       {alert.type === 'general' && (
-                        <Tag color="green" size="small">설비</Tag>
+                        <Tag color="green" size="small">{t('alerts.equipment')}</Tag>
                       )}
                     </div>
                   }
@@ -979,19 +1066,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             )}
             />
           ) : (
-            <Empty description="현재 알림이 없습니다" />
+            <Empty 
+              description={
+                notificationFilter === 'critical' ? t('alerts.noCriticalAlerts') :
+                notificationFilter === 'unacknowledged' ? t('alerts.noUnacknowledgedAlerts') :
+                t('alerts.noAlerts')
+              }
+            />
           );
         })()}
       </Drawer>
 
       {/* 설비 상태 상세 정보 모달 */}
       <Modal
-        title={`설비 상태 상세 정보 - ${selectedStatusType === 'maintenance' ? '점검' : '정지/기타'}`}
+        title={`${t('alerts.machineStatusDetails')} - ${selectedStatusType === 'maintenance' ? t('alerts.maintenance') : t('alerts.stopOther')}`}
         open={showMachineStatusModal}
         onCancel={() => setShowMachineStatusModal(false)}
         footer={[
           <Button key="close" onClick={() => setShowMachineStatusModal(false)}>
-            닫기
+            {t('alerts.close')}
           </Button>
         ]}
         width={800}
@@ -1013,7 +1106,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           return (
             <div>
               {Object.keys(groupedMachines).length === 0 ? (
-                <Empty description="해당 상태의 설비가 없습니다" />
+                <Empty description={t('alerts.noMachinesInStatus')} />
               ) : (
                 Object.entries(groupedMachines).map(([state, machineList]: [string, any]) => (
                   <div key={state} style={{ marginBottom: 16 }}>
@@ -1023,7 +1116,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                         text={getStatusText(state)}
                       />
                       <span style={{ marginLeft: 8, color: '#666' }}>
-                        ({(machineList as any[]).length}대)
+                        ({(machineList as any[]).length}{t('alerts.units')})
                       </span>
                     </h4>
                     <div style={{ 

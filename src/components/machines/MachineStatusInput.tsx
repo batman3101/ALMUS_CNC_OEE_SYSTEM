@@ -45,49 +45,49 @@ const getStateConfig = (state: MachineState, t: any) => {
     NORMAL_OPERATION: {
       color: 'success',
       icon: <PlayCircleOutlined />,
-      text: t('states.NORMAL_OPERATION'),
+      text: t('status.normalOperation'),
       description: '설비가 정상적으로 생산 중입니다' 
     },
     PM_MAINTENANCE: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: t('states.PM_MAINTENANCE'),
+      text: t('status.maintenance'),
       description: '계획된 예방정비 작업 중입니다'
     },
     MAINTENANCE: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: t('states.MAINTENANCE'),
+      text: t('status.maintenance'),
       description: '설비 점검 작업 중입니다'
     },
     MODEL_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: t('states.MODEL_CHANGE'),
+      text: t('status.modelChange'),
       description: '생산 모델 변경 작업 중입니다'
     },
     PLANNED_STOP: {
       color: 'default',
       icon: <PauseCircleOutlined />,
-      text: t('states.PLANNED_STOP'),
+      text: t('status.plannedStop'),
       description: '계획된 생산 중단 상태입니다'
     },
     PROGRAM_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: t('states.PROGRAM_CHANGE'),
+      text: t('status.programChange'),
       description: 'CNC 프로그램 변경 작업 중입니다'
     },
     TOOL_CHANGE: {
       color: 'processing',
       icon: <ToolOutlined />,
-      text: t('states.TOOL_CHANGE'),
+      text: t('status.toolChange'),
       description: '공구 교체 작업 중입니다'
     },
     TEMPORARY_STOP: {
       color: 'error',
       icon: <WarningOutlined />,
-      text: t('states.TEMPORARY_STOP'),
+      text: t('status.temporaryStop'),
       description: '예상치 못한 일시 정지 상태입니다'
     }
   };

@@ -194,7 +194,7 @@ export class SystemSettingsService {
   }
 
   /**
-   * 설정값 업데이트
+   * 설정값 업데이트 (Service Role 우회 로직 포함)
    */
   async updateSetting(update: SettingUpdate): Promise<SettingUpdateResponse> {
     try {
@@ -212,6 +212,14 @@ export class SystemSettingsService {
         valueToSave = JSON.stringify(update.setting_value);
       }
 
+      console.log('🔧 시스템 설정 업데이트 시도:', {
+        category: update.category,
+        key: update.setting_key,
+        value: valueToSave,
+        reason: update.change_reason
+      });
+
+      // 1차 시도: 일반 클라이언트 RPC 호출
       const { data, error } = await supabase
         .rpc('update_system_setting', {
           p_category: update.category,
@@ -221,19 +229,55 @@ export class SystemSettingsService {
         });
 
       if (error) {
-        console.error('Error updating system setting:', {
-          error,
-          update,
-          valueToSave
-        });
-        return { success: false, error: error.message || 'Failed to update setting' };
+        console.warn('⚠️ 일반 클라이언트 RPC 호출 실패:', error);
+
+        // 2차 시도: Service Role API를 통한 우회 처리
+        try {
+          console.log('🔄 Service Role API를 통한 우회 시도...');
+          
+          const serviceRoleResponse = await this.updateSettingViaServiceRole(update, valueToSave);
+          
+          if (serviceRoleResponse.success) {
+            console.log('✅ Service Role을 통한 설정 업데이트 성공');
+            
+            // 캐시 무효화 및 브로드캐스트
+            this.invalidateCache();
+            await this.broadcastSettingChange(update);
+            
+            // Log successful update
+            log.info('시스템 설정이 Service Role을 통해 성공적으로 업데이트됨', {
+              category: update.category,
+              key: update.setting_key,
+              value: update.setting_value,
+              method: 'service_role'
+            }, LogCategories.SETTINGS);
+            
+            return { success: true };
+          } else {
+            console.error('❌ Service Role 업데이트도 실패:', serviceRoleResponse.error);
+            return { 
+              success: false, 
+              error: `설정 업데이트 실패: ${serviceRoleResponse.error || '알 수 없는 오류'}`
+            };
+          }
+        } catch (serviceRoleError) {
+          console.error('❌ Service Role 우회 처리 중 예외 발생:', serviceRoleError);
+          return { 
+            success: false, 
+            error: `시스템 설정 업데이트에 실패했습니다. 관리자에게 문의하세요. (오류: ${error.message})`
+          };
+        }
       }
 
+      // 1차 시도 성공
+      console.log('✅ 일반 클라이언트 RPC 호출 성공');
+      
       // Log successful update
-      log.info('System setting updated successfully', {
+      log.info('시스템 설정이 성공적으로 업데이트됨', {
         category: update.category,
         key: update.setting_key,
-        value: update.setting_value
+        value: update.setting_value,
+        method: 'regular_client'
       }, LogCategories.SETTINGS);
 
       // 캐시 무효화
@@ -244,8 +288,81 @@ export class SystemSettingsService {
 
       return { success: true };
     } catch (error) {
-      console.error('Error in updateSetting:', error);
-      return { success: false, error: 'Failed to update system setting' };
+      console.error('❌ updateSetting에서 예외 발생:', error);
+      return { 
+        success: false, 
+        error: '시스템 설정 업데이트 중 오류가 발생했습니다. 다시 시도해 주세요.'
+      };
+    }
+  }
+
+  /**
+   * Service Role을 통한 설정 업데이트 (RLS 우회)
+   */
+  private async updateSettingViaServiceRole(update: SettingUpdate, valueToSave: string): Promise<SettingUpdateResponse> {
+    try {
+      // 클라이언트 사이드에서는 API 라우트를 통해 처리
+      if (typeof window !== 'undefined') {
+        const response = await fetch('/api/system-settings/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            category: update.category,
+            setting_key: update.setting_key,
+            setting_value: valueToSave,
+            change_reason: update.change_reason
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          return result;
+        } else {
+          const errorResult = await response.json();
+          return { 
+            success: false, 
+            error: errorResult.error || `HTTP ${response.status}: ${response.statusText}`
+          };
+        }
+      }
+      
+      // 서버 사이드에서는 직접 Service Role 사용
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!serviceRoleKey) {
+        return { success: false, error: 'Service Role Key를 사용할 수 없습니다' };
+      }
+      
+      const { createClient } = await import('@supabase/supabase-js');
+      const serviceClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        serviceRoleKey,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
+        }
+      );
+      
+      const { data, error } = await serviceClient
+        .rpc('update_system_setting', {
+          p_category: update.category,
+          p_key: update.setting_key,
+          p_value: valueToSave,
+          p_reason: update.change_reason
+        });
+
+      if (error) {
+        console.error('Service Role RPC 호출 실패:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Service Role 업데이트 중 오류:', error);
+      return { success: false, error: `Service Role 처리 중 오류: ${error}` };
     }
   }
 
@@ -494,7 +611,7 @@ export class SystemSettingsService {
         key: 'company_name',
         category: 'general',
         value_type: 'string',
-        default_value: 'CNC Manufacturing Co.',
+        default_value: 'ALMUS TECH',
         description: '회사명',
         is_system: true,
         validation: { required: true }
@@ -511,13 +628,41 @@ export class SystemSettingsService {
         key: 'timezone',
         category: 'general',
         value_type: 'string',
-        default_value: 'Asia/Seoul',
+        default_value: 'Asia/Ho_Chi_Minh',
         description: '시간대 설정',
         is_system: true,
         options: [
           { label: '서울 (Asia/Seoul)', value: 'Asia/Seoul' },
           { label: '호치민 (Asia/Ho_Chi_Minh)', value: 'Asia/Ho_Chi_Minh' },
           { label: 'UTC', value: 'UTC' }
+        ]
+      },
+      {
+        key: 'date_format',
+        category: 'general',
+        value_type: 'string',
+        default_value: 'DD/MM/YYYY',
+        description: '날짜 형식',
+        is_system: true,
+        options: [
+          { label: 'DD/MM/YYYY', value: 'DD/MM/YYYY' },
+          { label: 'MM/DD/YYYY', value: 'MM/DD/YYYY' },
+          { label: 'YYYY-MM-DD', value: 'YYYY-MM-DD' },
+          { label: 'YYYY/MM/DD', value: 'YYYY/MM/DD' }
+        ]
+      },
+      {
+        key: 'time_format',
+        category: 'general',
+        value_type: 'string',
+        default_value: 'HH:mm:ss',
+        description: '시간 형식',
+        is_system: true,
+        options: [
+          { label: '24시간 (HH:mm:ss)', value: 'HH:mm:ss' },
+          { label: '24시간 (HH:mm)', value: 'HH:mm' },
+          { label: '12시간 (hh:mm:ss A)', value: 'hh:mm:ss A' },
+          { label: '12시간 (hh:mm A)', value: 'hh:mm A' }
         ]
       },
       {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { theme } from 'antd';
 import { 
   Drawer, 
   List, 
@@ -54,6 +55,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   onClearAll,
   loading = false
 }) => {
+  const { token } = theme.useToken();
   const { t, language } = useLanguage();
   const [filter, setFilter] = useState<NotificationStatus | 'all'>('all');
   const [severityFilter, setSeverityFilter] = useState<NotificationSeverity | 'all'>('all');
@@ -196,6 +198,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
     }
   ];
 
+  const isDarkMode = (typeof window !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark');
+
   return (
     <Drawer
       title={
@@ -225,6 +229,14 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       onClose={onClose}
       open={open}
       width={400}
+      styles={{
+        body: {
+          background: isDarkMode ? token.colorBgElevated : undefined
+        },
+        header: {
+          background: isDarkMode ? token.colorBgElevated : undefined
+        }
+      }}
       extra={
         <Space>
           {notifications.length > 0 && (
@@ -264,7 +276,9 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 }`,
                 paddingLeft: 12,
                 marginLeft: -12,
-                backgroundColor: notification.status === 'active' ? '#fff2f0' : 'transparent'
+                backgroundColor: notification.status === 'active'
+                  ? (isDarkMode ? '#2a1919' : '#fff2f0')
+                  : 'transparent'
               }}
               actions={[
                 <Dropdown 

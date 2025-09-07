@@ -3,11 +3,15 @@
 import React from 'react';
 import { Spin, Card, Typography } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import styles from './login.module.css';
 
 const { Title, Text } = Typography;
 
 const LoginLoading: React.FC = () => {
+  const { getCompanyInfo, isLoading } = useSystemSettings();
+  const companyInfo = getCompanyInfo();
+  
   return (
     <div className={styles.loginContainer}>
       <div className={styles.loginWrapper}>
@@ -20,7 +24,7 @@ const LoginLoading: React.FC = () => {
                   <LoadingOutlined className={styles.logoIcon} spin />
                 </div>
                 <Title level={2} className={styles.brandTitle}>
-                  CNC OEE
+                  {isLoading ? 'Loading...' : companyInfo.name}
                 </Title>
                 <Text className={styles.subtitle}>
                   모니터링 시스템

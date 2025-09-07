@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useRouter, usePathname } from 'next/navigation';
 import styles from './Sidebar.module.css';
 
@@ -27,9 +28,12 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { getCompanyInfo, isLoading } = useSystemSettings();
   const router = useRouter();
   const pathname = usePathname();
   const screens = useBreakpoint();
+  
+  const companyInfo = getCompanyInfo();
 
   // 사용자 역할 (기본값: operator)
   const userRole = user?.role || 'operator';
@@ -145,7 +149,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
     >
       <div className={`${styles.logo} ${screens.xs ? styles.logoMobile : ''}`}>
         <span className={`${styles.logoText} ${screens.xs ? styles.logoTextMobile : ''}`}>
-          CNC OEE
+          {isLoading ? 'Loading...' : companyInfo.name}
         </span>
       </div>
       

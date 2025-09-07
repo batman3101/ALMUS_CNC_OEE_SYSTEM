@@ -113,3 +113,124 @@ body {
 * {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
+
+/* 다크 드로어 스타일 */
+.dark-drawer .ant-drawer-content {
+  background-color: #1f1f1f !important;
+}
+
+.dark-drawer .ant-drawer-header {
+  background-color: #1f1f1f !important;
+  border-bottom: 1px solid #333333 !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-drawer-header .ant-drawer-title {
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-drawer-body {
+  background-color: #1f1f1f !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-drawer-close {
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-drawer-close:hover {
+  color: #1890ff !important;
+}
+
+/* 드로어 내부 컨텐츠 스타일 */
+.dark-drawer .ant-list-item {
+  border-color: #333333 !important;
+  background-color: transparent !important;
+}
+
+.dark-drawer .ant-list-item-meta-title {
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-list-item-meta-description {
+  color: #cccccc !important;
+}
+
+.dark-drawer .ant-tag {
+  background-color: #333333 !important;
+  border-color: #555555 !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-empty-description {
+  color: #cccccc !important;
+}
+
+/* 버튼 스타일 */
+.dark-drawer .ant-btn-default {
+  background-color: #333333 !important;
+  border-color: #555555 !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-btn-default:hover {
+  background-color: #555555 !important;
+  border-color: #777777 !important;
+}
+
+/* 긴급/미확인 버튼은 원래 색상 유지 */
+.dark-drawer .ant-btn-danger {
+  background-color: #ff4d4f !important;
+  border-color: #ff4d4f !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-btn-danger:hover {
+  background-color: #ff7875 !important;
+  border-color: #ff7875 !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-btn-primary {
+  background-color: #1890ff !important;
+  border-color: #1890ff !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-btn-primary:hover {
+  background-color: #40a9ff !important;
+  border-color: #40a9ff !important;
+  color: #ffffff !important;
+}
+
+/* 상태 태그와 버튼은 원래 색상 유지 */
+.dark-drawer .ant-tag.ant-tag-red {
+  background-color: #ff4d4f !important;
+  border-color: #ff4d4f !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-tag.ant-tag-orange {
+  background-color: #fa8c16 !important;
+  border-color: #fa8c16 !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-tag.ant-tag-blue {
+  background-color: #1890ff !important;
+  border-color: #1890ff !important;
+  color: #ffffff !important;
+}
+
+.dark-drawer .ant-tag.ant-tag-green {
+  background-color: #52c41a !important;
+  border-color: #52c41a !important;
+  color: #ffffff !important;
+}
+
+/* 우선순위/상태별 태그 스타일 재정의 */
+.dark-drawer .ant-tag:not(.ant-tag-red):not(.ant-tag-orange):not(.ant-tag-blue):not(.ant-tag-green) {
+  background-color: #333333 !important;
+  border-color: #555555 !important;
+  color: #ffffff !important;
+}

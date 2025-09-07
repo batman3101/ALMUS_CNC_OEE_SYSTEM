@@ -48,6 +48,18 @@ const getStateConfig = (state: string, t: any) => {
       color: 'warning',
       text: t('status.maintenance')
     },
+    PM_MAINTENANCE: {
+      color: 'warning',
+      text: t('status.maintenance')
+    },
+    INSPECTION: {
+      color: 'warning',
+      text: t('status.inspection')
+    },
+    BREAKDOWN_REPAIR: {
+      color: 'error',
+      text: t('status.breakdownRepair')
+    },
     MODEL_CHANGE: {
       color: 'processing',
       text: t('status.modelChange')
@@ -70,7 +82,7 @@ const getStateConfig = (state: string, t: any) => {
     }
   };
   
-  return configs[state] || { color: 'default', text: state };
+  return configs[state] || { color: 'default', text: t('status.unknown') };
 };
 
 const MachineDetailModal: React.FC<MachineDetailModalProps> = ({

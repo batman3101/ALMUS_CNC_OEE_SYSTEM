@@ -14,7 +14,8 @@ import {
   ColorPicker,
   Alert,
   Divider,
-  Select
+  Select,
+  theme
 } from 'antd';
 import { SaveOutlined, EyeOutlined, BgColorsOutlined } from '@ant-design/icons';
 import type { Color } from 'antd/es/color-picker';
@@ -29,6 +30,7 @@ interface DisplaySettingsTabProps {
 }
 
 const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChange }) => {
+  const { token } = theme.useToken();
   const { t } = useLanguage();
   const { settings, updateSetting } = useDisplaySettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
@@ -373,7 +375,7 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
             </Col>
           </Row>
 
-          <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#fafafa', borderRadius: '6px' }}>
+          <div style={{ marginTop: '16px', padding: '12px', backgroundColor: token.colorFillAlter, borderRadius: '6px' }}>
             <Text strong>{t('settings.display.currentSettings')}: </Text>
             <br />
             <Text>

@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { systemSettingsService } from '@/lib/systemSettings';
+import type { 
+  SettingCategory, 
+  SettingsResponse,
+  SettingUpdateResponse 
+} from '@/types/systemSettings';
 
 export const dynamic = 'force-dynamic';
 
@@ -6,105 +12,44 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const category = searchParams.get('category');
+    const category = searchParams.get('category') as SettingCategory | null;
 
-    // 실제 구현에서는 system_settings 테이블에서 데이터를 가져와야 함
-    // 현재는 목업 데이터 반환
-    const mockSettings = {
-      general: {
-        app_name: 'CNC OEE Monitoring System',
-        default_language: 'ko',
-        timezone: 'Asia/Seoul',
-        date_format: 'YYYY-MM-DD',
-        time_format: '24',
-        downtime_reasons: [
-          '설비 고장',
-          '금형 교체', 
-          '자재 부족',
-          '품질 불량',
-          '계획 정지',
-          '청소/정리',
-          '기타'
-        ],
-        shift_config: {
-          A: { start: '08:00', end: '20:00', name: 'A교대' },
-          B: { start: '20:00', end: '08:00', name: 'B교대' }
-        }
-      },
-      oee: {
-        target_oee: 0.85,
-        target_availability: 0.90,
-        target_performance: 0.95,
-        target_quality: 0.98,
-        alert_threshold_low: 0.70,
-        alert_threshold_critical: 0.60,
-        calculation_method: 'standard',
-        aggregate_interval: 'hourly',
-        data_retention_days: 365
-      },
-      notifications: {
-        email_enabled: true,
-        sms_enabled: false,
-        push_enabled: true,
-        alert_recipients: ['admin@company.com', 'engineer@company.com'],
-        alert_conditions: {
-          oee_below_threshold: true,
-          machine_downtime: true,
-          quality_issues: true,
-          production_delays: true
-        },
-        notification_frequency: 'immediate'
-      },
-      display: {
-        theme: 'light',
-        dashboard_refresh_interval: 30,
-        chart_colors: {
-          oee: '#1890ff',
-          availability: '#52c41a', 
-          performance: '#faad14',
-          quality: '#f5222d'
-        },
-        default_date_range: '7d',
-        items_per_page: 20
-      },
-      shifts: {
-        enabled: true,
-        shifts: [
-          {
-            id: 'A',
-            name: 'A교대',
-            start_time: '08:00',
-            end_time: '20:00',
-            is_active: true
-          },
-          {
-            id: 'B', 
-            name: 'B교대',
-            start_time: '20:00',
-            end_time: '08:00',
-            is_active: true
-          }
-        ],
-        overlap_minutes: 30,
-        break_times: [
-          { start: '12:00', end: '13:00', name: '점심시간' },
-          { start: '18:00', end: '18:30', name: '저녁시간' }
-        ]
+    // 카테고리별 필터링이 요청된 경우
+    if (category) {
+      // 먼저 전체 구조화된 설정을 가져와서 카테고리별로 필터링
+      const structuredSettings = await systemSettingsService.getStructuredSettings();
+      
+      // 요청된 카테고리가 존재하는지 확인
+      if (structuredSettings[category]) {
+        return NextResponse.json({
+          success: true,
+          settings: { [category]: structuredSettings[category] }
+        });
+      } else {
+        // 카테고리가 없으면 빈 객체 반환
+        return NextResponse.json({
+          success: true,
+          settings: { [category]: {} }
+        });
       }
-    };
-
-    // 카테고리별 필터링
-    if (category && mockSettings[category as keyof typeof mockSettings]) {
-      return NextResponse.json({
-        settings: { [category]: mockSettings[category as keyof typeof mockSettings] }
-      });
     }
 
-    return NextResponse.json({ settings: mockSettings });
+    // 모든 설정 조회
+    const structuredSettings = await systemSettingsService.getStructuredSettings();
+    
+    return NextResponse.json({
+      success: true,
+      settings: structuredSettings
+    });
+    
   } catch (error) {
     console.error('Error fetching system settings:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch system settings' },
+      { 
+        success: false,
+        error: 'Failed to fetch system settings',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
@@ -114,33 +59,165 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { category, settings } = body;
+    const { category, settings, change_reason } = body;
 
     if (!category || !settings) {
       return NextResponse.json(
-        { error: 'Category and settings are required' },
+        { 
+          success: false,
+          error: 'Category and settings are required' 
+        },
         { status: 400 }
       );
     }
 
-    // 실제 구현에서는 system_settings 테이블 업데이트
-    // 현재는 목업 응답 반환
-    const updatedSettings = {
-      category,
-      settings,
-      updated_at: new Date().toISOString(),
-      updated_by: 'current_user' // 실제로는 인증된 사용자 ID
-    };
+    // 설정값들을 개별 업데이트로 변환
+    const updates = [];
+    for (const [key, value] of Object.entries(settings)) {
+      updates.push({
+        category: category as SettingCategory,
+        setting_key: key,
+        setting_value: value,
+        change_reason: change_reason || `API update - ${category}.${key}`
+      });
+    }
+
+    // 여러 설정값 일괄 업데이트
+    const response = await systemSettingsService.updateMultipleSettings(updates);
+
+    if (!response.success) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: response.error || 'Failed to update settings'
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Settings updated successfully',
-      updated_settings: updatedSettings
+      category,
+      updated_count: updates.length,
+      timestamp: new Date().toISOString()
     });
+
   } catch (error) {
     console.error('Error updating system settings:', error);
     return NextResponse.json(
-      { error: 'Failed to update system settings' },
+      { 
+        success: false,
+        error: 'Failed to update system settings',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/system-settings - 새로운 설정 생성 (단일 설정)
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { category, setting_key, setting_value, change_reason } = body;
+
+    if (!category || !setting_key || setting_value === undefined) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Category, setting_key, and setting_value are required' 
+        },
+        { status: 400 }
+      );
+    }
+
+    const update = {
+      category: category as SettingCategory,
+      setting_key,
+      setting_value,
+      change_reason: change_reason || `API create - ${category}.${setting_key}`
+    };
+
+    const response = await systemSettingsService.updateSetting(update);
+
+    if (!response.success) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: response.error || 'Failed to create setting'
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Setting created successfully',
+      setting: {
+        category,
+        key: setting_key,
+        value: setting_value
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error creating system setting:', error);
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Failed to create system setting',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/system-settings - 설정 비활성화
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const category = searchParams.get('category') as SettingCategory | null;
+    const setting_key = searchParams.get('key');
+
+    if (!category || !setting_key) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Category and key parameters are required' 
+        },
+        { status: 400 }
+      );
+    }
+
+    // 삭제 대신 비활성화 처리 (is_active = false로 업데이트)
+    const update = {
+      category,
+      setting_key,
+      setting_value: null, // 값은 유지하되 비활성화
+      change_reason: `API delete - ${category}.${setting_key}`
+    };
+
+    // 여기서는 실제 비활성화 로직이 필요하지만, 
+    // 현재 서비스에는 해당 메서드가 없으므로 에러 응답
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Delete operation not implemented yet'
+      },
+      { status: 501 }
+    );
+
+  } catch (error) {
+    console.error('Error deleting system setting:', error);
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Failed to delete system setting',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
