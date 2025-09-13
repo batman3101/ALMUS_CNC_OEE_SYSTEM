@@ -276,15 +276,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           const totalDefects = machineProduction.reduce((sum: number, p: any) => sum + (p.defect_qty || 0), 0);
           
           const quality = totalOutput > 0 ? (totalOutput - totalDefects) / totalOutput : 0.95;
-          const availability = machine.current_state === 'NORMAL_OPERATION' ? 0.85 + Math.random() * 0.1 : 0.5 + Math.random() * 0.2;
-          const performance = 0.8 + Math.random() * 0.15;
+          const availability = machine.current_state === 'NORMAL_OPERATION' ? 0.85 : 0.5;
+          const performance = 0.8;
           
           calculatedOeeMetrics[machine.id] = {
             availability,
             performance,
             quality,
             oee: Math.round(availability * performance * quality * 1000) / 1000,
-            actual_runtime: 420 + Math.random() * 60,
+            actual_runtime: 420,
             planned_runtime: 480,
             ideal_runtime: 480,
             output_qty: totalOutput,

@@ -28,13 +28,62 @@ export async function GET(
       );
     }
 
-    // 실시간 데이터인 경우
+    // 실시간 데이터인 경우 - 실제 데이터 기반
     if (realtime) {
       const currentTime = new Date();
-      const availability = 0.75 + Math.random() * 0.2;
-      const performance = 0.80 + Math.random() * 0.15;
-      const quality = 0.90 + Math.random() * 0.08;
-      const oee = availability * performance * quality;
+      const today = currentTime.toISOString().split('T')[0];
+      
+      // 오늘의 최신 생산 기록 조회
+      const { data: latestRecord } = await supabaseAdmin
+        .from('production_records')
+        .select('*')
+        .eq('machine_id', machineId)
+        .eq('date', today)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      // 현재 실행 중인 machine_log 조회
+      const { data: currentLog } = await supabaseAdmin
+        .from('machine_logs')
+        .select('*')
+        .eq('machine_id', machineId)
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .single();
+
+      // 오늘의 전체 생산 기록 조회 (집계용)
+      const { data: todayRecords } = await supabaseAdmin
+        .from('production_records')
+        .select('*')
+        .eq('machine_id', machineId)
+        .eq('date', today);
+
+      // 실제 데이터가 없으면 기본값 사용
+      const availability = latestRecord ? parseFloat(latestRecord.availability) : 0.0;
+      const performance = latestRecord ? parseFloat(latestRecord.performance) : 0.0;
+      const quality = latestRecord ? parseFloat(latestRecord.quality) : 0.0;
+      const oee = latestRecord ? parseFloat(latestRecord.oee) : 0.0;
+
+      // 오늘 집계 데이터 계산
+      const todaySummary = todayRecords?.reduce((sum, record) => ({
+        total_output: sum.total_output + (record.output_qty || 0),
+        defect_count: sum.defect_count + (record.defect_qty || 0),
+        runtime_minutes: sum.runtime_minutes + (record.actual_runtime || 0),
+        planned_minutes: sum.planned_minutes + (record.planned_runtime || 0),
+      }), { total_output: 0, defect_count: 0, runtime_minutes: 0, planned_minutes: 0 }) || 
+      { total_output: 0, defect_count: 0, runtime_minutes: 0, planned_minutes: 0 };
+
+      const efficiency = todaySummary.planned_minutes > 0 ? 
+        todaySummary.runtime_minutes / todaySummary.planned_minutes : 0;
+
+      // 현재 사이클 정보 계산
+      const cycleStartTime = currentLog ? new Date(currentLog.start_time) : 
+        new Date(currentTime.getTime() - 120000); // 기본 2분 전
+      const currentDuration = Math.floor((currentTime.getTime() - cycleStartTime.getTime()) / 1000);
+      const expectedDuration = machine.current_process?.tact_time_seconds || 120;
+      const progress = Math.min(currentDuration / expectedDuration, 1.0);
 
       const realtimeData = {
         machine_id: machineId,
@@ -46,17 +95,17 @@ export async function GET(
         performance: Math.round(performance * 1000) / 1000,
         quality: Math.round(quality * 1000) / 1000,
         current_cycle: {
-          started_at: new Date(currentTime.getTime() - 120000).toISOString(), // 2분 전 시작
-          expected_duration: machine.default_tact_time,
-          current_duration: 120,
-          progress: 0.8,
+          started_at: cycleStartTime.toISOString(),
+          expected_duration: expectedDuration,
+          current_duration: currentDuration,
+          progress: Math.round(progress * 1000) / 1000,
         },
         today_summary: {
-          total_output: 95,
-          defect_count: 2,
-          runtime_minutes: 480,
-          planned_minutes: 500,
-          efficiency: 0.85,
+          total_output: todaySummary.total_output,
+          defect_count: todaySummary.defect_count,
+          runtime_minutes: todaySummary.runtime_minutes,
+          planned_minutes: todaySummary.planned_minutes,
+          efficiency: Math.round(efficiency * 1000) / 1000,
         }
       };
 
@@ -66,69 +115,64 @@ export async function GET(
       });
     }
 
-    // 히스토리 데이터 생성
-    const generateHistoricalOEE = (days: number) => {
-      return Array.from({ length: days }, (_, index) => {
-        const date = new Date();
-        date.setDate(date.getDate() - index);
-        
-        // 설비별로 약간 다른 성능 특성 부여
-        let baseAvailability = 0.80;
-        let basePerformance = 0.85;
-        let baseQuality = 0.92;
-        
-        if (machineId.includes('1')) {
-          baseAvailability = 0.85;
-          basePerformance = 0.80;
-        } else if (machineId.includes('2')) {
-          basePerformance = 0.90;
-          baseQuality = 0.88;
-        }
-
-        const availability = baseAvailability + (Math.random() - 0.5) * 0.2;
-        const performance = basePerformance + (Math.random() - 0.5) * 0.15;
-        const quality = baseQuality + (Math.random() - 0.5) * 0.1;
-        const oee = availability * performance * quality;
-
-        return {
-          id: `oee_${machineId}_${index}`,
-          machine_id: machineId,
-          date: date.toISOString().split('T')[0],
-          shift: ['A', 'B'][index % 2] as 'A' | 'B',
-          availability: Math.max(0.5, Math.min(1, availability)),
-          performance: Math.max(0.5, Math.min(1, performance)),
-          quality: Math.max(0.8, Math.min(1, quality)),
-          oee: Math.max(0.4, Math.min(1, oee)),
-          actual_runtime: Math.round(availability * 500),
-          planned_runtime: 500,
-          ideal_runtime: Math.round(performance * availability * 500),
-          output_qty: Math.round((80 + Math.random() * 40) * availability * performance),
-          defect_qty: Math.round(Math.random() * 10 * (1 - quality)),
-          downtime_minutes: Math.round((1 - availability) * 500),
-          created_at: date.toISOString(),
-        };
-      }).map(data => ({
-        ...data,
-        availability: Math.round(data.availability * 1000) / 1000,
-        performance: Math.round(data.performance * 1000) / 1000,
-        quality: Math.round(data.quality * 1000) / 1000,
-        oee: Math.round(data.oee * 1000) / 1000,
-      }));
-    };
-
-    let oeeData = generateHistoricalOEE(30); // 기본 30일
+    // 히스토리 데이터 조회 - 실제 production_records에서 가져오기
+    let query = supabaseAdmin
+      .from('production_records')
+      .select('*')
+      .eq('machine_id', machineId)
+      .order('date', { ascending: false });
 
     // 날짜 필터 적용
     if (startDate && endDate) {
-      oeeData = oeeData.filter(data => 
-        data.date >= startDate && data.date <= endDate
-      );
+      query = query.gte('date', startDate).lte('date', endDate);
+    } else {
+      // 기본적으로 최근 30일 데이터
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      query = query.gte('date', thirtyDaysAgo.toISOString().split('T')[0]);
     }
 
     // 교대 필터 적용
     if (shift) {
-      oeeData = oeeData.filter(data => data.shift === shift);
+      query = query.eq('shift', shift);
     }
+
+    const { data: productionRecords, error: recordsError } = await query;
+
+    if (recordsError) {
+      console.error('Error fetching production records:', recordsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch production records' },
+        { status: 500 }
+      );
+    }
+
+    // production_records 데이터를 API 응답 형식에 맞게 변환
+    const oeeData = (productionRecords || []).map(record => ({
+      id: record.record_id,
+      machine_id: record.machine_id,
+      date: record.date,
+      shift: record.shift,
+      availability: parseFloat(record.availability) || 0,
+      performance: parseFloat(record.performance) || 0,
+      quality: parseFloat(record.quality) || 0,
+      oee: parseFloat(record.oee) || 0,
+      actual_runtime: record.actual_runtime || 0,
+      planned_runtime: record.planned_runtime || 480,
+      ideal_runtime: record.ideal_runtime || 0,
+      output_qty: record.output_qty || 0,
+      defect_qty: record.defect_qty || 0,
+      downtime_minutes: Math.max(0, (record.planned_runtime || 480) - (record.actual_runtime || 0)),
+      created_at: record.created_at,
+    })).map(data => ({
+      ...data,
+      availability: Math.round(data.availability * 1000) / 1000,
+      performance: Math.round(data.performance * 1000) / 1000,
+      quality: Math.round(data.quality * 1000) / 1000,
+      oee: Math.round(data.oee * 1000) / 1000,
+    }));
+
+    // 필터링은 이미 쿼리에서 처리됨
 
     // 통계 계산
     const totalRecords = oeeData.length;

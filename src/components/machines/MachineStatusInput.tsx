@@ -26,6 +26,7 @@ import { Machine, MachineState } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -39,60 +40,21 @@ interface MachineStatusInputProps {
   language?: 'ko' | 'vi';
 }
 
-// 설비 상태별 설정 - t 함수를 사용하도록 수정
-const getStateConfig = (state: MachineState, t: any) => {
-  const configs = {
-    NORMAL_OPERATION: {
-      color: 'success',
-      icon: <PlayCircleOutlined />,
-      text: t('status.normalOperation'),
-      description: '설비가 정상적으로 생산 중입니다' 
-    },
-    PM_MAINTENANCE: {
-      color: 'warning',
-      icon: <ToolOutlined />,
-      text: t('status.maintenance'),
-      description: '계획된 예방정비 작업 중입니다'
-    },
-    MAINTENANCE: {
-      color: 'warning',
-      icon: <ToolOutlined />,
-      text: t('status.maintenance'),
-      description: '설비 점검 작업 중입니다'
-    },
-    MODEL_CHANGE: {
-      color: 'processing',
-      icon: <SettingOutlined />,
-      text: t('status.modelChange'),
-      description: '생산 모델 변경 작업 중입니다'
-    },
-    PLANNED_STOP: {
-      color: 'default',
-      icon: <PauseCircleOutlined />,
-      text: t('status.plannedStop'),
-      description: '계획된 생산 중단 상태입니다'
-    },
-    PROGRAM_CHANGE: {
-      color: 'processing',
-      icon: <SettingOutlined />,
-      text: t('status.programChange'),
-      description: 'CNC 프로그램 변경 작업 중입니다'
-    },
-    TOOL_CHANGE: {
-      color: 'processing',
-      icon: <ToolOutlined />,
-      text: t('status.toolChange'),
-      description: '공구 교체 작업 중입니다'
-    },
-    TEMPORARY_STOP: {
-      color: 'error',
-      icon: <WarningOutlined />,
-      text: t('status.temporaryStop'),
-      description: '예상치 못한 일시 정지 상태입니다'
-    }
+// 설비 상태별 아이콘 매핑
+const getStateIcon = (state: MachineState) => {
+  const iconConfigs = {
+    NORMAL_OPERATION: <PlayCircleOutlined />,
+    INSPECTION: <ToolOutlined />,
+    BREAKDOWN_REPAIR: <WarningOutlined />,
+    PM_MAINTENANCE: <ToolOutlined />,
+    MODEL_CHANGE: <SettingOutlined />,
+    PLANNED_STOP: <PauseCircleOutlined />,
+    PROGRAM_CHANGE: <SettingOutlined />,
+    TOOL_CHANGE: <ToolOutlined />,
+    TEMPORARY_STOP: <WarningOutlined />
   };
   
-  return configs[state];
+  return iconConfigs[state] || <WarningOutlined />;
 };
 
 const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
@@ -102,26 +64,48 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
   onStatusChange,
   language = 'ko'
 }) => {
-  const { t } = useMachinesTranslation();
+  const { t, i18n } = useMachinesTranslation();
+  const currentLanguage = (i18n?.language as 'ko' | 'vi') || language;
+  const { 
+    getStatusText, 
+    getStatusColorCode, 
+    getAntdColorFromHex,
+    getAllStatusOptions,
+    isLoading: statusLoading 
+  } = useMachineStatusTranslations(currentLanguage);
   const [selectedState, setSelectedState] = useState<MachineState | undefined>();
   const [loading, setLoading] = useState(false);
 
-  // 현재 상태 정보
-  const currentStateConfig = machine?.current_state 
-    ? getStateConfig(machine.current_state, t)
-    : null;
-
-  // 현재 상태 지속 시간 (임시 계산)
-  const getCurrentStateDuration = () => {
+  // 현재 상태 설정 정보 생성
+  const getCurrentStateConfig = () => {
     if (!machine?.current_state) return null;
     
-    // 실제로는 machine_logs에서 현재 상태의 start_time을 가져와야 함
-    const now = new Date();
-    const mockStartTime = new Date(now.getTime() - Math.random() * 8 * 60 * 60 * 1000);
+    const colorCode = getStatusColorCode(machine.current_state);
+    const text = getStatusText(machine.current_state);
+    const color = getAntdColorFromHex(colorCode);
+    const icon = getStateIcon(machine.current_state);
     
-    return formatDistanceToNow(mockStartTime, {
+    return {
+      color,
+      colorCode,
+      icon,
+      text,
+      description: `${text} 상태입니다` // 기본 설명
+    };
+  };
+
+  const currentStateConfig = getCurrentStateConfig();
+
+  // 현재 상태 지속 시간 (실제 데이터 기반)
+  const getCurrentStateDuration = () => {
+    if (!machine?.current_state || !machine?.updated_at) return null;
+    
+    // machine.updated_at을 현재 상태 시작 시간으로 사용
+    const stateStartTime = new Date(machine.updated_at);
+    
+    return formatDistanceToNow(stateStartTime, {
       addSuffix: true,
-      locale: language === 'ko' ? ko : vi
+      locale: currentLanguage === 'ko' ? ko : vi
     });
   };
 
@@ -137,7 +121,17 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
       return;
     }
 
-    const newStateConfig = getStateConfig(selectedState, t);
+    const newStateColorCode = getStatusColorCode(selectedState);
+    const newStateText = getStatusText(selectedState);
+    const newStateColor = getAntdColorFromHex(newStateColorCode);
+    const newStateIcon = getStateIcon(selectedState);
+    
+    const newStateConfig = {
+      color: newStateColor,
+      colorCode: newStateColorCode,
+      icon: newStateIcon,
+      text: newStateText
+    };
     const currentStateText = currentStateConfig?.text || t('statusChange.unknown');
 
     // 상태 변경 확인 모달
@@ -283,24 +277,22 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
               onChange={setSelectedState}
               style={{ width: '100%' }}
               size="large"
+              loading={statusLoading}
             >
-              {['NORMAL_OPERATION', 'MAINTENANCE', 'PM_MAINTENANCE', 'MODEL_CHANGE', 'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP'].map(state => {
-                const config = getStateConfig(state as MachineState, t);
-                return (
-                  <Option key={state} value={state}>
-                    <Space>
-                      {config.icon}
-                      <span>{config.text}</span>
-                    </Space>
-                  </Option>
-                );
-              })}
+              {getAllStatusOptions().map(option => (
+                <Option key={option.value} value={option.value}>
+                  <Space>
+                    {getStateIcon(option.value as MachineState)}
+                    <span>{option.label}</span>
+                  </Space>
+                </Option>
+              ))}
             </Select>
             
             {selectedState && (
               <div style={{ marginTop: 8 }}>
                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                  {getStateConfig(selectedState, t).description}
+                  {getStatusText(selectedState)} 상태입니다
                 </Text>
               </div>
             )}

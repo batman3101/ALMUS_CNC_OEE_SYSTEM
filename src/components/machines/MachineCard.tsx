@@ -15,6 +15,7 @@ import { Machine, MachineState } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 
 const { Text, Title } = Typography;
 
@@ -24,62 +25,21 @@ interface MachineCardProps {
   language?: 'ko' | 'vi';
 }
 
-// 설비 상태별 색상 및 아이콘 매핑
-const getStateConfig = (state: MachineState, t: any) => {
-  const configs = {
-    NORMAL_OPERATION: {
-      color: 'success',
-      icon: <PlayCircleOutlined />,
-      text: t('status.normalOperation')
-    },
-    MAINTENANCE: {
-      color: 'warning',
-      icon: <ToolOutlined />,
-      text: t('status.maintenance')
-    },
-    PM_MAINTENANCE: {
-      color: 'warning',
-      icon: <ToolOutlined />,
-      text: t('status.maintenance')
-    },
-    INSPECTION: {
-      color: 'warning',
-      icon: <ToolOutlined />,
-      text: t('status.inspection')
-    },
-    BREAKDOWN_REPAIR: {
-      color: 'error',
-      icon: <WarningOutlined />,
-      text: t('status.breakdownRepair')
-    },
-    MODEL_CHANGE: {
-      color: 'processing',
-      icon: <SettingOutlined />,
-      text: t('status.modelChange')
-    },
-    PLANNED_STOP: {
-      color: 'default',
-      icon: <PauseCircleOutlined />,
-      text: t('status.plannedStop')
-    },
-    PROGRAM_CHANGE: {
-      color: 'processing',
-      icon: <SettingOutlined />,
-      text: t('status.programChange')
-    },
-    TOOL_CHANGE: {
-      color: 'processing',
-      icon: <ToolOutlined />,
-      text: t('status.toolChange')
-    },
-    TEMPORARY_STOP: {
-      color: 'error',
-      icon: <WarningOutlined />,
-      text: t('status.temporaryStop')
-    }
+// 설비 상태별 아이콘 매핑 (데이터베이스에서 색상은 가져옴)
+const getStateIcon = (state: MachineState) => {
+  const iconConfigs = {
+    NORMAL_OPERATION: <PlayCircleOutlined />,
+    INSPECTION: <ToolOutlined />,
+    BREAKDOWN_REPAIR: <WarningOutlined />,
+    PM_MAINTENANCE: <ToolOutlined />,
+    MODEL_CHANGE: <SettingOutlined />,
+    PLANNED_STOP: <PauseCircleOutlined />,
+    PROGRAM_CHANGE: <SettingOutlined />,
+    TOOL_CHANGE: <ToolOutlined />,
+    TEMPORARY_STOP: <WarningOutlined />
   };
   
-  return configs[state] || { color: 'default', icon: <WarningOutlined />, text: t('status.unknown') };
+  return iconConfigs[state] || <WarningOutlined />;
 };
 
 const MachineCard: React.FC<MachineCardProps> = ({ 
@@ -88,10 +48,31 @@ const MachineCard: React.FC<MachineCardProps> = ({
   language = 'ko' 
 }) => {
   const { t } = useMachinesTranslation();
+  const { 
+    getStatusText, 
+    getStatusColorCode, 
+    getAntdColorFromHex,
+    isLoading: statusLoading 
+  } = useMachineStatusTranslations(language);
   
-  const stateConfig = machine.current_state 
-    ? getStateConfig(machine.current_state, t)
-    : null;
+  // 현재 상태의 설정 정보 생성
+  const getStateConfig = () => {
+    if (!machine.current_state) return null;
+    
+    const colorCode = getStatusColorCode(machine.current_state);
+    const text = getStatusText(machine.current_state);
+    const color = getAntdColorFromHex(colorCode);
+    const icon = getStateIcon(machine.current_state);
+    
+    return {
+      color,
+      colorCode,
+      icon,
+      text
+    };
+  };
+  
+  const stateConfig = getStateConfig();
 
   const handleCardClick = () => {
     if (onClick) {
@@ -99,15 +80,14 @@ const MachineCard: React.FC<MachineCardProps> = ({
     }
   };
 
-  // 상태 지속 시간 계산 (임시로 현재 시간 기준)
+  // 상태 지속 시간 계산 (실제 데이터 기반)
   const getStateDuration = () => {
-    if (!machine.current_state) return null;
+    if (!machine.current_state || !machine.updated_at) return null;
     
-    // 실제로는 machine_logs에서 현재 상태의 start_time을 가져와야 함
-    const now = new Date();
-    const mockStartTime = new Date(now.getTime() - Math.random() * 8 * 60 * 60 * 1000); // 0-8시간 전
+    // machine.updated_at을 현재 상태 시작 시간으로 사용
+    const stateStartTime = new Date(machine.updated_at);
     
-    return formatDistanceToNow(mockStartTime, {
+    return formatDistanceToNow(stateStartTime, {
       addSuffix: true,
       locale: language === 'ko' ? ko : vi
     });
@@ -119,13 +99,7 @@ const MachineCard: React.FC<MachineCardProps> = ({
       onClick={handleCardClick}
       className="machine-card"
       style={{ 
-        borderLeft: `4px solid ${
-          stateConfig?.color === 'success' ? '#52c41a' :
-          stateConfig?.color === 'warning' ? '#faad14' :
-          stateConfig?.color === 'error' ? '#ff4d4f' :
-          stateConfig?.color === 'processing' ? '#1890ff' :
-          '#d9d9d9'
-        }`
+        borderLeft: `4px solid ${stateConfig?.colorCode || '#d9d9d9'}`
       }}
       actions={[]}
     >

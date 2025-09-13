@@ -67,7 +67,7 @@ const MachineForm: React.FC<MachineFormProps> = ({
       setProductModels(data || []);
     } catch (error) {
       console.error('Error fetching product models:', error);
-      message.error('생산 모델 목록을 불러오는데 실패했습니다');
+      message.error(t('admin:machineManagement.fetchModelsError'));
     } finally {
       setModelsLoading(false);
     }
@@ -93,7 +93,7 @@ const MachineForm: React.FC<MachineFormProps> = ({
       }
     } catch (error) {
       console.error('Error fetching model processes:', error);
-      message.error('공정 목록을 불러오는데 실패했습니다');
+      message.error(t('admin:machineManagement.fetchProcessesError'));
     } finally {
       setProcessesLoading(false);
     }
@@ -155,23 +155,23 @@ const MachineForm: React.FC<MachineFormProps> = ({
     try {
       if (isEditing && machine) {
         await updateMachine(machine.id, values);
-        message.success('설비 정보가 성공적으로 저장되었습니다');
+        message.success(t('admin:machineManagement.saveSuccess'));
       } else {
         await createMachine(values);
-        message.success('설비 정보가 성공적으로 저장되었습니다');
+        message.success(t('admin:machineManagement.saveSuccess'));
       }
 
       form.resetFields();
       onSuccess();
     } catch (error) {
       console.error('Error saving machine:', error);
-      message.error('설비 정보 저장 중 오류가 발생했습니다');
+      message.error(t('admin:machineManagement.saveError'));
     }
   };
 
   return (
     <Modal
-      title={isEditing ? '설비 편집' : '설비 추가'}
+      title={isEditing ? t('admin:machineManagement.editMachine') : t('admin:machineManagement.addMachine')}
       open={visible}
       onCancel={onCancel}
       onOk={() => form.submit()}
@@ -187,40 +187,40 @@ const MachineForm: React.FC<MachineFormProps> = ({
       >
         <Form.Item
           name="name"
-          label="설비명"
+          label={t('admin:machineManagement.form.machineName')}
           rules={[
-            { required: true, message: '설비명은 필수입니다' }
+            { required: true, message: t('admin:machineManagement.validation.nameRequired') }
           ]}
         >
-          <Input placeholder="설비명" />
+          <Input placeholder={t('admin:machineManagement.form.machineName')} />
         </Form.Item>
 
         <Form.Item
           name="location"
-          label="위치"
+          label={t('admin:machineManagement.form.location')}
           rules={[
-            { required: true, message: '위치는 필수입니다' }
+            { required: true, message: t('admin:machineManagement.validation.locationRequired') }
           ]}
         >
-          <Input placeholder="위치" />
+          <Input placeholder={t('admin:machineManagement.form.location')} />
         </Form.Item>
 
         <Form.Item
           name="equipment_type"
-          label="설비 타입 (선택사항)"
+          label={t('admin:machineManagement.form.equipmentType')}
         >
-          <Input placeholder="예: DMG MORI, MAZAK, HAAS 등" />
+          <Input placeholder={t('admin:machineManagement.form.equipmentTypePlaceholder')} />
         </Form.Item>
 
         <Form.Item
           name="production_model_id"
-          label="생산 모델"
+          label={t('admin:machineManagement.form.productionModel')}
           rules={[
-            { required: true, message: '생산 모델은 필수입니다' }
+            { required: true, message: t('admin:machineManagement.validation.productionModelRequired') }
           ]}
         >
           <Select
-            placeholder="생산 모델을 선택하세요"
+            placeholder={t('admin:machineManagement.form.selectProductionModel')}
             loading={modelsLoading}
             onChange={handleProductModelChange}
             showSearch
@@ -236,27 +236,27 @@ const MachineForm: React.FC<MachineFormProps> = ({
 
         <Form.Item
           name="current_process_id"
-          label="가공 공정"
+          label={t('admin:machineManagement.form.process')}
           rules={[
-            { required: true, message: '가공 공정은 필수입니다' }
+            { required: true, message: t('admin:machineManagement.validation.processRequired') }
           ]}
         >
           <Select
-            placeholder="공정을 선택하세요"
+            placeholder={t('admin:machineManagement.form.selectProcess')}
             loading={processesLoading}
             onChange={handleProcessChange}
             disabled={modelProcesses.length === 0}
             options={modelProcesses.map(process => ({
               value: process.id,
-              label: `${process.process_name} (${process.tact_time_seconds}초)`
+              label: `${process.process_name} (${t('admin:machineManagement.form.tactTimeSeconds', { seconds: process.tact_time_seconds })})`
             }))}
           />
         </Form.Item>
 
         {selectedTactTime > 0 && (
-          <Form.Item label="Tact Time">
+          <Form.Item label={t('admin:machineManagement.form.tactTime')}>
             <Input
-              value={`${selectedTactTime}초`}
+              value={t('admin:machineManagement.form.tactTimeSeconds', { seconds: selectedTactTime })}
               disabled
               style={{ backgroundColor: '#f5f5f5' }}
             />
@@ -265,12 +265,12 @@ const MachineForm: React.FC<MachineFormProps> = ({
 
         <Form.Item
           name="is_active"
-          label="상태"
+          label={t('admin:common.status')}
           valuePropName="checked"
         >
           <Switch
-            checkedChildren="활성"
-            unCheckedChildren="비활성"
+            checkedChildren={t('admin:common.active')}
+            unCheckedChildren={t('admin:common.inactive')}
           />
         </Form.Item>
       </Form>

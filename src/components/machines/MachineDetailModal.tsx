@@ -23,9 +23,10 @@ import {
 } from '@ant-design/icons';
 import { Machine } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { ko, vi } from 'date-fns/locale';
 import MachineEditModal from './MachineEditModal';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 
 const { Title, Text } = Typography;
 
@@ -37,52 +38,21 @@ interface MachineDetailModalProps {
   onMachineUpdated?: () => void;
 }
 
-// 설비 상태별 색상 및 텍스트 매핑
-const getStateConfig = (state: string, t: any) => {
-  const configs: Record<string, any> = {
-    NORMAL_OPERATION: {
-      color: 'success',
-      text: t('status.normalOperation')
-    },
-    MAINTENANCE: {
-      color: 'warning',
-      text: t('status.maintenance')
-    },
-    PM_MAINTENANCE: {
-      color: 'warning',
-      text: t('status.maintenance')
-    },
-    INSPECTION: {
-      color: 'warning',
-      text: t('status.inspection')
-    },
-    BREAKDOWN_REPAIR: {
-      color: 'error',
-      text: t('status.breakdownRepair')
-    },
-    MODEL_CHANGE: {
-      color: 'processing',
-      text: t('status.modelChange')
-    },
-    PLANNED_STOP: {
-      color: 'default',
-      text: t('status.plannedStop')
-    },
-    PROGRAM_CHANGE: {
-      color: 'processing',
-      text: t('status.programChange')
-    },
-    TOOL_CHANGE: {
-      color: 'processing',
-      text: t('status.toolChange')
-    },
-    TEMPORARY_STOP: {
-      color: 'error',
-      text: t('status.temporaryStop')
-    }
+// 설비 상태별 아이콘 매핑 (데이터베이스에서 색상은 가져옴)
+const getStateIcon = (state: string) => {
+  const iconConfigs: Record<string, React.ReactNode> = {
+    NORMAL_OPERATION: <CheckCircleOutlined />,
+    INSPECTION: <SettingOutlined />,
+    BREAKDOWN_REPAIR: <ExclamationCircleOutlined />,
+    PM_MAINTENANCE: <SettingOutlined />,
+    MODEL_CHANGE: <SettingOutlined />,
+    PLANNED_STOP: <ClockCircleOutlined />,
+    PROGRAM_CHANGE: <SettingOutlined />,
+    TOOL_CHANGE: <SettingOutlined />,
+    TEMPORARY_STOP: <ExclamationCircleOutlined />
   };
   
-  return configs[state] || { color: 'default', text: t('status.unknown') };
+  return iconConfigs[state] || <ExclamationCircleOutlined />;
 };
 
 const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
@@ -92,12 +62,36 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
   language = 'ko',
   onMachineUpdated
 }) => {
-  const { t } = useMachinesTranslation();
+  const { t, i18n } = useMachinesTranslation();
+  const currentLanguage = (i18n?.language as 'ko' | 'vi') || language;
+  const { 
+    getStatusText, 
+    getStatusColorCode, 
+    getAntdColorFromHex,
+    isLoading: statusLoading 
+  } = useMachineStatusTranslations(currentLanguage);
   const [editModalVisible, setEditModalVisible] = useState(false);
 
   if (!machine) return null;
 
-  const stateConfig = getStateConfig(machine.current_state, t);
+  // 현재 상태의 설정 정보 생성
+  const getStateConfig = () => {
+    if (!machine.current_state) return null;
+    
+    const colorCode = getStatusColorCode(machine.current_state);
+    const text = getStatusText(machine.current_state);
+    const color = getAntdColorFromHex(colorCode);
+    const icon = getStateIcon(machine.current_state);
+    
+    return {
+      color,
+      colorCode,
+      icon,
+      text
+    };
+  };
+  
+  const stateConfig = getStateConfig();
   
   // 마지막 업데이트 시간
   const getLastUpdateTime = () => {
@@ -105,7 +99,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
     
     return formatDistanceToNow(new Date(machine.updated_at), {
       addSuffix: true,
-      locale: ko
+      locale: currentLanguage === 'ko' ? ko : vi
     });
   };
 
@@ -154,12 +148,15 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                   {machine.name}
                 </Title>
                 <Space style={{ marginTop: 8 }}>
-                  <Tag 
-                    color={stateConfig.color as any}
-                    style={{ fontSize: '14px', padding: '4px 12px' }}
-                  >
-                    {stateConfig.text}
-                  </Tag>
+                  {stateConfig && (
+                    <Tag 
+                      color={stateConfig.color as any}
+                      style={{ fontSize: '14px', padding: '4px 12px' }}
+                      icon={stateConfig.icon}
+                    >
+                      {stateConfig.text}
+                    </Tag>
+                  )}
                   <Tag color={machine.is_active ? 'green' : 'red'}>
                     {machine.is_active ? t('common.active') : t('common.inactive')}
                   </Tag>
@@ -209,9 +206,11 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                 <Card title={t('detail.productionInfo')} size="small">
                   <Descriptions column={1} size="small">
                     <Descriptions.Item label={t('fields.currentStatus')}>
-                      <Tag color={stateConfig.color as any}>
-                        {stateConfig.text}
-                      </Tag>
+                      {stateConfig && (
+                        <Tag color={stateConfig.color as any} icon={stateConfig.icon}>
+                          {stateConfig.text}
+                        </Tag>
+                      )}
                     </Descriptions.Item>
                     <Descriptions.Item label={t('fields.productionModel')}>
                       <Text code>
@@ -252,6 +251,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
         visible={editModalVisible}
         onSuccess={handleEditSuccess}
         onCancel={handleEditCancel}
+        language={currentLanguage}
       />
     </>
   );

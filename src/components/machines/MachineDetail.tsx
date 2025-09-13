@@ -171,20 +171,20 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
     ? getStateConfig(machine.current_state, language)
     : null;
 
-  // 현재 상태 지속 시간 계산
+  // 현재 상태 지속 시간 계산 (실제 데이터 기반)
   const getCurrentStateDuration = () => {
-    if (!machine.current_state) return null;
+    if (!machine.current_state || !machine.updated_at) return null;
     
-    // 실제로는 machine_logs에서 현재 상태의 start_time을 가져와야 함
+    // machine.updated_at을 현재 상태 시작 시간으로 사용
     const now = new Date();
-    const mockStartTime = new Date(now.getTime() - Math.random() * 4 * 60 * 60 * 1000);
+    const stateStartTime = new Date(machine.updated_at);
     
     return {
-      duration: formatDistanceToNow(mockStartTime, {
+      duration: formatDistanceToNow(stateStartTime, {
         addSuffix: false,
         locale: language === 'ko' ? ko : vi
       }),
-      minutes: differenceInMinutes(now, mockStartTime)
+      minutes: differenceInMinutes(now, stateStartTime)
     };
   };
 

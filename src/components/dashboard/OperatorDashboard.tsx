@@ -385,7 +385,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           visible={showStatusInput}
           onClose={() => setShowStatusInput(false)}
           onStatusChange={handleStatusChange}
-          language={machinesT.i18n?.language as 'ko' | 'vi' || 'ko'}
+          language={(machinesT.i18n?.language as 'ko' | 'vi') || 'ko'}
         />
       )}
 

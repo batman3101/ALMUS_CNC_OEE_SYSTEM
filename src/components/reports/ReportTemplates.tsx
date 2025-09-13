@@ -31,7 +31,9 @@ interface ChartData {
 // 설비 상태별 한글 이름 매핑
 const stateLabels: Record<MachineState, string> = {
   NORMAL_OPERATION: '정상가동',
-  MAINTENANCE: '점검중',
+  INSPECTION: '점검중',
+  BREAKDOWN_REPAIR: '고장수리',
+  PM_MAINTENANCE: '예방정비',
   MODEL_CHANGE: '모델교체',
   PLANNED_STOP: '계획정지',
   PROGRAM_CHANGE: '프로그램교체',

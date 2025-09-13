@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,85 +12,141 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
 
-    // 집계 기간에 따른 데이터 생성
-    const generateAggregatedData = (period: string) => {
-      const periods: Array<{period: string; label: string}> = [];
+    // 실제 production_records에서 집계 데이터 조회
+    const generateRealAggregatedData = async (period: string, machineId: string | null) => {
+      let query = supabaseAdmin
+        .from('production_records')
+        .select('*');
+
+      // 설비 필터
+      if (machineId) {
+        query = query.eq('machine_id', machineId);
+      }
+
+      // 날짜 필터 설정
       const now = new Date();
+      let startDate = new Date();
       
       switch (period) {
         case 'daily':
-          // 지난 30일
-          for (let i = 0; i < 30; i++) {
-            const date = new Date(now);
-            date.setDate(date.getDate() - i);
-            periods.push({
-              period: date.toISOString().split('T')[0],
-              label: date.toLocaleDateString('ko-KR'),
-            });
-          }
+          startDate.setDate(now.getDate() - 30);
           break;
-          
         case 'weekly':
-          // 지난 12주
-          for (let i = 0; i < 12; i++) {
-            const date = new Date(now);
-            date.setDate(date.getDate() - (i * 7));
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay());
-            periods.push({
-              period: weekStart.toISOString().split('T')[0],
-              label: `${weekStart.getFullYear()}년 ${Math.ceil(weekStart.getMonth() / 3)}분기`,
-            });
-          }
+          startDate.setDate(now.getDate() - (12 * 7));
           break;
-          
         case 'monthly':
-          // 지난 12개월
-          for (let i = 0; i < 12; i++) {
-            const date = new Date(now);
-            date.setMonth(date.getMonth() - i);
-            periods.push({
-              period: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-              label: `${date.getFullYear()}년 ${date.getMonth() + 1}월`,
-            });
-          }
+          startDate.setMonth(now.getMonth() - 12);
           break;
-          
         case 'yearly':
-          // 지난 5년
-          for (let i = 0; i < 5; i++) {
-            const year = now.getFullYear() - i;
-            periods.push({
-              period: year.toString(),
-              label: `${year}년`,
-            });
-          }
+          startDate.setFullYear(now.getFullYear() - 5);
           break;
       }
+
+      query = query.gte('date', startDate.toISOString().split('T')[0]);
       
-      return periods.map(p => {
-        const availability = 0.75 + Math.random() * 0.2;
-        const performance = 0.80 + Math.random() * 0.15;
-        const quality = 0.90 + Math.random() * 0.08;
-        const oee = availability * performance * quality;
+      const { data: records, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching production records for aggregation:', error);
+        return [];
+      }
+
+      // 기간별로 데이터 그룹핑 및 집계
+      const groupedData = new Map();
+      
+      (records || []).forEach(record => {
+        let periodKey: string;
+        const recordDate = new Date(record.date);
         
+        switch (period) {
+          case 'daily':
+            periodKey = record.date;
+            break;
+          case 'weekly':
+            const weekStart = new Date(recordDate);
+            weekStart.setDate(recordDate.getDate() - recordDate.getDay());
+            periodKey = weekStart.toISOString().split('T')[0];
+            break;
+          case 'monthly':
+            periodKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
+            break;
+          case 'yearly':
+            periodKey = recordDate.getFullYear().toString();
+            break;
+          default:
+            periodKey = record.date;
+        }
+
+        if (!groupedData.has(periodKey)) {
+          groupedData.set(periodKey, []);
+        }
+        groupedData.get(periodKey).push(record);
+      });
+
+      // 집계 계산
+      const aggregatedResults = Array.from(groupedData.entries()).map(([periodKey, records]) => {
+        const totalRecords = records.length;
+        
+        if (totalRecords === 0) {
+          return null;
+        }
+
+        const avgAvailability = records.reduce((sum: number, r: any) => sum + parseFloat(r.availability || 0), 0) / totalRecords;
+        const avgPerformance = records.reduce((sum: number, r: any) => sum + parseFloat(r.performance || 0), 0) / totalRecords;
+        const avgQuality = records.reduce((sum: number, r: any) => sum + parseFloat(r.quality || 0), 0) / totalRecords;
+        const avgOEE = records.reduce((sum: number, r: any) => sum + parseFloat(r.oee || 0), 0) / totalRecords;
+        
+        const totalOutput = records.reduce((sum: number, r: any) => sum + (r.output_qty || 0), 0);
+        const totalDefects = records.reduce((sum: number, r: any) => sum + (r.defect_qty || 0), 0);
+        const totalRuntime = records.reduce((sum: number, r: any) => sum + (r.actual_runtime || 0), 0);
+        const plannedRuntime = records.reduce((sum: number, r: any) => sum + (r.planned_runtime || 480), 0);
+
+        // 라벨 생성
+        let label: string;
+        switch (period) {
+          case 'daily':
+            label = new Date(periodKey).toLocaleDateString('ko-KR');
+            break;
+          case 'weekly':
+            const weekDate = new Date(periodKey);
+            label = `${weekDate.getFullYear()}년 ${Math.floor(weekDate.getMonth() / 3) + 1}분기`;
+            break;
+          case 'monthly':
+            const [year, month] = periodKey.split('-');
+            label = `${year}년 ${month}월`;
+            break;
+          case 'yearly':
+            label = `${periodKey}년`;
+            break;
+          default:
+            label = periodKey;
+        }
+
         return {
-          period: p.period,
-          label: p.label,
+          period: periodKey,
+          label,
           machine_id: machineId || 'all',
-          availability: Math.round(availability * 1000) / 1000,
-          performance: Math.round(performance * 1000) / 1000,
-          quality: Math.round(quality * 1000) / 1000,
-          oee: Math.round(oee * 1000) / 1000,
-          total_output: 1000 + Math.floor(Math.random() * 500),
-          total_defects: Math.floor(Math.random() * 50),
-          total_runtime: 400 + Math.floor(Math.random() * 100),
-          planned_runtime: 500,
+          availability: Math.round(avgAvailability * 1000) / 1000,
+          performance: Math.round(avgPerformance * 1000) / 1000,
+          quality: Math.round(avgQuality * 1000) / 1000,
+          oee: Math.round(avgOEE * 1000) / 1000,
+          total_output: totalOutput,
+          total_defects: totalDefects,
+          total_runtime: totalRuntime,
+          planned_runtime: plannedRuntime,
         };
+      }).filter(Boolean);
+
+      // 시간순 정렬
+      return aggregatedResults.sort((a, b) => {
+        if (period === 'yearly') {
+          return parseInt(a.period) - parseInt(b.period);
+        }
+        return a.period.localeCompare(b.period);
       });
     };
 
-    const aggregatedData = generateAggregatedData(period);
+    const aggregatedData = await generateRealAggregatedData(period, machineId);
 
     // 트렌드 분석
     const calculateTrend = (data: Record<string, unknown>[], key: string) => {

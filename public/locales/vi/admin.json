@@ -11,11 +11,27 @@
     "deleteError": "Có lỗi xảy ra khi xóa thiết bị",
     "saveSuccess": "Thông tin thiết bị đã được lưu thành công",
     "saveError": "Có lỗi xảy ra khi lưu thông tin thiết bị",
+    "fetchModelsError": "Có lỗi xảy ra khi tải danh sách mô hình sản xuất",
+    "fetchProcessesError": "Có lỗi xảy ra khi tải danh sách quy trình",
     "validation": {
       "nameRequired": "Tên thiết bị là bắt buộc",
       "locationRequired": "Vị trí là bắt buộc",
       "tactTimeRequired": "Tact Time là bắt buộc",
-      "tactTimePositive": "Tact Time phải là số dương"
+      "tactTimePositive": "Tact Time phải là số dương",
+      "productionModelRequired": "Mô hình sản xuất là bắt buộc",
+      "processRequired": "Quy trình gia công là bắt buộc"
+    },
+    "form": {
+      "machineName": "Tên thiết bị",
+      "location": "Vị trí",
+      "equipmentType": "Loại thiết bị (tùy chọn)",
+      "equipmentTypePlaceholder": "Ví dụ: DMG MORI, MAZAK, HAAS, v.v.",
+      "productionModel": "Mô hình sản xuất",
+      "selectProductionModel": "Chọn mô hình sản xuất",
+      "process": "Quy trình gia công",
+      "selectProcess": "Chọn quy trình",
+      "tactTime": "Tact Time",
+      "tactTimeSeconds": "{{seconds}} giây"
     }
   },
   "userManagement": {
@@ -40,6 +56,13 @@
       "roleRequired": "Vui lòng chọn vai trò",
       "passwordRequired": "Mật khẩu là bắt buộc",
       "passwordMinLength": "Mật khẩu phải có ít nhất 6 ký tự"
+    },
+    "form": {
+      "name": "Tên",
+      "email": "Email",
+      "password": "Mật khẩu",
+      "role": "Vai trò",
+      "selectRole": "Chọn vai trò"
     }
   },
   "page": {
@@ -100,6 +123,7 @@
   },
   "roles": {
     "admin": "Quản trị viên",
+    "engineer": "Kỹ sư",
     "operator": "Vận hành viên",
     "user": "Người dùng"
   }

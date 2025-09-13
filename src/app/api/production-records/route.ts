@@ -68,30 +68,15 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    // 레코드가 없는 경우 모의 데이터 생성
+    // 데이터가 없으면 빈 배열 반환 (Mock 데이터 생성 금지)
     if (!records || records.length === 0) {
-      const mockRecords = Array.from({ length: 10 }, (_, index) => {
-        const date = new Date();
-        date.setDate(date.getDate() - index);
-        
-        return {
-          record_id: `mock_${Date.now()}_${index}`,
-          machine_id: machineId || `machine_${index % 3 + 1}`,
-          date: date.toISOString().split('T')[0],
-          shift: ['day', 'night'][index % 2],
-          output_qty: 700 + Math.floor(Math.random() * 200),
-          defect_qty: Math.floor(Math.random() * 20),
-          created_at: date.toISOString()
-        };
-      });
-
       return NextResponse.json({
-        records: mockRecords,
+        records: [],
         pagination: {
-          page: 1,
+          page,
           limit,
-          total: mockRecords.length,
-          pages: 1
+          total: 0,
+          pages: 0
         }
       });
     }
@@ -163,25 +148,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 실제 구현에서는 production_records 테이블에 데이터 삽입
-    // 현재는 목업 응답 반환
-    const mockRecord = {
-      id: `record_${Date.now()}`,
-      machine_id,
-      date,
-      shift,
-      output_qty: output_qty || 0,
-      defect_qty: defect_qty || 0,
-      actual_runtime: actual_runtime || 0,
-      planned_runtime: planned_runtime || 500,
-      tact_time: tact_time || 60,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
+    // OEE 계산
+    const plannedRuntimeValue = planned_runtime || 480; // 기본 8시간
+    const actualRuntimeValue = actual_runtime || 0;
+    const outputQtyValue = output_qty || 0;
+    const defectQtyValue = defect_qty || 0;
+    const tactTimeValue = tact_time || 120; // 기본 2분
+
+    // Availability = (Actual Runtime / Planned Runtime)
+    const availability = plannedRuntimeValue > 0 ? actualRuntimeValue / plannedRuntimeValue : 0;
+    
+    // Performance = (Output Qty * Tact Time) / Actual Runtime
+    const idealRuntime = outputQtyValue * tactTimeValue / 60; // 분 단위 변환
+    const performance = actualRuntimeValue > 0 ? idealRuntime / actualRuntimeValue : 0;
+    
+    // Quality = (Output Qty - Defect Qty) / Output Qty
+    const quality = outputQtyValue > 0 ? (outputQtyValue - defectQtyValue) / outputQtyValue : 0;
+    
+    // OEE = Availability × Performance × Quality
+    const oee = availability * performance * quality;
+
+    // production_records 테이블에 실제 데이터 삽입
+    const { data: newRecord, error: insertError } = await supabaseAdmin
+      .from('production_records')
+      .insert({
+        machine_id,
+        date,
+        shift,
+        planned_runtime: plannedRuntimeValue,
+        actual_runtime: actualRuntimeValue,
+        ideal_runtime: Math.round(idealRuntime),
+        output_qty: outputQtyValue,
+        defect_qty: defectQtyValue,
+        availability: Math.round(availability * 10000) / 10000, // 소수점 4자리
+        performance: Math.round(performance * 10000) / 10000,
+        quality: Math.round(quality * 10000) / 10000,
+        oee: Math.round(oee * 10000) / 10000
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error inserting production record:', insertError);
+      throw insertError;
+    }
 
     return NextResponse.json({
       success: true,
-      record: mockRecord
+      record: newRecord
     });
   } catch (error) {
     console.error('Error creating production record:', error);

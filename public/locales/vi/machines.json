@@ -24,7 +24,8 @@
   "emptyMessage": "Không có thiết bị nào phù hợp với điều kiện",
   "states": {
     "NORMAL_OPERATION": "Hoạt động bình thường",
-    "MAINTENANCE": "Bảo trì",
+    "INSPECTION": "Kiểm tra",
+    "BREAKDOWN_REPAIR": "Sửa chữa hỏng hóc",
     "PM_MAINTENANCE": "Bảo trì phòng ngừa",
     "MODEL_CHANGE": "Thay đổi mô hình",
     "PLANNED_STOP": "Dừng theo kế hoạch",
@@ -74,16 +75,15 @@
     "processOrder": "Thứ tự quy trình"
   },
   "status": {
-    "normalOperation": "Hoạt động bình thường",
-    "inspection": "Kiểm tra",
-    "breakdownRepair": "Sửa chữa hỏng hóc",
-    "maintenance": "Bảo trì phòng ngừa",
-    "modelChange": "Thay đổi mô hình",
-    "plannedStop": "Dừng theo kế hoạch",
-    "programChange": "Thay đổi chương trình",
-    "toolChange": "Thay dụng cụ",
-    "temporaryStop": "Dừng tạm thời",
-    "unknown": "Không xác định"
+    "NORMAL_OPERATION": "Hoạt động bình thường",
+    "INSPECTION": "Kiểm tra",
+    "BREAKDOWN_REPAIR": "Sửa chữa hỏng hóc",
+    "PM_MAINTENANCE": "Bảo trì phòng ngừa",
+    "MODEL_CHANGE": "Thay đổi mô hình",
+    "PLANNED_STOP": "Dừng theo kế hoạch",
+    "PROGRAM_CHANGE": "Thay đổi chương trình",
+    "TOOL_CHANGE": "Thay dụng cụ",
+    "TEMPORARY_STOP": "Dừng tạm thời"
   },
   "common": {
     "active": "Hoạt động",

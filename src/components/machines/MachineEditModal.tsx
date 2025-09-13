@@ -20,6 +20,7 @@ import {
 } from '@ant-design/icons';
 import { Machine } from '@/types';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 
 const { Option } = Select;
 
@@ -28,6 +29,7 @@ interface MachineEditModalProps {
   visible: boolean;
   onSuccess: () => void;
   onCancel: () => void;
+  language?: 'ko' | 'vi';
 }
 
 interface EditFormData {
@@ -40,26 +42,36 @@ interface EditFormData {
   current_process_id: string | null;
 }
 
-// 설비 상태 옵션
-const getMachineStates = (t: any) => [
-  { value: 'NORMAL_OPERATION', label: t('status.normalOperation') },
-  { value: 'INSPECTION', label: t('status.inspection') },
-  { value: 'BREAKDOWN_REPAIR', label: t('status.breakdownRepair') },
-  { value: 'PM_MAINTENANCE', label: t('status.maintenance') },
-  { value: 'MODEL_CHANGE', label: t('status.modelChange') },
-  { value: 'PLANNED_STOP', label: t('status.plannedStop') },
-  { value: 'PROGRAM_CHANGE', label: t('status.programChange') },
-  { value: 'TOOL_CHANGE', label: t('status.toolChange') },
-  { value: 'TEMPORARY_STOP', label: t('status.temporaryStop') }
-];
+// 상태별 아이콘 매핑
+const getStateIcon = (state: string) => {
+  const iconMap: Record<string, React.ReactNode> = {
+    NORMAL_OPERATION: '🟢',
+    INSPECTION: '🔧', 
+    BREAKDOWN_REPAIR: '🚨',
+    PM_MAINTENANCE: '⚙️',
+    MODEL_CHANGE: '🔄',
+    PLANNED_STOP: '⏸️',
+    PROGRAM_CHANGE: '💻',
+    TOOL_CHANGE: '🔧',
+    TEMPORARY_STOP: '⚠️'
+  };
+  
+  return iconMap[state] || '❓';
+};
 
 const MachineEditModal: React.FC<MachineEditModalProps> = ({
   machine,
   visible,
   onSuccess,
-  onCancel
+  onCancel,
+  language = 'ko'
 }) => {
-  const { t } = useMachinesTranslation();
+  const { t, i18n } = useMachinesTranslation();
+  const currentLanguage = (i18n?.language as 'ko' | 'vi') || language;
+  const { 
+    getAllStatusOptions,
+    isLoading: statusLoading 
+  } = useMachineStatusTranslations(currentLanguage);
   const { message } = App.useApp();
   const [form] = Form.useForm<EditFormData>();
   const [loading, setLoading] = useState(false);
@@ -268,10 +280,16 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
                 label={t('fields.currentStatus')}
                 rules={[{ required: true, message: t('edit.validation.selectStatus') }]}
               >
-                <Select placeholder={t('edit.placeholders.status')}>
-                  {getMachineStates(t).map(state => (
-                    <Option key={state.value} value={state.value}>
-                      {state.label}
+                <Select 
+                  placeholder={t('edit.placeholders.status')}
+                  loading={statusLoading}
+                >
+                  {getAllStatusOptions().map(option => (
+                    <Option key={option.value} value={option.value}>
+                      <Space>
+                        {getStateIcon(option.value)}
+                        <span>{option.label}</span>
+                      </Space>
                     </Option>
                   ))}
                 </Select>

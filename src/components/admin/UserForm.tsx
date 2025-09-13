@@ -89,7 +89,7 @@ const UserForm: React.FC<UserFormProps> = ({
           role: values.role,
           assigned_machines: values.role === 'operator' ? targetKeys : undefined
         }, user.email);
-        message.success('사용자 정보가 성공적으로 저장되었습니다');
+        message.success(t('admin:userManagement.saveSuccess'));
       } else {
         await createUser({
           name: values.name,
@@ -98,7 +98,7 @@ const UserForm: React.FC<UserFormProps> = ({
           role: values.role,
           assigned_machines: values.role === 'operator' ? targetKeys : undefined
         });
-        message.success('사용자 정보가 성공적으로 저장되었습니다');
+        message.success(t('admin:userManagement.saveSuccess'));
       }
 
       form.resetFields();
@@ -106,7 +106,7 @@ const UserForm: React.FC<UserFormProps> = ({
       onSuccess();
     } catch (error) {
       console.error('Error saving user:', error);
-      message.error('사용자 정보 저장 중 오류가 발생했습니다');
+      message.error(t('admin:userManagement.saveError'));
     }
   };
 
@@ -115,9 +115,9 @@ const UserForm: React.FC<UserFormProps> = ({
   };
 
   const roleOptions = [
-    { value: 'admin', label: '관리자' },
-    { value: 'engineer', label: '엔지니어' },
-    { value: 'operator', label: '운영자' }
+    { value: 'admin', label: t('admin:roles.admin') },
+    { value: 'engineer', label: t('admin:roles.engineer') },
+    { value: 'operator', label: t('admin:roles.operator') }
   ];
 
   const selectedRole = Form.useWatch('role', form);
@@ -125,7 +125,7 @@ const UserForm: React.FC<UserFormProps> = ({
 
   return (
     <Modal
-      title={isEditing ? '사용자 편집' : '사용자 추가'}
+      title={isEditing ? t('admin:userManagement.editUser') : t('admin:userManagement.addUser')}
       open={visible}
       onCancel={onCancel}
       onOk={() => form.submit()}
@@ -140,58 +140,58 @@ const UserForm: React.FC<UserFormProps> = ({
       >
         <Form.Item
           name="name"
-          label="이름"
+          label={t('admin:userManagement.form.name')}
           rules={[
-            { required: true, message: '이름은 필수입니다' }
+            { required: true, message: t('admin:userManagement.validation.nameRequired') }
           ]}
         >
-          <Input placeholder="이름" />
+          <Input placeholder={t('admin:userManagement.form.name')} />
         </Form.Item>
 
         <Form.Item
           name="email"
-          label="이메일"
+          label={t('admin:userManagement.form.email')}
           rules={[
-            { required: true, message: '이메일은 필수입니다' },
-            { type: 'email', message: '유효한 이메일 주소를 입력하세요' }
+            { required: true, message: t('admin:userManagement.validation.emailRequired') },
+            { type: 'email', message: t('admin:userManagement.validation.emailInvalid') }
           ]}
         >
-          <Input placeholder="이메일" />
+          <Input placeholder={t('admin:userManagement.form.email')} />
         </Form.Item>
 
         {!isEditing && (
           <Form.Item
             name="password"
-            label="비밀번호"
+            label={t('admin:userManagement.form.password')}
             rules={[
-              { required: true, message: '비밀번호는 필수입니다' },
-              { min: 6, message: '비밀번호는 최소 6자 이상이어야 합니다' }
+              { required: true, message: t('admin:userManagement.validation.passwordRequired') },
+              { min: 6, message: t('admin:userManagement.validation.passwordMinLength') }
             ]}
           >
-            <Input.Password placeholder="비밀번호" />
+            <Input.Password placeholder={t('admin:userManagement.form.password')} />
           </Form.Item>
         )}
 
         <Form.Item
           name="role"
-          label="역할"
+          label={t('admin:userManagement.form.role')}
           rules={[
-            { required: true, message: '역할을 선택하세요' }
+            { required: true, message: t('admin:userManagement.validation.roleRequired') }
           ]}
         >
           <Select
-            placeholder="역할을 선택하세요"
+            placeholder={t('admin:userManagement.form.selectRole')}
             options={roleOptions}
           />
         </Form.Item>
 
         {showMachineAssignment && (
           <Form.Item
-            label="담당 설비 할당"
+            label={t('admin:userManagement.assignMachines')}
           >
             <Transfer
               dataSource={transferData}
-              titles={['사용 가능한 설비', '할당된 설비']}
+              titles={[t('admin:userManagement.availableMachines'), t('admin:userManagement.assignedMachines')]}
               targetKeys={targetKeys}
               onChange={handleTransferChange}
               render={item => item.title}

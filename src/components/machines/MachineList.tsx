@@ -69,10 +69,12 @@ const MachineList: React.FC<MachineListProps> = ({
         const { data, error } = await supabase
           .from('machine_status_descriptions')
           .select('*')
+          .eq('is_active', true)
           .order('display_order');
 
         if (error) {
           console.error('Error fetching status descriptions:', error);
+          // 에러 발생 시 fallback으로 번역 파일 사용
           return;
         }
 
@@ -152,28 +154,32 @@ const MachineList: React.FC<MachineListProps> = ({
     return [...new Set(models)].sort();
   }, [machines]);
 
-  // 데이터베이스 기반 상태별 옵션
+  // 번역 파일 기반 상태별 옵션
   const statusOptions = useMemo(() => {
     const options = [{ value: 'all', label: t('filterOptions.all') }];
     
-    statusDescriptions.forEach(status => {
-      let label = '';
-      if (language === 'ko') {
-        label = status.description_ko;
-      } else if (language === 'vi') {
-        label = status.description_vi || status.description_ko;
-      } else {
-        label = status.description_en || status.description_ko;
-      }
-      
+    // MachineState 타입의 모든 상태값들
+    const machineStates: MachineState[] = [
+      'NORMAL_OPERATION',
+      'INSPECTION', 
+      'BREAKDOWN_REPAIR',
+      'PM_MAINTENANCE',
+      'MODEL_CHANGE',
+      'PLANNED_STOP',
+      'PROGRAM_CHANGE',
+      'TOOL_CHANGE',
+      'TEMPORARY_STOP'
+    ];
+    
+    machineStates.forEach(state => {
       options.push({
-        value: status.status,
-        label: label
+        value: state,
+        label: t(`status.${state}`)
       });
     });
     
     return options;
-  }, [statusDescriptions, language, t]);
+  }, [language, t]);
 
   const handleFilterChange = (key: keyof FilterOptions, value: any) => {
     setFilters(prev => ({

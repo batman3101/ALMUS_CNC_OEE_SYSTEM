@@ -24,7 +24,8 @@
   "emptyMessage": "조건에 맞는 설비가 없습니다",
   "states": {
     "NORMAL_OPERATION": "정상가동",
-    "MAINTENANCE": "점검중",
+    "INSPECTION": "점검중",
+    "BREAKDOWN_REPAIR": "고장수리",
     "PM_MAINTENANCE": "예방정비",
     "MODEL_CHANGE": "모델교체",
     "PLANNED_STOP": "계획정지",
@@ -74,16 +75,15 @@
     "processOrder": "공정 순서"
   },
   "status": {
-    "normalOperation": "정상가동",
-    "inspection": "점검중",
-    "breakdownRepair": "고장수리",
-    "maintenance": "예방정비",
-    "modelChange": "모델교체",
-    "plannedStop": "계획정지",
-    "programChange": "프로그램 교체",
-    "toolChange": "공구교환",
-    "temporaryStop": "일시정지",
-    "unknown": "알 수 없음"
+    "NORMAL_OPERATION": "정상가동",
+    "INSPECTION": "점검중",
+    "BREAKDOWN_REPAIR": "고장수리",
+    "PM_MAINTENANCE": "예방정비",
+    "MODEL_CHANGE": "모델교체",
+    "PLANNED_STOP": "계획정지",
+    "PROGRAM_CHANGE": "프로그램 교체",
+    "TOOL_CHANGE": "공구교환",
+    "TEMPORARY_STOP": "일시정지"
   },
   "common": {
     "active": "활성",

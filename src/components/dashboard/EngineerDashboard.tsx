@@ -527,8 +527,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         quality: metrics?.quality || 0,
         downtimeHours: Math.round(downtimeHours),
         defectRate: metrics ? (metrics.defect_qty / Math.max(metrics.output_qty, 1)) : 0,
-        trend: Math.random() > 0.5 ? 'up' as const : 'down' as const,
-        trendValue: Math.random() * 10
+        trend: 'neutral' as const,
+        trendValue: 0
       };
     });
 

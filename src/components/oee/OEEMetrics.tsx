@@ -36,18 +36,18 @@ const generateMockOEEData = (): OEEMetricsType => ({
   defect_qty: 48
 });
 
-const generateMockTrendData = (formatDate: (date: Date) => string) => {
+const generateEmptyTrendData = (formatDate: (date: Date) => string) => {
   const data = [];
   for (let i = 6; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
     data.push({
       date: formatDate(date),
-      availability: 0.8 + Math.random() * 0.15,
-      performance: 0.85 + Math.random() * 0.1,
-      quality: 0.9 + Math.random() * 0.08,
-      oee: 0.65 + Math.random() * 0.2,
-      shift: Math.random() > 0.5 ? 'A' as const : 'B' as const
+      availability: 0,
+      performance: 0,
+      quality: 0,
+      oee: 0,
+      shift: 'A' as const
     });
   }
   return data;
@@ -61,21 +61,19 @@ const generateMockDowntimeData = () => [
   { state: 'TEMPORARY_STOP' as const, duration: 25, count: 6, percentage: 7.4 }
 ];
 
-const generateMockProductionData = (formatDate: (date: Date) => string) => {
+const generateEmptyProductionData = (formatDate: (date: Date) => string) => {
   const data = [];
   for (let i = 6; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
-    const outputQty = 1000 + Math.floor(Math.random() * 400);
-    const defectQty = Math.floor(outputQty * (0.02 + Math.random() * 0.06));
     data.push({
       date: formatDate(date),
-      output_qty: outputQty,
-      defect_qty: defectQty,
-      good_qty: outputQty - defectQty,
-      defect_rate: defectQty / outputQty,
+      output_qty: 0,
+      defect_qty: 0,
+      good_qty: 0,
+      defect_rate: 0,
       target_qty: 1200,
-      shift: Math.random() > 0.5 ? 'A' as const : 'B' as const
+      shift: 'A' as const
     });
   }
   return data;
@@ -97,9 +95,9 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
 
   // 데이터 상태
   const [oeeMetrics, setOeeMetrics] = useState<OEEMetricsType>(generateMockOEEData());
-  const [trendData, setTrendData] = useState(generateMockTrendData(formatDate));
+  const [trendData, setTrendData] = useState(generateEmptyTrendData(formatDate));
   const [downtimeData, setDowntimeData] = useState(generateMockDowntimeData());
-  const [productionData, setProductionData] = useState(generateMockProductionData(formatDate));
+  const [productionData, setProductionData] = useState(generateEmptyProductionData(formatDate));
 
   // 데이터 새로고침
   const handleRefresh = async () => {
