@@ -413,8 +413,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             time: t('time.realTime')
           }));
         
-        // 추이 데이터 - 실제 생산 기록에서 계산
-        const trendData = productionRecords.slice(0, 7).map(record => ({
+        // 추이 데이터 - 선택된 기간에 따른 실제 생산 기록에서 계산
+        const getFilteredRecords = () => {
+          const now = new Date();
+          let filteredRecords = [...productionRecords];
+
+          switch (selectedPeriod) {
+            case 'today':
+              const today = now.toISOString().split('T')[0];
+              filteredRecords = productionRecords.filter(record => record.date === today);
+              break;
+            case 'week':
+              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              filteredRecords = productionRecords.filter(record =>
+                new Date(record.date) >= weekAgo
+              ).slice(0, 7);
+              break;
+            case 'month':
+              const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+              filteredRecords = productionRecords.filter(record =>
+                new Date(record.date) >= monthAgo
+              ).slice(0, 30);
+              break;
+            default:
+              filteredRecords = productionRecords.slice(0, 7);
+          }
+
+          return filteredRecords.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        };
+
+        const trendData = getFilteredRecords().map(record => ({
           date: record.date,
           availability: record.availability / 100,
           performance: record.performance / 100,
@@ -820,9 +848,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} lg={16}>
           <OEETrendChart
             data={processedData.trendData}
-            title={t('chart.overallOeeTrend')}
+            title={`${t('chart.overallOeeTrend')} (${selectedPeriod === 'today' ? '오늘' : selectedPeriod === 'week' ? '최근 7일' : '이전 달'})`}
             height={400}
-            showControls={false}
+            showControls={true}
+            onDateRangeChange={(dates) => {
+              console.log('날짜 범위 변경:', dates);
+              // 필요시 추가 로직 구현
+            }}
+            onPeriodChange={(period) => {
+              console.log('기간 변경:', period);
+              // 필요시 추가 로직 구현
+            }}
           />
         </Col>
       </Row>
