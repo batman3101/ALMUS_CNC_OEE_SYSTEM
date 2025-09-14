@@ -81,33 +81,73 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const { t } = useLanguage();
 
 
-  // 실제 데이터베이스 기반 알림 생성
+  // 로컬스토리지에서 확인된 알림 조회
+  const getAcknowledgedNotifications = useCallback((): Set<string> => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const acknowledged = localStorage.getItem(`notifications_acknowledged_${user?.id}`);
+      return acknowledged ? new Set(JSON.parse(acknowledged)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }, [user?.id]);
+
+  // 로컬스토리지에 확인된 알림 저장
+  const saveAcknowledgedNotification = useCallback((machineId: string, state: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const acknowledgedSet = getAcknowledgedNotifications();
+      const notificationKey = `${machineId}_${state}`;
+      acknowledgedSet.add(notificationKey);
+      localStorage.setItem(
+        `notifications_acknowledged_${user?.id}`,
+        JSON.stringify(Array.from(acknowledgedSet))
+      );
+      console.log('💾 알림 확인 상태 저장:', notificationKey);
+    } catch (error) {
+      console.error('❌ 알림 확인 상태 저장 실패:', error);
+    }
+  }, [user?.id, getAcknowledgedNotifications]);
+
+  // 실제 데이터베이스 기반 알림 생성 (중복 방지)
   const generateRealNotifications = useCallback(async (): Promise<Notification[]> => {
     try {
       console.log('🏭 설비 데이터 API 호출 시작');
       // 실제 설비 데이터 가져오기
       const machinesResponse = await fetch('/api/machines');
       console.log('📡 API 응답 상태:', machinesResponse.status);
-      
+
       const machinesData = await machinesResponse.json();
       const machines = Array.isArray(machinesData) ? machinesData : (machinesData.machines || []);
       console.log('🔧 로딩된 설비 수:', machines.length);
-      
+
+      // 이미 확인된 알림 조회
+      const acknowledgedNotifications = getAcknowledgedNotifications();
+      console.log('✅ 이미 확인된 알림 수:', acknowledgedNotifications.size);
+
       const notifications: Notification[] = [];
       let notificationId = 1;
 
-      // 비정상 상태 설비에 대한 알림 생성
+      // 비정상 상태 설비에 대한 알림 생성 (확인되지 않은 것만)
       console.log('🔍 비정상 상태 설비 검색 중...');
-      
+
       const abnormalMachines = machines.filter((m: any) => m.current_state !== 'NORMAL_OPERATION');
       console.log('⚠️ 비정상 상태 설비 발견:', abnormalMachines.length, '대');
-      
+
       machines.forEach((machine: any) => {
         if (machine.current_state !== 'NORMAL_OPERATION') {
-          console.log(`🚨 알림 생성: ${machine.name} - ${machine.current_state}`);
+          const notificationKey = `${machine.id}_${machine.current_state}`;
+
+          // 이미 확인된 알림은 건너뛰기
+          if (acknowledgedNotifications.has(notificationKey)) {
+            console.log(`⏭️ 이미 확인된 알림 건너뛰기: ${machine.name} - ${machine.current_state}`);
+            return;
+          }
+
+          console.log(`🚨 새 알림 생성: ${machine.name} - ${machine.current_state}`);
           let message = '';
           let severity: NotificationSeverity = 'warning';
-          
+
           switch (machine.current_state) {
             case 'TEMPORARY_STOP':
               message = `${machine.name}이(가) 일시정지 상태입니다.`;
@@ -143,10 +183,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
               message = `${machine.name}의 상태를 확인해주세요.`;
               severity = 'warning';
           }
-          
+
           notifications.push({
-            id: notificationId.toString(),
-            type: machine.current_state === 'BREAKDOWN_REPAIR' ? 'EQUIPMENT_ERROR' : 
+            id: notificationKey, // 고유한 키로 ID 설정
+            type: machine.current_state === 'BREAKDOWN_REPAIR' ? 'EQUIPMENT_ERROR' :
                   machine.current_state === 'TEMPORARY_STOP' ? 'OEE_LOW' : 'MAINTENANCE',
             severity,
             title: `설비 상태 알림`,
@@ -159,21 +199,21 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             acknowledged: false,
             status: 'active'
           });
-          
+
           notificationId++;
         }
       });
-      
-      console.log('📊 최종 생성된 알림 수:', notifications.length);
+
+      console.log('📊 최종 생성된 새 알림 수:', notifications.length);
       const finalNotifications = notifications.slice(0, 10);
       console.log('📋 반환할 알림 수:', finalNotifications.length);
-      
+
       return finalNotifications; // 최대 10개만 표시
     } catch (error) {
       console.error('❌ generateRealNotifications 오류:', error);
       return [];
     }
-  }, [user?.id]);
+  }, [user?.id, getAcknowledgedNotifications]);
 
   // 알림 목록 새로고침
   const refreshNotifications = useCallback(async () => {
@@ -227,45 +267,38 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }
   }, []);
 
-  // 알림 확인 처리
+  // 알림 확인 처리 (로컬스토리지에 저장)
   const acknowledgeNotification = useCallback(async (id: string) => {
     try {
-      // 실제로는 Supabase 업데이트
-      // await supabase
-      //   .from('notifications')
-      //   .update({ 
-      //     status: 'acknowledged',
-      //     acknowledged_at: new Date().toISOString(),
-      //     acknowledged_by: user?.id
-      //   })
-      //   .eq('id', id);
+      console.log('✅ 알림 확인 처리:', id);
 
-      dispatch({ 
-        type: 'UPDATE_NOTIFICATION', 
-        payload: { 
-          id, 
-          updates: { 
-            status: 'acknowledged',
-            acknowledged_at: new Date().toISOString(),
-            acknowledged_by: user?.id
-          } 
-        } 
-      });
+      // 현재 알림에서 machine_id와 state 추출
+      const notification = state.notifications.find(n => n.id === id);
+      if (notification) {
+        // ID가 "machineId_state" 형식으로 되어 있음
+        const [machineId, machineState] = id.split('_');
+        if (machineId && machineState) {
+          saveAcknowledgedNotification(machineId, machineState);
+        }
+      }
 
-      showToast({ 
-        type: 'success', 
-        title: t('notifications.acknowledged'), 
-        message: t('notifications.acknowledgedMessage') 
+      // UI에서 알림 제거 (확인된 알림은 더 이상 표시하지 않음)
+      dispatch({ type: 'REMOVE_NOTIFICATION', payload: id });
+
+      showToast({
+        type: 'success',
+        title: t('notifications.acknowledged'),
+        message: t('notifications.acknowledgedMessage')
       });
     } catch (error) {
       console.error('Failed to acknowledge notification:', error);
-      showToast({ 
-        type: 'error', 
-        title: t('common.error'), 
-        message: t('notifications.acknowledgeError') 
+      showToast({
+        type: 'error',
+        title: t('common.error'),
+        message: t('notifications.acknowledgeError')
       });
     }
-  }, [user?.id, t]);
+  }, [state.notifications, saveAcknowledgedNotification, t]);
 
   // 알림 해결 처리
   const resolveNotification = useCallback(async (id: string) => {
@@ -318,26 +351,38 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }
   }, [t]);
 
-  // 모든 알림 삭제
+  // 모든 알림 확인/삭제 (로컬스토리지에 저장)
   const clearAllNotifications = useCallback(async () => {
     try {
-      // 실제로는 Supabase에서 모든 알림 삭제
-      dispatch({ type: 'CLEAR_ALL_NOTIFICATIONS' });
-      
-      showToast({ 
-        type: 'success', 
-        title: t('notifications.allCleared'), 
-        message: t('notifications.allClearedMessage') 
+      console.log('🧹 모든 알림 확인 처리 시작');
+
+      // 현재 모든 활성 알림을 확인됨으로 표시하고 로컬스토리지에 저장
+      state.notifications.forEach(notification => {
+        const [machineId, machineState] = notification.id.split('_');
+        if (machineId && machineState) {
+          saveAcknowledgedNotification(machineId, machineState);
+        }
       });
+
+      // UI에서 모든 알림 제거
+      dispatch({ type: 'CLEAR_ALL_NOTIFICATIONS' });
+
+      showToast({
+        type: 'success',
+        title: t('notifications.allCleared'),
+        message: t('notifications.allClearedMessage')
+      });
+
+      console.log('✅ 모든 알림 확인 처리 완료');
     } catch (error) {
       console.error('Failed to clear all notifications:', error);
-      showToast({ 
-        type: 'error', 
-        title: t('common.error'), 
-        message: t('notifications.clearAllError') 
+      showToast({
+        type: 'error',
+        title: t('common.error'),
+        message: t('notifications.clearAllError')
       });
     }
-  }, [t]);
+  }, [state.notifications, saveAcknowledgedNotification, t]);
 
   // 읽지 않은 알림 수 계산
   const unreadCount = state.notifications.filter(n => n.status === 'active').length;
