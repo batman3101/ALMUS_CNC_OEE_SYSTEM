@@ -178,15 +178,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('🔑 로그인 시도:', { email, isDev: isDevelopment() });
       setError(null); // 이전 오류 초기화
       
-      // 개발 환경에서는 테스트 계정도 허용
-      if (isDevelopment() && MockAuthService.getAvailableUsers().some(user => user.email === email)) {
-        console.log('🧑‍💻 개발 모드: 모의 인증으로 로그인');
-        log.info('개발 모드: 모의 인증으로 로그인', { email }, LogCategories.AUTH);
-        const mockUser = await MockAuthService.login(email, password);
-        safeSetState(setUser, mockUser);
-        console.log('✅ 모의 로그인 성공:', mockUser.email);
-        return;
-      }
+      // Mock 인증 비활성화 - 항상 Supabase 실제 인증만 사용
+      // if (isDevelopment() && MockAuthService.getAvailableUsers().some(user => user.email === email)) {
+      //   console.log('🧑‍💻 개발 모드: 모의 인증으로 로그인');
+      //   log.info('개발 모드: 모의 인증으로 로그인', { email }, LogCategories.AUTH);
+      //   const mockUser = await MockAuthService.login(email, password);
+      //   safeSetState(setUser, mockUser);
+      //   console.log('✅ 모의 로그인 성공:', mockUser.email);
+      //   return;
+      // }
 
       // 실제 Supabase 인증 사용
       console.log('📊 Supabase 로그인 시도...');
@@ -250,15 +250,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       safeSetState(setUser, null);
       safeSetState(setError, null);
       
-      if (isDevelopment()) {
-        // 개발 환경: 모의 인증 로그아웃
-        await MockAuthService.logout();
-        // 개발 환경에서도 로그인 페이지로 리다이렉트
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
-        return;
-      }
+      // Mock 인증 비활성화 - 항상 Supabase 로그아웃만 사용
+      // if (isDevelopment()) {
+      //   // 개발 환경: 모의 인증 로그아웃
+      //   await MockAuthService.logout();
+      //   // 개발 환경에서도 로그인 페이지로 리다이렉트
+      //   if (typeof window !== 'undefined') {
+      //     window.location.href = '/login';
+      //   }
+      //   return;
+      // }
 
       // 프로덕션 환경: Supabase 로그아웃
       const { error } = await supabase.auth.signOut();

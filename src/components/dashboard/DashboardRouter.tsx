@@ -5,7 +5,6 @@ import { Button, Alert } from 'antd';
 import { AdminDashboard } from './AdminDashboard';
 import { OperatorDashboard } from './OperatorDashboard';
 import { EngineerDashboard } from './EngineerDashboard';
-import { RoleSwitcher } from './RoleSwitcher';
 import { User } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useAuth } from '@/contexts/AuthContext';
@@ -140,10 +139,5 @@ export const DashboardRouter: React.FC<DashboardRouterProps> = ({ user }) => {
     }
   };
 
-  return (
-    <>
-      {renderDashboard()}
-      <RoleSwitcher />
-    </>
-  );
+  return renderDashboard();
 };

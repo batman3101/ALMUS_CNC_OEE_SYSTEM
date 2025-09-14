@@ -27,15 +27,15 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 개발 환경에서 기본값 설정
-  React.useEffect(() => {
-    if (isDevelopment()) {
-      form.setFieldsValue({
-        email: 'zetooo1972@gmail.com',
-        password: 'youkillme-1972'
-      });
-    }
-  }, [form]);
+  // 자동 로그인 비활성화 - 항상 수동으로 입력하도록 변경
+  // React.useEffect(() => {
+  //   if (isDevelopment()) {
+  //     form.setFieldsValue({
+  //       email: 'zetooo1972@gmail.com',
+  //       password: 'youkillme-1972'
+  //     });
+  //   }
+  // }, [form]);
 
   const handleSubmit = async (values: LoginFormData) => {
     setLoading(true);
@@ -156,8 +156,8 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
         </Form.Item>
       </Form>
 
-      {/* 개발 환경에서만 표시되는 테스트 계정 정보 */}
-      {isDevelopment() && (
+      {/* 테스트 계정 정보 비활성화 - 실제 계정만 사용 */}
+      {false && isDevelopment() && (
         <>
           <Divider>
             <Text type="secondary" style={{ fontSize: '12px' }}>

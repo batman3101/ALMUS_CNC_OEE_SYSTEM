@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   // Fix for static file loading issues
   const pathname = request.nextUrl.pathname;
-  
+
   // Skip middleware for static files and Next.js internals
   if (
     pathname.startsWith('/_next') ||
@@ -18,14 +18,14 @@ export function middleware(request: NextRequest) {
 
   // Add cache headers for better performance
   const response = NextResponse.next();
-  
+
   // Set cache headers for development
   if (process.env.NODE_ENV === 'development') {
     response.headers.set('Cache-Control', 'no-store, must-revalidate');
     response.headers.set('Pragma', 'no-cache');
     response.headers.set('Expires', '0');
   }
-  
+
   return response;
 }
 
