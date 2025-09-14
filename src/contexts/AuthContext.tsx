@@ -4,7 +4,6 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useRe
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase, checkSupabaseConnection, safeSupabaseOperation } from '@/lib/supabase';
 import { User, AuthContextType, AppError, ErrorCodes } from '@/types';
-import { MockAuthService, isDevelopment } from '@/lib/mockAuth';
 import { log, LogCategories } from '@/lib/logger';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -175,18 +174,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // 로그인 함수 (향상된 디버깅과 오류 처리)
   const login = async (email: string, password: string): Promise<void> => {
     try {
-      console.log('🔑 로그인 시도:', { email, isDev: isDevelopment() });
+      console.log('🔑 로그인 시도:', { email });
       setError(null); // 이전 오류 초기화
-      
-      // Mock 인증 비활성화 - 항상 Supabase 실제 인증만 사용
-      // if (isDevelopment() && MockAuthService.getAvailableUsers().some(user => user.email === email)) {
-      //   console.log('🧑‍💻 개발 모드: 모의 인증으로 로그인');
-      //   log.info('개발 모드: 모의 인증으로 로그인', { email }, LogCategories.AUTH);
-      //   const mockUser = await MockAuthService.login(email, password);
-      //   safeSetState(setUser, mockUser);
-      //   console.log('✅ 모의 로그인 성공:', mockUser.email);
-      //   return;
-      // }
 
       // 실제 Supabase 인증 사용
       console.log('📊 Supabase 로그인 시도...');
@@ -250,18 +239,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       safeSetState(setUser, null);
       safeSetState(setError, null);
       
-      // Mock 인증 비활성화 - 항상 Supabase 로그아웃만 사용
-      // if (isDevelopment()) {
-      //   // 개발 환경: 모의 인증 로그아웃
-      //   await MockAuthService.logout();
-      //   // 개발 환경에서도 로그인 페이지로 리다이렉트
-      //   if (typeof window !== 'undefined') {
-      //     window.location.href = '/login';
-      //   }
-      //   return;
-      // }
-
-      // 프로덕션 환경: Supabase 로그아웃
+      // Supabase 로그아웃
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.warn('로그아웃 중 오류 발생했지만 사용자 상태는 이미 초기화됨:', error);

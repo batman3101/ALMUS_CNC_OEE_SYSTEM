@@ -129,42 +129,60 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // 임시 일일 지표 데이터 생성
+  // 실제 일일 지표 데이터 조회
   useEffect(() => {
-    // 실제로는 API에서 당일 데이터를 가져와야 함
-    const mockDailyMetrics: DailyMetrics = {
-      totalRuntime: 420, // 7시간
-      plannedRuntime: 480, // 8시간
-      downtime: 60, // 1시간
-      availability: 87.5,
-      stateHistory: [
-        {
-          state: 'NORMAL_OPERATION',
-          duration: 240,
-          startTime: '2024-01-15T08:00:00Z',
-          endTime: '2024-01-15T12:00:00Z'
-        },
-        {
-          state: 'MAINTENANCE',
-          duration: 30,
-          startTime: '2024-01-15T12:00:00Z',
-          endTime: '2024-01-15T12:30:00Z'
-        },
-        {
-          state: 'NORMAL_OPERATION',
-          duration: 180,
-          startTime: '2024-01-15T12:30:00Z',
-          endTime: '2024-01-15T15:30:00Z'
-        },
-        {
-          state: 'TEMPORARY_STOP',
-          duration: 30,
-          startTime: '2024-01-15T15:30:00Z',
-          endTime: '2024-01-15T16:00:00Z'
-        }
-      ]
+    const fetchDailyMetrics = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+
+        // machine_logs에서 당일 데이터 조회
+        const response = await fetch(`/api/machines/${machine.id}/logs?date=${today}`);
+        if (!response.ok) return;
+
+        const { machine_logs } = await response.json();
+
+        if (!machine_logs || machine_logs.length === 0) return;
+
+        // 실제 데이터를 기반으로 지표 계산
+        let totalRuntime = 0;
+        let downtime = 0;
+        const stateHistory: DailyMetrics['stateHistory'] = [];
+
+        machine_logs.forEach((log: MachineLog) => {
+          const duration = log.duration || 0;
+
+          if (log.state === 'NORMAL_OPERATION') {
+            totalRuntime += duration;
+          } else {
+            downtime += duration;
+          }
+
+          stateHistory.push({
+            state: log.state,
+            duration: duration,
+            startTime: log.start_time,
+            endTime: log.end_time || undefined
+          });
+        });
+
+        const plannedRuntime = 480; // 8시간 (분)
+        const availability = plannedRuntime > 0 ? (totalRuntime / plannedRuntime) * 100 : 0;
+
+        const calculatedMetrics: DailyMetrics = {
+          totalRuntime,
+          plannedRuntime,
+          downtime,
+          availability,
+          stateHistory
+        };
+
+        setDailyMetrics(calculatedMetrics);
+      } catch (error) {
+        console.error('Failed to fetch daily metrics:', error);
+      }
     };
-    setDailyMetrics(mockDailyMetrics);
+
+    fetchDailyMetrics();
   }, [machine.id]);
 
   const currentStateConfig = machine.current_state 

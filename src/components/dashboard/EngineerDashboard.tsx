@@ -25,100 +25,6 @@ import { useTranslation } from '@/hooks/useTranslation';
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
 
-// 모의 데이터 생성 함수들 (고정값 사용으로 하이드레이션 오류 방지)
-const generateMockAnalysisData = () => {
-  const machines = ['CNC-001', 'CNC-002', 'CNC-003', 'CNC-004', 'CNC-005'];
-  const fixedData = [
-    { location: 'A동 1층', avgOEE: 0.85, availability: 0.89, performance: 0.92, quality: 0.96, downtimeHours: 15, defectRate: 0.02, trend: 'up', trendValue: 5.2 },
-    { location: 'A동 1층', avgOEE: 0.72, availability: 0.78, performance: 0.88, quality: 0.94, downtimeHours: 28, defectRate: 0.04, trend: 'down', trendValue: 2.1 },
-    { location: 'A동 2층', avgOEE: 0.91, availability: 0.94, performance: 0.95, quality: 0.98, downtimeHours: 12, defectRate: 0.01, trend: 'up', trendValue: 7.8 },
-    { location: 'B동 1층', avgOEE: 0.58, availability: 0.65, performance: 0.82, quality: 0.91, downtimeHours: 45, defectRate: 0.06, trend: 'down', trendValue: 3.5 },
-    { location: 'B동 2층', avgOEE: 0.78, availability: 0.83, performance: 0.90, quality: 0.95, downtimeHours: 22, defectRate: 0.03, trend: 'up', trendValue: 4.1 }
-  ];
-  
-  return machines.map((name, index) => ({
-    key: name,
-    machine: name,
-    ...fixedData[index]
-  }));
-};
-
-const generateMockTrendData = () => {
-  // 30일간의 고정된 패턴 데이터
-  const basePattern = [
-    0.82, 0.78, 0.85, 0.79, 0.83, 0.81, 0.84, 0.77, 0.86, 0.80,
-    0.75, 0.88, 0.82, 0.79, 0.87, 0.74, 0.89, 0.83, 0.76, 0.85,
-    0.81, 0.78, 0.84, 0.80, 0.86, 0.82, 0.77, 0.88, 0.79, 0.85
-  ];
-  
-  const data = [];
-  for (let i = 29; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dayIndex = 29 - i;
-    const baseOEE = basePattern[dayIndex];
-    
-    data.push({
-      date: date.toISOString().split('T')[0],
-      availability: baseOEE + 0.05,
-      performance: baseOEE + 0.08,
-      quality: baseOEE + 0.12,
-      oee: baseOEE,
-      shift: dayIndex % 2 === 0 ? 'A' as const : 'B' as const
-    });
-  }
-  return data;
-};
-
-const generateMockDowntimeData = () => [
-  { state: 'MAINTENANCE' as const, duration: 1200, count: 15, percentage: 42.3 },
-  { state: 'MODEL_CHANGE' as const, duration: 800, count: 8, percentage: 28.2 },
-  { state: 'TOOL_CHANGE' as const, duration: 450, count: 32, percentage: 15.9 },
-  { state: 'PROGRAM_CHANGE' as const, duration: 280, count: 12, percentage: 9.9 },
-  { state: 'TEMPORARY_STOP' as const, duration: 110, count: 18, percentage: 3.7 }
-];
-
-const generateMockProductionData = () => {
-  // 30일간의 고정된 생산 데이터 패턴
-  const baseOutputs = [
-    9200, 8800, 9500, 8600, 9100, 8900, 9300, 8500, 9400, 8700,
-    8300, 9600, 9000, 8400, 9700, 8200, 9800, 9100, 8100, 9500,
-    8900, 8600, 9200, 8800, 9400, 9000, 8500, 9600, 8700, 9300
-  ];
-  
-  const data = [];
-  for (let i = 29; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dayIndex = 29 - i;
-    const outputQty = baseOutputs[dayIndex];
-    const defectRate = 0.02 + (dayIndex % 5) * 0.01; // 2-6% 범위
-    const defectQty = Math.floor(outputQty * defectRate);
-    
-    data.push({
-      date: date.toISOString().split('T')[0],
-      output_qty: outputQty,
-      defect_qty: defectQty,
-      good_qty: outputQty - defectQty,
-      defect_rate: defectRate,
-      target_qty: 10000,
-      shift: dayIndex % 2 === 0 ? 'A' as const : 'B' as const
-    });
-  }
-  return data;
-};
-
-const generateMockOverallMetrics = (): OEEMetrics => ({
-  availability: 0.82,
-  performance: 0.89,
-  quality: 0.94,
-  oee: 0.69,
-  actual_runtime: 18720,
-  planned_runtime: 22800,
-  ideal_runtime: 16800,
-  output_qty: 45600,
-  defect_qty: 2736
-});
 
 interface EngineerDashboardProps {
   onError?: (error: Error) => void;
@@ -415,13 +321,23 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const loading = realtimeLoading || engineerDataLoading;
   const error = realtimeError || engineerDataError;
 
-  // 폴백 데이터
-  const [fallbackData] = useState({
-    overallMetrics: generateMockOverallMetrics(),
-    analysisData: generateMockAnalysisData(),
-    trendData: generateMockTrendData(),
-    downtimeData: generateMockDowntimeData(),
-    productionData: generateMockProductionData()
+  // 기본 빈 데이터 구조
+  const getEmptyData = () => ({
+    overallMetrics: {
+      availability: 0,
+      performance: 0,
+      quality: 0,
+      oee: 0,
+      actual_runtime: 0,
+      planned_runtime: 0,
+      ideal_runtime: 0,
+      output_qty: 0,
+      defect_qty: 0
+    },
+    analysisData: [],
+    trendData: [],
+    downtimeData: [],
+    productionData: []
   });
 
   // 에러 핸들링
@@ -559,18 +475,18 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       return {
         overallMetrics,
         analysisData,
-        trendData: oeeData.length > 0 ? oeeData : fallbackData.trendData, // 실제 API 데이터 우선 사용
+        trendData: oeeData.length > 0 ? oeeData : [], // 실제 API 데이터만 사용
         downtimeData: downtimeData.length > 0 ? downtimeData : downtimeAnalysis.slice(0, 5),
-        productionData: productionData.length > 0 ? productionData : fallbackData.productionData // 실제 API 데이터 우선 사용
+        productionData: productionData.length > 0 ? productionData : [] // 실제 API 데이터만 사용
       };
     } catch (error) {
       console.error('Error processing engineer dashboard data:', error);
       if (onError) {
         onError(error as Error);
       }
-      return fallbackData;
+      return getEmptyData();
     }
-  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, fallbackData, onError, filteredOEEData]);
+  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, onError, filteredOEEData]);
 
   // 설비 필터링된 분석 데이터
   const filteredAnalysisData = React.useMemo(() => {

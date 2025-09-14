@@ -9,7 +9,6 @@ interface EnvConfig {
   SUPABASE_SERVICE_ROLE_KEY?: string;
   NEXT_PUBLIC_APP_NAME?: string;
   NEXT_PUBLIC_DEFAULT_LANGUAGE?: string;
-  USE_MOCK_AUTH?: boolean;
 }
 
 export function validateEnv(): EnvConfig {
@@ -31,16 +30,15 @@ export function validateEnv(): EnvConfig {
   const isValidSupabaseUrl = supabaseUrl && 
     (supabaseUrl.includes('.supabase.co') || supabaseUrl.includes('localhost'));
 
-  const useMockAuth = isPlaceholderUrl || isPlaceholderKey || !isValidSupabaseUrl;
-
-  if (useMockAuth) {
-    console.warn(
-      '🔧 Development Mode: Using mock authentication system\n' +
-      'Reason: Supabase credentials are not properly configured\n' +
+  if (isPlaceholderUrl || isPlaceholderKey || !isValidSupabaseUrl) {
+    console.error(
+      '❌ Missing Supabase Configuration\n' +
+      'Supabase credentials are not properly configured\n' +
       `- URL valid: ${!isPlaceholderUrl && isValidSupabaseUrl}\n` +
       `- Key valid: ${!isPlaceholderKey}\n` +
-      'Configure .env.local with actual Supabase credentials for production use.'
+      'Please configure .env.local with actual Supabase credentials.'
     );
+    throw new Error('Supabase configuration is required');
   } else {
     console.info(
       '🔗 Production Mode: Using Supabase authentication\n' +
@@ -49,12 +47,11 @@ export function validateEnv(): EnvConfig {
   }
 
   return {
-    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl || 'https://placeholder.supabase.co',
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseKey || 'placeholder-key',
+    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseKey,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'CNC OEE Monitoring System',
-    NEXT_PUBLIC_DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || 'ko',
-    USE_MOCK_AUTH: useMockAuth
+    NEXT_PUBLIC_DEFAULT_LANGUAGE: process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE || 'ko'
   };
 }
 

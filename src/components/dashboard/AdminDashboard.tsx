@@ -23,59 +23,6 @@ import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 
 
 
-// 모의 데이터 생성 함수들 (고정값 사용으로 하이드레이션 오류 방지)
-const generateMockOverallMetrics = (): OEEMetrics => ({
-  availability: 0.82,
-  performance: 0.89,
-  quality: 0.94,
-  oee: 0.69,
-  actual_runtime: 18720, // 전체 설비 합계
-  planned_runtime: 22800,
-  ideal_runtime: 16800,
-  output_qty: 45600,
-  defect_qty: 2736
-});
-
-// Mock 데이터는 컴포넌트 내부에서 getStatusText로 번역될 예정
-const generateMockMachineList = (): Array<Machine & { oee: number; status: string }> => [
-  { id: '1', name: 'CNC-001', location: 'A동 1층', model_type: 'DMG MORI', default_tact_time: 120, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.85, status: 'NORMAL_OPERATION' },
-  { id: '2', name: 'CNC-002', location: 'A동 1층', model_type: 'MAZAK', default_tact_time: 90, is_active: true, current_state: 'MAINTENANCE', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.72, status: 'MAINTENANCE' },
-  { id: '3', name: 'CNC-003', location: 'A동 2층', model_type: 'HAAS', default_tact_time: 150, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.91, status: 'NORMAL_OPERATION' },
-  { id: '4', name: 'CNC-004', location: 'B동 1층', model_type: 'DMG MORI', default_tact_time: 110, is_active: true, current_state: 'TEMPORARY_STOP', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.58, status: 'TEMPORARY_STOP' },
-  { id: '5', name: 'CNC-005', location: 'B동 2층', model_type: 'OKUMA', default_tact_time: 130, is_active: true, current_state: 'NORMAL_OPERATION', created_at: '2024-01-01', updated_at: '2024-01-01', oee: 0.78, status: 'NORMAL_OPERATION' },
-];
-
-const generateMockAlerts = () => [
-  { id: 1, machine: 'CNC-004', message: 'OEE 60% 미만 지속', severity: 'error', time: '10분 전' },
-  { id: 2, machine: 'CNC-002', message: '점검 시간 초과', severity: 'warning', time: '25분 전' },
-  { id: 3, machine: 'CNC-007', message: '불량률 5% 초과', severity: 'warning', time: '1시간 전' },
-];
-
-// 상태 텍스트 변환 함수는 컴포넌트 내부로 이동 (번역 컨텍스트 필요)
-
-const generateMockTrendData = () => {
-  // 고정된 시드 값을 사용하여 일관된 데이터 생성
-  const fixedValues = [
-    { availability: 0.82, performance: 0.87, quality: 0.95, oee: 0.68, shift: 'A' as const },
-    { availability: 0.78, performance: 0.91, quality: 0.93, oee: 0.66, shift: 'B' as const },
-    { availability: 0.85, performance: 0.89, quality: 0.96, oee: 0.73, shift: 'A' as const },
-    { availability: 0.79, performance: 0.88, quality: 0.94, oee: 0.65, shift: 'B' as const },
-    { availability: 0.83, performance: 0.92, quality: 0.97, oee: 0.74, shift: 'A' as const },
-    { availability: 0.81, performance: 0.86, quality: 0.95, oee: 0.66, shift: 'B' as const },
-    { availability: 0.84, performance: 0.90, quality: 0.96, oee: 0.73, shift: 'A' as const }
-  ];
-  
-  const data = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    data.push({
-      date: date.toISOString().split('T')[0],
-      ...fixedValues[6 - i]
-    });
-  }
-  return data;
-};
 
 interface AdminDashboardProps {
   onError?: (error: Error) => void;
@@ -157,7 +104,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   // 실시간 OEE 메트릭 계산
   const calculateRealTimeOEEMetrics = (): OEEMetrics => {
     if (!aggregatedData) {
-      return generateMockOverallMetrics();
+      return {
+        availability: 0,
+        performance: 0,
+        quality: 0,
+        oee: 0,
+        actual_runtime: 0,
+        planned_runtime: 0,
+        ideal_runtime: 0,
+        output_qty: 0,
+        defect_qty: 0
+      };
     }
 
     return {
@@ -449,8 +406,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             time: t('time.realTime')
           }));
         
-        // 추이 데이터
-        const trendData = generateMockTrendData();
+        // 추이 데이터 - 실제 생산 기록에서 계산
+        const trendData = productionRecords.slice(0, 7).map(record => ({
+          date: record.date,
+          availability: record.availability / 100,
+          performance: record.performance / 100,
+          quality: record.quality / 100,
+          oee: record.oee / 100,
+          shift: record.shift as 'A' | 'B'
+        }));
         
         return {
           overallMetrics,
@@ -510,7 +474,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           overallMetrics: realTimeMetrics,
           machineList,
           alerts,
-          trendData: generateMockTrendData()
+          trendData: [] // 실제 데이터가 없을 경우 빈 배열
         };
       }
 

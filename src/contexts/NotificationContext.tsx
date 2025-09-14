@@ -80,66 +80,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const { user } = useAuth();
   const { t } = useLanguage();
 
-  // 모의 알림 데이터 생성 (실제로는 Supabase에서 가져옴)
-  const generateMockNotifications = useCallback((): Notification[] => {
-    const mockNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'OEE_LOW',
-        severity: 'high',
-        status: 'active',
-        machine_id: 'cnc-004',
-        machine_name: 'CNC-004',
-        title: 'OEE 저하 경고',
-        message: 'OEE가 60% 미만으로 30분 이상 지속되고 있습니다.',
-        threshold_value: 60,
-        current_value: 45,
-        created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-      },
-      {
-        id: '2',
-        type: 'DOWNTIME_EXCEEDED',
-        severity: 'medium',
-        status: 'active',
-        machine_id: 'cnc-002',
-        machine_name: 'CNC-002',
-        title: '다운타임 초과',
-        message: '점검 시간이 예상 시간을 초과했습니다.',
-        threshold_value: 60,
-        current_value: 85,
-        created_at: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-      },
-      {
-        id: '3',
-        type: 'QUALITY_ISSUE',
-        severity: 'medium',
-        status: 'acknowledged',
-        machine_id: 'cnc-007',
-        machine_name: 'CNC-007',
-        title: '품질 문제 발생',
-        message: '불량률이 임계치를 초과했습니다.',
-        threshold_value: 5,
-        current_value: 7.2,
-        created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-        acknowledged_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        acknowledged_by: user?.id,
-      },
-      {
-        id: '4',
-        type: 'MACHINE_STOPPED',
-        severity: 'critical',
-        status: 'resolved',
-        machine_id: 'cnc-001',
-        machine_name: 'CNC-001',
-        title: '설비 긴급 정지',
-        message: '안전 센서 작동으로 설비가 긴급 정지되었습니다.',
-        created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        resolved_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      }
-    ];
-
-    return mockNotifications;
-  }, [user?.id]);
 
   // 실제 데이터베이스 기반 알림 생성
   const generateRealNotifications = useCallback(async (): Promise<Notification[]> => {

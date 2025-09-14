@@ -27,48 +27,37 @@ export async function GET(
       );
     }
 
-    // production_records 테이블이 없으므로 목업 데이터 반환
-    // 실제 구현에서는 production_records 테이블에서 데이터를 가져와야 함
-    const mockProductionData = [
-      {
-        id: `prod_${Date.now()}_1`,
-        machine_id: machineId,
-        date: new Date().toISOString().split('T')[0],
-        shift: 'A',
-        output_qty: 120,
-        defect_qty: 3,
-        actual_runtime: 480,
-        planned_runtime: 500,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: `prod_${Date.now()}_2`,
-        machine_id: machineId,
-        date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-        shift: 'B',
-        output_qty: 115,
-        defect_qty: 2,
-        actual_runtime: 470,
-        planned_runtime: 500,
-        created_at: new Date(Date.now() - 86400000).toISOString()
-      }
-    ];
+    // production_records 테이블에서 실제 데이터 조회
+    let query = supabaseAdmin
+      .from('production_records')
+      .select('*')
+      .eq('machine_id', machineId);
 
-    // 필터 적용
-    let filteredData = mockProductionData;
-
+    // 날짜 필터 적용
     if (startDate && endDate) {
-      filteredData = filteredData.filter(record => 
-        record.date >= startDate && record.date <= endDate
+      query = query.gte('date', startDate).lte('date', endDate);
+    }
+
+    // 교대 필터 적용
+    if (shift) {
+      query = query.eq('shift', shift);
+    }
+
+    // 최신 순으로 정렬
+    query = query.order('date', { ascending: false });
+
+    const { data: productionRecords, error: productionError } = await query;
+
+    if (productionError) {
+      console.error('Error fetching production records:', productionError);
+      return NextResponse.json(
+        { error: 'Failed to fetch production records' },
+        { status: 500 }
       );
     }
 
-    if (shift) {
-      filteredData = filteredData.filter(record => record.shift === shift);
-    }
-
-    return NextResponse.json({ 
-      production_records: filteredData,
+    return NextResponse.json({
+      production_records: productionRecords || [],
       machine_id: machineId
     });
   } catch (error) {

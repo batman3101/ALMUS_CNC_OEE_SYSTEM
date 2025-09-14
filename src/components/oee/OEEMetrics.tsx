@@ -23,60 +23,53 @@ interface OEEMetricsProps {
   onDataRefresh?: () => void;
 }
 
-// 모의 데이터 생성 함수들
-const generateMockOEEData = (): OEEMetricsType => ({
-  availability: 0.85,
-  performance: 0.92,
-  quality: 0.96,
-  oee: 0.75,
-  actual_runtime: 510,
-  planned_runtime: 600,
-  ideal_runtime: 480,
-  output_qty: 1200,
-  defect_qty: 48
-});
-
-const generateEmptyTrendData = (formatDate: (date: Date) => string) => {
-  const data = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    data.push({
-      date: formatDate(date),
-      availability: 0,
-      performance: 0,
-      quality: 0,
-      oee: 0,
-      shift: 'A' as const
-    });
+// 실제 Supabase API 함수들
+const fetchOEEMetrics = async (machineId: string): Promise<OEEMetricsType | null> => {
+  try {
+    const response = await fetch(`/api/machines/${machineId}/oee-metrics`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.oee_metrics || null;
+  } catch (error) {
+    console.error('Failed to fetch OEE metrics:', error);
+    return null;
   }
-  return data;
 };
 
-const generateMockDowntimeData = () => [
-  { state: 'MAINTENANCE' as const, duration: 120, count: 3, percentage: 35.3 },
-  { state: 'MODEL_CHANGE' as const, duration: 90, count: 2, percentage: 26.5 },
-  { state: 'TOOL_CHANGE' as const, duration: 60, count: 8, percentage: 17.6 },
-  { state: 'PROGRAM_CHANGE' as const, duration: 45, count: 4, percentage: 13.2 },
-  { state: 'TEMPORARY_STOP' as const, duration: 25, count: 6, percentage: 7.4 }
-];
-
-const generateEmptyProductionData = (formatDate: (date: Date) => string) => {
-  const data = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    data.push({
-      date: formatDate(date),
-      output_qty: 0,
-      defect_qty: 0,
-      good_qty: 0,
-      defect_rate: 0,
-      target_qty: 1200,
-      shift: 'A' as const
-    });
+const fetchDowntimeAnalysis = async (machineId: string) => {
+  try {
+    const response = await fetch(`/api/machines/${machineId}/downtime-analysis`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.downtime_analysis || [];
+  } catch (error) {
+    console.error('Failed to fetch downtime analysis:', error);
+    return [];
   }
-  return data;
+};
+
+const fetchTrendData = async (machineId: string) => {
+  try {
+    const response = await fetch(`/api/machines/${machineId}/trend-data?days=7`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.trend_data || [];
+  } catch (error) {
+    console.error('Failed to fetch trend data:', error);
+    return [];
+  }
+};
+
+const fetchProductionData = async (machineId: string) => {
+  try {
+    const response = await fetch(`/api/machines/${machineId}/production?days=7`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.production_records || [];
+  } catch (error) {
+    console.error('Failed to fetch production data:', error);
+    return [];
+  }
 };
 
 export const OEEMetrics: React.FC<OEEMetricsProps> = ({
@@ -94,23 +87,38 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
 
   // 데이터 상태
-  const [oeeMetrics, setOeeMetrics] = useState<OEEMetricsType>(generateMockOEEData());
-  const [trendData, setTrendData] = useState(generateEmptyTrendData(formatDate));
-  const [downtimeData, setDowntimeData] = useState(generateMockDowntimeData());
-  const [productionData, setProductionData] = useState(generateEmptyProductionData(formatDate));
+  const [oeeMetrics, setOeeMetrics] = useState<OEEMetricsType>({
+    availability: 0,
+    performance: 0,
+    quality: 0,
+    oee: 0,
+    actual_runtime: 0,
+    planned_runtime: 0,
+    ideal_runtime: 0,
+    output_qty: 0,
+    defect_qty: 0
+  });
+  const [trendData, setTrendData] = useState<any[]>([]);
+  const [downtimeData, setDowntimeData] = useState<any[]>([]);
+  const [productionData, setProductionData] = useState<any[]>([]);
 
   // 데이터 새로고침
   const handleRefresh = async () => {
     setLoading(true);
     try {
-      // 실제 구현에서는 API 호출
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setOeeMetrics(generateMockOEEData());
-      setTrendData(generateMockTrendData(formatDate));
-      setDowntimeData(generateMockDowntimeData());
-      setProductionData(generateMockProductionData(formatDate));
-      
+      // 실제 Supabase API 호출
+      const [metrics, trend, downtime, production] = await Promise.all([
+        fetchOEEMetrics(machineId),
+        fetchTrendData(machineId),
+        fetchDowntimeAnalysis(machineId),
+        fetchProductionData(machineId)
+      ]);
+
+      if (metrics) setOeeMetrics(metrics);
+      setTrendData(trend);
+      setDowntimeData(downtime);
+      setProductionData(production);
+
       if (onDataRefresh) {
         onDataRefresh();
       }
@@ -125,12 +133,18 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
   useEffect(() => {
     if (!realTime) return;
 
-    const interval = setInterval(() => {
-      setOeeMetrics(generateMockOEEData());
+    const interval = setInterval(async () => {
+      const metrics = await fetchOEEMetrics(machineId);
+      if (metrics) setOeeMetrics(metrics);
     }, 30000); // 30초마다 업데이트
 
     return () => clearInterval(interval);
-  }, [realTime]);
+  }, [realTime, machineId]);
+
+  // 초기 데이터 로딩
+  useEffect(() => {
+    handleRefresh();
+  }, [machineId]);
 
   // 데이터 내보내기
   const handleExport = () => {

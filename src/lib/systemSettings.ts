@@ -582,7 +582,7 @@ export class SystemSettingsService {
    */
   private getDefaultSettingsResponse(): SettingsResponse {
     const defaultSettings = this.getDefaultSettings();
-    const mockData = defaultSettings.map((setting, index) => ({
+    const defaultData = defaultSettings.map((setting, index) => ({
       id: `default-${index}`,
       category: setting.category,
       setting_key: setting.key,
@@ -596,9 +596,9 @@ export class SystemSettingsService {
     }));
 
     // 캐시 업데이트
-    this.updateCache(mockData);
+    this.updateCache(defaultData);
 
-    return { success: true, data: mockData };
+    return { success: true, data: defaultData };
   }
 
   /**
