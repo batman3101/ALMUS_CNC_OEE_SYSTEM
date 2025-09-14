@@ -47,18 +47,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     refreshRecords
   } = useRealtimeProductionRecords();
 
-  // 실시간 알림 시스템
-  const {
-    alerts: realtimeAlerts,
-    alertStats,
-    acknowledgeAlert,
-    clearAllAlerts,
-    requestNotificationPermission
-  } = useRealtimeNotifications({
-    productionRecords,
-    aggregatedData,
-    machines: [] // TODO: 실제 설비 데이터 연결 필요
-  });
+  // 실시간 알림 시스템 (현재 NotificationContext로 대체하여 비활성화)
+  // const {
+  //   alerts: realtimeAlerts,
+  //   alertStats,
+  //   acknowledgeAlert,
+  //   clearAllAlerts,
+  //   requestNotificationPermission
+  // } = useRealtimeNotifications({
+  //   productionRecords,
+  //   aggregatedData,
+  //   machines: [] // TODO: 실제 설비 데이터 연결 필요
+  // });
+
+  // 임시 빈 데이터로 대체
+  const realtimeAlerts: any[] = [];
+  const alertStats = { total: 0, unacknowledged: 0, critical: 0, high: 0, byType: {} };
+  const acknowledgeAlert = () => {};
+  const clearAllAlerts = () => {};
+  const requestNotificationPermission = () => Promise.resolve('granted');
 
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [showMachineStatusModal, setShowMachineStatusModal] = useState(false);
