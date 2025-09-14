@@ -105,12 +105,15 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
       if (productionError) throw productionError;
 
-      // OEE 지표 계산
+      // OEE 지표 계산 (개선된 로직)
       const oeeMetrics: Record<string, OEEMetrics> = {};
-      if (machines && productionRecords) {
+      if (machines) {
         machines.forEach(machine => {
-          const machineRecords = productionRecords.filter(r => r.machine_id === machine.id);
+          // 생산 실적 기반 OEE 데이터 찾기
+          const machineRecords = productionRecords?.filter(r => r.machine_id === machine.id) || [];
+
           if (machineRecords.length > 0) {
+            // 생산 실적이 있는 경우: 최신 데이터 사용
             const latestRecord = machineRecords[0];
             oeeMetrics[machine.id] = {
               availability: latestRecord.availability || 0,
@@ -118,10 +121,50 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
               quality: latestRecord.quality || 0,
               oee: latestRecord.oee || 0,
               actual_runtime: latestRecord.actual_runtime || 0,
-              planned_runtime: latestRecord.planned_runtime || 480, // 8시간 기본값
+              planned_runtime: latestRecord.planned_runtime || 480,
               ideal_runtime: latestRecord.ideal_runtime || 0,
               output_qty: latestRecord.output_qty || 0,
               defect_qty: latestRecord.defect_qty || 0
+            };
+          } else {
+            // 생산 실적이 없는 경우: 기본값 또는 실시간 계산
+            // machine_logs 기반으로 가용성만이라도 계산
+            const todayLogs = machineLogs?.filter(log =>
+              log.machine_id === machine.id &&
+              new Date(log.start_time).toDateString() === new Date().toDateString()
+            ) || [];
+
+            let availability = 0;
+            if (todayLogs.length > 0) {
+              // 정상 작동 시간 계산
+              const normalOperationTime = todayLogs
+                .filter(log => log.state === 'NORMAL_OPERATION')
+                .reduce((acc, log) => {
+                  const start = new Date(log.start_time).getTime();
+                  const end = log.end_time ? new Date(log.end_time).getTime() : Date.now();
+                  return acc + (end - start) / (1000 * 60); // 분 단위
+                }, 0);
+
+              // 계획된 작동 시간 (현재까지의 시간)
+              const now = new Date();
+              const todayStart = new Date(now);
+              todayStart.setHours(0, 0, 0, 0);
+              const plannedTime = Math.min((now.getTime() - todayStart.getTime()) / (1000 * 60), 480);
+
+              availability = plannedTime > 0 ? normalOperationTime / plannedTime : 0;
+            }
+
+            // 기본 OEE 메트릭 설정 (데이터 없는 경우)
+            oeeMetrics[machine.id] = {
+              availability: availability,
+              performance: 0, // 생산 데이터 없으면 0
+              quality: 0, // 품질 데이터 없으면 0
+              oee: 0, // OEE는 모든 요소가 있어야 계산 가능
+              actual_runtime: 0,
+              planned_runtime: 480,
+              ideal_runtime: 0,
+              output_qty: 0,
+              defect_qty: 0
             };
           }
         });

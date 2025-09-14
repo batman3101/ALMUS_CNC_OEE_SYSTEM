@@ -357,15 +357,46 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                 label: machinesT('operator.oeeStatus'),
                 children: (
                   <>
-                    {selectedMachine && oeeMetrics[selectedMachine] && (
-                      <OEEGauge
-                        metrics={oeeMetrics[selectedMachine]}
-                        title={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name}
-                        size="small"
-                        showDetails={false}
-                      />
-                    )}
-                    {!selectedMachine && (
+                    {selectedMachine && oeeMetrics[selectedMachine] ? (
+                      <Card size="small">
+                        <OEEGauge
+                          metrics={oeeMetrics[selectedMachine]}
+                          title={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name}
+                          size="small"
+                          showDetails={true}
+                        />
+                        {/* OEE가 0인 경우 안내 메시지 추가 */}
+                        {oeeMetrics[selectedMachine].oee === 0 && (
+                          <Alert
+                            message="OEE 데이터 수집 중"
+                            description="생산 실적이 입력되면 정확한 OEE가 계산됩니다."
+                            type="info"
+                            showIcon
+                            style={{ marginTop: 16 }}
+                          />
+                        )}
+                      </Card>
+                    ) : selectedMachine ? (
+                      <Card size="small">
+                        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                          <ClockCircleOutlined style={{ fontSize: 48, color: '#bfbfbf', marginBottom: 16 }} />
+                          <div style={{ color: '#666', fontSize: 14 }}>
+                            <p style={{ marginBottom: 8 }}>OEE 데이터를 불러오는 중...</p>
+                            <p style={{ fontSize: 12, color: '#999' }}>
+                              생산 실적을 입력하면 OEE가 자동으로 계산됩니다.
+                            </p>
+                          </div>
+                          <Button
+                            type="primary"
+                            size="small"
+                            style={{ marginTop: 16 }}
+                            onClick={() => setShowProductionInput(true)}
+                          >
+                            생산 실적 입력
+                          </Button>
+                        </div>
+                      </Card>
+                    ) : (
                       <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
                         {machinesT('operator.selectMachine')}
                       </div>

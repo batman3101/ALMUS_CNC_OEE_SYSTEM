@@ -6,6 +6,7 @@ import { SettingOutlined, BarChartOutlined, DashboardOutlined } from '@ant-desig
 import { LoginFormInline } from '@/components/auth/LoginFormInline';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import styles from './login.module.css';
 
 const { Title, Text, Paragraph } = Typography;
@@ -28,13 +29,24 @@ const LoginPage: React.FC = () => {
             <div className={styles.brandingContent}>
               <div className={styles.logoSection}>
                 <div className={styles.logo}>
-                  <SettingOutlined className={styles.logoIcon} />
+                  <Image
+                    src="/symbol.svg"
+                    alt="Company Logo"
+                    width={64}
+                    height={64}
+                    style={{
+                      width: '60px',
+                      height: '60px',
+                      objectFit: 'contain',
+                      filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'
+                    }}
+                  />
                 </div>
                 <Title level={2} className={styles.brandTitle}>
                   {isLoading ? 'Loading...' : companyInfo.name}
                 </Title>
                 <Text className={styles.subtitle}>
-                  모니터링 시스템
+                  CNC OEE System
                 </Text>
               </div>
 
@@ -81,7 +93,7 @@ const LoginPage: React.FC = () => {
 
               <div className={styles.systemInfo}>
                 <Text className={styles.versionInfo} style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                  Version 1.0.0 | 2024 {isLoading ? 'System' : companyInfo.name} System
+                  Version 1.0.0 | 2025 ALMUS TECH CNC System
                 </Text>
               </div>
             </div>

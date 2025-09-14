@@ -209,7 +209,7 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
 
       <div style={{ textAlign: 'center', marginTop: 24 }}>
         <Text type="secondary" style={{ fontSize: '12px' }}>
-          {isDevelopment() ? '🔧 개발 모드 - 모의 데이터 사용 중' : t('auth.systemInfo')}
+          {isDevelopment() ? '신규 사용자 가입은 운영자에게 문의' : t('auth.systemInfo')}
         </Text>
       </div>
     </div>
