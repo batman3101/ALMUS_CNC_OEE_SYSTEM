@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, Alert, Typography, Divider, Tag, Space } from 'antd';
-import { UserOutlined, LockOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Card, Alert, Typography } from 'antd';
+import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuth } from '@/contexts/AuthContext';
-import { MockAuthService, isDevelopment } from '@/lib/mockAuth';
 import { AppError, ErrorCodes } from '@/types';
 
 const { Title } = Typography;
@@ -27,15 +26,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onError }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 개발 환경에서 기본값 설정
-  React.useEffect(() => {
-    if (isDevelopment()) {
-      form.setFieldsValue({
-        email: 'zetooo1972@gmail.com',
-        password: 'youkillme-1972'
-      });
-    }
-  }, [form]);
 
   const handleSubmit = async (values: LoginFormData) => {
     setLoading(true);
@@ -72,11 +62,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onError }) => {
     }
   };
 
-  // 개발 계정으로 빠른 로그인
-  const handleQuickLogin = (email: string, password: string) => {
-    form.setFieldsValue({ email, password });
-    handleSubmit({ email, password });
-  };
 
   return (
     <div style={{ 
@@ -169,47 +154,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onError }) => {
           </Form.Item>
         </Form>
 
-        {/* 개발 환경에서만 표시되는 테스트 계정 정보 */}
-        {isDevelopment() && (
-          <>
-            <Divider>
-              <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-                <InfoCircleOutlined /> 개발 모드 - 테스트 계정
-              </Typography.Text>
-            </Divider>
-            
-            <div style={{ marginBottom: 16 }}>
-              {MockAuthService.getAvailableUsers().map((user, index) => (
-                <div key={user.id} style={{ marginBottom: 8 }}>
-                  <Space size="small" style={{ width: '100%', justifyContent: 'space-between' }}>
-                    <div>
-                      <Tag color={user.role === 'admin' ? 'red' : user.role === 'engineer' ? 'blue' : 'green'}>
-                        {user.role === 'admin' ? '관리자' : user.role === 'engineer' ? '엔지니어' : '운영자'}
-                      </Tag>
-                      <Typography.Text style={{ fontSize: '12px' }}>
-                        {user.name}
-                      </Typography.Text>
-                    </div>
-                    <Button 
-                      size="small" 
-                      type="link"
-                      onClick={() => handleQuickLogin(user.email, index === 0 ? 'youkillme-1972' : 'test123')}
-                    >
-                      로그인
-                    </Button>
-                  </Space>
-                  <div style={{ fontSize: '11px', color: '#999', marginLeft: 8 }}>
-                    {user.email}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
-            {isDevelopment() ? '🔧 개발 모드 - 모의 데이터 사용 중' : t('auth.systemInfo')}
+            {t('auth.systemInfo')}
           </Typography.Text>
         </div>
       </Card>
