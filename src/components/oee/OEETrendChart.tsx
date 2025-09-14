@@ -61,11 +61,16 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
   
   // 데이터 로깅 (디버깅용)
   React.useEffect(() => {
-    console.log('OEETrendChart 받은 데이터:', { 
-      dataLength: data.length, 
+    console.log('📈 OEETrendChart 받은 데이터:', {
+      dataLength: data.length,
       sampleData: data.slice(0, 3),
-      title 
+      title,
+      allDates: data.map(item => item.date)
     });
+
+    if (data.length === 0) {
+      console.warn('⚠️ OEETrendChart: 데이터가 비어있습니다!');
+    }
   }, [data, title]);
   // 차트 데이터 구성 (하이드레이션 오류 방지를 위해 간단한 포맷 사용)
   const chartData = {
@@ -236,7 +241,20 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
 
       {/* 차트 */}
       <div style={{ height }}>
-        <Line data={chartData} options={options} />
+        {data.length === 0 ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            color: '#666',
+            fontSize: 16
+          }}>
+            선택된 기간에 데이터가 없습니다
+          </div>
+        ) : (
+          <Line data={chartData} options={options} />
+        )}
       </div>
 
       {/* 통계 요약 */}

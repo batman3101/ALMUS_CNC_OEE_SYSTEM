@@ -430,10 +430,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               ).slice(0, 7);
               break;
             case 'month':
-              const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+              // 이번 달 1일부터 오늘까지의 데이터
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
               filteredRecords = productionRecords.filter(record =>
-                new Date(record.date) >= monthAgo
-              ).slice(0, 30);
+                new Date(record.date) >= startOfMonth && new Date(record.date) <= now
+              );
               break;
             default:
               filteredRecords = productionRecords.slice(0, 7);
@@ -442,7 +443,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           return filteredRecords.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         };
 
-        const trendData = getFilteredRecords().map(record => ({
+        const filteredRecords = getFilteredRecords();
+        console.log('🔍 필터링된 레코드:', {
+          selectedPeriod,
+          totalRecords: productionRecords.length,
+          filteredCount: filteredRecords.length,
+          dateRange: filteredRecords.length > 0 ? {
+            start: filteredRecords[0]?.date,
+            end: filteredRecords[filteredRecords.length - 1]?.date
+          } : 'No data'
+        });
+
+        const trendData = filteredRecords.map(record => ({
           date: record.date,
           availability: record.availability / 100,
           performance: record.performance / 100,
@@ -450,6 +462,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           oee: record.oee / 100,
           shift: record.shift as 'A' | 'B'
         }));
+
+        console.log('📊 차트용 변환된 데이터:', {
+          trendDataLength: trendData.length,
+          sampleData: trendData.slice(0, 3)
+        });
         
         return {
           overallMetrics,

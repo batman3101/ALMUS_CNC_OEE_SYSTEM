@@ -161,7 +161,7 @@
   },
   "chart": {
     "overallOeeStatus": "전체 OEE 현황",
-    "overallOeeTrend": "전체 OEE 추이 (최근 7일)",
+    "overallOeeTrend": "전체 OEE 추이",
     "percentage": "비율 (%)"
   },
   "engineerDashboard": {
@@ -224,7 +224,7 @@
   },
   "chart": {
     "overallOeeStatus": "전체 OEE 현황",
-    "overallOeeTrend": "전체 OEE 추이 (최근 7일)",
+    "overallOeeTrend": "전체 OEE 추이",
     "percentage": "비율 (%)",
     "downtimeRootCauseAnalysis": "다운타임 원인 분석",
     "defectRateTrend": "불량률 추이",
