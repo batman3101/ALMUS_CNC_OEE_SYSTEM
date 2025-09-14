@@ -85,7 +85,18 @@ export async function DELETE(
     let profileDeleted = false;
     let authDeleted = false;
 
-    // Delete user profile first
+    // IMPORTANT: Clear foreign key references first
+    // Update machine_logs to remove operator references
+    const { error: logsUpdateError } = await supabaseAdmin
+      .from('machine_logs')
+      .update({ operator_id: null })
+      .eq('operator_id', userId);
+
+    if (logsUpdateError) {
+      console.warn('Error updating machine logs:', logsUpdateError);
+    }
+
+    // Delete user profile
     const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .delete()
