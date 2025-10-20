@@ -1,0 +1,37 @@
+{
+  "recordInput": {
+    "title": "Nhập Kết Quả Sản Xuất",
+    "machineInfo": "Thông Tin Máy",
+    "machineName": "Tên Máy",
+    "location": "Vị Trí",
+    "date": "Ngày",
+    "shift": "Ca Làm",
+    "shiftA": "Ca A",
+    "shiftB": "Ca B",
+    "totalOutput": "Tổng Sản Lượng",
+    "defectQty": "Số Lượng Lỗi",
+    "outputPlaceholder": "Nhập tổng số lượng đã sản xuất",
+    "defectPlaceholder": "Nhập số lượng sản phẩm lỗi",
+    "estimatedOutput": "Sản lượng ước tính dựa trên Tact Time",
+    "useEstimated": "Sử dụng",
+    "pieces": "cái",
+    "cancel": "Hủy",
+    "submit": "Hoàn Thành",
+    "success": "Kết quả sản xuất đã được nhập thành công",
+    "error": "Có lỗi xảy ra khi nhập kết quả sản xuất",
+    "validateError": "Vui lòng kiểm tra dữ liệu đầu vào",
+    "validation": {
+      "outputRequired": "Vui lòng nhập sản lượng",
+      "outputPositive": "Sản lượng phải lớn hơn hoặc bằng 0",
+      "defectRequired": "Vui lòng nhập số lượng lỗi",
+      "defectPositive": "Số lượng lỗi phải lớn hơn hoặc bằng 0",
+      "defectExceedsOutput": "Số lượng lỗi không thể lớn hơn sản lượng"
+    },
+    "notes": {
+      "title": "Ghi Chú",
+      "outputNote": "Sản lượng là tổng số lượng thực tế được sản xuất trong ca làm việc này",
+      "defectNote": "Số lượng lỗi là số sản phẩm được xác định là lỗi trong số sản phẩm đã sản xuất",
+      "limitNote": "Số lượng lỗi không thể lớn hơn sản lượng"
+    }
+  }
+}

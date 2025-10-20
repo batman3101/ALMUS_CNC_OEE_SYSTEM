@@ -1,0 +1,273 @@
+/* 로그인 페이지 스타일 */
+
+.loginContainer {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.loginWrapper {
+  max-width: 1200px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* 브랜딩 섹션 */
+.brandingSection {
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.brandingSection::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="20" cy="20" r="1" fill="rgba(255,255,255,0.08)"/><circle cx="80" cy="30" r="1.5" fill="rgba(255,255,255,0.06)"/><circle cx="30" cy="80" r="1" fill="rgba(255,255,255,0.04)"/></svg>');
+  background-size: 100px 100px;
+}
+
+.brandingCard {
+  background: transparent !important;
+  border: none !important;
+  height: 100%;
+  min-height: 600px;
+}
+
+.brandingContent {
+  padding: 48px 40px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  z-index: 1;
+}
+
+.logoSection {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.logo {
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.logoIcon {
+  font-size: 36px;
+  color: white;
+}
+
+.brandTitle {
+  color: white !important;
+  margin-bottom: 8px !important;
+  font-weight: 700;
+  font-size: 32px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.subtitle {
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-size: 18px;
+  font-weight: 300;
+}
+
+/* 특징 섹션 */
+.featuresSection {
+  flex: 1;
+}
+
+.featuresTitle {
+  color: white !important;
+  margin-bottom: 32px !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+.featureList {
+  space-y: 24px;
+}
+
+.featureItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 32px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+}
+
+.featureItem:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.featureIcon {
+  font-size: 24px;
+  color: #64b5f6;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.featureDesc {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.systemInfo {
+  text-align: center;
+}
+
+.versionInfo {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* 로그인 섹션 */
+.loginSection {
+  background: var(--ant-color-bg-container, #ffffff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loginFormWrapper {
+  width: 100%;
+  max-width: 400px;
+  padding: 48px 40px;
+}
+
+.loginHeader {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.loginTitle {
+  margin-bottom: 12px !important;
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88)) !important;
+  font-weight: 600;
+}
+
+.loginDesc {
+  color: var(--ant-color-text-secondary, rgba(0, 0, 0, 0.65)) !important;
+  margin-bottom: 0 !important;
+  font-size: 14px;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 992px) {
+  .loginWrapper {
+    grid-template-columns: 1fr;
+    max-width: 500px;
+  }
+  
+  .brandingSection {
+    display: none;
+  }
+  
+  .loginSection {
+    min-height: 100vh;
+  }
+}
+
+@media (max-width: 768px) {
+  .loginContainer {
+    padding: 16px;
+  }
+  
+  .loginFormWrapper {
+    padding: 32px 24px;
+  }
+  
+  .brandTitle {
+    font-size: 28px;
+  }
+  
+  .brandingContent {
+    padding: 32px 24px;
+  }
+}
+
+@media (max-width: 576px) {
+  .loginFormWrapper {
+    padding: 24px 20px;
+  }
+  
+  .loginTitle {
+    font-size: 24px;
+  }
+  
+  .featureItem {
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+}
+
+/* 다크 테마 지원 */
+[data-theme="dark"] .loginSection {
+  background: var(--ant-color-bg-container, #141414);
+}
+
+[data-theme="dark"] .loginTitle {
+  color: var(--ant-color-text, rgba(255, 255, 255, 0.88)) !important;
+}
+
+[data-theme="dark"] .loginDesc {
+  color: var(--ant-color-text-secondary, rgba(255, 255, 255, 0.65)) !important;
+}
+
+/* 애니메이션 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loginFormWrapper {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.brandingContent {
+  animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+.featureItem:nth-child(1) {
+  animation: fadeInUp 0.6s ease-out 0.4s both;
+}
+
+.featureItem:nth-child(2) {
+  animation: fadeInUp 0.6s ease-out 0.5s both;
+}
+
+.featureItem:nth-child(3) {
+  animation: fadeInUp 0.6s ease-out 0.6s both;
+}

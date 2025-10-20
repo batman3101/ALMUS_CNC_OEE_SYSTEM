@@ -1,0 +1,92 @@
+/* AppLayout 컴포넌트 스타일 */
+
+.appLayout {
+  min-height: 100vh;
+}
+
+.header {
+  padding: 0 16px;
+  background: var(--ant-color-bg-container, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  box-shadow: var(--ant-box-shadow, 0 1px 4px rgba(0, 21, 41, 0.08));
+  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.headerTitle {
+  font-size: 18px;
+  margin-left: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content {
+  margin: 16px;
+  padding: 24px;
+  background: var(--ant-color-bg-container, #fff);
+  border-radius: 8px;
+  min-height: calc(100vh - 112px);
+  overflow: auto;
+}
+
+/* 모바일 스타일 */
+@media (max-width: 576px) {
+  .header {
+    padding: 0 8px;
+  }
+  
+  .headerTitle {
+    font-size: 16px;
+  }
+  
+  .content {
+    margin: 8px;
+    padding: 16px;
+    min-height: calc(100vh - 96px);
+  }
+}
+
+/* 태블릿 스타일 */
+@media (max-width: 768px) {
+  .headerTitle {
+    font-size: 16px;
+  }
+}
+
+/* 반응형 버튼 크기 */
+.menuToggle {
+  font-size: 16px;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 576px) {
+  .menuToggle {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* 헤더 액션 버튼들 */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 576px) {
+  .headerActions {
+    gap: 4px;
+  }
+}

@@ -1,0 +1,97 @@
+/* Sidebar 컴포넌트 스타일 */
+
+.sidebar {
+  background: #001529;
+}
+
+.sidebarMobile {
+  position: fixed;
+  z-index: 1000;
+  height: 100vh;
+  left: 0;
+  top: 0;
+}
+
+.logo {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid #1f1f1f;
+  padding: 0 16px;
+}
+
+.logoMobile {
+  height: 48px;
+}
+
+.logoText {
+  color: #fff;
+  font-weight: bold;
+  font-size: 16px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logoTextMobile {
+  font-size: 14px;
+}
+
+.logoTextCollapsed {
+  font-size: 12px;
+}
+
+.menu {
+  border-right: 0;
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+.menuMobile {
+  height: calc(100vh - 48px);
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 999;
+}
+
+/* 스크롤바 스타일링 */
+.menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.menu::-webkit-scrollbar-track {
+  background: #001529;
+}
+
+.menu::-webkit-scrollbar-thumb {
+  background: #1f1f1f;
+  border-radius: 3px;
+}
+
+.menu::-webkit-scrollbar-thumb:hover {
+  background: #2f2f2f;
+}
+
+/* Global styles for Ant Design menu components */
+.sidebar :global(.ant-menu-dark .ant-menu-item:hover) {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.sidebar :global(.ant-menu-dark .ant-menu-item-selected) {
+  background-color: #1890ff !important;
+}
+
+/* Tooltip styles for collapsed state */
+.sidebar :global(.ant-tooltip-inner) {
+  background-color: rgba(0, 0, 0, 0.85);
+  border-radius: 6px;
+}

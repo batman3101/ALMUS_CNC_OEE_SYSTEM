@@ -1,0 +1,75 @@
+{
+  "title": "Báo cáo thống kê",
+  "description": "Phân tích dữ liệu OEE của thiết bị và tạo ra các loại báo cáo khác nhau.",
+  "buttons": {
+    "exportPdf": "Xuất PDF",
+    "exportExcel": "Xuất Excel",
+    "preview": "Xem trước",
+    "pdfExport": "Xuất PDF",
+    "excelExport": "Xuất Excel",
+    "pdfCustom": "PDF tùy chỉnh",
+    "excelCustom": "Excel tùy chỉnh"
+  },
+  "preview": {
+    "reportInfo": "Thông tin báo cáo",
+    "period": "Thời gian",
+    "machineCount": "Số lượng thiết bị",
+    "tabs": {
+      "oeeSummary": "Tóm tắt OEE",
+      "productionData": "Dữ liệu sản xuất",
+      "machineList": "Danh sách thiết bị",
+      "machineStats": "Thống kê thiết bị"
+    },
+    "stats": {
+      "avgOEE": "OEE trung bình",
+      "avgAvailability": "Tỷ lệ hoạt động trung bình",
+      "avgPerformance": "Hiệu suất trung bình",
+      "avgQuality": "Chất lượng trung bình"
+    },
+    "columns": {
+      "date": "Ngày",
+      "machine": "Thiết bị",
+      "machineName": "Tên thiết bị",
+      "location": "Vị trí",
+      "status": "Trạng thái",
+      "output": "Sản lượng",
+      "defects": "Lỗi"
+    }
+  },
+  "previewModal": {
+    "daily": "Xem trước báo cáo hàng ngày",
+    "weekly": "Xem trước báo cáo hàng tuần",
+    "monthly": "Xem trước báo cáo hàng tháng"
+  },
+  "settings": "Cài đặt báo cáo",
+  "filters": {
+    "machineSelectPlaceholder": "Chọn thiết bị",
+    "startDate": "Ngày bắt đầu",
+    "endDate": "Ngày kết thúc"
+  },
+  "refreshData": "Làm mới dữ liệu",
+  "metrics": {
+    "averageOEE": "OEE trung bình",
+    "averageAvailability": "Tỷ lệ hoạt động trung bình",
+    "totalProduction": "Tổng sản lượng",
+    "defectRate": "Tỷ lệ lỗi"
+  },
+  "quickReports": "Báo cáo nhanh",
+  "types": {
+    "daily": "Hàng ngày",
+    "weekly": "Hàng tuần",
+    "monthly": "Hàng tháng"
+  },
+  "reportGeneration": "Tạo báo cáo",
+  "quickExport": "Xuất nhanh",
+  "customReport": "Báo cáo tùy chỉnh",
+  "units": {
+    "machines": "",
+    "pieces": "cái"
+  },
+  "common": {
+    "close": "Đóng",
+    "running": "Đang chạy",
+    "stopped": "Dừng"
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "title": "통계 리포트",
+  "description": "설비의 OEE 데이터를 분석하고 다양한 형태의 보고서를 생성할 수 있습니다.",
+  "buttons": {
+    "exportPdf": "PDF로 내보내기",
+    "exportExcel": "Excel로 내보내기",
+    "preview": "미리보기",
+    "pdfExport": "PDF 내보내기",
+    "excelExport": "Excel 내보내기",
+    "pdfCustom": "사용자 정의 PDF",
+    "excelCustom": "사용자 정의 Excel"
+  },
+  "preview": {
+    "reportInfo": "보고서 정보",
+    "period": "기간",
+    "machineCount": "설비 수",
+    "tabs": {
+      "oeeSummary": "OEE 요약",
+      "productionData": "생산 데이터",
+      "machineList": "설비 목록",
+      "machineStats": "설비 통계"
+    },
+    "stats": {
+      "avgOEE": "평균 OEE",
+      "avgAvailability": "평균 가동률",
+      "avgPerformance": "평균 성능",
+      "avgQuality": "평균 품질"
+    },
+    "columns": {
+      "date": "날짜",
+      "machine": "설비",
+      "machineName": "설비명",
+      "location": "위치",
+      "status": "상태",
+      "output": "생산량",
+      "defects": "불량"
+    }
+  },
+  "previewModal": {
+    "daily": "일일 보고서 미리보기",
+    "weekly": "주간 보고서 미리보기",
+    "monthly": "월간 보고서 미리보기"
+  },
+  "settings": "리포트 설정",
+  "filters": {
+    "machineSelectPlaceholder": "설비 선택",
+    "startDate": "시작 날짜",
+    "endDate": "종료 날짜"
+  },
+  "refreshData": "데이터 새로고침",
+  "metrics": {
+    "averageOEE": "평균 OEE",
+    "averageAvailability": "평균 가동률",
+    "totalProduction": "총 생산량",
+    "defectRate": "불량률"
+  },
+  "quickReports": "빠른 리포트",
+  "types": {
+    "daily": "일일",
+    "weekly": "주간",
+    "monthly": "월간"
+  },
+  "reportGeneration": "리포트 생성",
+  "quickExport": "빠른 내보내기",
+  "customReport": "사용자 정의 리포트",
+  "units": {
+    "machines": "대",
+    "pieces": "개"
+  },
+  "common": {
+    "close": "닫기",
+    "running": "가동중",
+    "stopped": "정지"
+  }
+}

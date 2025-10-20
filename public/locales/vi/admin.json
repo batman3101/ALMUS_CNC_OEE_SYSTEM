@@ -1,0 +1,130 @@
+{
+  "machineManagement": {
+    "title": "Quản lý thiết bị",
+    "addMachine": "Thêm thiết bị",
+    "editMachine": "Chỉnh sửa thiết bị",
+    "deleteMachine": "Xóa thiết bị",
+    "machineList": "Danh sách thiết bị",
+    "machineDetails": "Chi tiết thiết bị",
+    "confirmDelete": "Bạn có chắc chắn muốn xóa thiết bị này?",
+    "deleteSuccess": "Thiết bị đã được xóa thành công",
+    "deleteError": "Có lỗi xảy ra khi xóa thiết bị",
+    "saveSuccess": "Thông tin thiết bị đã được lưu thành công",
+    "saveError": "Có lỗi xảy ra khi lưu thông tin thiết bị",
+    "fetchModelsError": "Có lỗi xảy ra khi tải danh sách mô hình sản xuất",
+    "fetchProcessesError": "Có lỗi xảy ra khi tải danh sách quy trình",
+    "validation": {
+      "nameRequired": "Tên thiết bị là bắt buộc",
+      "locationRequired": "Vị trí là bắt buộc",
+      "tactTimeRequired": "Tact Time là bắt buộc",
+      "tactTimePositive": "Tact Time phải là số dương",
+      "productionModelRequired": "Mô hình sản xuất là bắt buộc",
+      "processRequired": "Quy trình gia công là bắt buộc"
+    },
+    "form": {
+      "machineName": "Tên thiết bị",
+      "location": "Vị trí",
+      "equipmentType": "Loại thiết bị (tùy chọn)",
+      "equipmentTypePlaceholder": "Ví dụ: DMG MORI, MAZAK, HAAS, v.v.",
+      "productionModel": "Mô hình sản xuất",
+      "selectProductionModel": "Chọn mô hình sản xuất",
+      "process": "Quy trình gia công",
+      "selectProcess": "Chọn quy trình",
+      "tactTime": "Tact Time",
+      "tactTimeSeconds": "{{seconds}} giây"
+    }
+  },
+  "userManagement": {
+    "title": "Quản lý người dùng",
+    "addUser": "Thêm người dùng",
+    "editUser": "Chỉnh sửa người dùng",
+    "deleteUser": "Xóa người dùng",
+    "userList": "Danh sách người dùng",
+    "userDetails": "Chi tiết người dùng",
+    "assignMachines": "Phân công thiết bị",
+    "availableMachines": "Thiết bị có sẵn",
+    "assignedMachines": "Thiết bị được phân công",
+    "confirmDelete": "Bạn có chắc chắn muốn xóa người dùng này?",
+    "deleteSuccess": "Người dùng đã được xóa thành công",
+    "deleteError": "Có lỗi xảy ra khi xóa người dùng",
+    "saveSuccess": "Thông tin người dùng đã được lưu thành công",
+    "saveError": "Có lỗi xảy ra khi lưu thông tin người dùng",
+    "validation": {
+      "nameRequired": "Tên là bắt buộc",
+      "emailRequired": "Email là bắt buộc",
+      "emailInvalid": "Vui lòng nhập địa chỉ email hợp lệ",
+      "roleRequired": "Vui lòng chọn vai trò",
+      "passwordRequired": "Mật khẩu là bắt buộc",
+      "passwordMinLength": "Mật khẩu phải có ít nhất 6 ký tự"
+    },
+    "form": {
+      "name": "Tên",
+      "email": "Email",
+      "password": "Mật khẩu",
+      "role": "Vai trò",
+      "selectRole": "Chọn vai trò"
+    }
+  },
+  "page": {
+    "title": "Quản lý người dùng và thiết bị",
+    "description": "Quản lý người dùng hệ thống và thiết bị",
+    "tabs": {
+      "machineManagement": "Quản lý thiết bị",
+      "userManagement": "Quản lý người dùng"
+    }
+  },
+  "table": {
+    "search": "Tìm kiếm",
+    "refresh": "Làm mới",
+    "bulkUpload": "Đăng ký hàng loạt",
+    "addMachine": "+ Thêm thiết bị",
+    "addUser": "+ Thêm người dùng",
+    "columns": {
+      "machineName": "Tên thiết bị",
+      "location": "Vị trí",
+      "machineType": "Loại thiết bị", 
+      "productionModel": "Mô hình sản xuất",
+      "processes": "Quy trình gia công",
+      "tactTime": "Tact Time (giây)",
+      "settings": "Cài đặt",
+      "createdDate": "Ngày tạo",
+      "actions": "Hành động",
+      "userName": "Tên",
+      "email": "Email",
+      "role": "Vai trò",
+      "assignedMachines": "Thiết bị được phân công"
+    },
+    "actions": {
+      "edit": "Chỉnh sửa",
+      "delete": "Xóa"
+    },
+    "pagination": {
+      "itemsPerPage": "/ trang",
+      "showTotal": "{{start}}-{{end}} / {{total}} mục"
+    }
+  },
+  "common": {
+    "active": "Hoạt động",
+    "inactive": "Không hoạt động",
+    "enable": "Kích hoạt",
+    "disable": "Vô hiệu hóa",
+    "status": "Trạng thái",
+    "actions": "Hành động",
+    "noData": "Không có dữ liệu",
+    "loading": "Đang tải...",
+    "search": "Tìm kiếm",
+    "filter": "Lọc",
+    "all": "Tất cả",
+    "confirm": "Xác nhận",
+    "cancel": "Hủy",
+    "createdAt": "Ngày tạo",
+    "updatedAt": "Ngày cập nhật",
+    "assignedMachinesCount": " thiết bị"
+  },
+  "roles": {
+    "admin": "Quản trị viên",
+    "engineer": "Kỹ sư",
+    "operator": "Vận hành viên",
+    "user": "Người dùng"
+  }
+}
