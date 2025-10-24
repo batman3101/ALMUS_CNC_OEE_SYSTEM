@@ -111,8 +111,9 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         borderWidth: 3,
         fill: true,
         tension: 0.4,
-        pointRadius: 5,
-        pointHoverRadius: 7,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        pointStyle: 'circle',
       },
       {
         label: t('oee.availability'),
@@ -122,8 +123,9 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         borderWidth: 2,
         fill: false,
         tension: 0.4,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        pointStyle: 'circle',
       },
       {
         label: t('oee.performance'),
@@ -133,8 +135,9 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         borderWidth: 2,
         fill: false,
         tension: 0.4,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        pointStyle: 'circle',
       },
       {
         label: t('oee.quality'),
@@ -144,8 +147,9 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         borderWidth: 2,
         fill: false,
         tension: 0.4,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        pointStyle: 'circle',
       },
     ],
   };
@@ -168,15 +172,8 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         callbacks: {
           label: function(context) {
             return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}%`;
-          },
-          afterLabel: function(context) {
-            const dataIndex = context.dataIndex;
-            const item = data[dataIndex];
-            if (item.shift) {
-              return `교대: ${item.shift}`;
-            }
-            return '';
-          },
+          }
+          // ✅ shift 정보 제거 (날짜별 집계로 변경)
         },
       },
     },
@@ -218,8 +215,9 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
     },
     elements: {
       point: {
-        radius: 4,
-        hoverRadius: 6,
+        radius: 2,
+        hoverRadius: 4,
+        pointStyle: 'circle',
       },
     },
   };

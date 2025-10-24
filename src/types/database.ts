@@ -83,7 +83,7 @@ export interface Database {
         Row: {
           log_id: string
           machine_id: string
-          state: 'NORMAL_OPERATION' | 'MAINTENANCE' | 'MODEL_CHANGE' | 'PLANNED_STOP' | 'PROGRAM_CHANGE' | 'TOOL_CHANGE' | 'TEMPORARY_STOP'
+          state: 'NORMAL_OPERATION' | 'INSPECTION' | 'BREAKDOWN_REPAIR' | 'PM_MAINTENANCE' | 'MODEL_CHANGE' | 'PLANNED_STOP' | 'PROGRAM_CHANGE' | 'TOOL_CHANGE' | 'TEMPORARY_STOP'
           start_time: string
           end_time: string | null
           duration: number | null
@@ -93,7 +93,7 @@ export interface Database {
         Insert: {
           log_id?: string
           machine_id: string
-          state: 'NORMAL_OPERATION' | 'MAINTENANCE' | 'MODEL_CHANGE' | 'PLANNED_STOP' | 'PROGRAM_CHANGE' | 'TOOL_CHANGE' | 'TEMPORARY_STOP'
+          state: 'NORMAL_OPERATION' | 'INSPECTION' | 'BREAKDOWN_REPAIR' | 'PM_MAINTENANCE' | 'MODEL_CHANGE' | 'PLANNED_STOP' | 'PROGRAM_CHANGE' | 'TOOL_CHANGE' | 'TEMPORARY_STOP'
           start_time: string
           end_time?: string | null
           duration?: number | null
@@ -103,7 +103,7 @@ export interface Database {
         Update: {
           log_id?: string
           machine_id?: string
-          state?: 'NORMAL_OPERATION' | 'MAINTENANCE' | 'MODEL_CHANGE' | 'PLANNED_STOP' | 'PROGRAM_CHANGE' | 'TOOL_CHANGE' | 'TEMPORARY_STOP'
+          state?: 'NORMAL_OPERATION' | 'INSPECTION' | 'BREAKDOWN_REPAIR' | 'PM_MAINTENANCE' | 'MODEL_CHANGE' | 'PLANNED_STOP' | 'PROGRAM_CHANGE' | 'TOOL_CHANGE' | 'TEMPORARY_STOP'
           start_time?: string
           end_time?: string | null
           duration?: number | null

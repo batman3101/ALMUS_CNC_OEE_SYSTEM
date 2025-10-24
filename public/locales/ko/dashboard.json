@@ -98,7 +98,10 @@
     "thisWeek": "이번 주",
     "lastWeek": "지난 주",
     "thisMonth": "이번 달",
-    "lastMonth": "지난 달"
+    "lastMonth": "지난 달",
+    "last7Days": "최근 7일",
+    "last30Days": "최근 30일",
+    "customRange": "기간 지정"
   },
   "time": {
     "realTime": "실시간",

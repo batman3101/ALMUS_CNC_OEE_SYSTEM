@@ -6,8 +6,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
-    const startDate = searchParams.get('start_date');
-    const endDate = searchParams.get('end_date');
+    // ✅ 파라미터 이름 통일: camelCase 사용
+    const startDate = searchParams.get('startDate') || searchParams.get('start_date');
+    const endDate = searchParams.get('endDate') || searchParams.get('end_date');
     const shift = searchParams.get('shift');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '100');
@@ -81,14 +82,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 실제 데이터 형식 맞추기
+    // ✅ 실제 Supabase 데이터 그대로 반환 (OEE 필드 포함)
     const formattedRecords = records.map(record => ({
-      record_id: record.id,
+      record_id: record.record_id,  // Supabase의 primary key
       machine_id: record.machine_id,
       date: record.date,
       shift: record.shift,
+      planned_runtime: record.planned_runtime || 0,
+      actual_runtime: record.actual_runtime || 0,
+      ideal_runtime: record.ideal_runtime || 0,
       output_qty: record.output_qty || 0,
       defect_qty: record.defect_qty || 0,
+      // ✅ OEE 관련 필드 추가 (Supabase에 저장된 실제 값)
+      availability: record.availability || 0,
+      performance: record.performance || 0,
+      quality: record.quality || 0,
+      oee: record.oee || 0,
       created_at: record.created_at,
       machine: record.machines
     }));

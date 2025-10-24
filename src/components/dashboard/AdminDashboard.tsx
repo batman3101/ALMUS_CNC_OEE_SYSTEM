@@ -18,6 +18,8 @@ import { useClientOnly } from '@/hooks/useClientOnly';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
 import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecords';
+import { DateRangeSelector } from '@/components/common/DateRangeSelector';
+import { useDateRange } from '@/contexts/DateRangeContext';
 
 
 
@@ -30,7 +32,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const { t, i18n } = useDashboardTranslation();
   const isClient = useClientOnly();
   const { notifications, acknowledgeNotification } = useNotifications();
-  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
+  const { dateRange, getFormattedRange, preset } = useDateRange();
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [statusDescriptions, setStatusDescriptions] = useState<any[]>([]);
@@ -67,7 +69,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [showMachineStatusModal, setShowMachineStatusModal] = useState(false);
   const [selectedStatusType, setSelectedStatusType] = useState<'maintenance' | 'stopped' | null>(null);
-  const [notificationFilter, setNotificationFilter] = useState<'all' | 'critical' | 'unacknowledged'>('all');
+  // ✅ 기본 필터를 'unacknowledged'로 변경 (확인된 알림 숨김)
+  const [notificationFilter, setNotificationFilter] = useState<'all' | 'critical' | 'unacknowledged'>('unacknowledged');
 
   const { Text } = Typography;
 
@@ -138,22 +141,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const fetchDashboardData = async () => {
     try {
       setDashboardLoading(true);
-      
+
+      // 날짜 범위 가져오기
+      const formattedRange = getFormattedRange();
+
       // 병렬로 모든 데이터 가져오기
       const [machinesRes, productionRes, modelsRes, statusDescRes] = await Promise.all([
-        fetch('/api/machines', { 
+        fetch('/api/machines', {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         }),
-        fetch('/api/production-records?limit=100', { 
+        fetch(`/api/production-records?startDate=${formattedRange.startDate}&endDate=${formattedRange.endDate}&limit=1000`, {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         }),
-        fetch('/api/product-models', { 
+        fetch('/api/product-models', {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         }),
-        fetch('/api/machine-status-descriptions', { 
+        fetch('/api/machine-status-descriptions', {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         })
@@ -228,39 +234,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       machinesData.forEach((machine: Machine) => {
         // 해당 설비의 생산 기록 찾기
         const machineProduction = productionData.filter((p: any) => p.machine_id === machine.id);
-        
+
         if (machineProduction.length > 0) {
+          // ✅ 실제 Supabase 데이터 사용 (hardcoded 값 제거)
           const totalOutput = machineProduction.reduce((sum: number, p: any) => sum + (p.output_qty || 0), 0);
           const totalDefects = machineProduction.reduce((sum: number, p: any) => sum + (p.defect_qty || 0), 0);
-          
-          const quality = totalOutput > 0 ? (totalOutput - totalDefects) / totalOutput : 0.95;
-          const availability = machine.current_state === 'NORMAL_OPERATION' ? 0.85 : 0.5;
-          const performance = 0.8;
-          
+          const totalActualRuntime = machineProduction.reduce((sum: number, p: any) => sum + (p.actual_runtime || 0), 0);
+          const totalPlannedRuntime = machineProduction.reduce((sum: number, p: any) => sum + (p.planned_runtime || 0), 0);
+          const totalIdealRuntime = machineProduction.reduce((sum: number, p: any) => sum + (p.ideal_runtime || 0), 0);
+
+          // production_records 테이블의 실제 OEE 값들을 평균내서 사용
+          const avgOee = machineProduction.reduce((sum: number, p: any) => sum + (p.oee || 0), 0) / machineProduction.length;
+          const avgAvailability = machineProduction.reduce((sum: number, p: any) => sum + (p.availability || 0), 0) / machineProduction.length;
+          const avgPerformance = machineProduction.reduce((sum: number, p: any) => sum + (p.performance || 0), 0) / machineProduction.length;
+          const avgQuality = machineProduction.reduce((sum: number, p: any) => sum + (p.quality || 0), 0) / machineProduction.length;
+
           calculatedOeeMetrics[machine.id] = {
-            availability,
-            performance,
-            quality,
-            oee: Math.round(availability * performance * quality * 1000) / 1000,
-            actual_runtime: 420,
-            planned_runtime: 480,
-            ideal_runtime: 480,
+            // ✅ Supabase에서 가져온 실제 값들 사용 (DB에는 0~1 범위로 저장됨)
+            availability: avgAvailability,
+            performance: avgPerformance,
+            quality: avgQuality,
+            oee: avgOee,
+            actual_runtime: totalActualRuntime,
+            planned_runtime: totalPlannedRuntime,
+            ideal_runtime: totalIdealRuntime,
             output_qty: totalOutput,
             defect_qty: totalDefects
           };
         } else {
-          // 생산 기록이 없는 경우 기본값
-          const defaultAvailability = 0.8;
-          const defaultPerformance = 0.85;
-          const defaultQuality = 0.95;
+          // 생산 기록이 없는 경우 0으로 설정 (mock 데이터 제거)
           calculatedOeeMetrics[machine.id] = {
-            availability: defaultAvailability,
-            performance: defaultPerformance,
-            quality: defaultQuality,
-            oee: Math.round(defaultAvailability * defaultPerformance * defaultQuality * 1000) / 1000,
-            actual_runtime: 400,
-            planned_runtime: 480,
-            ideal_runtime: 480,
+            availability: 0,
+            performance: 0,
+            quality: 0,
+            oee: 0,
+            actual_runtime: 0,
+            planned_runtime: 0,
+            ideal_runtime: 0,
             output_qty: 0,
             defect_qty: 0
           };
@@ -321,7 +331,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     if (isClient) {
       fetchDashboardData();
     }
-  }, [isClient, selectedPeriod]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isClient, dateRange]);
 
   // 대시보드 데이터 상태 변경 감지
   useEffect(() => {
@@ -344,7 +355,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         aggregatedData: aggregatedData ? 'exists' : 'null',
         recordsLoading,
         recordsError,
-        selectedPeriod,
+        selectedPreset: preset,
         dashboardLoading
       });
       
@@ -406,54 +417,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           }));
         
         // 추이 데이터 - 선택된 기간에 따른 실제 생산 기록에서 계산
-        const getFilteredRecords = () => {
-          const now = new Date();
-          let filteredRecords = [...productionRecords];
-
-          // 날짜 정규화 함수 (YYYY-MM-DD 형식으로 통일)
-          const normalizeDate = (dateInput: string | Date): string => {
-            const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-            return date.toISOString().split('T')[0];
-          };
-
-          switch (selectedPeriod) {
-            case 'today':
-              const today = normalizeDate(now);
-              filteredRecords = productionRecords.filter(record => {
-                const recordDate = normalizeDate(record.date);
-                return recordDate === today;
-              });
-              break;
-            case 'week':
-              const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-              filteredRecords = productionRecords.filter(record => {
-                const recordDate = new Date(normalizeDate(record.date));
-                return recordDate >= weekAgo && recordDate <= now;
-              }).slice(-7); // 최근 7일만
-              break;
-            case 'month':
-              // 이번 달 1일부터 오늘까지의 데이터
-              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-              filteredRecords = productionRecords.filter(record => {
-                const recordDate = new Date(normalizeDate(record.date));
-                return recordDate >= startOfMonth && recordDate <= now;
-              });
-              break;
-            default:
-              filteredRecords = productionRecords.slice(-7); // 최근 7개 레코드
-          }
-
-          // 날짜순 정렬
-          return filteredRecords.sort((a, b) => {
-            const dateA = new Date(normalizeDate(a.date));
-            const dateB = new Date(normalizeDate(b.date));
+        // dateRange를 사용한 필터링
+        const filteredRecords = productionRecords
+          .filter(record => {
+            const recordDate = new Date(record.date);
+            return recordDate >= dateRange.startDate && recordDate <= dateRange.endDate;
+          })
+          .sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
             return dateA.getTime() - dateB.getTime();
           });
-        };
 
-        const filteredRecords = getFilteredRecords();
         console.log('🔍 필터링된 레코드:', {
-          selectedPeriod,
+          selectedPreset: preset,
+          dateRange: {
+            start: dateRange.startDate.toISOString(),
+            end: dateRange.endDate.toISOString()
+          },
           totalRecords: productionRecords.length,
           filteredCount: filteredRecords.length,
           dateRange: filteredRecords.length > 0 ? {
@@ -467,19 +448,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           }))
         });
 
-        const trendData = filteredRecords.map(record => ({
-          date: record.date,
-          availability: (record.availability || 0) / 100,
-          performance: (record.performance || 0) / 100,
-          quality: (record.quality || 0) / 100,
-          oee: (record.oee || 0) / 100,
-          shift: record.shift as 'A' | 'B'
-        }));
+        // ✅ 날짜별로 집계 (A, B shift 평균) - 차트 가독성 향상
+        const dailyAggregated = filteredRecords.reduce((acc: any, record) => {
+          const date = record.date;
+          if (!acc[date]) {
+            acc[date] = {
+              date,
+              records: []
+            };
+          }
+          acc[date].records.push(record);
+          return acc;
+        }, {});
 
-        console.log('📊 차트용 변환된 데이터:', {
+        const trendData = Object.values(dailyAggregated).map((item: any) => {
+          const records = item.records;
+          const avgAvailability = records.reduce((sum: number, r: any) => sum + (r.availability || 0), 0) / records.length;
+          const avgPerformance = records.reduce((sum: number, r: any) => sum + (r.performance || 0), 0) / records.length;
+          const avgQuality = records.reduce((sum: number, r: any) => sum + (r.quality || 0), 0) / records.length;
+          const avgOee = records.reduce((sum: number, r: any) => sum + (r.oee || 0), 0) / records.length;
+
+          return {
+            date: item.date,
+            // ✅ Supabase 데이터는 이미 0~1 범위 (0.79 = 79%)
+            availability: avgAvailability,
+            performance: avgPerformance,
+            quality: avgQuality,
+            oee: avgOee
+          };
+        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        console.log('📊 차트용 변환된 데이터 (날짜별 집계):', {
           trendDataLength: trendData.length,
           sampleData: trendData.slice(0, 3),
-          allData: trendData
+          dateRange: trendData.length > 0 ? {
+            start: trendData[0].date,
+            end: trendData[trendData.length - 1].date
+          } : 'No data'
         });
         
         return {
@@ -534,11 +539,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             time: '실시간'
           }));
 
+        // 실시간 productionRecords를 trendData로 변환 (날짜 범위 필터링 포함)
+        const filteredRecords = productionRecords
+          .filter(record => {
+            const recordDate = new Date(record.date);
+            return recordDate >= dateRange.startDate && recordDate <= dateRange.endDate;
+          })
+          .sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            return dateA.getTime() - dateB.getTime();
+          });
+
+        // ✅ 날짜별로 집계 (A, B shift 평균) - 차트 가독성 향상
+        const dailyAggregated = filteredRecords.reduce((acc: any, record) => {
+          const date = record.date;
+          if (!acc[date]) {
+            acc[date] = {
+              date,
+              records: []
+            };
+          }
+          acc[date].records.push(record);
+          return acc;
+        }, {});
+
+        const trendData = Object.values(dailyAggregated).map((item: any) => {
+          const records = item.records;
+          const avgAvailability = records.reduce((sum: number, r: any) => sum + (r.availability || 0), 0) / records.length;
+          const avgPerformance = records.reduce((sum: number, r: any) => sum + (r.performance || 0), 0) / records.length;
+          const avgQuality = records.reduce((sum: number, r: any) => sum + (r.quality || 0), 0) / records.length;
+          const avgOee = records.reduce((sum: number, r: any) => sum + (r.oee || 0), 0) / records.length;
+
+          return {
+            date: item.date,
+            // ✅ Supabase 데이터는 이미 0~1 범위 (0.79 = 79%)
+            availability: avgAvailability,
+            performance: avgPerformance,
+            quality: avgQuality,
+            oee: avgOee
+          };
+        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        console.log('📊 실시간 차트용 변환된 데이터 (날짜별 집계):', {
+          trendDataLength: trendData.length,
+          sampleData: trendData.slice(0, 3),
+          dateRange: {
+            start: dateRange.startDate.toISOString(),
+            end: dateRange.endDate.toISOString()
+          }
+        });
+
         return {
           overallMetrics: realTimeMetrics,
           machineList,
           alerts,
-          trendData: [] // 실제 데이터가 없을 경우 빈 배열
+          trendData // ✅ 실시간 데이터로 변환된 trendData 반환
         };
       }
 
@@ -737,18 +793,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           </div>
         </div>
         <Space>
-          <Select
-            value={selectedPeriod}
-            onChange={setSelectedPeriod}
-            options={[
-              { label: t('filters.today'), value: 'today' },
-              { label: t('filters.thisWeek'), value: 'week' },
-              { label: t('filters.thisMonth'), value: 'month' }
-            ]}
-            style={{ width: 120 }}
-          />
+          <DateRangeSelector />
           <Badge count={alertStats.unacknowledged} size="small">
-            <Button 
+            <Button
               icon={<BellOutlined />}
               onClick={() => setShowNotificationPanel(true)}
               type={alertStats.critical > 0 ? "primary" : "default"}
@@ -757,8 +804,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               알림 ({alertStats.total})
             </Button>
           </Badge>
-          <Button 
-            icon={<ReloadOutlined />} 
+          <Button
+            icon={<ReloadOutlined />}
             onClick={() => {
               fetchDashboardData(); // 대시보드 데이터 새로고침
               if (refreshRecords) refreshRecords(); // 실시간 생산 기록 새로고침
@@ -876,17 +923,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <Col xs={24} lg={16}>
           <OEETrendChart
             data={processedData.trendData}
-            title={`${t('chart.overallOeeTrend')} (${selectedPeriod === 'today' ? '오늘' : selectedPeriod === 'week' ? '최근 7일' : '이전 달'})`}
+            title={t('chart.overallOeeTrend')}
             height={400}
-            showControls={true}
-            onDateRangeChange={(dates) => {
-              console.log('날짜 범위 변경:', dates);
-              // 필요시 추가 로직 구현
-            }}
-            onPeriodChange={(period) => {
-              console.log('기간 변경:', period);
-              // 필요시 추가 로직 구현
-            }}
+            showControls={false}
           />
         </Col>
       </Row>

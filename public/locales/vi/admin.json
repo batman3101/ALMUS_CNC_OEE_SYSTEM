@@ -12,14 +12,14 @@
     "saveSuccess": "Thông tin thiết bị đã được lưu thành công",
     "saveError": "Có lỗi xảy ra khi lưu thông tin thiết bị",
     "fetchModelsError": "Có lỗi xảy ra khi tải danh sách mô hình sản xuất",
-    "fetchProcessesError": "Có lỗi xảy ra khi tải danh sách quy trình",
+    "fetchProcessesError": "Có lỗi xảy ra khi tải danh sách công đoạn",
     "validation": {
       "nameRequired": "Tên thiết bị là bắt buộc",
       "locationRequired": "Vị trí là bắt buộc",
       "tactTimeRequired": "Tact Time là bắt buộc",
       "tactTimePositive": "Tact Time phải là số dương",
       "productionModelRequired": "Mô hình sản xuất là bắt buộc",
-      "processRequired": "Quy trình gia công là bắt buộc"
+      "processRequired": "Công đoạn gia công là bắt buộc"
     },
     "form": {
       "machineName": "Tên thiết bị",
@@ -28,8 +28,8 @@
       "equipmentTypePlaceholder": "Ví dụ: DMG MORI, MAZAK, HAAS, v.v.",
       "productionModel": "Mô hình sản xuất",
       "selectProductionModel": "Chọn mô hình sản xuất",
-      "process": "Quy trình gia công",
-      "selectProcess": "Chọn quy trình",
+      "process": "Công đoạn gia công",
+      "selectProcess": "Chọn công đoạn",
       "tactTime": "Tact Time",
       "tactTimeSeconds": "{{seconds}} giây"
     }
@@ -82,9 +82,9 @@
     "columns": {
       "machineName": "Tên thiết bị",
       "location": "Vị trí",
-      "machineType": "Loại thiết bị", 
+      "machineType": "Loại thiết bị",
       "productionModel": "Mô hình sản xuất",
-      "processes": "Quy trình gia công",
+      "processes": "Công đoạn gia công",
       "tactTime": "Tact Time (giây)",
       "settings": "Cài đặt",
       "createdDate": "Ngày tạo",

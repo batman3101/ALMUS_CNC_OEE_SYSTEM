@@ -46,15 +46,18 @@ export const DashboardAlerts: React.FC<DashboardAlertsProps> = ({
     .slice(0, maxDisplay);
 
   // 심각도별 아이콘
-  const getSeverityIcon = (severity: NotificationSeverity) => {
+  const getSeverityIcon = (severity: NotificationSeverity | string) => {
     switch (severity) {
       case 'critical':
+      case 'error':
         return <CloseCircleOutlined />;
       case 'high':
+      case 'warning':
         return <ExclamationCircleOutlined />;
       case 'medium':
         return <WarningOutlined />;
       case 'low':
+      case 'info':
         return <InfoCircleOutlined />;
       default:
         return <InfoCircleOutlined />;
@@ -62,14 +65,17 @@ export const DashboardAlerts: React.FC<DashboardAlertsProps> = ({
   };
 
   // 심각도별 Alert 타입
-  const getSeverityType = (severity: NotificationSeverity): 'error' | 'warning' | 'info' => {
+  const getSeverityType = (severity: NotificationSeverity | string): 'error' | 'warning' | 'info' => {
     switch (severity) {
       case 'critical':
+      case 'error':
         return 'error';
       case 'high':
+      case 'warning':
       case 'medium':
         return 'warning';
       case 'low':
+      case 'info':
       default:
         return 'info';
     }
@@ -103,10 +109,10 @@ export const DashboardAlerts: React.FC<DashboardAlertsProps> = ({
         </div>
       }
       extra={
-        totalActiveCount > maxDisplay && onViewAll && (
-          <Button 
-            type="link" 
-            size="small" 
+        notifications.length > 0 && onViewAll && (
+          <Button
+            type="link"
+            size="small"
             icon={<EyeOutlined />}
             onClick={onViewAll}
           >

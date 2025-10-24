@@ -11,8 +11,6 @@ import {
 import { usePathname } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNotifications } from '@/contexts/NotificationContext';
-import { NotificationBadge, NotificationPanel } from '@/components/notifications';
 import { LoginForm } from '@/components/auth/LoginForm';
 import Sidebar from './Sidebar';
 import LanguageToggle from './LanguageToggle';
@@ -29,19 +27,10 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
-  const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
   const pathname = usePathname();
   const { t } = useLanguage();
   const { user, logout, loading } = useAuth();
   const { message } = App.useApp();
-  const { 
-    notifications, 
-    unreadCount, 
-    acknowledgeNotification, 
-    resolveNotification, 
-    clearNotification, 
-    clearAllNotifications 
-  } = useNotifications();
   const screens = useBreakpoint();
 
   // 로그인 페이지인지 확인
@@ -124,24 +113,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
           
           <div className={styles.headerActions}>
-            {/* 알림 배지 */}
-            <NotificationBadge
-              count={unreadCount}
-              severity={notifications.find(n => n.status === 'active' && n.severity === 'critical') ? 'critical' : 'medium'}
-              onClick={() => setNotificationPanelOpen(true)}
-              size={screens.xs ? 'small' : 'default'}
-            />
-            
             {/* 언어 전환 컴포넌트 */}
             <LanguageToggle size={screens.xs ? 'small' : 'middle'} />
-            
+
             {/* 테마 전환 컴포넌트 */}
             <ThemeToggle size={screens.xs ? 'small' : 'middle'} />
-            
+
             {/* 사용자 메뉴 드롭다운 */}
             <Dropdown menu={{ items: userItems }} placement="bottomRight">
-              <Button 
-                type="text" 
+              <Button
+                type="text"
                 icon={<UserOutlined />}
                 size={screens.xs ? 'small' : 'middle'}
               >
@@ -155,17 +136,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           {children}
         </Content>
       </Layout>
-
-      {/* 알림 패널 */}
-      <NotificationPanel
-        open={notificationPanelOpen}
-        onClose={() => setNotificationPanelOpen(false)}
-        notifications={notifications}
-        onAcknowledge={acknowledgeNotification}
-        onResolve={resolveNotification}
-        onDelete={clearNotification}
-        onClearAll={clearAllNotifications}
-      />
     </Layout>
   );
 };

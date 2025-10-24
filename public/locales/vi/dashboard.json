@@ -98,7 +98,10 @@
     "thisWeek": "Tuần này",
     "lastWeek": "Tuần trước",
     "thisMonth": "Tháng này",
-    "lastMonth": "Tháng trước"
+    "lastMonth": "Tháng trước",
+    "last7Days": "7 ngày gần đây",
+    "last30Days": "30 ngày gần đây",
+    "customRange": "Tùy chỉnh khoảng thời gian"
   },
   "time": {
     "realTime": "Thời gian thực",

@@ -110,9 +110,12 @@
       "label": "심각도",
       "all": "전체",
       "critical": "긴급",
+      "error": "긴급",
       "high": "높음",
+      "warning": "경고",
       "medium": "보통",
-      "low": "낮음"
+      "low": "낮음",
+      "info": "정보"
     },
     "status": {
       "active": "활성",

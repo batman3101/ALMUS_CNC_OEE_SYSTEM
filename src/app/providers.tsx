@@ -10,6 +10,7 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { SystemSettingsProvider } from '@/contexts/SystemSettingsContext';
+import { DateRangeProvider } from '@/contexts/DateRangeContext';
 import { ToastNotificationProvider } from '@/components/notifications';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import i18n from '@/lib/i18n'; // i18n 초기화
@@ -63,15 +64,17 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
       <AuthProvider>
         <SystemSettingsProvider>
           <LanguageProvider>
-            <NotificationProvider>
-              <ToastNotificationProvider>
-                <ThemeProvider>
-                  <AntdConfigProvider>
-                    {children}
-                  </AntdConfigProvider>
-                </ThemeProvider>
-              </ToastNotificationProvider>
-            </NotificationProvider>
+            <DateRangeProvider>
+              <NotificationProvider>
+                <ToastNotificationProvider>
+                  <ThemeProvider>
+                    <AntdConfigProvider>
+                      {children}
+                    </AntdConfigProvider>
+                  </ThemeProvider>
+                </ToastNotificationProvider>
+              </NotificationProvider>
+            </DateRangeProvider>
           </LanguageProvider>
         </SystemSettingsProvider>
       </AuthProvider>

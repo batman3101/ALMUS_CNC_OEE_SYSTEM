@@ -57,7 +57,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 }) => {
   const { token } = theme.useToken();
   const { t, language } = useLanguage();
-  const [filter, setFilter] = useState<NotificationStatus | 'all'>('all');
+  // ✅ 기본 필터를 'active'로 변경 (확인된 알림은 기본적으로 숨김)
+  const [filter, setFilter] = useState<NotificationStatus | 'all'>('active');
   const [severityFilter, setSeverityFilter] = useState<NotificationSeverity | 'all'>('all');
 
   // 필터링된 알림 목록
@@ -68,32 +69,40 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   });
 
   // 심각도별 아이콘
-  const getSeverityIcon = (severity: NotificationSeverity) => {
+  const getSeverityIcon = (severity: NotificationSeverity | string) => {
     switch (severity) {
       case 'critical':
+      case 'error':
         return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
       case 'high':
+      case 'warning':
         return <ExclamationCircleOutlined style={{ color: '#fa8c16' }} />;
       case 'medium':
         return <WarningOutlined style={{ color: '#faad14' }} />;
       case 'low':
         return <InfoCircleOutlined style={{ color: '#52c41a' }} />;
+      case 'info':
+        return <InfoCircleOutlined style={{ color: '#1890ff' }} />;
       default:
         return <InfoCircleOutlined />;
     }
   };
 
   // 심각도별 색상
-  const getSeverityColor = (severity: NotificationSeverity) => {
+  const getSeverityColor = (severity: NotificationSeverity | string) => {
     switch (severity) {
       case 'critical':
+      case 'error':
         return 'error';
       case 'high':
+      case 'warning':
         return 'warning';
       case 'medium':
         return 'orange';
       case 'low':
         return 'success';
+      case 'info':
+        return 'blue';
       default:
         return 'default';
     }
@@ -172,6 +181,11 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       key: 'low',
       label: t('notifications.severity.low'),
       onClick: () => setSeverityFilter('low')
+    },
+    {
+      key: 'info',
+      label: t('notifications.severity.info'),
+      onClick: () => setSeverityFilter('info')
     }
   ];
 
@@ -297,19 +311,19 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
               <List.Item.Meta
                 avatar={getSeverityIcon(notification.severity)}
                 title={
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Text strong style={{ fontSize: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <Text strong style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {notification.title}
                     </Text>
-                    <Space size={4}>
-                      <Tag 
-                        color={getSeverityColor(notification.severity)} 
+                    <Space size={4} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      <Tag
+                        color={getSeverityColor(notification.severity)}
                         size="small"
                       >
                         {t(`notifications.severity.${notification.severity}`)}
                       </Tag>
-                      <Tag 
-                        color={getStatusColor(notification.status)} 
+                      <Tag
+                        color={getStatusColor(notification.status)}
                         size="small"
                       >
                         {t(`notifications.status.${notification.status}`)}

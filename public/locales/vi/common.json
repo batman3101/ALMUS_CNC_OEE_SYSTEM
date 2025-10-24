@@ -109,9 +109,12 @@
       "label": "Mức độ",
       "all": "Tất cả",
       "critical": "Khẩn cấp",
+      "error": "Khẩn cấp",
       "high": "Cao",
+      "warning": "Cảnh báo",
       "medium": "Trung bình",
-      "low": "Thấp"
+      "low": "Thấp",
+      "info": "Thông tin"
     },
     "status": {
       "active": "Hoạt động",
@@ -378,10 +381,10 @@
     "machineName": "Tên thiết bị",
     "machineNumber": "Số thiết bị",
     "modelType": "Mẫu",
-    "processInfo": "Thông tin quy trình",
-    "addProcess": "Thêm quy trình",
-    "processName": "Tên quy trình",
-    "processDescription": "Mô tả quy trình",
+    "processInfo": "Thông tin công đoạn",
+    "addProcess": "Thêm công đoạn",
+    "processName": "Tên công đoạn",
+    "processDescription": "Mô tả công đoạn",
     "standardTime": "Thời gian chuẩn",
     "productionInfo": "Thông tin sản xuất",
     "tactTime": "Thời gian Tact",

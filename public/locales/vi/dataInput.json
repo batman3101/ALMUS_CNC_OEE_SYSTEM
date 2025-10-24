@@ -10,7 +10,7 @@
   },
   "machineInfo": {
     "equipmentModel": "Mô hình thiết bị",
-    "machineProcess": "Quy trình máy",
+    "machineProcess": "Công đoạn máy",
     "tactTime": "Thời gian Tact", 
     "equipmentSelection": "Lựa chọn thiết bị",
     "formalOperation": "Vận hành chính thức",
@@ -20,7 +20,7 @@
     "machineStatus": "Trạng thái thiết bị",
     "normalOperation": "Hoạt động bình thường",
     "abnormal": "Bất thường",
-    "process": "Quy trình gia công"
+    "process": "Công đoạn gia công"
   },
   "schedule": {
     "dayShiftBaseTime": "Thời gian cơ bản ca ngày",
@@ -98,9 +98,9 @@
     "machineInfoPartialWarning": "Một số thông tin thiết bị chưa được cài đặt",
     "machineInfoLoadFailed": "Không thể tải thông tin thiết bị",
     "downtimeAdded": "Đã thêm thời gian ngừng hoạt động",
-    "downtimeDeleted": "Đã xóa thời gian ngừng hoạt động", 
+    "downtimeDeleted": "Đã xóa thời gian ngừng hoạt động",
     "noProductionModel": "Thiết bị chưa được cài đặt mô hình sản xuất",
-    "noProcess": "Thiết bị chưa được cài đặt quy trình",
+    "noProcess": "Thiết bị chưa được cài đặt công đoạn",
     "selectMachine": "Chọn thiết bị",
     "machineLoadingError": "Lỗi tải thiết bị",
     "productionDataSaved": "Dữ liệu sản xuất đã được lưu",

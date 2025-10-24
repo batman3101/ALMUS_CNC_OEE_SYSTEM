@@ -70,9 +70,9 @@
     "registrationDate": "Ngày đăng ký",
     "currentStatus": "Trạng thái hiện tại",
     "productionModel": "Mẫu sản xuất",
-    "currentProcess": "Quy trình gia công",
+    "currentProcess": "Công đoạn gia công",
     "tactTime": "Thời gian Tact",
-    "processOrder": "Thứ tự quy trình"
+    "processOrder": "Thứ tự công đoạn"
   },
   "status": {
     "NORMAL_OPERATION": "Hoạt động bình thường",
@@ -112,7 +112,7 @@
       "equipmentType": "Ví dụ: Trung tâm gia công CNC",
       "status": "Chọn trạng thái",
       "productionModel": "Chọn mẫu sản xuất",
-      "process": "Chọn quy trình gia công"
+      "process": "Chọn công đoạn gia công"
     },
     "validation": {
       "selectStatus": "Vui lòng chọn trạng thái hiện tại"
