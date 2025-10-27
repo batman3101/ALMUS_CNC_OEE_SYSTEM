@@ -42,6 +42,7 @@ export interface Machine {
   current_process_name?: string;
   current_process_order?: number;
   current_tact_time?: number;
+  current_cavity_count?: number;
 }
 
 // 설비 로그 타입

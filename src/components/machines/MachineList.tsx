@@ -95,11 +95,11 @@ const MachineList: React.FC<MachineListProps> = ({
       // 검색어 필터
       if (filters.searchText) {
         const searchLower = filters.searchText.toLowerCase();
-        const matchesSearch = 
-          machine.name.toLowerCase().includes(searchLower) ||
-          machine.location.toLowerCase().includes(searchLower) ||
-          machine.model_type.toLowerCase().includes(searchLower);
-        
+        const matchesSearch =
+          (machine.name || '').toLowerCase().includes(searchLower) ||
+          (machine.location || '').toLowerCase().includes(searchLower) ||
+          (machine.model_type || '').toLowerCase().includes(searchLower);
+
         if (!matchesSearch) return false;
       }
 

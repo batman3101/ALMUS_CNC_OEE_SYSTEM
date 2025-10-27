@@ -127,7 +127,7 @@
     "cancel": "Hủy",
     "save": "Lưu"
   },
-  "status": {
+  "systemStatus": {
     "autoRefreshing": "Tự động làm mới",
     "refresh": "Làm mới",
     "pollingActive": "Polling đang hoạt động",
@@ -171,6 +171,7 @@
     "defectQtyMin": "Số lượng lỗi phải từ 0 trở lên",
     "defectQtyMax": "Số lượng lỗi không được vượt quá số lượng sản xuất",
     "estimatedOutput": "Số lượng sản xuất ước tính dựa trên Tact Time",
+    "cycles": "chu kỳ",
     "useEstimated": "Sử dụng",
     "piece": "cái",
     "notes": "Ghi chú",

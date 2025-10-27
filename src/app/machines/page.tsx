@@ -83,7 +83,7 @@ export default function MachinesPage() {
                       icon={isAutoRefreshing ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
                       onClick={toggleAutoRefresh}
                     >
-                      {isAutoRefreshing ? t('status.autoRefreshing') : tCommon('actions.autoRefresh')}
+                      {isAutoRefreshing ? t('systemStatus.autoRefreshing') : tCommon('actions.autoRefresh')}
                     </Button>
                   </Tooltip>
                   
@@ -93,7 +93,7 @@ export default function MachinesPage() {
                       onClick={() => refetch()}
                       loading={loading}
                     >
-                      {t('status.refresh')}
+                      {t('systemStatus.refresh')}
                     </Button>
                   </Tooltip>
                 </Space>
@@ -101,19 +101,19 @@ export default function MachinesPage() {
                 <div style={{ textAlign: 'right' }}>
                   <Space>
                     <Tag color={isAutoRefreshing ? "green" : "default"}>
-                      {isAutoRefreshing ? t('status.pollingActive') : t('status.pollingStopped')}
+                      {isAutoRefreshing ? t('systemStatus.pollingActive') : t('systemStatus.pollingStopped')}
                     </Tag>
                     <Tag color={isRealtimeConnected ? "blue" : "default"}>
-                      {isRealtimeConnected ? t('status.realtimeConnected') : t('status.realtimeDisconnected')}
+                      {isRealtimeConnected ? t('systemStatus.realtimeConnected') : t('systemStatus.realtimeDisconnected')}
                     </Tag>
                   </Space>
                   <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                    {t('status.lastUpdate')}: {formatLastUpdated(lastUpdated)}
+                    {t('systemStatus.lastUpdate')}: {formatLastUpdated(lastUpdated)}
                   </div>
                   <div style={{ fontSize: '11px', color: '#ccc', marginTop: '2px' }}>
-                    {isRealtimeConnected && isAutoRefreshing ? t('status.hybridMode') :
-                     isRealtimeConnected ? t('status.realtimeMode') :
-                     isAutoRefreshing ? t('status.pollingMode') : t('status.manualMode')}
+                    {isRealtimeConnected && isAutoRefreshing ? t('systemStatus.hybridMode') :
+                     isRealtimeConnected ? t('systemStatus.realtimeMode') :
+                     isAutoRefreshing ? t('systemStatus.pollingMode') : t('systemStatus.manualMode')}
                   </div>
                 </div>
               </Space>

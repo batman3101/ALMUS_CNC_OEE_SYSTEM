@@ -127,7 +127,7 @@
     "cancel": "취소",
     "save": "저장"
   },
-  "status": {
+  "systemStatus": {
     "autoRefreshing": "자동 새로고침중",
     "refresh": "새로고침",
     "pollingActive": "폴링 활성",
@@ -171,6 +171,7 @@
     "defectQtyMin": "불량 수량은 0 이상이어야 합니다",
     "defectQtyMax": "불량 수량은 생산 수량보다 클 수 없습니다",
     "estimatedOutput": "Tact Time 기반 추정 생산량",
+    "cycles": "사이클",
     "useEstimated": "사용하기",
     "piece": "개",
     "notes": "참고사항",

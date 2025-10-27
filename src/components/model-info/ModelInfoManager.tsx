@@ -151,7 +151,8 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           .update({
             process_name: values.process_name,
             tact_time_seconds: values.tact_time_seconds,
-            process_order: values.process_order
+            process_order: values.process_order,
+            cavity_count: values.cavity_count || 1
           })
           .eq('id', editingProcess.id);
 
@@ -170,7 +171,8 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             model_id: selectedModel.id,
             process_name: values.process_name,
             tact_time_seconds: values.tact_time_seconds,
-            process_order: values.process_order || 1
+            process_order: values.process_order || 1,
+            cavity_count: values.cavity_count || 1
           });
 
         if (error) throw error;
@@ -245,7 +247,8 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       processForm.resetFields();
       // 기본값 설정
       processForm.setFieldsValue({
-        process_order: processes.length + 1
+        process_order: processes.length + 1,
+        cavity_count: 1
       });
     }
     setProcessModalVisible(true);
@@ -339,6 +342,13 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       dataIndex: 'tact_time_seconds',
       key: 'tact_time_seconds',
       render: (seconds: number) => `${seconds}초`
+    },
+    {
+      title: t('컬럼.캐비티수'),
+      dataIndex: 'cavity_count',
+      key: 'cavity_count',
+      width: 100,
+      render: (count: number) => <Tag color="green">{count || 1}</Tag>
     },
     {
       title: t('컬럼.모델'),
@@ -584,6 +594,24 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
               placeholder="120"
               min={1}
               addonAfter="초"
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="cavity_count"
+            label={t('라벨.캐비티수')}
+            rules={[
+              { required: true, message: t('검증.캐비티수필수') },
+              { type: 'number', min: 1, message: t('검증.캐비티수최소값') }
+            ]}
+            initialValue={1}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              placeholder="1"
+              min={1}
+              precision={0}
+              addonAfter={t('단위.개')}
             />
           </Form.Item>
 

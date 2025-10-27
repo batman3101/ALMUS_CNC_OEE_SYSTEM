@@ -149,14 +149,20 @@ export class OEECalculator {
    * 이론 생산시간 계산
    * @param outputQty 생산 수량
    * @param tactTime 택트 타임 (초)
+   * @param cavityCount Cavity 수량 (기본값: 1)
    * @returns 이론 생산시간 (분)
    */
-  static calculateIdealRuntime(outputQty: number, tactTime: number): number {
+  static calculateIdealRuntime(outputQty: number, tactTime: number, cavityCount: number = 1): number {
     if (tactTime <= 0) {
       throw new Error(`${ErrorCodes.OEE_CALCULATION_ERROR}: 택트 타임은 0보다 커야 합니다.`);
     }
-    
-    return (outputQty * tactTime) / 60; // 분 단위로 변환
+
+    // Cavity 수량을 고려한 사이클 수 계산
+    const cavity = Math.max(1, cavityCount);
+    const cycles = outputQty / cavity;
+
+    // 이론 생산시간 = 사이클 수 × Tact Time (분 단위로 변환)
+    return (cycles * tactTime) / 60;
   }
 
   /**
@@ -249,13 +255,15 @@ export class RealTimeOEECalculator {
    * @param machineLogs 설비 로그 배열
    * @param productionRecord 생산 실적 (선택사항)
    * @param tactTime 택트 타임 (초)
+   * @param cavityCount Cavity 수량 (기본값: 1)
    * @returns 실시간 OEE 지표
    */
   static calculateRealTimeOEE(
     machineId: string,
     machineLogs: MachineLog[],
     productionRecord?: Partial<ProductionRecord>,
-    tactTime: number = 30
+    tactTime: number = 30,
+    cavityCount: number = 1
   ): OEEMetrics {
     const cacheKey = `realtime_${machineId}_${Date.now().toString().slice(0, -4)}0000`; // 10초 단위로 캐싱
     
@@ -285,8 +293,8 @@ export class RealTimeOEECalculator {
     const outputQty = productionRecord?.output_qty || 0;
     const defectQty = productionRecord?.defect_qty || 0;
 
-    // 이론 생산시간 계산
-    const idealRuntime = OEECalculator.calculateIdealRuntime(outputQty, tactTime);
+    // 이론 생산시간 계산 (Cavity 수량 반영)
+    const idealRuntime = OEECalculator.calculateIdealRuntime(outputQty, tactTime, cavityCount);
 
     // OEE 계산
     const availability = OEECalculator.calculateAvailability(actualRuntime, plannedRuntime);

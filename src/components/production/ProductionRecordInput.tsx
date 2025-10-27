@@ -41,6 +41,7 @@ interface ProductionRecordInputProps {
   date: string;
   onSubmit: (data: { output_qty: number; defect_qty: number }) => Promise<void>;
   estimatedOutput?: number; // Tact Time 기반 추정 생산량
+  cavityCount?: number; // 현재 공정의 Cavity 수량
 }
 
 interface ProductionInputData {
@@ -55,7 +56,8 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
   shift,
   date,
   onSubmit,
-  estimatedOutput
+  estimatedOutput,
+  cavityCount
 }) => {
   const { t } = useMachinesTranslation();
   const { token } = theme.useToken();
@@ -211,10 +213,15 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
           <div style={estimatedOutputStyle}>
             <Text type="secondary">
               {t('productionInput.estimatedOutput')}: {estimatedOutput.toLocaleString()}{t('productionInput.piece')}
+              {cavityCount && cavityCount > 1 && (
+                <span style={{ marginLeft: 8, color: token.colorTextSecondary }}>
+                  (Cavity {cavityCount}{t('단위.개')} × {Math.floor(estimatedOutput / cavityCount).toLocaleString()} {t('productionInput.cycles')})
+                </span>
+              )}
             </Text>
-            <Button 
-              type="link" 
-              size="small" 
+            <Button
+              type="link"
+              size="small"
               onClick={useEstimatedOutput}
               style={estimatedButtonStyle}
             >

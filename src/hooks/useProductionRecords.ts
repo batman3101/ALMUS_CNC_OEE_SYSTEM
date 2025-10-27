@@ -72,14 +72,18 @@ export const useProductionRecords = () => {
   // Tact Time 기반 추정 생산량 계산
   const calculateEstimatedOutput = useCallback((
     tactTime: number, // 초 단위
-    actualRuntime: number // 분 단위
+    actualRuntime: number, // 분 단위
+    cavityCount: number = 1 // Cavity 수량 (기본값: 1)
   ): number => {
     if (tactTime <= 0 || actualRuntime <= 0) return 0;
-    
-    // 실제 가동 시간(분)을 초로 변환하고 Tact Time으로 나누어 추정 생산량 계산
+
+    // 실제 가동 시간(분)을 초로 변환하고 Tact Time으로 나누어 사이클 수 계산
     const runtimeInSeconds = actualRuntime * 60;
-    const estimatedOutput = Math.floor(runtimeInSeconds / tactTime);
-    
+    const cycles = Math.floor(runtimeInSeconds / tactTime);
+
+    // 사이클 수에 cavity 수를 곱하여 추정 생산량 계산
+    const estimatedOutput = cycles * Math.max(1, cavityCount);
+
     return estimatedOutput;
   }, []);
 

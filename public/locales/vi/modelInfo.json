@@ -42,6 +42,7 @@
     "설명": "Mô tả",
     "공정수": "Số công đoạn",
     "택트타임": "Tact Time",
+    "캐비티수": "Số Cavity",
     "등록일": "Ngày đăng ký",
     "작업": "Thao tác",
     "순서": "Thứ tự",
@@ -66,7 +67,8 @@
     "설명": "Mô tả",
     "공정명": "Tên công đoạn",
     "공정순서": "Thứ tự công đoạn",
-    "택트타임초": "Tact Time (giây)"
+    "택트타임초": "Tact Time (giây)",
+    "캐비티수": "Số lượng Cavity"
   },
   "validation": {
     "modelNameRequired": "Vui lòng nhập tên mô hình",
@@ -77,7 +79,9 @@
     "모델명최소길이": "Tên mô hình phải có ít nhất 2 ký tự",
     "공정명필수": "Vui lòng nhập tên công đoạn",
     "공정순서필수": "Vui lòng nhập thứ tự công đoạn",
-    "택트타임필수": "Vui lòng nhập Tact Time"
+    "택트타임필수": "Vui lòng nhập Tact Time",
+    "캐비티수필수": "Vui lòng nhập số lượng Cavity",
+    "캐비티수최소값": "Vui lòng nhập số lớn hơn hoặc bằng 1"
   },
   "에러": {
     "모델목록조회실패": "Không thể tải danh sách mô hình",

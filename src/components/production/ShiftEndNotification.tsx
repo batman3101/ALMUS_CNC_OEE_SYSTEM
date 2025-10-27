@@ -84,7 +84,8 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
       machines.forEach(machine => {
         // 임시로 8시간(480분) 가동 시간으로 가정하여 추정 생산량 계산
         const estimatedRuntime = 480; // 분
-        estimates[machine.id] = calculateEstimatedOutput(machine.default_tact_time, estimatedRuntime);
+        const cavityCount = machine.current_cavity_count || 1;
+        estimates[machine.id] = calculateEstimatedOutput(machine.default_tact_time, estimatedRuntime, cavityCount);
       });
       setEstimatedOutputs(estimates);
       
@@ -247,6 +248,7 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
           date={format(new Date(), 'yyyy-MM-dd')}
           onSubmit={handleProductionRecordSubmit}
           estimatedOutput={estimatedOutputs[selectedMachine.id]}
+          cavityCount={selectedMachine.current_cavity_count}
         />
       )}
     </>

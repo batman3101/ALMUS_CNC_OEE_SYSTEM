@@ -66,7 +66,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   const processedData = useMemo(() => {
     if (data.length === 0) return [];
 
-    let sortedData = [...data];
+    const sortedData = [...data];
     
     // OEE 기준 내림차순 정렬
     sortedData.sort((a, b) => b.oee - a.oee);
