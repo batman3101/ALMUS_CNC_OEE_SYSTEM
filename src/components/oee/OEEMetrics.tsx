@@ -171,9 +171,10 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // 보고서 생성용 데이터 준비
+  // 보고서 생성용 데이터 준비 (실제 데이터 기반)
   const getReportData = () => {
-    const mockMachine = {
+    // 실제 설비 데이터
+    const machineData = {
       id: machineId,
       name: machineName,
       location: 'Production Floor',
@@ -184,7 +185,8 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
       updated_at: formatDateTime(new Date())
     };
 
-    const mockProductionRecords = productionData.map((prod, index) => ({
+    // 실제 생산 기록 데이터
+    const formattedProductionRecords = productionData.map((prod, index) => ({
       record_id: `record_${index}`,
       machine_id: machineId,
       date: prod.date,
@@ -195,9 +197,9 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
     }));
 
     return {
-      machines: [mockMachine],
+      machines: [machineData],
       oeeData: [oeeMetrics],
-      productionData: mockProductionRecords
+      productionData: formattedProductionRecords
     };
   };
 

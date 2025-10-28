@@ -16,6 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
+import { useThemeState } from '@/hooks/useThemeToggle';
 
 const { Text, Title } = Typography;
 
@@ -42,17 +43,18 @@ const getStateIcon = (state: MachineState) => {
   return iconConfigs[state] || <WarningOutlined />;
 };
 
-const MachineCard: React.FC<MachineCardProps> = ({ 
-  machine, 
+const MachineCard: React.FC<MachineCardProps> = ({
+  machine,
   onClick,
-  language = 'ko' 
+  language = 'ko'
 }) => {
   const { t } = useMachinesTranslation();
-  const { 
-    getStatusText, 
-    getStatusColorCode, 
+  const { isDark } = useThemeState();
+  const {
+    getStatusText,
+    getStatusColorCode,
     getAntdColorFromHex,
-    isLoading: statusLoading 
+    isLoading: statusLoading
   } = useMachineStatusTranslations(language);
   
   // 현재 상태의 설정 정보 생성
@@ -98,8 +100,9 @@ const MachineCard: React.FC<MachineCardProps> = ({
       hoverable
       onClick={handleCardClick}
       className="machine-card"
-      style={{ 
-        borderLeft: `4px solid ${stateConfig?.colorCode || '#d9d9d9'}`
+      style={{
+        borderLeft: `4px solid ${stateConfig?.colorCode || '#d9d9d9'}`,
+        backgroundColor: isDark ? '#1a1a1a' : '#fafafa'
       }}
       actions={[]}
     >

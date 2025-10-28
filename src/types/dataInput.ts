@@ -118,14 +118,30 @@ export interface MachineConfiguration {
   updated_at?: string;
 }
 
-// 비가동 사유 enum
+// 비가동 사유 키 (번역용)
+export const DOWNTIME_REASON_KEYS = [
+  'equipmentFailure',
+  'endmillChange',
+  'materialShortage',
+  'qualityDefect',
+  'plannedStop',
+  'productionModelChange',
+  'pm',
+  'programChange',
+  'other'
+] as const;
+
+export type DowntimeReasonKey = typeof DOWNTIME_REASON_KEYS[number];
+
+// 비가동 사유 enum (Deprecated: 하위 호환성을 위해 유지)
 export const DOWNTIME_REASONS = [
   '설비 고장',
-  '금형 교체',
+  'ENDMILL 교체',
   '자재 부족',
   '품질 불량',
   '계획 정지',
-  '청소/정리',
+  '생산모델 교체',
+  'PM',
   '기타'
 ] as const;
 

@@ -8,6 +8,7 @@ import 'dayjs/locale/vi';
 import koKR from 'antd/locale/ko_KR';
 import viVN from 'antd/locale/vi_VN';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface AntdConfigProviderProps {
   children: ReactNode;
@@ -18,20 +19,19 @@ interface AntdConfigProviderProps {
  * 시스템 설정에 따른 전역 날짜/시간 형식 및 로케일 설정 제공
  */
 export const AntdConfigProvider: React.FC<AntdConfigProviderProps> = ({ children }) => {
-  const { getCompanyInfo, getDisplaySettings } = useSystemSettings();
-  
+  const { getDisplaySettings } = useSystemSettings();
+  const { language } = useLanguage();
+
   const locale = useMemo(() => {
-    const companyInfo = getCompanyInfo();
-    
     // dayjs 로케일 설정
-    if (companyInfo.language === 'ko') {
+    if (language === 'ko') {
       dayjs.locale('ko');
       return koKR;
     } else {
       dayjs.locale('vi');
       return viVN;
     }
-  }, [getCompanyInfo]);
+  }, [language]);
 
   const theme = useMemo(() => {
     const displaySettings = getDisplaySettings();

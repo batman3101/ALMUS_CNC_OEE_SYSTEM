@@ -84,11 +84,13 @@
     "endTimeLabel": "종료 시간",
     "reasons": {
       "equipmentFailure": "설비 고장",
-      "moldChange": "금형 교체",
+      "endmillChange": "ENDMILL 교체",
       "materialShortage": "자재 부족",
       "qualityDefect": "품질 불량",
       "plannedStop": "계획 정지",
-      "cleaning": "청소/정리",
+      "productionModelChange": "생산모델 교체",
+      "pm": "PM",
+      "programChange": "프로그램 교체",
       "other": "기타"
     }
   },

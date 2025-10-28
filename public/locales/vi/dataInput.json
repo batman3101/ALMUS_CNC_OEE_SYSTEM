@@ -84,11 +84,13 @@
     "endTimeLabel": "Thời gian kết thúc",
     "reasons": {
       "equipmentFailure": "Hỏng thiết bị",
-      "moldChange": "Thay khuôn",
-      "materialShortage": "Thiếu vật liệu", 
+      "endmillChange": "Thay ENDMILL",
+      "materialShortage": "Thiếu vật liệu",
       "qualityDefect": "Lỗi chất lượng",
       "plannedStop": "Dừng theo kế hoạch",
-      "cleaning": "Dọn dẹp/Sắp xếp",
+      "productionModelChange": "Thay đổi mô hình sản xuất",
+      "pm": "PM",
+      "programChange": "Thay đổi chương trình",
       "other": "Khác"
     }
   },

@@ -37,6 +37,7 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useMachines } from '@/hooks/useMachines';
 import { useUserProfiles } from '@/hooks/useUserProfiles';
 import type { ShiftProductionData, DowntimeEntry, DailyProductionData } from '@/types/dataInput';
+import { DOWNTIME_REASON_KEYS } from '@/types/dataInput';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -114,16 +115,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const [downtimeModalVisible, setDowntimeModalVisible] = useState(false);
   const [downtimeForm] = Form.useForm();
 
-  // 비가동 사유 목록
-  const downtimeReasons = getSetting('general', 'downtime_reasons') || [
-    t('downtime.reasons.equipmentFailure'),
-    t('downtime.reasons.moldChange'), 
-    t('downtime.reasons.materialShortage'),
-    t('downtime.reasons.qualityDefect'),
-    t('downtime.reasons.plannedStop'),
-    t('downtime.reasons.cleaning'),
-    t('downtime.reasons.other')
-  ];
+  // 비가동 사유 목록 (번역 키 사용)
+  const downtimeReasons = DOWNTIME_REASON_KEYS;
+
+  // 사유 번역 헬퍼
+  const translateReason = (reasonKey: string): string => {
+    return t(`downtime.reasons.${reasonKey}` as any);
+  };
 
   // 현재 교대 데이터 가져오기
   const getCurrentShiftData = (): ShiftProductionData => {
@@ -461,7 +459,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     {
       title: t('dataEntry.reason'),
       dataIndex: 'reason',
-      key: 'reason'
+      key: 'reason',
+      render: (reason: string) => translateReason(reason)
     },
     {
       title: t('dataEntry.work'),
@@ -1026,9 +1025,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
             rules={[{ required: true, message: t('downtime.selectReason') }]}
           >
             <Select placeholder={t('downtime.selectReason')}>
-              {downtimeReasons.map((reason: string) => (
-                <Option key={reason} value={reason}>
-                  {reason}
+              {downtimeReasons.map((reasonKey) => (
+                <Option key={reasonKey} value={reasonKey}>
+                  {translateReason(reasonKey)}
                 </Option>
               ))}
             </Select>
