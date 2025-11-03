@@ -122,9 +122,9 @@
     "assignedMachinesCount": " thiết bị"
   },
   "roles": {
-    "admin": "Quản trị viên",
-    "engineer": "Kỹ sư",
-    "operator": "Vận hành viên",
+    "admin": "Quản trị hệ thống",
+    "engineer": "Người quản lý",
+    "operator": "Người dùng",
     "user": "Người dùng"
   }
 }

@@ -122,9 +122,9 @@
     "assignedMachinesCount": "개 설비"
   },
   "roles": {
-    "admin": "관리자",
-    "engineer": "엔지니어",
-    "operator": "운영자",
+    "admin": "시스템 관리자",
+    "engineer": "관리자",
+    "operator": "사용자",
     "user": "사용자"
   }
 }
