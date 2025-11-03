@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
+  Filler,
 } from 'chart.js';
 import { Card, Typography, Select, DatePicker, Row, Col, Spin } from 'antd';
 import { useOEEChartData } from '@/hooks/useOEEChartData';
@@ -24,7 +25,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 const { Title: AntTitle } = Typography;

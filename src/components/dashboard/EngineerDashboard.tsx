@@ -402,7 +402,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           품질: (avgQuality * 100).toFixed(1) + '%'
         });
       } else if (machines.length === 0) {
-        return fallbackData;
+        return getEmptyData();
       } else {
         // 실시간 데이터로 폴백
         const totalOEE = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.oee, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
