@@ -217,7 +217,7 @@ export const useEngineerData = (
         defect_qty: item.total_defects,
         good_qty: item.total_output - item.total_defects,
         defect_rate: item.defect_rate / 100, // 백분율을 0-1로 변환
-        target_qty: Math.round(item.total_output * 1.1), // 목표량을 실제 생산량의 110%로 설정 (임시)
+        target_qty: 0, // target_qty는 DB에 없으므로 0으로 설정 (차트에서 사용하지 않음)
         shift: 'A' as const // 기본값
       }));
 

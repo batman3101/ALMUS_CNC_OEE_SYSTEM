@@ -114,26 +114,18 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         productionData = prodData.records || [];
       }
 
-      // OEE 데이터 계산
-      const oeeData: OEEMetrics[] = productionData.map(record => {
-        const availability = 0.85 + Math.random() * 0.1; // 실제로는 서버에서 계산되어야 함
-        const performance = 0.88 + Math.random() * 0.08;
-        const quality = record.defect_qty > 0 
-          ? (record.output_qty - record.defect_qty) / record.output_qty
-          : 0.98;
-        
-        return {
-          availability,
-          performance,
-          quality,
-          oee: availability * performance * quality,
-          actual_runtime: 420 + Math.random() * 60,
-          planned_runtime: 480,
-          ideal_runtime: 480,
-          output_qty: record.output_qty,
-          defect_qty: record.defect_qty
-        };
-      });
+      // OEE 데이터 - production_records의 실제 데이터 사용 (Mock 데이터 제거)
+      const oeeData: OEEMetrics[] = productionData.map(record => ({
+        availability: record.availability || 0,
+        performance: record.performance || 0,
+        quality: record.quality || 0,
+        oee: record.oee || 0,
+        actual_runtime: record.actual_runtime || 0,
+        planned_runtime: record.planned_runtime || 480,
+        ideal_runtime: record.ideal_runtime || 0,
+        output_qty: record.output_qty || 0,
+        defect_qty: record.defect_qty || 0
+      }));
 
       setReportData({ oeeData, productionData });
     } catch (error) {

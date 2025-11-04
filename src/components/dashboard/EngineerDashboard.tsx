@@ -14,7 +14,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { OEEGauge, IndependentOEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
-import { DefectRateTrendChart, DefectTypeAnalysisChart, MachineComparisonChart } from '@/components/quality';
+import { DefectRateTrendChart, QualityPerformanceChart, MachineComparisonChart } from '@/components/quality';
 import { OEEMetrics } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
@@ -498,19 +498,15 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     );
   }, [processedData.analysisData, selectedMachines]);
 
-  // 실제 설비 목록 옵션 생성
+  // 실제 설비 목록 옵션 생성 (Supabase 데이터만 사용)
   const machineOptions = React.useMemo(() => {
     const options = [{ label: t('dashboard:table.all'), value: 'all' }];
     if (machines.length > 0) {
       machines.forEach(machine => {
         options.push({ label: machine.name, value: machine.id });
       });
-    } else {
-      // 폴백 옵션
-      ['CNC-001', 'CNC-002', 'CNC-003', 'CNC-004', 'CNC-005'].forEach(name => {
-        options.push({ label: name, value: name });
-      });
     }
+    // machines가 없으면 "전체" 옵션만 반환 (Mock 데이터 제거)
     return options;
   }, [machines, t]);
 
@@ -544,12 +540,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       key: 'machine',
       width: 100,
       fixed: 'left' as const,
+      sorter: (a: { machine: string }, b: { machine: string }) => a.machine.localeCompare(b.machine),
     },
     {
       title: t('dashboard:table.location'),
       dataIndex: 'location',
       key: 'location',
       width: 120,
+      sorter: (a: { location: string }, b: { location: string }) => a.location.localeCompare(b.location),
     },
     {
       title: t('dashboard:table.oee'),
@@ -617,6 +615,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           {record.trendValue.toFixed(1)}%
         </span>
       ),
+      sorter: (a: { trendValue: number }, b: { trendValue: number }) => a.trendValue - b.trendValue,
     },
   ];
 
@@ -872,10 +871,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card title="불량 유형별 분석">
-                    <DefectTypeAnalysisChart 
+                  <Card title="양품 생산 및 품질률 추이">
+                    <QualityPerformanceChart
                       data={processedData.productionData}
                       height={300}
+                      period={selectedPeriod}
                     />
                   </Card>
                 </Col>
