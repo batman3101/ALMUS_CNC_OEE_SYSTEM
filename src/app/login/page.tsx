@@ -1,18 +1,25 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import { Card, Typography } from 'antd';
 import { SettingOutlined, BarChartOutlined, DashboardOutlined } from '@ant-design/icons';
 import { LoginFormInline } from '@/components/auth/LoginFormInline';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { useTranslation } from 'react-i18next';
 import styles from './login.module.css';
+
+// 클라이언트 전용 컴포넌트
+const ThemeToggle = dynamic(() => import('@/components/layout/ThemeToggle'), { ssr: false });
+const LanguageToggle = dynamic(() => import('@/components/layout/LanguageToggle'), { ssr: false });
 
 const { Title, Text, Paragraph } = Typography;
 
 const LoginPage: React.FC = () => {
   const router = useRouter();
+  const { t } = useTranslation(['auth', 'common']);
   const { getCompanyInfo, isLoading } = useSystemSettings();
   const companyInfo = getCompanyInfo();
 
@@ -22,6 +29,12 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className={styles.loginContainer}>
+      {/* 테마 및 언어 토글 */}
+      <div className={styles.loginControls}>
+        <ThemeToggle size="middle" showTooltip={false} />
+        <LanguageToggle size="middle" showText={true} />
+      </div>
+
       <div className={styles.loginWrapper}>
         {/* 좌측 브랜딩 영역 */}
         <div className={styles.brandingSection}>
@@ -52,39 +65,39 @@ const LoginPage: React.FC = () => {
 
               <div className={styles.featuresSection}>
                 <Title level={4} className={styles.featuresTitle}>
-                  시스템 특징
+                  {t('auth:loginPage.systemFeatures')}
                 </Title>
-                
+
                 <div className={styles.featureList}>
                   <div className={styles.featureItem}>
                     <DashboardOutlined className={styles.featureIcon} />
                     <div>
-                      <Text strong style={{ color: 'white' }}>실시간 모니터링</Text>
+                      <Text strong style={{ color: 'white' }}>{t('auth:loginPage.realtimeMonitoring')}</Text>
                       <br />
                       <Text className={styles.featureDesc} style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                        CNC 설비 상태를 실시간으로 추적
+                        {t('auth:loginPage.realtimeMonitoringDesc')}
                       </Text>
                     </div>
                   </div>
-                  
+
                   <div className={styles.featureItem}>
                     <BarChartOutlined className={styles.featureIcon} />
                     <div>
-                      <Text strong style={{ color: 'white' }}>OEE 분석</Text>
+                      <Text strong style={{ color: 'white' }}>{t('auth:loginPage.oeeAnalysis')}</Text>
                       <br />
                       <Text className={styles.featureDesc} style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                        생산성 지표 분석 및 개선점 도출
+                        {t('auth:loginPage.oeeAnalysisDesc')}
                       </Text>
                     </div>
                   </div>
-                  
+
                   <div className={styles.featureItem}>
                     <SettingOutlined className={styles.featureIcon} />
                     <div>
-                      <Text strong style={{ color: 'white' }}>통합 관리</Text>
+                      <Text strong style={{ color: 'white' }}>{t('auth:loginPage.integratedManagement')}</Text>
                       <br />
                       <Text className={styles.featureDesc} style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                        설비, 생산, 품질 데이터 통합 관리
+                        {t('auth:loginPage.integratedManagementDesc')}
                       </Text>
                     </div>
                   </div>
@@ -93,7 +106,7 @@ const LoginPage: React.FC = () => {
 
               <div className={styles.systemInfo}>
                 <Text className={styles.versionInfo} style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                  Version 1.0.0 | 2025 ALMUS TECH CNC System
+                  {t('auth:loginPage.version')}
                 </Text>
               </div>
             </div>
@@ -105,13 +118,13 @@ const LoginPage: React.FC = () => {
           <div className={styles.loginFormWrapper}>
             <div className={styles.loginHeader}>
               <Title level={2} className={styles.loginTitle}>
-                시스템 로그인
+                {t('auth:loginPage.systemLogin')}
               </Title>
               <Paragraph className={styles.loginDesc}>
-                {isLoading ? 'Loading...' : `${companyInfo.name} 모니터링 시스템에 로그인하세요`}
+                {isLoading ? t('common:app.loading') : t('auth:loginPage.loginToSystem', { companyName: companyInfo.name })}
               </Paragraph>
             </div>
-            
+
             <LoginFormInline onSuccess={handleLoginSuccess} />
           </div>
         </div>

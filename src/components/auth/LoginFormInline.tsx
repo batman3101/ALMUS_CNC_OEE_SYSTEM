@@ -20,7 +20,7 @@ interface LoginFormData {
 }
 
 export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onError }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation('auth');
   const { login } = useAuth();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -45,17 +45,17 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
       onSuccess?.();
     } catch (err: any) {
       console.error('Login error:', err);
-      
-      let errorMessage = t('auth.loginFailed');
+
+      let errorMessage = t('loginFailed');
       const errorCode = ErrorCodes.AUTHENTICATION_FAILED;
 
-      if (err.message?.includes('Invalid login credentials') || 
+      if (err.message?.includes('Invalid login credentials') ||
           err.message?.includes('이메일 또는 비밀번호가 올바르지 않습니다')) {
-        errorMessage = t('auth.invalidCredentials');
+        errorMessage = t('invalidCredentials');
       } else if (err.message?.includes('Email not confirmed')) {
-        errorMessage = t('auth.emailNotConfirmed');
+        errorMessage = t('emailNotConfirmed');
       } else if (err.message?.includes('Too many requests')) {
-        errorMessage = t('auth.tooManyRequests');
+        errorMessage = t('tooManyRequests');
       }
 
       const appError: AppError = {
@@ -93,42 +93,42 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
       >
         <Form.Item
           name="email"
-          label="이메일"
+          label={t('email')}
           rules={[
             {
               required: true,
-              message: t('auth.emailRequired'),
+              message: t('emailRequired'),
             },
             {
               type: 'email',
-              message: t('auth.emailInvalid'),
+              message: t('emailInvalid'),
             },
           ]}
         >
           <Input
             prefix={<UserOutlined />}
-            placeholder={t('auth.emailPlaceholder')}
+            placeholder={t('emailPlaceholder')}
             autoComplete="email"
           />
         </Form.Item>
 
         <Form.Item
           name="password"
-          label="비밀번호"
+          label={t('password')}
           rules={[
             {
               required: true,
-              message: t('auth.passwordRequired'),
+              message: t('passwordRequired'),
             },
             {
               min: 6,
-              message: t('auth.passwordMinLength'),
+              message: t('passwordMinLength'),
             },
           ]}
         >
           <Input.Password
             prefix={<LockOutlined />}
-            placeholder={t('auth.passwordPlaceholder')}
+            placeholder={t('passwordPlaceholder')}
             autoComplete="current-password"
           />
         </Form.Item>
@@ -138,14 +138,14 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
             type="primary"
             htmlType="submit"
             loading={loading}
-            style={{ 
+            style={{
               width: '100%',
               height: 48,
               fontSize: '16px',
               fontWeight: 500
             }}
           >
-            {loading ? t('auth.loggingIn') : t('auth.login')}
+            {loading ? t('loggingIn') : t('loginButton')}
           </Button>
         </Form.Item>
       </Form>
@@ -153,7 +153,7 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
 
       <div style={{ textAlign: 'center', marginTop: 24 }}>
         <Text type="secondary" style={{ fontSize: '12px' }}>
-          신규 사용자 가입은 운영자에게 문의
+          {t('loginPage.contactAdmin')}
         </Text>
       </div>
     </div>

@@ -7,6 +7,33 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
+  position: relative;
+}
+
+/* 테마 및 언어 토글 컨트롤 */
+.loginControls {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  animation: fadeIn 0.6s ease-out;
+  transition: all 0.3s ease;
+}
+
+.loginControls:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
 }
 
 .loginWrapper {
@@ -184,11 +211,11 @@
     grid-template-columns: 1fr;
     max-width: 500px;
   }
-  
+
   .brandingSection {
     display: none;
   }
-  
+
   .loginSection {
     min-height: 100vh;
   }
@@ -198,29 +225,43 @@
   .loginContainer {
     padding: 16px;
   }
-  
+
+  .loginControls {
+    top: 16px;
+    right: 16px;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
   .loginFormWrapper {
     padding: 32px 24px;
   }
-  
+
   .brandTitle {
     font-size: 28px;
   }
-  
+
   .brandingContent {
     padding: 32px 24px;
   }
 }
 
 @media (max-width: 576px) {
+  .loginControls {
+    top: 12px;
+    right: 12px;
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
   .loginFormWrapper {
     padding: 24px 20px;
   }
-  
+
   .loginTitle {
     font-size: 24px;
   }
-  
+
   .featureItem {
     padding: 16px;
     margin-bottom: 20px;
@@ -240,6 +281,11 @@
   color: var(--ant-color-text-secondary, rgba(255, 255, 255, 0.65)) !important;
 }
 
+[data-theme="dark"] .loginControls {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 /* 애니메이션 */
 @keyframes fadeInUp {
   from {
@@ -249,6 +295,15 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
