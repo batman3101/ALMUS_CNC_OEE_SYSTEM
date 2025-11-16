@@ -988,32 +988,49 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       <Modal
         title={`${t('downtime.modalTitle')} - ${activeShift === 'DAY' ? t('shift.dayShift') : t('shift.nightShift')}`}
         open={downtimeModalVisible}
-        onCancel={() => setDowntimeModalVisible(false)}
+        onCancel={() => {
+          setDowntimeModalVisible(false);
+          downtimeForm.resetFields();
+        }}
         footer={null}
       >
         <Form
           form={downtimeForm}
           layout="vertical"
-          onFinish={addDowntimeEntry}
+          onFinish={(values) => {
+            // DatePicker의 dayjs 객체를 ISO string으로 변환
+            const formattedValues = {
+              ...values,
+              start_time: values.start_time ? values.start_time.toISOString() : undefined,
+              end_time: values.end_time ? values.end_time.toISOString() : undefined
+            };
+            addDowntimeEntry(formattedValues);
+          }}
+          initialValues={{
+            start_time: dayjs(`${selectedDate} ${activeShift === 'DAY' ? '10:00' : '22:00'}`),
+            end_time: null
+          }}
         >
           <Form.Item
             name="start_time"
             label={t('downtime.startTimeLabel')}
             rules={[{ required: true, message: t('downtime.selectStartTime') }]}
           >
-            <Input 
-              type="datetime-local" 
+            <DatePicker
+              showTime={{ format: 'HH:mm' }}
+              format="YYYY-MM-DD HH:mm"
               style={{ width: '100%' }}
-              defaultValue={`${selectedDate}T${activeShift === 'DAY' ? '10:00' : '22:00'}`}
+              placeholder={t('downtime.selectStartTime')}
             />
           </Form.Item>
-          
+
           <Form.Item
             name="end_time"
             label={t('downtime.endTimeLabel')}
           >
-            <Input 
-              type="datetime-local" 
+            <DatePicker
+              showTime={{ format: 'HH:mm' }}
+              format="YYYY-MM-DD HH:mm"
               style={{ width: '100%' }}
               placeholder={t('common.defaultTimeNote')}
             />
@@ -1045,7 +1062,10 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
           <div style={{ textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => setDowntimeModalVisible(false)}>
+              <Button onClick={() => {
+                setDowntimeModalVisible(false);
+                downtimeForm.resetFields();
+              }}>
                 {t('downtime.cancel')}
               </Button>
               <Button type="primary" htmlType="submit">

@@ -27,7 +27,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // 안전한 상태 업데이트 헬퍼 함수
-  const safeSetState = <T>(setState: React.Dispatch<React.SetStateAction<T>>, value: T | ((prev: T) => T)) => {
+  const safeSetState = <T,>(setState: React.Dispatch<React.SetStateAction<T>>, value: T | ((prev: T) => T)) => {
     if (isMountedRef.current) {
       setState(value);
     }
