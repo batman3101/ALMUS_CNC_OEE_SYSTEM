@@ -275,6 +275,104 @@
     "defectRate": "Tỷ lệ lỗi",
     "trend": "Xu hướng",
     "machinePerformanceAnalysis": "Phân tích hiệu suất thiết bị",
-    "all": "Tất cả"
+    "all": "Tất cả",
+    "itemsRange": "{{start}}-{{end}} / {{total}} mục"
+  },
+  "downtimeReasons": {
+    "NORMAL_OPERATION": "Hoạt động bình thường",
+    "MAINTENANCE": "Đang bảo trì",
+    "PM_MAINTENANCE": "PM Bảo trì",
+    "INSPECTION": "Kiểm tra",
+    "BREAKDOWN_REPAIR": "Sửa chữa hỏng hóc",
+    "MODEL_CHANGE": "Thay đổi mẫu",
+    "PLANNED_STOP": "Dừng theo kế hoạch",
+    "PROGRAM_CHANGE": "Thay đổi chương trình",
+    "TOOL_CHANGE": "Thay đổi công cụ",
+    "TEMPORARY_STOP": "Dừng tạm thời"
+  },
+  "buttons": {
+    "filter": "Bộ lọc",
+    "export": "Xuất",
+    "reset": "Đặt lại"
+  },
+  "filterMenu": {
+    "title": "Bộ lọc",
+    "machineLocation": "Vị trí thiết bị",
+    "shift": "Ca làm việc",
+    "oeeGrade": "Cấp độ OEE",
+    "appliedFilters": "Bộ lọc đã áp dụng",
+    "location": "Vị trí",
+    "allLocations": "Tất cả vị trí",
+    "allShifts": "Tất cả ca",
+    "allGrades": "Tất cả cấp độ",
+    "shiftA": "Ca A",
+    "shiftB": "Ca B",
+    "shiftC": "Ca C",
+    "shiftD": "Ca D"
+  },
+  "oeeGrades": {
+    "excellent": "Xuất sắc (≥85%)",
+    "good": "Tốt (75-85%)",
+    "fair": "Trung bình (65-75%)",
+    "poor": "Kém (<65%)"
+  },
+  "chartTypes": {
+    "bar": "Biểu đồ cột",
+    "line": "Biểu đồ đường"
+  },
+  "cardTitles": {
+    "defectRateTrend": "Phân tích xu hướng tỷ lệ lỗi",
+    "qualityPerformance": "Sản xuất tốt và xu hướng tỷ lệ chất lượng",
+    "machineComparison": "Phân tích so sánh hiệu suất thiết bị"
+  },
+  "qualityChart": {
+    "date": "Ngày",
+    "shift": "Ca làm việc",
+    "defectRate": "Tỷ lệ lỗi",
+    "defectQty": "Số lượng lỗi",
+    "totalOutput": "Tổng sản lượng",
+    "targetDefectRate": "Tỷ lệ lỗi mục tiêu (2%)",
+    "avgDefectRate": "Tỷ lệ lỗi trung bình",
+    "maxDefectRate": "Tỷ lệ lỗi cao nhất",
+    "minDefectRate": "Tỷ lệ lỗi thấp nhất",
+    "goodProduction": "Sản lượng tốt",
+    "qualityRate": "Tỷ lệ chất lượng (%)",
+    "qualityRateAxis": "Tỷ lệ chất lượng (%)",
+    "goodProductionAxis": "Sản lượng tốt (cái)",
+    "avgQualityRate": "Tỷ lệ chất lượng trung bình",
+    "totalGoodProduction": "Tổng sản lượng tốt",
+    "totalDefectQty": "Tổng số lượng lỗi",
+    "qualityTrend": "Xu hướng chất lượng",
+    "excellentQuality": "✅ Xuất sắc: Đạt mục tiêu chất lượng (95%)",
+    "warningQuality": "⚠️ Cảnh báo: Cần duy trì tỷ lệ chất lượng trên 90%",
+    "poorQuality": "🔴 Cần cải thiện: Cần nâng cao chất lượng ngay",
+    "currentPeriodAvg": "Tỷ lệ chất lượng trung bình kỳ hiện tại: {{rate}}%",
+    "targetGap": "(Còn thiếu {{gap}}% để đạt mục tiêu 95%)"
+  },
+  "comparisonChart": {
+    "machineSelection": "Chọn thiết bị",
+    "allMachines": "Tất cả thiết bị",
+    "topPerformers": "Thiết bị hiệu suất cao nhất",
+    "bottomPerformers": "Thiết bị hiệu suất thấp nhất",
+    "customSelection": "Lựa chọn tùy chỉnh",
+    "displayCount": "Số lượng hiển thị",
+    "count5": "5 máy",
+    "count10": "10 máy",
+    "count15": "15 máy",
+    "count20": "20 máy",
+    "displayMetrics": "Chỉ số hiển thị",
+    "oee": "OEE",
+    "availability": "Tỷ lệ khả dụng",
+    "performance": "Hiệu suất",
+    "quality": "Chất lượng",
+    "machineName": "Tên thiết bị",
+    "location": "Vị trí",
+    "downtime": "Thời gian ngừng",
+    "defectRate": "Tỷ lệ lỗi",
+    "downtimeHours": "{{hours}} giờ",
+    "avgOEE": "OEE trung bình",
+    "topPerformance": "Hiệu suất cao nhất",
+    "needsImprovement": "Cần cải thiện",
+    "performanceSpread": "Độ lệch hiệu suất"
   }
 }

@@ -45,18 +45,18 @@ interface DowntimeChartProps {
   showTable?: boolean;
 }
 
-// 설비 상태별 한글 이름 및 색상 매핑
-const stateConfig: Record<MachineState, { label: string; color: string }> = {
-  NORMAL_OPERATION: { label: '정상가동', color: '#13c2c2' },
-  MAINTENANCE: { label: '점검중', color: '#1890ff' },
-  PM_MAINTENANCE: { label: 'PM 점검', color: '#fa8c16' },
-  INSPECTION: { label: '검사', color: '#1890ff' },
-  BREAKDOWN_REPAIR: { label: '고장수리', color: '#ff4d4f' },
-  MODEL_CHANGE: { label: '모델교체', color: '#722ed1' },
-  PLANNED_STOP: { label: '계획정지', color: '#8c8c8c' },
-  PROGRAM_CHANGE: { label: '프로그램교체', color: '#13c2c2' },
-  TOOL_CHANGE: { label: '공구교환', color: '#52c41a' },
-  TEMPORARY_STOP: { label: '일시정지', color: '#faad14' },
+// 설비 상태별 색상 매핑
+const stateColors: Record<MachineState, string> = {
+  NORMAL_OPERATION: '#13c2c2',
+  MAINTENANCE: '#1890ff',
+  PM_MAINTENANCE: '#fa8c16',
+  INSPECTION: '#1890ff',
+  BREAKDOWN_REPAIR: '#ff4d4f',
+  MODEL_CHANGE: '#722ed1',
+  PLANNED_STOP: '#8c8c8c',
+  PROGRAM_CHANGE: '#13c2c2',
+  TOOL_CHANGE: '#52c41a',
+  TEMPORARY_STOP: '#faad14',
 };
 
 export const DowntimeChart: React.FC<DowntimeChartProps> = ({
@@ -66,6 +66,11 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   showTable = true
 }) => {
   const { t } = useTranslation();
+
+  // 상태 레이블 번역 함수
+  const getStateLabel = (state: MachineState): string => {
+    return t(`dashboard:downtimeReasons.${state}`) || state;
+  };
   
   // 데이터 로깅 (디버깅용)
   React.useEffect(() => {
@@ -94,14 +99,14 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
 
   // 차트 데이터 구성
   const barChartData = {
-    labels: chartData.map(item => stateConfig[item.state]?.label || item.state),
+    labels: chartData.map(item => getStateLabel(item.state)),
     datasets: [
       {
         type: 'bar' as const,
         label: t('dashboard:chart.downtimeByMinutes'),
         data: chartData.map(item => item.duration),
-        backgroundColor: chartData.map(item => stateConfig[item.state]?.color || '#8c8c8c'),
-        borderColor: chartData.map(item => stateConfig[item.state]?.color || '#8c8c8c'),
+        backgroundColor: chartData.map(item => stateColors[item.state] || '#8c8c8c'),
+        borderColor: chartData.map(item => stateColors[item.state] || '#8c8c8c'),
         borderWidth: 1,
         yAxisID: 'y',
       },
@@ -202,8 +207,8 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       dataIndex: 'state',
       key: 'state',
       render: (state: MachineState) => (
-        <span style={{ color: stateConfig[state]?.color || '#8c8c8c', fontWeight: 'bold' }}>
-          {stateConfig[state]?.label || state}
+        <span style={{ color: stateColors[state] || '#8c8c8c', fontWeight: 'bold' }}>
+          {getStateLabel(state)}
         </span>
       ),
     },
@@ -282,7 +287,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
         <Col>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#52c41a' }}>
-              {sortedData.length > 0 ? (stateConfig[sortedData[0].state]?.label || sortedData[0].state) : '-'}
+              {sortedData.length > 0 ? getStateLabel(sortedData[0].state) : '-'}
             </div>
             <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.mainCause')}</div>
           </div>

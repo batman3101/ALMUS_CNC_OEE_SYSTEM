@@ -15,6 +15,7 @@ import {
 } from 'chart.js';
 import { Card, Typography, Row, Col, Statistic } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { useTranslation } from '@/hooks/useTranslation';
 
 ChartJS.register(
   CategoryScale,
@@ -47,6 +48,8 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
   height = 300,
   period = 'month'
 }) => {
+  const { t } = useTranslation();
+
   // 데이터 가공
   const chartData = React.useMemo(() => {
     return data.map(item => {
@@ -100,7 +103,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
     datasets: [
       {
         type: 'bar' as const,
-        label: '양품 생산량',
+        label: t('dashboard:qualityChart.goodProduction'),
         data: chartData.map(item => item.goodQty),
         backgroundColor: 'rgba(82, 196, 26, 0.6)',
         borderColor: 'rgba(82, 196, 26, 1)',
@@ -109,7 +112,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
       },
       {
         type: 'line' as const,
-        label: '품질률 (%)',
+        label: t('dashboard:qualityChart.qualityRate'),
         data: chartData.map(item => item.qualityRate),
         borderColor: '#1890ff',
         backgroundColor: 'rgba(24, 144, 255, 0.1)',
@@ -152,7 +155,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
             if (context.dataset.type === 'line') {
               return `${label}: ${value.toFixed(1)}%`;
             } else {
-              return `${label}: ${value.toLocaleString()}개`;
+              return `${label}: ${value.toLocaleString()}${t('dashboard:chart.unit')}`;
             }
           },
         },
@@ -163,7 +166,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         display: true,
         title: {
           display: true,
-          text: '날짜',
+          text: t('dashboard:qualityChart.date'),
         },
         grid: {
           display: true,
@@ -176,7 +179,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         position: 'left',
         title: {
           display: true,
-          text: '양품 생산량 (개)',
+          text: t('dashboard:qualityChart.goodProductionAxis'),
         },
         beginAtZero: true,
         grid: {
@@ -189,7 +192,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         position: 'right',
         title: {
           display: true,
-          text: '품질률 (%)',
+          text: t('dashboard:qualityChart.qualityRateAxis'),
         },
         min: 0,
         max: 100,
@@ -217,7 +220,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         <Col xs={12} sm={6}>
           <div style={{ textAlign: 'center' }}>
             <Statistic
-              title="평균 품질률"
+              title={t('dashboard:qualityChart.avgQualityRate')}
               value={stats.avgQualityRate.toFixed(1)}
               suffix="%"
               valueStyle={{
@@ -232,9 +235,9 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         <Col xs={12} sm={6}>
           <div style={{ textAlign: 'center' }}>
             <Statistic
-              title="총 양품 생산"
+              title={t('dashboard:qualityChart.totalGoodProduction')}
               value={stats.totalGoodQty}
-              suffix="개"
+              suffix={t('dashboard:chart.unit')}
               valueStyle={{ color: '#52c41a', fontSize: 20 }}
             />
           </div>
@@ -243,9 +246,9 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         <Col xs={12} sm={6}>
           <div style={{ textAlign: 'center' }}>
             <Statistic
-              title="총 불량 수량"
+              title={t('dashboard:qualityChart.totalDefectQty')}
               value={stats.totalDefectQty}
-              suffix="개"
+              suffix={t('dashboard:chart.unit')}
               valueStyle={{ color: '#ff4d4f', fontSize: 20 }}
             />
           </div>
@@ -254,7 +257,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         <Col xs={12} sm={6}>
           <div style={{ textAlign: 'center' }}>
             <Statistic
-              title="품질률 추세"
+              title={t('dashboard:qualityChart.qualityTrend')}
               value={Math.abs(stats.qualityTrend).toFixed(1)}
               suffix="%"
               prefix={stats.qualityTrend >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
@@ -279,14 +282,14 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
       }}>
         <Text strong>
           {stats.avgQualityRate >= 95
-            ? '✅ 우수: 품질 목표(95%) 달성'
+            ? t('dashboard:qualityChart.excellentQuality')
             : stats.avgQualityRate >= 90
-            ? '⚠️ 주의: 품질률 90% 이상 유지 필요'
-            : '🔴 개선 필요: 품질률 향상이 시급합니다'}
+            ? t('dashboard:qualityChart.warningQuality')
+            : t('dashboard:qualityChart.poorQuality')}
         </Text>
         <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-          현재 기간 평균 품질률: {stats.avgQualityRate.toFixed(1)}%
-          {stats.avgQualityRate < 95 && ` (목표 95%까지 ${(95 - stats.avgQualityRate).toFixed(1)}% 부족)`}
+          {t('dashboard:qualityChart.currentPeriodAvg', { rate: stats.avgQualityRate.toFixed(1) })}
+          {stats.avgQualityRate < 95 && ` ${t('dashboard:qualityChart.targetGap', { gap: (95 - stats.avgQualityRate).toFixed(1) })}`}
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Card } from 'antd';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface DefectRateTrendChartProps {
   data: Array<{
@@ -18,11 +19,13 @@ interface DefectRateTrendChartProps {
   period?: 'week' | 'month' | 'quarter';
 }
 
-const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({ 
-  data, 
+const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
+  data,
   height = 300,
   period = 'month'
 }) => {
+  const { t } = useTranslation();
+
   const chartData = data.map(item => ({
     date: item.date,
     defectRate: (item.defect_rate * 100), // 백분율로 변환
@@ -38,24 +41,28 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div style={{ 
-          backgroundColor: '#1f1f1f', 
+        <div style={{
+          backgroundColor: '#1f1f1f',
           color: 'white',
           padding: '12px',
           border: '1px solid #444',
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
         }}>
-          <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0' }}>{`날짜: ${label}`}</p>
-          <p style={{ fontSize: '14px', margin: '0 0 4px 0' }}>{`교대: ${data.shift}교대`}</p>
+          <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0' }}>
+            {t('dashboard:qualityChart.date')}: {label}
+          </p>
+          <p style={{ fontSize: '14px', margin: '0 0 4px 0' }}>
+            {t('dashboard:qualityChart.shift')}: {data.shift}
+          </p>
           <p style={{ fontSize: '14px', margin: '0 0 4px 0', color: payload[0].color }}>
-            {`불량률: ${data.defectRate.toFixed(2)}%`}
+            {t('dashboard:qualityChart.defectRate')}: {data.defectRate.toFixed(2)}%
           </p>
           <p style={{ fontSize: '14px', margin: '0 0 4px 0', color: '#ccc' }}>
-            {`불량 수량: ${data.defectQty}개`}
+            {t('dashboard:qualityChart.defectQty')}: {data.defectQty}{t('dashboard:chart.unit')}
           </p>
           <p style={{ fontSize: '14px', margin: '0', color: '#ccc' }}>
-            {`총 생산량: ${data.outputQty}개`}
+            {t('dashboard:qualityChart.totalOutput')}: {data.outputQty}{t('dashboard:chart.unit')}
           </p>
         </div>
       );
@@ -89,11 +96,11 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
             <Tooltip content={<CustomTooltip />} />
             
             {/* 목표 불량률 기준선 */}
-            <ReferenceLine 
-              y={targetDefectRate} 
-              stroke="#ff4d4f" 
+            <ReferenceLine
+              y={targetDefectRate}
+              stroke="#ff4d4f"
               strokeDasharray="5 5"
-              label={{ value: "목표 불량률 (2%)", position: "topRight" }}
+              label={{ value: t('dashboard:qualityChart.targetDefectRate'), position: "topRight" }}
             />
             
             <Line
@@ -110,31 +117,31 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
       </div>
       
       {/* 요약 정보 - 차트 컨테이너 내부로 이동 */}
-      <div style={{ 
+      <div style={{
         padding: '12px 16px',
-        display: 'flex', 
-        justifyContent: 'space-around', 
+        display: 'flex',
+        justifyContent: 'space-around',
         fontSize: '12px',
         color: '#ccc',
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
         borderTop: '1px solid rgba(255, 255, 255, 0.1)'
       }}>
         <div>
-          <span style={{ fontWeight: 'bold' }}>평균 불량률:</span>{' '}
-          <span style={{ 
-            color: chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length > targetDefectRate ? '#ff4d4f' : '#52c41a' 
+          <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.avgDefectRate')}:</span>{' '}
+          <span style={{
+            color: chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length > targetDefectRate ? '#ff4d4f' : '#52c41a'
           }}>
             {(chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length).toFixed(2)}%
           </span>
         </div>
         <div>
-          <span style={{ fontWeight: 'bold' }}>최고 불량률:</span>{' '}
+          <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.maxDefectRate')}:</span>{' '}
           <span style={{ color: '#ff4d4f' }}>
             {Math.max(...chartData.map(item => item.defectRate)).toFixed(2)}%
           </span>
         </div>
         <div>
-          <span style={{ fontWeight: 'bold' }}>최저 불량률:</span>{' '}
+          <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.minDefectRate')}:</span>{' '}
           <span style={{ color: '#52c41a' }}>
             {Math.min(...chartData.map(item => item.defectRate)).toFixed(2)}%
           </span>

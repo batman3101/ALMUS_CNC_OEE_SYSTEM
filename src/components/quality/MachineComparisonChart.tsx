@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import { Select, Space, Checkbox, Card, Row, Col, Divider } from 'antd';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface MachineComparisonChartProps {
   data: Array<{
@@ -24,23 +25,25 @@ interface MachineComparisonChartProps {
   selectedMachines?: string[];
 }
 
-const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({ 
-  data, 
+const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
+  data,
   height = 400,
   chartType = 'bar',
   onChartTypeChange,
   selectedMachines = []
 }) => {
+  const { t } = useTranslation();
+
   // 설비 필터 상태
   const [machineFilter, setMachineFilter] = useState<'all' | 'top10' | 'bottom10' | 'custom'>('top10');
   const [displayCount, setDisplayCount] = useState<number>(10);
-  
+
   // 표시할 지표 체크박스 상태
   const [visibleMetrics, setVisibleMetrics] = useState({
     OEE: true,
-    가용성: true,
-    성능: true,
-    품질: true
+    availability: true,
+    performance: true,
+    quality: true
   });
 
   // 설비 필터링 로직
@@ -61,39 +64,57 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
     return filteredData.map(item => ({
       name: item.machine,
       OEE: Math.round(item.avgOEE * 100),
-      가용성: Math.round(item.availability * 100),
-      성능: Math.round(item.performance * 100),
-      품질: Math.round(item.quality * 100),
+      availability: Math.round(item.availability * 100),
+      performance: Math.round(item.performance * 100),
+      quality: Math.round(item.quality * 100),
       location: item.location,
       downtimeHours: item.downtimeHours,
       defectRate: Math.round(item.defectRate * 1000) / 10
     }));
   }, [data, selectedMachines, machineFilter, displayCount]);
 
+  const getMetricLabel = (key: string): string => {
+    const labels: Record<string, string> = {
+      'OEE': t('dashboard:comparisonChart.oee'),
+      'availability': t('dashboard:comparisonChart.availability'),
+      'performance': t('dashboard:comparisonChart.performance'),
+      'quality': t('dashboard:comparisonChart.quality')
+    };
+    return labels[key] || key;
+  };
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div style={{ 
-          backgroundColor: '#1f1f1f', 
+        <div style={{
+          backgroundColor: '#1f1f1f',
           color: 'white',
           padding: '12px',
           border: '1px solid #444',
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
         }}>
-          <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0' }}>{`설비명: ${label}`}</p>
-          <p style={{ fontSize: '14px', margin: '0 0 8px 0', color: '#ccc' }}>{`위치: ${data.location}`}</p>
+          <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0' }}>
+            {t('dashboard:comparisonChart.machineName')}: {label}
+          </p>
+          <p style={{ fontSize: '14px', margin: '0 0 8px 0', color: '#ccc' }}>
+            {t('dashboard:comparisonChart.location')}: {data.location}
+          </p>
           <div style={{ margin: '8px 0' }}>
             {payload.map((entry: any, index: number) => (
               <p key={index} style={{ fontSize: '14px', margin: '0 0 4px 0', color: entry.color }}>
-                {`${entry.dataKey}: ${entry.value}%`}
+                {getMetricLabel(entry.dataKey)}: {entry.value}%
               </p>
             ))}
           </div>
           <div style={{ marginTop: '8px', fontSize: '12px', color: '#aaa' }}>
-            <p style={{ margin: '0 0 2px 0' }}>{`다운타임: ${data.downtimeHours}시간`}</p>
-            <p style={{ margin: '0' }}>{`불량률: ${data.defectRate}%`}</p>
+            <p style={{ margin: '0 0 2px 0' }}>
+              {t('dashboard:comparisonChart.downtime')}: {t('dashboard:comparisonChart.downtimeHours', { hours: data.downtimeHours })}
+            </p>
+            <p style={{ margin: '0' }}>
+              {t('dashboard:comparisonChart.defectRate')}: {data.defectRate}%
+            </p>
           </div>
         </div>
       );
@@ -131,10 +152,10 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
             wrapperStyle={{ paddingTop: '20px' }}
             iconType="rect"
           />
-          {visibleMetrics.OEE && <Bar dataKey="OEE" fill="#ff7875" name="OEE" />}
-          {visibleMetrics.가용성 && <Bar dataKey="가용성" fill="#40a9ff" name="가용성" />}
-          {visibleMetrics.성능 && <Bar dataKey="성능" fill="#52c41a" name="성능" />}
-          {visibleMetrics.품질 && <Bar dataKey="품질" fill="#faad14" name="품질" />}
+          {visibleMetrics.OEE && <Bar dataKey="OEE" fill="#ff7875" name={t('dashboard:comparisonChart.oee')} />}
+          {visibleMetrics.availability && <Bar dataKey="availability" fill="#40a9ff" name={t('dashboard:comparisonChart.availability')} />}
+          {visibleMetrics.performance && <Bar dataKey="performance" fill="#52c41a" name={t('dashboard:comparisonChart.performance')} />}
+          {visibleMetrics.quality && <Bar dataKey="quality" fill="#faad14" name={t('dashboard:comparisonChart.quality')} />}
         </BarChart>
       );
     } else {
@@ -162,43 +183,43 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
             iconType="line"
           />
           {visibleMetrics.OEE && (
-            <Line 
-              type="monotone" 
-              dataKey="OEE" 
-              stroke="#ff7875" 
+            <Line
+              type="monotone"
+              dataKey="OEE"
+              stroke="#ff7875"
               strokeWidth={3}
               dot={{ fill: '#ff7875', strokeWidth: 2, r: 5 }}
-              name="OEE"
+              name={t('dashboard:comparisonChart.oee')}
             />
           )}
-          {visibleMetrics.가용성 && (
-            <Line 
-              type="monotone" 
-              dataKey="가용성" 
-              stroke="#40a9ff" 
+          {visibleMetrics.availability && (
+            <Line
+              type="monotone"
+              dataKey="availability"
+              stroke="#40a9ff"
               strokeWidth={3}
               dot={{ fill: '#40a9ff', strokeWidth: 2, r: 5 }}
-              name="가용성"
+              name={t('dashboard:comparisonChart.availability')}
             />
           )}
-          {visibleMetrics.성능 && (
-            <Line 
-              type="monotone" 
-              dataKey="성능" 
-              stroke="#52c41a" 
+          {visibleMetrics.performance && (
+            <Line
+              type="monotone"
+              dataKey="performance"
+              stroke="#52c41a"
               strokeWidth={3}
               dot={{ fill: '#52c41a', strokeWidth: 2, r: 5 }}
-              name="성능"
+              name={t('dashboard:comparisonChart.performance')}
             />
           )}
-          {visibleMetrics.품질 && (
-            <Line 
-              type="monotone" 
-              dataKey="품질" 
-              stroke="#faad14" 
+          {visibleMetrics.quality && (
+            <Line
+              type="monotone"
+              dataKey="quality"
+              stroke="#faad14"
               strokeWidth={3}
               dot={{ fill: '#faad14', strokeWidth: 2, r: 5 }}
-              name="품질"
+              name={t('dashboard:comparisonChart.quality')}
             />
           )}
         </LineChart>
@@ -236,16 +257,16 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
         <Row gutter={[16, 16]} align="middle">
           <Col span={8}>
             <Space direction="vertical" size={4}>
-              <span style={{ fontSize: '12px', color: '#ccc' }}>설비 선택</span>
+              <span style={{ fontSize: '12px', color: '#ccc' }}>{t('dashboard:comparisonChart.machineSelection')}</span>
               <Select
                 value={machineFilter}
                 onChange={setMachineFilter}
                 style={{ width: '100%' }}
                 options={[
-                  { label: '전체 설비', value: 'all' },
-                  { label: '최고 성과 설비', value: 'top10' },
-                  { label: '최저 성과 설비', value: 'bottom10' },
-                  { label: '사용자 선택', value: 'custom' }
+                  { label: t('dashboard:comparisonChart.allMachines'), value: 'all' },
+                  { label: t('dashboard:comparisonChart.topPerformers'), value: 'top10' },
+                  { label: t('dashboard:comparisonChart.bottomPerformers'), value: 'bottom10' },
+                  { label: t('dashboard:comparisonChart.customSelection'), value: 'custom' }
                 ]}
               />
             </Space>
@@ -254,16 +275,16 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
           {(machineFilter === 'top10' || machineFilter === 'bottom10') && (
             <Col span={4}>
               <Space direction="vertical" size={4}>
-                <span style={{ fontSize: '12px', color: '#ccc' }}>표시 개수</span>
+                <span style={{ fontSize: '12px', color: '#ccc' }}>{t('dashboard:comparisonChart.displayCount')}</span>
                 <Select
                   value={displayCount}
                   onChange={setDisplayCount}
                   style={{ width: '100%' }}
                   options={[
-                    { label: '5개', value: 5 },
-                    { label: '10개', value: 10 },
-                    { label: '15개', value: 15 },
-                    { label: '20개', value: 20 }
+                    { label: t('dashboard:comparisonChart.count5'), value: 5 },
+                    { label: t('dashboard:comparisonChart.count10'), value: 10 },
+                    { label: t('dashboard:comparisonChart.count15'), value: 15 },
+                    { label: t('dashboard:comparisonChart.count20'), value: 20 }
                   ]}
                 />
               </Space>
@@ -272,35 +293,35 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
           
           <Col span={12}>
             <Space direction="vertical" size={4}>
-              <span style={{ fontSize: '12px', color: '#ccc' }}>표시 지표</span>
+              <span style={{ fontSize: '12px', color: '#ccc' }}>{t('dashboard:comparisonChart.displayMetrics')}</span>
               <Space wrap>
                 <Checkbox
                   checked={visibleMetrics.OEE}
                   onChange={(e) => setVisibleMetrics(prev => ({ ...prev, OEE: e.target.checked }))}
                   style={{ color: '#ff7875' }}
                 >
-                  <span style={{ color: '#ff7875' }}>OEE</span>
+                  <span style={{ color: '#ff7875' }}>{t('dashboard:comparisonChart.oee')}</span>
                 </Checkbox>
                 <Checkbox
-                  checked={visibleMetrics.가용성}
-                  onChange={(e) => setVisibleMetrics(prev => ({ ...prev, 가용성: e.target.checked }))}
+                  checked={visibleMetrics.availability}
+                  onChange={(e) => setVisibleMetrics(prev => ({ ...prev, availability: e.target.checked }))}
                   style={{ color: '#40a9ff' }}
                 >
-                  <span style={{ color: '#40a9ff' }}>가용성</span>
+                  <span style={{ color: '#40a9ff' }}>{t('dashboard:comparisonChart.availability')}</span>
                 </Checkbox>
                 <Checkbox
-                  checked={visibleMetrics.성능}
-                  onChange={(e) => setVisibleMetrics(prev => ({ ...prev, 성능: e.target.checked }))}
+                  checked={visibleMetrics.performance}
+                  onChange={(e) => setVisibleMetrics(prev => ({ ...prev, performance: e.target.checked }))}
                   style={{ color: '#52c41a' }}
                 >
-                  <span style={{ color: '#52c41a' }}>성능</span>
+                  <span style={{ color: '#52c41a' }}>{t('dashboard:comparisonChart.performance')}</span>
                 </Checkbox>
                 <Checkbox
-                  checked={visibleMetrics.품질}
-                  onChange={(e) => setVisibleMetrics(prev => ({ ...prev, 품질: e.target.checked }))}
+                  checked={visibleMetrics.quality}
+                  onChange={(e) => setVisibleMetrics(prev => ({ ...prev, quality: e.target.checked }))}
                   style={{ color: '#faad14' }}
                 >
-                  <span style={{ color: '#faad14' }}>품질</span>
+                  <span style={{ color: '#faad14' }}>{t('dashboard:comparisonChart.quality')}</span>
                 </Checkbox>
               </Space>
             </Space>
@@ -317,8 +338,8 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
       
       {/* 요약 통계 */}
       {statsInfo && (
-        <div style={{ 
-          marginTop: 16, 
+        <div style={{
+          marginTop: 16,
           padding: '12px 16px',
           backgroundColor: 'rgba(255,255,255,0.05)',
           borderRadius: '6px',
@@ -328,26 +349,26 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
           color: '#ccc'
         }}>
           <div>
-            <span style={{ fontWeight: 'bold' }}>평균 OEE:</span>{' '}
+            <span style={{ fontWeight: 'bold' }}>{t('dashboard:comparisonChart.avgOEE')}:</span>{' '}
             <span style={{ color: '#1890ff', fontWeight: 'bold' }}>{statsInfo.avgOEE}%</span>
           </div>
           <div>
-            <span style={{ fontWeight: 'bold' }}>최고 성과:</span>{' '}
+            <span style={{ fontWeight: 'bold' }}>{t('dashboard:comparisonChart.topPerformance')}:</span>{' '}
             <span style={{ color: '#52c41a', fontWeight: 'bold' }}>
               {statsInfo.bestMachine} ({statsInfo.maxOEE}%)
             </span>
           </div>
           <div>
-            <span style={{ fontWeight: 'bold' }}>개선 필요:</span>{' '}
+            <span style={{ fontWeight: 'bold' }}>{t('dashboard:comparisonChart.needsImprovement')}:</span>{' '}
             <span style={{ color: '#ff4d4f', fontWeight: 'bold' }}>
               {statsInfo.worstMachine} ({statsInfo.minOEE}%)
             </span>
           </div>
           <div>
-            <span style={{ fontWeight: 'bold' }}>성과 편차:</span>{' '}
-            <span style={{ 
-              color: parseFloat(statsInfo.spread) > 20 ? '#ff4d4f' : '#faad14', 
-              fontWeight: 'bold' 
+            <span style={{ fontWeight: 'bold' }}>{t('dashboard:comparisonChart.performanceSpread')}:</span>{' '}
+            <span style={{
+              color: parseFloat(statsInfo.spread) > 20 ? '#ff4d4f' : '#faad14',
+              fontWeight: 'bold'
             }}>
               {statsInfo.spread}%
             </span>

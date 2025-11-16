@@ -291,6 +291,104 @@
     "machineStatus": "설비 현황",
     "realtimeUpdate": "실시간 업데이트",
     "machinePerformanceAnalysis": "설비별 성능 분석",
-    "all": "전체"
+    "all": "전체",
+    "itemsRange": "{{start}}-{{end}} / {{total}}개 항목"
+  },
+  "downtimeReasons": {
+    "NORMAL_OPERATION": "정상가동",
+    "MAINTENANCE": "점검중",
+    "PM_MAINTENANCE": "PM 점검",
+    "INSPECTION": "검사",
+    "BREAKDOWN_REPAIR": "고장수리",
+    "MODEL_CHANGE": "모델교체",
+    "PLANNED_STOP": "계획정지",
+    "PROGRAM_CHANGE": "프로그램교체",
+    "TOOL_CHANGE": "공구교환",
+    "TEMPORARY_STOP": "일시정지"
+  },
+  "buttons": {
+    "filter": "필터",
+    "export": "내보내기",
+    "reset": "초기화"
+  },
+  "filterMenu": {
+    "title": "필터",
+    "machineLocation": "설비 위치",
+    "shift": "교대",
+    "oeeGrade": "OEE 성과 등급",
+    "appliedFilters": "적용된 필터",
+    "location": "위치",
+    "allLocations": "전체 위치",
+    "allShifts": "전체 교대",
+    "allGrades": "전체 등급",
+    "shiftA": "A교대",
+    "shiftB": "B교대",
+    "shiftC": "C교대",
+    "shiftD": "D교대"
+  },
+  "oeeGrades": {
+    "excellent": "우수 (85% 이상)",
+    "good": "양호 (75-85%)",
+    "fair": "보통 (65-75%)",
+    "poor": "미흡 (65% 미만)"
+  },
+  "chartTypes": {
+    "bar": "막대 차트",
+    "line": "선 차트"
+  },
+  "cardTitles": {
+    "defectRateTrend": "불량률 추세 분석",
+    "qualityPerformance": "양품 생산 및 품질률 추이",
+    "machineComparison": "설비간 성능 비교 분석"
+  },
+  "qualityChart": {
+    "date": "날짜",
+    "shift": "교대",
+    "defectRate": "불량률",
+    "defectQty": "불량 수량",
+    "totalOutput": "총 생산량",
+    "targetDefectRate": "목표 불량률 (2%)",
+    "avgDefectRate": "평균 불량률",
+    "maxDefectRate": "최고 불량률",
+    "minDefectRate": "최저 불량률",
+    "goodProduction": "양품 생산량",
+    "qualityRate": "품질률 (%)",
+    "qualityRateAxis": "품질률 (%)",
+    "goodProductionAxis": "양품 생산량 (개)",
+    "avgQualityRate": "평균 품질률",
+    "totalGoodProduction": "총 양품 생산",
+    "totalDefectQty": "총 불량 수량",
+    "qualityTrend": "품질률 추세",
+    "excellentQuality": "✅ 우수: 품질 목표(95%) 달성",
+    "warningQuality": "⚠️ 주의: 품질률 90% 이상 유지 필요",
+    "poorQuality": "🔴 개선 필요: 품질률 향상이 시급합니다",
+    "currentPeriodAvg": "현재 기간 평균 품질률: {{rate}}%",
+    "targetGap": "(목표 95%까지 {{gap}}% 부족)"
+  },
+  "comparisonChart": {
+    "machineSelection": "설비 선택",
+    "allMachines": "전체 설비",
+    "topPerformers": "최고 성과 설비",
+    "bottomPerformers": "최저 성과 설비",
+    "customSelection": "사용자 선택",
+    "displayCount": "표시 개수",
+    "count5": "5개",
+    "count10": "10개",
+    "count15": "15개",
+    "count20": "20개",
+    "displayMetrics": "표시 지표",
+    "oee": "OEE",
+    "availability": "가용성",
+    "performance": "성능",
+    "quality": "품질",
+    "machineName": "설비명",
+    "location": "위치",
+    "downtime": "다운타임",
+    "defectRate": "불량률",
+    "downtimeHours": "{{hours}}시간",
+    "avgOEE": "평균 OEE",
+    "topPerformance": "최고 성과",
+    "needsImprovement": "개선 필요",
+    "performanceSpread": "성과 편차"
   }
 }

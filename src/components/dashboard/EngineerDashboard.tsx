@@ -56,10 +56,10 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   };
 
   const oeeGradeLabels = {
-    excellent: '우수 (85% 이상)',
-    good: '양호 (75-85%)',
-    fair: '보통 (65-75%)',
-    poor: '미흡 (65% 미만)'
+    excellent: t('dashboard:oeeGrades.excellent'),
+    good: t('dashboard:oeeGrades.good'),
+    fair: t('dashboard:oeeGrades.fair'),
+    poor: t('dashboard:oeeGrades.poor')
   };
 
   // 실시간 데이터 훅 사용
@@ -79,16 +79,16 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     // machines가 아직 로드되지 않았을 경우 기본값 반환
     if (!machines || machines.length === 0) {
       return {
-        locations: [{ value: 'all', label: '전체 위치', count: 0 }],
+        locations: [{ value: 'all', label: t('dashboard:filterMenu.allLocations'), count: 0 }],
         shifts: [
-          { value: 'all', label: '전체 교대', count: 0 },
-          { value: 'A', label: 'A교대', count: 0 },
-          { value: 'B', label: 'B교대', count: 0 },
-          { value: 'C', label: 'C교대', count: 0 },
-          { value: 'D', label: 'D교대', count: 0 }
+          { value: 'all', label: t('dashboard:filterMenu.allShifts'), count: 0 },
+          { value: 'A', label: t('dashboard:filterMenu.shiftA'), count: 0 },
+          { value: 'B', label: t('dashboard:filterMenu.shiftB'), count: 0 },
+          { value: 'C', label: t('dashboard:filterMenu.shiftC'), count: 0 },
+          { value: 'D', label: t('dashboard:filterMenu.shiftD'), count: 0 }
         ],
         oeeGrades: [
-          { value: 'all', label: '전체 등급', count: 0 },
+          { value: 'all', label: t('dashboard:filterMenu.allGrades'), count: 0 },
           { value: 'excellent', label: oeeGradeLabels.excellent, count: 0 },
           { value: 'good', label: oeeGradeLabels.good, count: 0 },
           { value: 'fair', label: oeeGradeLabels.fair, count: 0 },
@@ -110,7 +110,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     
     return {
       locations: [
-        { value: 'all', label: '전체 위치', count: machines.length },
+        { value: 'all', label: t('dashboard:filterMenu.allLocations'), count: machines.length },
         ...locations.map(loc => ({
           value: loc,
           label: loc,
@@ -118,14 +118,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         }))
       ],
       shifts: [
-        { value: 'all', label: '전체 교대', count: 0 },
-        { value: 'A', label: 'A교대', count: 0 },
-        { value: 'B', label: 'B교대', count: 0 },
-        { value: 'C', label: 'C교대', count: 0 },
-        { value: 'D', label: 'D교대', count: 0 }
+        { value: 'all', label: t('dashboard:filterMenu.allShifts'), count: 0 },
+        { value: 'A', label: t('dashboard:filterMenu.shiftA'), count: 0 },
+        { value: 'B', label: t('dashboard:filterMenu.shiftB'), count: 0 },
+        { value: 'C', label: t('dashboard:filterMenu.shiftC'), count: 0 },
+        { value: 'D', label: t('dashboard:filterMenu.shiftD'), count: 0 }
       ],
       oeeGrades: [
-        { value: 'all', label: '전체 등급', count: machines.length },
+        { value: 'all', label: t('dashboard:filterMenu.allGrades'), count: machines.length },
         { value: 'excellent', label: oeeGradeLabels.excellent, count: oeeGrades.excellent },
         { value: 'good', label: oeeGradeLabels.good, count: oeeGrades.good },
         { value: 'fair', label: oeeGradeLabels.fair, count: oeeGrades.fair },
@@ -194,15 +194,15 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const filterMenu = (
     <div style={{ width: 320, padding: '12px' }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600, fontSize: '14px' }}>필터</span>
+        <span style={{ fontWeight: 600, fontSize: '14px' }}>{t('dashboard:filterMenu.title')}</span>
         <Button type="link" size="small" onClick={resetFilters}>
-          초기화
+          {t('dashboard:buttons.reset')}
         </Button>
       </div>
 
       {/* 위치 필터 */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>설비 위치</div>
+        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>{t('dashboard:filterMenu.machineLocation')}</div>
         <Space wrap size={[4, 4]}>
           {filterOptions.locations.map(option => (
             <Tag
@@ -220,7 +220,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
       {/* 교대 필터 */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>교대</div>
+        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>{t('dashboard:filterMenu.shift')}</div>
         <Space wrap size={[4, 4]}>
           {filterOptions.shifts.map(option => (
             <Tag
@@ -238,7 +238,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
       {/* OEE 등급 필터 */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>OEE 성과 등급</div>
+        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>{t('dashboard:filterMenu.oeeGrade')}</div>
         <Space wrap size={[4, 4]}>
           {filterOptions.oeeGrades.map(option => (
             <Tag
@@ -265,21 +265,21 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       {/* 활성 필터 표시 */}
       {activeFilterCount > 0 && (
         <div style={{ paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: 8 }}>적용된 필터</div>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: 8 }}>{t('dashboard:filterMenu.appliedFilters')}</div>
           <Space wrap size={[4, 4]}>
             {!selectedLocations.includes('all') && (
               <Tag color="blue" closable onClose={() => setSelectedLocations(['all'])}>
-                위치: {selectedLocations.join(', ')}
+                {t('dashboard:filterMenu.location')}: {selectedLocations.join(', ')}
               </Tag>
             )}
             {!selectedShifts.includes('all') && (
               <Tag color="green" closable onClose={() => setSelectedShifts(['all'])}>
-                교대: {selectedShifts.join(', ')}
+                {t('dashboard:filterMenu.shift')}: {selectedShifts.join(', ')}
               </Tag>
             )}
             {!selectedOEEGrades.includes('all') && (
               <Tag color="purple" closable onClose={() => setSelectedOEEGrades(['all'])}>
-                OEE등급: {selectedOEEGrades.map(grade => oeeGradeLabels[grade as keyof typeof oeeGradeLabels] || grade).join(', ')}
+                {t('dashboard:filterMenu.oeeGrade')}: {selectedOEEGrades.map(grade => oeeGradeLabels[grade as keyof typeof oeeGradeLabels] || grade).join(', ')}
               </Tag>
             )}
           </Space>
@@ -667,28 +667,28 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
               }
             }}
             format="YYYY-MM-DD"
-            placeholder={['시작일', '종료일']}
+            placeholder={[t('dashboard:time.startDate'), t('dashboard:time.endDate')]}
             style={{ width: 200 }}
           />
-          <Dropdown 
-            overlay={filterMenu} 
+          <Dropdown
+            overlay={filterMenu}
             trigger={['click']}
             open={filterDropdownVisible}
             onOpenChange={setFilterDropdownVisible}
             placement="bottomLeft"
           >
             <Button icon={<FilterOutlined />} style={{ position: 'relative' }}>
-              필터
+              {t('dashboard:buttons.filter')}
               {activeFilterCount > 0 && (
-                <Badge 
-                  count={activeFilterCount} 
-                  size="small" 
-                  style={{ 
-                    position: 'absolute', 
-                    top: -5, 
-                    right: -5, 
-                    backgroundColor: '#1890ff' 
-                  }} 
+                <Badge
+                  count={activeFilterCount}
+                  size="small"
+                  style={{
+                    position: 'absolute',
+                    top: -5,
+                    right: -5,
+                    backgroundColor: '#1890ff'
+                  }}
                 />
               )}
             </Button>
@@ -703,11 +703,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           >
             {t('dashboard:adminDashboard.refresh')}
           </Button>
-          <Button 
+          <Button
             icon={<DownloadOutlined />}
             onClick={handleExport}
           >
-            내보내기
+            {t('dashboard:buttons.export')}
           </Button>
         </Space>
       </div>
@@ -810,14 +810,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                 <Table
                   columns={analysisColumns}
                   dataSource={filteredAnalysisData}
-                  pagination={{ 
+                  pagination={{
                     pageSize: pageSize,
                     showSizeChanger: true,
                     pageSizeOptions: ['10', '20', '30', '50'],
                     onShowSizeChange: (current, size) => setPageSize(size),
                     showQuickJumper: true,
-                    showTotal: (total, range) => 
-                      `${range[0]}-${range[1]} / ${total}개 항목`
+                    showTotal: (total, range) =>
+                      t('dashboard:table.itemsRange', { start: range[0], end: range[1], total })
                   }}
                   scroll={{ x: 1000 }}
                   size="small"
@@ -862,8 +862,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
-                  <Card title="불량률 추세 분석">
-                    <DefectRateTrendChart 
+                  <Card title={t('dashboard:cardTitles.defectRateTrend')}>
+                    <DefectRateTrendChart
                       data={processedData.productionData}
                       height={300}
                       period={selectedPeriod}
@@ -871,7 +871,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card title="양품 생산 및 품질률 추이">
+                  <Card title={t('dashboard:cardTitles.qualityPerformance')}>
                     <QualityPerformanceChart
                       data={processedData.productionData}
                       height={300}
@@ -888,7 +888,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24}>
-                  <Card title="설비간 성능 비교 분석" extra={
+                  <Card title={t('dashboard:cardTitles.machineComparison')} extra={
                     <Space>
                       <RangePicker
                         value={customDateRange ? [dayjs(customDateRange[0]), dayjs(customDateRange[1])] : null}
@@ -900,14 +900,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                           }
                         }}
                         format="YYYY-MM-DD"
-                        placeholder={['시작일', '종료일']}
+                        placeholder={[t('dashboard:time.startDate'), t('dashboard:time.endDate')]}
                       />
                       <Select
                         value={chartType}
                         onChange={setChartType}
                         options={[
-                          { label: '막대 차트', value: 'bar' },
-                          { label: '선 차트', value: 'line' }
+                          { label: t('dashboard:chartTypes.bar'), value: 'bar' },
+                          { label: t('dashboard:chartTypes.line'), value: 'line' }
                         ]}
                         style={{ width: 100 }}
                       />

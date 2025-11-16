@@ -78,6 +78,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             label: t('nav.dataInput'),
           },
           {
+            key: '/model-info',
+            icon: <AppstoreOutlined />,
+            label: t('nav.modelInfo'),
+          },
+          {
             key: '/reports',
             icon: <BarChartOutlined />,
             label: t('nav.reports'),

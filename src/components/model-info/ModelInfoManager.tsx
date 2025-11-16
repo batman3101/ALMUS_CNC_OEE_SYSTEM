@@ -157,11 +157,11 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           .eq('id', editingProcess.id);
 
         if (error) throw error;
-        message.success('공정이 수정되었습니다');
+        message.success(t('멤시지.공정수정완료'));
       } else {
         // 추가
         if (!selectedModel) {
-          message.error('모델을 선택해주세요');
+          message.error(t('에러.모델선택필요'));
           return;
         }
 
@@ -176,7 +176,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           });
 
         if (error) throw error;
-        message.success('공정이 추가되었습니다');
+        message.success(t('멤시지.공정생성완료'));
       }
 
       setProcessModalVisible(false);
@@ -186,9 +186,9 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     } catch (error: any) {
       console.error('공정 저장 오류:', error);
       if (error.code === '23505') {
-        message.error('해당 모델에 이미 존재하는 공정명입니다');
+        message.error(t('에러.중복공정명'));
       } else {
-        message.error('공정 저장에 실패했습니다');
+        message.error(t('에러.공정저장실패'));
       }
     }
   };
@@ -202,11 +202,11 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
         .eq('id', id);
 
       if (error) throw error;
-      message.success('모델이 삭제되었습니다');
+      message.success(t('모델삭제완료'));
       fetchModels();
     } catch (error) {
       console.error('모델 삭제 오류:', error);
-      message.error('모델 삭제에 실패했습니다');
+      message.error(t('에러.모델삭제실패'));
     }
   };
 
@@ -219,11 +219,11 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
         .eq('id', id);
 
       if (error) throw error;
-      message.success('공정이 삭제되었습니다');
+      message.success(t('공정삭제완료'));
       fetchProcesses();
     } catch (error) {
       console.error('공정 삭제 오류:', error);
-      message.error('공정 삭제에 실패했습니다');
+      message.error(t('에러.공정삭제실패'));
     }
   };
 
@@ -307,11 +307,11 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             {t('버튼.수정')}
           </Button>
           <Popconfirm
-            title="이 모델을 삭제하시겠습니까?"
-            description="연결된 모든 공정도 함께 삭제됩니다."
+            title={t('확인.모델삭제')}
+            description={t('확인.모델삭제설명')}
             onConfirm={() => handleDeleteModel(record.id)}
-            okText="삭제"
-            cancelText="취소"
+            okText={t('확인.삭제')}
+            cancelText={t('확인.취소')}
           >
             <Button type="link" danger icon={<DeleteOutlined />} size="small">
               {t('버튼.삭제')}
@@ -341,7 +341,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       title: 'Tact Time',
       dataIndex: 'tact_time_seconds',
       key: 'tact_time_seconds',
-      render: (seconds: number) => `${seconds}초`
+      render: (seconds: number) => `${seconds}${t('단위.초')}`
     },
     {
       title: t('컬럼.캐비티수'),
@@ -369,10 +369,10 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             {t('버튼.수정')}
           </Button>
           <Popconfirm
-            title="이 공정을 삭제하시겠습니까?"
+            title={t('확인.공정삭제')}
             onConfirm={() => handleDeleteProcess(record.id)}
-            okText="삭제"
-            cancelText="취소"
+            okText={t('확인.삭제')}
+            cancelText={t('확인.취소')}
           >
             <Button type="link" danger icon={<DeleteOutlined />} size="small">
               {t('버튼.삭제')}
@@ -536,7 +536,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
 
       {/* 공정 추가/수정 모달 */}
       <Modal
-        title={editingProcess ? '공정 수정' : '공정 추가'}
+        title={editingProcess ? t('모달.공정수정') : t('모달.공정추가')}
         open={processModalVisible}
         onCancel={() => {
           setProcessModalVisible(false);
@@ -555,21 +555,21 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             <Col span={12}>
               <Form.Item
                 name="process_name"
-                label="공정명"
+                label={t('라벨.공정명')}
                 rules={[
-                  { required: true, message: '공정명을 입력하세요' }
+                  { required: true, message: t('검증.공정명필수') }
                 ]}
               >
-                <Input placeholder="예: 가공, 조립, 검사" />
+                <Input placeholder={t('라벨.공정명')} />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
                 name="process_order"
-                label="공정 순서"
+                label={t('라벨.공정순서')}
                 rules={[
-                  { required: true, message: '공정 순서를 입력하세요' },
-                  { type: 'number', min: 1, message: '1 이상의 숫자를 입력하세요' }
+                  { required: true, message: t('검증.공정순서필수') },
+                  { type: 'number', min: 1, message: t('검증.캐비티수최소값') }
                 ]}
               >
                 <InputNumber
@@ -583,17 +583,17 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
 
           <Form.Item
             name="tact_time_seconds"
-            label="Tact Time (초)"
+            label={t('라벨.택트타임초')}
             rules={[
-              { required: true, message: 'Tact Time을 입력하세요' },
-              { type: 'number', min: 1, message: '1초 이상 입력하세요' }
+              { required: true, message: t('검증.택트타임필수') },
+              { type: 'number', min: 1, message: t('검증.캐비티수최소값') }
             ]}
           >
             <InputNumber
               style={{ width: '100%' }}
               placeholder="120"
               min={1}
-              addonAfter="초"
+              addonAfter={t('단위.초')}
             />
           </Form.Item>
 
@@ -622,10 +622,10 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
                 setEditingProcess(null);
                 processForm.resetFields();
               }}>
-                취소
+                {t('버튼.취소')}
               </Button>
               <Button type="primary" htmlType="submit">
-                {editingProcess ? '수정' : '추가'}
+                {editingProcess ? t('버튼.수정') : t('버튼.추가')}
               </Button>
             </Space>
           </Form.Item>
