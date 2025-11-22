@@ -48,6 +48,8 @@ export interface ShiftProductionData {
 export interface DowntimeEntry {
   id?: string;
   machine_id: string;
+  date?: string; // YYYY-MM-DD format
+  shift?: 'A' | 'B'; // A: Day shift (08:00-20:00), B: Night shift (20:00-08:00)
   start_time: string;
   end_time?: string;
   duration_minutes?: number;
@@ -55,6 +57,7 @@ export interface DowntimeEntry {
   description?: string;
   operator_id?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface ProductionEntry {

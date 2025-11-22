@@ -20,7 +20,6 @@ import {
   Badge,
   DatePicker,
   Descriptions,
-  Divider,
   Checkbox,
   App
 } from 'antd';
@@ -33,16 +32,14 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useMachines } from '@/hooks/useMachines';
 import { useUserProfiles } from '@/hooks/useUserProfiles';
 import type { ShiftProductionData, DowntimeEntry, DailyProductionData } from '@/types/dataInput';
 import { DOWNTIME_REASON_KEYS } from '@/types/dataInput';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
-const { TabPane } = Tabs;
 
 interface ShiftDataInputFormProps {
   initialDate?: string;
@@ -52,9 +49,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   initialDate = dayjs().format('YYYY-MM-DD')
 }) => {
   const { t } = useDataInputTranslation();
-  const { getSetting } = useSystemSettings();
   const { machines, loading: machinesLoading, error: machinesError } = useMachines();
-  const { profiles, loading: profilesLoading, error: profilesError } = useUserProfiles();
+  const { profiles, loading: profilesLoading } = useUserProfiles();
   const { message } = App.useApp();
   
   // 폼 상태
@@ -62,6 +58,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const [selectedDate, setSelectedDate] = useState<string>(initialDate);
   const [activeShift, setActiveShift] = useState<'DAY' | 'NIGHT'>('DAY');
   const [loading, setLoading] = useState(false);
+  const [loadingDowntime, setLoadingDowntime] = useState(false);
   
   // 교대조별 기본 가동시간 (분 단위)
   const [dayShiftOperatingMinutes, setDayShiftOperatingMinutes] = useState<number>(720); // 기본 12시간 = 720분
@@ -73,8 +70,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   
   // 설비 관련 데이터 상태
   const [machineDetails, setMachineDetails] = useState<{
-    productionModel: any | null;
-    currentProcess: any | null;
+    productionModel: { model_name: string } | null;
+    currentProcess: { process_name: string; tact_time_seconds: number } | null;
     loading: boolean;
     error: string | null;
   }>({
@@ -120,8 +117,17 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
   // 사유 번역 헬퍼
   const translateReason = (reasonKey: string): string => {
-    return t(`downtime.reasons.${reasonKey}` as any);
+    return t(`downtime.reasons.${reasonKey}` as 'downtime.reasons.equipmentFailure');
   };
+
+  // 설비 선택 및 날짜 변경 시 비가동 데이터 로드
+  React.useEffect(() => {
+    if (selectedMachineId && selectedDate) {
+      // 주간조와 야간조 비가동 데이터 모두 로드
+      loadDowntimeEntries(selectedMachineId, selectedDate, 'DAY');
+      loadDowntimeEntries(selectedMachineId, selectedDate, 'NIGHT');
+    }
+  }, [selectedMachineId, selectedDate]);
 
   // 현재 교대 데이터 가져오기
   const getCurrentShiftData = (): ShiftProductionData => {
@@ -151,7 +157,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
     const response = await fetch(`/api/product-models/${machine.production_model_id}`);
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response.json().catch(() => ({ message: '' }));
       throw new Error(errorData.message || `HTTP ${response.status}`);
     }
 
@@ -172,7 +178,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
     const response = await fetch(`/api/model-processes/${machine.current_process_id}`);
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = await response.json().catch(() => ({ message: '' }));
       throw new Error(errorData.message || `HTTP ${response.status}`);
     }
 
@@ -248,15 +254,16 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
           message.warning(t('messages.machineInfoPartialWarning'));
         }
 
-      } catch (error: any) {
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : t('messages.machineInfoLoadFailed');
         console.error('Error loading machine details:', error);
         setMachineDetails(prev => ({
           ...prev,
           loading: false,
-          error: error.message || t('messages.machineInfoLoadFailed')
+          error: errorMessage
         }));
-        
-        message.error(`${t('messages.machineInfoLoadFailed')}: ${error.message}`);
+
+        message.error(`${t('messages.machineInfoLoadFailed')}: ${errorMessage}`);
       }
     }
   };
@@ -275,53 +282,156 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     updateCurrentShiftData(updates);
   };
 
-  // 비가동 시간 추가
-  const addDowntimeEntry = (values: { start_time: string; end_time?: string; reason: string; description?: string }) => {
+  // 비가동 데이터 로드
+  const loadDowntimeEntries = async (machineId: string, date: string, shift: 'DAY' | 'NIGHT') => {
+    try {
+      setLoadingDowntime(true);
+      const shiftCode = shift === 'DAY' ? 'A' : 'B';
+
+      const response = await fetch(
+        `/api/downtime-entries?machine_id=${machineId}&date=${date}&shift=${shiftCode}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const entries: DowntimeEntry[] = result.data;
+        const totalDowntime = entries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0);
+
+        // 해당 교대의 데이터에 반영
+        if (shift === 'DAY') {
+          setDayShiftData(prev => ({
+            ...prev,
+            downtime_entries: entries,
+            total_downtime_minutes: totalDowntime
+          }));
+        } else {
+          setNightShiftData(prev => ({
+            ...prev,
+            downtime_entries: entries,
+            total_downtime_minutes: totalDowntime
+          }));
+        }
+
+        console.log(`Loaded ${entries.length} downtime entries for ${shift} shift`);
+      }
+    } catch (error) {
+      console.error('Error loading downtime entries:', error);
+      // 로드 실패 시 빈 배열로 초기화 (에러 메시지는 표시하지 않음)
+      if (shift === 'DAY') {
+        setDayShiftData(prev => ({
+          ...prev,
+          downtime_entries: [],
+          total_downtime_minutes: 0
+        }));
+      } else {
+        setNightShiftData(prev => ({
+          ...prev,
+          downtime_entries: [],
+          total_downtime_minutes: 0
+        }));
+      }
+    } finally {
+      setLoadingDowntime(false);
+    }
+  };
+
+  // 비가동 시간 추가 (DB에 즉시 저장)
+  const addDowntimeEntry = async (values: { start_time: string; end_time?: string; reason: string; description?: string }) => {
     if (!selectedMachineId) {
       message.error(t('messages.selectMachineFirst'));
       return;
     }
 
-    const startTime = dayjs(values.start_time);
-    const endTime = values.end_time ? dayjs(values.end_time) : dayjs();
-    const duration = endTime.diff(startTime, 'minute');
+    try {
+      setLoading(true);
 
-    const newEntry: DowntimeEntry = {
-      id: Date.now().toString(),
-      machine_id: selectedMachineId,
-      start_time: startTime.toISOString(),
-      end_time: endTime.toISOString(),
-      duration_minutes: duration,
-      reason: values.reason,
-      description: values.description || ''
-    };
+      const startTime = dayjs(values.start_time);
+      const endTime = values.end_time ? dayjs(values.end_time) : dayjs();
+      const shiftCode = activeShift === 'DAY' ? 'A' : 'B';
 
-    const currentData = getCurrentShiftData();
-    const updatedEntries = [...currentData.downtime_entries, newEntry];
-    const totalDowntime = updatedEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0);
+      const downtimeData = {
+        machine_id: selectedMachineId,
+        date: selectedDate,
+        shift: shiftCode,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        reason: values.reason,
+        description: values.description || ''
+      };
 
-    updateCurrentShiftData({
-      downtime_entries: updatedEntries,
-      total_downtime_minutes: totalDowntime
-    });
+      const response = await fetch('/api/downtime-entries', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(downtimeData)
+      });
 
-    setDowntimeModalVisible(false);
-    downtimeForm.resetFields();
-    message.success(t('messages.downtimeAdded'));
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        message.success(t('messages.downtimeAdded'));
+
+        // 비가동 데이터 새로 로드
+        await loadDowntimeEntries(selectedMachineId, selectedDate, activeShift);
+
+        setDowntimeModalVisible(false);
+        downtimeForm.resetFields();
+      } else {
+        throw new Error(result.error || 'Failed to save downtime');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error adding downtime entry:', error);
+      message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // 비가동 시간 삭제
-  const removeDowntimeEntry = (entryId: string) => {
-    const currentData = getCurrentShiftData();
-    const updatedEntries = currentData.downtime_entries.filter(entry => entry.id !== entryId);
-    const totalDowntime = updatedEntries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0);
+  // 비가동 시간 삭제 (DB에서 삭제)
+  const removeDowntimeEntry = async (entryId: string) => {
+    if (!selectedMachineId) return;
 
-    updateCurrentShiftData({
-      downtime_entries: updatedEntries,
-      total_downtime_minutes: totalDowntime
-    });
+    try {
+      setLoading(true);
 
-    message.success(t('messages.downtimeDeleted'));
+      const response = await fetch(`/api/downtime-entries/${entryId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        message.success(t('messages.downtimeDeleted'));
+
+        // 비가동 데이터 새로 로드
+        await loadDowntimeEntries(selectedMachineId, selectedDate, activeShift);
+      } else {
+        throw new Error(result.error || 'Failed to delete downtime');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error deleting downtime entry:', error);
+      message.error(`삭제 실패: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 일일 데이터 계산
@@ -428,9 +538,10 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         total_downtime_minutes: 0
       });
 
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error saving data:', error);
-      message.error(`${t('messages.saveFailed')}: ${error.message}`);
+      message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -454,7 +565,14 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       title: t('dataEntry.downtime'),
       dataIndex: 'duration_minutes',
       key: 'duration_minutes',
-      render: (minutes: number) => `${minutes}${t('schedule.minutes')}`
+      render: (minutes: number, record: DowntimeEntry) => (
+        <Space>
+          <Text>{minutes}{t('schedule.minutes')}</Text>
+          {record.id && record.created_at && (
+            <Badge status="success" text="저장됨" />
+          )}
+        </Space>
+      )
     },
     {
       title: t('dataEntry.reason'),
@@ -465,7 +583,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     {
       title: t('dataEntry.work'),
       key: 'actions',
-      render: (_: any, record: DowntimeEntry) => (
+      render: (_: unknown, record: DowntimeEntry) => (
         <Popconfirm
           title={t('downtime.deleteConfirm')}
           onConfirm={() => removeDowntimeEntry(record.id!)}
@@ -905,9 +1023,10 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
           <Table
             dataSource={currentShiftData.downtime_entries}
             columns={downtimeColumns}
-            rowKey="id"
+            rowKey={(record) => record.id || `temp-${record.start_time}`}
             size="small"
             pagination={false}
+            loading={loadingDowntime}
             locale={{ emptyText: t('downtime.noDowntimeRecords') }}
             summary={() => (
               <Table.Summary.Row>
