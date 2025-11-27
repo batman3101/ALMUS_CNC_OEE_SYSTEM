@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Button, Space, Badge, Timeline, Alert, Tabs, Select } from 'antd';
-import { 
-  PlayCircleOutlined, 
-  PauseCircleOutlined, 
+import React, { useState, useEffect, useMemo } from 'react';
+import { Row, Col, Card, Button, Space, Badge, Timeline, Alert, Tabs, Select, Pagination, Table, Segmented } from 'antd';
+import {
+  PlayCircleOutlined,
+  PauseCircleOutlined,
   ToolOutlined,
   ClockCircleOutlined,
   ReloadOutlined,
-  WifiOutlined
+  WifiOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined
 } from '@ant-design/icons';
 import { MachineStatusInput } from '@/components/machines';
 import { OEEGauge } from '@/components/oee';
@@ -71,7 +73,10 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
   const [showProductionInput, setShowProductionInput] = useState(false);
-  
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
   // 실시간 데이터 훅 사용
   const { 
     machines, 
@@ -104,12 +109,18 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
         };
       }
 
+      // 설비 번호 추출 함수 (예: "CNC-012" -> 12)
+      const extractMachineNumber = (name: string): number => {
+        const match = name.match(/(\d+)$/);
+        return match ? parseInt(match[1], 10) : 0;
+      };
+
       const assignedMachines = machines
         .filter(machine => assignedMachineIds.includes(machine.id))
         .map(machine => {
           const logs = machineLogs.filter(log => log.machine_id === machine.id);
           const currentLog = logs.find(log => !log.end_time);
-          const currentDuration = currentLog 
+          const currentDuration = currentLog
             ? Math.floor((Date.now() - new Date(currentLog.start_time).getTime()) / (1000 * 60))
             : 0;
 
@@ -118,7 +129,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             oee: oeeMetrics[machine.id]?.oee || 0,
             currentDuration
           };
-        });
+        })
+        // 설비 번호 기준 정렬
+        .sort((a, b) => extractMachineNumber(a.name) - extractMachineNumber(b.name));
 
       // 최근 로그 (담당 설비만)
       const recentLogs = machineLogs
@@ -185,6 +198,63 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   const currentHour = new Date().getHours();
   const isShiftEnd = currentHour === 8 || currentHour === 20;
 
+  // 페이지네이션된 설비 목록
+  const paginatedMachines = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return processedData.assignedMachines.slice(startIndex, startIndex + pageSize);
+  }, [processedData.assignedMachines, currentPage, pageSize]);
+
+  // 테이블 컬럼 정의
+  const tableColumns = [
+    {
+      title: machinesT('labels.machineName'),
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: any) => (
+        <span
+          style={{
+            fontWeight: selectedMachine === record.id ? 'bold' : 'normal',
+            color: selectedMachine === record.id ? '#1890ff' : 'inherit',
+            cursor: 'pointer'
+          }}
+          onClick={() => setSelectedMachine(record.id)}
+        >
+          {name}
+        </span>
+      )
+    },
+    {
+      title: machinesT('labels.currentState'),
+      dataIndex: 'current_state',
+      key: 'current_state',
+      render: (state: MachineState) => (
+        <Space>
+          {getStateIcon(state)}
+          <span>{getStateText(state, machinesT)}</span>
+        </Space>
+      )
+    },
+    {
+      title: machinesT('labels.duration'),
+      dataIndex: 'currentDuration',
+      key: 'currentDuration',
+      render: (duration: number) => formatDuration(duration, machinesT)
+    },
+    {
+      title: 'OEE',
+      dataIndex: 'oee',
+      key: 'oee',
+      render: (oee: number) => (
+        <span style={{
+          fontWeight: 'bold',
+          color: oee >= 0.85 ? '#52c41a' : oee >= 0.65 ? '#faad14' : '#ff4d4f'
+        }}>
+          {(oee * 100).toFixed(1)}%
+        </span>
+      )
+    }
+  ];
+
   return (
     <div>
       {/* 헤더 */}
@@ -199,7 +269,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
               {machinesT('operator.description')}
               {isConnected && (
                 <span style={{ marginLeft: 8, color: '#52c41a' }}>
-                  <WifiOutlined /> {machinesT('status.realtimeConnected')}
+                  <WifiOutlined /> {machinesT('systemStatus.realtimeConnected')}
                 </span>
               )}
             </p>
@@ -212,7 +282,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             onClick={refresh}
             loading={loading}
           >
-            {machinesT('status.refresh')}
+            {machinesT('systemStatus.refresh')}
           </Button>
         </Space>
       </div>
@@ -236,57 +306,110 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       <Row gutter={[16, 16]}>
         {/* 담당 설비 현황 */}
         <Col xs={24} lg={16}>
-          <Card title={machinesT('operator.assignedMachines')} extra={<Badge count={processedData.assignedMachines.length} />}>
+          <Card
+              title={machinesT('operator.assignedMachines')}
+              extra={
+                <Space>
+                  <Badge count={processedData.assignedMachines.length} />
+                  <Segmented
+                    size="small"
+                    options={[
+                      { value: 'card', icon: <AppstoreOutlined /> },
+                      { value: 'table', icon: <UnorderedListOutlined /> }
+                    ]}
+                    value={viewMode}
+                    onChange={(value) => {
+                      setViewMode(value as 'card' | 'table');
+                      setCurrentPage(1);
+                    }}
+                  />
+                </Space>
+              }
+            >
             {loading ? (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                <span>데이터를 불러오는 중...</span>
+                <span>{machinesT('operator.loadingData')}</span>
               </div>
             ) : processedData.assignedMachines.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
-                <span>배정된 설비가 없습니다</span>
+                <span>{machinesT('operator.noAssignedMachines')}</span>
               </div>
+            ) : viewMode === 'card' ? (
+              <>
+                <Row gutter={[16, 16]}>
+                  {paginatedMachines.map(machine => (
+                  <Col xs={24} md={12} xl={8} key={machine.id}>
+                    <Card
+                      size="small"
+                      hoverable
+                      onClick={() => setSelectedMachine(machine.id)}
+                      style={{
+                        border: selectedMachine === machine.id ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
+                          {machine.name}
+                        </div>
+
+                        <div style={{ marginBottom: 12 }}>
+                          {getStateIcon(machine.current_state!)}
+                          <span style={{ marginLeft: 8 }}>
+                            {getStateText(machine.current_state!, machinesT)}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+                          {machinesT('labels.duration')}: {formatDuration(machine.currentDuration, machinesT)}
+                        </div>
+
+                        <div style={{ fontSize: 14, fontWeight: 'bold' }}>
+                          OEE: <span style={{
+                            color: machine.oee >= 0.85 ? '#52c41a' :
+                                   machine.oee >= 0.65 ? '#faad14' : '#ff4d4f'
+                          }}>
+                            {(machine.oee * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  </Col>
+                  ))}
+                </Row>
+                {processedData.assignedMachines.length > pageSize && (
+                  <div style={{ marginTop: 16, textAlign: 'center' }}>
+                    <Pagination
+                      current={currentPage}
+                      pageSize={pageSize}
+                      total={processedData.assignedMachines.length}
+                      onChange={(page) => setCurrentPage(page)}
+                      showSizeChanger={false}
+                      showTotal={(total, range) => `${range[0]}-${range[1]} / ${total}`}
+                    />
+                  </div>
+                )}
+              </>
             ) : (
-              <Row gutter={[16, 16]}>
-                {processedData.assignedMachines.map(machine => (
-                <Col xs={24} md={12} xl={8} key={machine.id}>
-                  <Card 
-                    size="small"
-                    hoverable
-                    onClick={() => setSelectedMachine(machine.id)}
-                    style={{ 
-                      border: selectedMachine === machine.id ? '2px solid #1890ff' : '1px solid #d9d9d9',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
-                        {machine.name}
-                      </div>
-                      
-                      <div style={{ marginBottom: 12 }}>
-                        {getStateIcon(machine.current_state!)}
-                        <span style={{ marginLeft: 8 }}>
-                          {getStateText(machine.current_state!, machinesT)}
-                        </span>
-                      </div>
-                      
-                      <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-                        {machinesT('labels.duration')}: {formatDuration(machine.currentDuration, machinesT)}
-                      </div>
-                      
-                      <div style={{ fontSize: 14, fontWeight: 'bold' }}>
-                        OEE: <span style={{ 
-                          color: machine.oee >= 0.85 ? '#52c41a' : 
-                                 machine.oee >= 0.65 ? '#faad14' : '#ff4d4f' 
-                        }}>
-                          {(machine.oee * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                  </Card>
-                </Col>
-                ))}
-              </Row>
+              <Table
+                columns={tableColumns}
+                dataSource={processedData.assignedMachines}
+                rowKey="id"
+                size="small"
+                pagination={{
+                  current: currentPage,
+                  pageSize: pageSize,
+                  total: processedData.assignedMachines.length,
+                  onChange: (page) => setCurrentPage(page),
+                  showSizeChanger: false,
+                  showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}`
+                }}
+                rowClassName={(record) => selectedMachine === record.id ? 'ant-table-row-selected' : ''}
+                onRow={(record) => ({
+                  onClick: () => setSelectedMachine(record.id),
+                  style: { cursor: 'pointer' }
+                })}
+              />
             )}
             
             {/* 상태 변경 버튼 */}
@@ -368,8 +491,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                         {/* OEE가 0인 경우 안내 메시지 추가 */}
                         {oeeMetrics[selectedMachine].oee === 0 && (
                           <Alert
-                            message="OEE 데이터 수집 중"
-                            description="생산 실적이 입력되면 정확한 OEE가 계산됩니다."
+                            message={machinesT('operator.oeeDataCollecting')}
+                            description={machinesT('operator.oeeDataCollectingDesc')}
                             type="info"
                             showIcon
                             style={{ marginTop: 16 }}
@@ -381,9 +504,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                         <div style={{ textAlign: 'center', padding: '40px 0' }}>
                           <ClockCircleOutlined style={{ fontSize: 48, color: '#bfbfbf', marginBottom: 16 }} />
                           <div style={{ color: '#666', fontSize: 14 }}>
-                            <p style={{ marginBottom: 8 }}>OEE 데이터를 불러오는 중...</p>
+                            <p style={{ marginBottom: 8 }}>{machinesT('operator.loadingOeeData')}</p>
                             <p style={{ fontSize: 12, color: '#999' }}>
-                              생산 실적을 입력하면 OEE가 자동으로 계산됩니다.
+                              {machinesT('operator.inputProductionForOee')}
                             </p>
                           </div>
                           <Button
@@ -392,7 +515,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                             style={{ marginTop: 16 }}
                             onClick={() => setShowProductionInput(true)}
                           >
-                            생산 실적 입력
+                            {machinesT('operator.inputProduction')}
                           </Button>
                         </div>
                       </Card>

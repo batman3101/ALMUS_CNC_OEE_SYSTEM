@@ -50,6 +50,7 @@
   "alerts": {
     "title": "Thông báo",
     "allAlerts": "Tất cả thông báo",
+    "allAlertsCount": "Tất cả thông báo ({{count}})",
     "critical": "Khẩn cấp",
     "warning": "Cảnh báo",
     "info": "Thông tin",
@@ -65,6 +66,7 @@
     "viewAll": "Xem tất cả thông báo",
     "markAsRead": "Đánh dấu đã đọc",
     "clearAll": "Xác nhận tất cả thông báo",
+    "clearAllCount": "Xác nhận tất cả thông báo ({{count}})",
     "allowBrowserNotifications": "Cho phép thông báo trình duyệt",
     "machineStatusDetails": "Chi tiết trạng thái thiết bị",
     "maintenance": "Bảo trì",
@@ -77,7 +79,8 @@
     "maintenanceRequired": "Cần bảo trì",
     "oeeBelowMessage": "OEE duy trì dưới 60%",
     "maintenanceTimeoutMessage": "Vượt quá thời gian bảo trì",
-    "statusCheckRequiredMessage": "Cần kiểm tra trạng thái thiết bị"
+    "statusCheckRequiredMessage": "Cần kiểm tra trạng thái thiết bị",
+    "clickForDetails": "Nhấp để xem chi tiết"
   },
   "charts": {
     "downtimeReasons": "Nguyên nhân ngừng máy",
@@ -123,7 +126,21 @@
     "connectedRealtime": "Kết nối thời gian thực",
     "refresh": "Làm mới",
     "loadingMessage": "Đang tải dữ liệu bảng điều khiển...",
-    "updatingMessage": "Đang cập nhật dữ liệu..."
+    "updatingMessage": "Đang cập nhật dữ liệu...",
+    "realtimeActive": "Kết nối thời gian thực hoạt động",
+    "recordCount": "{{count}} bản ghi",
+    "dataLoading": "Đang tải dữ liệu...",
+    "connectionError": "Lỗi kết nối",
+    "noProductionRecord": "Không có bản ghi sản xuất - Cần nhập dữ liệu",
+    "notification": "Thông báo",
+    "noProductionData": "Không có dữ liệu sản xuất",
+    "noProductionDataDesc": "Không có dữ liệu sản xuất thời gian thực. Vui lòng đăng ký thông tin sản xuất tại trang nhập dữ liệu.",
+    "goToDataInput": "Nhập dữ liệu",
+    "dataLoadError": "Lỗi tải dữ liệu",
+    "supabaseConnectionError": "Lỗi kết nối Supabase",
+    "loadingMachineData": "Đang tải dữ liệu tình hình thiết bị...",
+    "loadingMachineCount": "Đang tải thông tin {{count}} thiết bị",
+    "showingMachines": "Hiển thị {{count}} trong tổng số {{total}} máy"
   },
   "statistics": {
     "totalMachines": "Tổng số thiết bị",
@@ -150,7 +167,8 @@
     "location": "Vị trí",
     "status": "Trạng thái",
     "machineStatus": "Tình hình thiết bị",
-    "realtimeUpdate": "Cập nhật thời gian thực"
+    "realtimeUpdate": "Cập nhật thời gian thực",
+    "machinesRange": "{{start}}-{{end}} / {{total}} máy"
   },
   "chart": {
     "overallOeeStatus": "Tình hình OEE tổng thể",

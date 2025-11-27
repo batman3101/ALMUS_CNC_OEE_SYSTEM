@@ -52,7 +52,24 @@
     "seconds": "초",
     "startDate": "시작일",
     "endDate": "종료일",
-    "actions": "작업"
+    "actions": "작업",
+    "retry": "다시 시도"
+  },
+  "theme": {
+    "darkMode": "다크 모드",
+    "lightMode": "라이트 모드",
+    "dark": "다크",
+    "light": "라이트",
+    "switchToDark": "다크 모드로 전환",
+    "switchToLight": "라이트 모드로 전환",
+    "switchToDarkAria": "다크 모드로 전환하기",
+    "switchToLightAria": "라이트 모드로 전환하기",
+    "changedToDark": "다크 모드로 변경되었습니다.",
+    "changedToLight": "라이트 모드로 변경되었습니다.",
+    "changeFailed": "테마 변경에 실패했습니다.",
+    "changeError": "테마 변경 중 오류가 발생했습니다.",
+    "currentMode": "현재 {{mode}} 모드입니다.",
+    "switchInstruction": "{{mode}} 모드로 전환하려면 클릭하거나 스페이스/엔터키를 누르세요."
   },
   "auth": {
     "login": "로그인",

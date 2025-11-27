@@ -50,6 +50,7 @@
   "alerts": {
     "title": "알림",
     "allAlerts": "전체 알림",
+    "allAlertsCount": "전체 알림 ({{count}}개)",
     "critical": "긴급",
     "warning": "경고",
     "info": "정보",
@@ -65,6 +66,7 @@
     "viewAll": "모든 알림 보기",
     "markAsRead": "읽음 처리",
     "clearAll": "모든 알림 확인",
+    "clearAllCount": "모든 알림 확인 ({{count}}개)",
     "allowBrowserNotifications": "브라우저 알림 허용",
     "machineStatusDetails": "설비 상태 상세 정보",
     "maintenance": "점검",
@@ -77,7 +79,8 @@
     "maintenanceRequired": "점검 필요",
     "oeeBelowMessage": "OEE 60% 미만 지속",
     "maintenanceTimeoutMessage": "점검 시간 초과",
-    "statusCheckRequiredMessage": "설비 상태 확인 필요"
+    "statusCheckRequiredMessage": "설비 상태 확인 필요",
+    "clickForDetails": "클릭하여 상세 정보 보기"
   },
   "charts": {
     "downtimeReasons": "다운타임 원인",
@@ -123,7 +126,21 @@
     "connectedRealtime": "실시간 연결됨",
     "refresh": "새로고침",
     "loadingMessage": "대시보드 데이터를 불러오는 중입니다...",
-    "updatingMessage": "데이터를 업데이트하는 중..."
+    "updatingMessage": "데이터를 업데이트하는 중...",
+    "realtimeActive": "실시간 연결 활성",
+    "recordCount": "{{count}}개 기록",
+    "dataLoading": "데이터 로딩 중...",
+    "connectionError": "연결 오류",
+    "noProductionRecord": "생산 기록 없음 - 데이터 입력 필요",
+    "notification": "알림",
+    "noProductionData": "생산 데이터 없음",
+    "noProductionDataDesc": "실시간 생산 데이터가 없습니다. 데이터 입력 페이지에서 생산 정보를 등록해주세요.",
+    "goToDataInput": "데이터 입력하기",
+    "dataLoadError": "데이터 로딩 오류",
+    "supabaseConnectionError": "Supabase 연결 오류",
+    "loadingMachineData": "설비 현황 데이터를 불러오는 중입니다...",
+    "loadingMachineCount": "{{count}}대 설비 정보를 로딩 중",
+    "showingMachines": "전체 {{total}}대 중 {{count}}대 표시"
   },
   "statistics": {
     "totalMachines": "전체 설비",
@@ -292,7 +309,8 @@
     "realtimeUpdate": "실시간 업데이트",
     "machinePerformanceAnalysis": "설비별 성능 분석",
     "all": "전체",
-    "itemsRange": "{{start}}-{{end}} / {{total}}개 항목"
+    "itemsRange": "{{start}}-{{end}} / {{total}}개 항목",
+    "machinesRange": "{{start}}-{{end}} / {{total}}대"
   },
   "downtimeReasons": {
     "NORMAL_OPERATION": "정상가동",

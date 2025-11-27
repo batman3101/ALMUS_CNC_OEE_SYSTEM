@@ -13,9 +13,9 @@ interface ThemeToggleProps {
   showTooltip?: boolean;
 }
 
-const ThemeToggle: React.FC<ThemeToggleProps> = ({ 
-  size = 'middle', 
-  showTooltip = true 
+const ThemeToggle: React.FC<ThemeToggleProps> = ({
+  size = 'middle',
+  showTooltip = true
 }) => {
   const { getDisplaySettings, updateSetting } = useSystemSettings();
   const { t } = useLanguage();
@@ -30,25 +30,24 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
   const handleToggleTheme = useCallback(async () => {
     try {
       const newMode = isDark ? 'light' : 'dark';
-      
+
       const success = await updateSetting({
         category: 'display',
         setting_key: 'theme_mode',
         setting_value: newMode,
-        change_reason: '사용자가 헤더에서 테마 모드를 변경함'
+        change_reason: 'User changed theme mode from header'
       });
 
       if (success) {
-        const modeText = newMode === 'dark' ? '다크 모드' : '라이트 모드';
-        message.success(`${modeText}로 변경되었습니다.`);
+        message.success(newMode === 'dark' ? t('theme.changedToDark') : t('theme.changedToLight'));
       } else {
-        message.error('테마 변경에 실패했습니다.');
+        message.error(t('theme.changeFailed'));
       }
     } catch (error) {
       console.error('Theme toggle error:', error);
-      message.error('테마 변경 중 오류가 발생했습니다.');
+      message.error(t('theme.changeError'));
     }
-  }, [isDark, updateSetting, message]);
+  }, [isDark, updateSetting, message, t]);
 
   // 토글 버튼 컨텐츠
   const buttonContent = (
@@ -72,35 +71,36 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
         padding: screens.xs ? '4px 8px' : '4px 12px',
         transition: 'all 0.3s ease'
       }}
-      aria-label={isDark ? '라이트 모드로 전환하기' : '다크 모드로 전환하기'}
+      aria-label={isDark ? t('theme.switchToLightAria') : t('theme.switchToDarkAria')}
       aria-describedby="theme-toggle-description"
       role="switch"
       aria-checked={isDark}
       tabIndex={0}
     >
       {!screens.xs && (
-        <span 
-          style={{ 
+        <span
+          style={{
             fontSize: screens.xs ? '12px' : '14px',
             marginLeft: 2
           }}
           aria-hidden="true"
         >
-          {isDark ? '라이트' : '다크'}
+          {isDark ? t('theme.light') : t('theme.dark')}
         </span>
       )}
-      
+
       {/* 스크린리더용 숨김 설명 */}
-      <span 
-        id="theme-toggle-description" 
-        style={{ 
-          position: 'absolute', 
-          left: '-9999px', 
-          opacity: 0 
+      <span
+        id="theme-toggle-description"
+        style={{
+          position: 'absolute',
+          left: '-9999px',
+          opacity: 0
         }}
       >
-        현재 {isDark ? '다크' : '라이트'} 모드입니다. 
-        {isDark ? '라이트' : '다크'} 모드로 전환하려면 클릭하거나 스페이스/엔터키를 누르세요.
+        {t('theme.currentMode', { mode: isDark ? t('theme.dark') : t('theme.light') })}
+        {' '}
+        {t('theme.switchInstruction', { mode: isDark ? t('theme.light') : t('theme.dark') })}
       </span>
     </Button>
   );
@@ -112,8 +112,8 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
 
   // 데스크탑에서는 툴팁 표시
   return (
-    <Tooltip 
-      title={isDark ? '라이트 모드로 전환' : '다크 모드로 전환'}
+    <Tooltip
+      title={isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
       placement="bottom"
     >
       {buttonContent}

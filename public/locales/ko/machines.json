@@ -151,7 +151,13 @@
     "selectMachine": "설비를 선택해주세요",
     "shiftEndAlert": "교대 종료 시간입니다",
     "shiftEndDescription": "생산 실적을 입력해주세요.",
-    "inputRecord": "실적 입력"
+    "inputRecord": "실적 입력",
+    "oeeDataCollecting": "OEE 데이터 수집 중",
+    "oeeDataCollectingDesc": "생산 실적이 입력되면 정확한 OEE가 계산됩니다.",
+    "loadingOeeData": "OEE 데이터를 불러오는 중...",
+    "inputProductionForOee": "생산 실적을 입력하면 OEE가 자동으로 계산됩니다.",
+    "loadingData": "데이터를 불러오는 중...",
+    "noAssignedMachines": "배정된 설비가 없습니다"
   },
   "productionInput": {
     "title": "생산 실적 입력",

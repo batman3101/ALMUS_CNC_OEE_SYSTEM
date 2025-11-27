@@ -254,34 +254,34 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>
                 {chartData.length > 0 ? (chartData.reduce((sum, item) => sum + item.oee, 0) / chartData.length * 100).toFixed(1) : 0}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>평균 OEE</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.average')}</div>
             </div>
           </Col>
-          
+
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#52c41a' }}>
                 {chartData.length > 0 ? Math.max(...chartData.map(item => item.oee * 100)).toFixed(1) : 0}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>최고 OEE</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.highest')}</div>
             </div>
           </Col>
-          
+
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#ff4d4f' }}>
                 {chartData.length > 0 ? Math.min(...chartData.map(item => item.oee * 100)).toFixed(1) : 0}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>최저 OEE</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.lowest')}</div>
             </div>
           </Col>
-          
+
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#722ed1' }}>
                 {chartData.filter(item => item.oee >= 0.85).length}
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>우수한 날</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('oee.excellentDays')}</div>
             </div>
           </Col>
         </Row>

@@ -75,7 +75,24 @@
     "minutes": "phút",
     "seconds": "giây",
     "startDate": "Ngày bắt đầu",
-    "endDate": "Ngày kết thúc"
+    "endDate": "Ngày kết thúc",
+    "retry": "Thử lại"
+  },
+  "theme": {
+    "darkMode": "Chế độ tối",
+    "lightMode": "Chế độ sáng",
+    "dark": "Tối",
+    "light": "Sáng",
+    "switchToDark": "Chuyển sang chế độ tối",
+    "switchToLight": "Chuyển sang chế độ sáng",
+    "switchToDarkAria": "Chuyển sang chế độ tối",
+    "switchToLightAria": "Chuyển sang chế độ sáng",
+    "changedToDark": "Đã chuyển sang chế độ tối.",
+    "changedToLight": "Đã chuyển sang chế độ sáng.",
+    "changeFailed": "Không thể thay đổi giao diện.",
+    "changeError": "Đã xảy ra lỗi khi thay đổi giao diện.",
+    "currentMode": "Hiện tại đang ở chế độ {{mode}}.",
+    "switchInstruction": "Nhấp hoặc nhấn phím Space/Enter để chuyển sang chế độ {{mode}}."
   },
   "notifications": {
     "title": "Thông báo",

@@ -21,6 +21,7 @@ import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useEngineerData } from '@/hooks/useEngineerData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
@@ -34,6 +35,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const isClient = useClientOnly();
   const { user } = useAuth();
   const { t } = useTranslation();
+  const { getDisplaySettings } = useSystemSettings();
+  const isDarkMode = getDisplaySettings().mode === 'dark';
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
   const [selectedMachines, setSelectedMachines] = useState<string[]>(['all']);
@@ -83,9 +86,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         shifts: [
           { value: 'all', label: t('dashboard:filterMenu.allShifts'), count: 0 },
           { value: 'A', label: t('dashboard:filterMenu.shiftA'), count: 0 },
-          { value: 'B', label: t('dashboard:filterMenu.shiftB'), count: 0 },
-          { value: 'C', label: t('dashboard:filterMenu.shiftC'), count: 0 },
-          { value: 'D', label: t('dashboard:filterMenu.shiftD'), count: 0 }
+          { value: 'B', label: t('dashboard:filterMenu.shiftB'), count: 0 }
         ],
         oeeGrades: [
           { value: 'all', label: t('dashboard:filterMenu.allGrades'), count: 0 },
@@ -120,9 +121,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       shifts: [
         { value: 'all', label: t('dashboard:filterMenu.allShifts'), count: 0 },
         { value: 'A', label: t('dashboard:filterMenu.shiftA'), count: 0 },
-        { value: 'B', label: t('dashboard:filterMenu.shiftB'), count: 0 },
-        { value: 'C', label: t('dashboard:filterMenu.shiftC'), count: 0 },
-        { value: 'D', label: t('dashboard:filterMenu.shiftD'), count: 0 }
+        { value: 'B', label: t('dashboard:filterMenu.shiftB'), count: 0 }
       ],
       oeeGrades: [
         { value: 'all', label: t('dashboard:filterMenu.allGrades'), count: machines.length },
@@ -192,9 +191,19 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
   // 필터 드롭다운 메뉴 생성
   const filterMenu = (
-    <div style={{ width: 320, padding: '12px' }}>
+    <div style={{
+      width: 320,
+      padding: '12px',
+      backgroundColor: isDarkMode ? '#1f1f1f' : '#fff',
+      borderRadius: '8px',
+      boxShadow: isDarkMode
+        ? '0 6px 16px 0 rgba(0, 0, 0, 0.4), 0 3px 6px -4px rgba(0, 0, 0, 0.3), 0 9px 28px 8px rgba(0, 0, 0, 0.2)'
+        : '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
+      border: isDarkMode ? '1px solid #424242' : '1px solid #f0f0f0',
+      color: isDarkMode ? '#ffffff' : 'inherit'
+    }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600, fontSize: '14px' }}>{t('dashboard:filterMenu.title')}</span>
+        <span style={{ fontWeight: 600, fontSize: '14px', color: isDarkMode ? '#ffffff' : 'inherit' }}>{t('dashboard:filterMenu.title')}</span>
         <Button type="link" size="small" onClick={resetFilters}>
           {t('dashboard:buttons.reset')}
         </Button>
@@ -202,7 +211,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
       {/* 위치 필터 */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>{t('dashboard:filterMenu.machineLocation')}</div>
+        <div style={{ marginBottom: 8, fontSize: '12px', color: isDarkMode ? '#a0a0a0' : '#666' }}>{t('dashboard:filterMenu.machineLocation')}</div>
         <Space wrap size={[4, 4]}>
           {filterOptions.locations.map(option => (
             <Tag
@@ -220,7 +229,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
       {/* 교대 필터 */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>{t('dashboard:filterMenu.shift')}</div>
+        <div style={{ marginBottom: 8, fontSize: '12px', color: isDarkMode ? '#a0a0a0' : '#666' }}>{t('dashboard:filterMenu.shift')}</div>
         <Space wrap size={[4, 4]}>
           {filterOptions.shifts.map(option => (
             <Tag
@@ -238,7 +247,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
       {/* OEE 등급 필터 */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 8, fontSize: '12px', color: '#666' }}>{t('dashboard:filterMenu.oeeGrade')}</div>
+        <div style={{ marginBottom: 8, fontSize: '12px', color: isDarkMode ? '#a0a0a0' : '#666' }}>{t('dashboard:filterMenu.oeeGrade')}</div>
         <Space wrap size={[4, 4]}>
           {filterOptions.oeeGrades.map(option => (
             <Tag
@@ -264,8 +273,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
       {/* 활성 필터 표시 */}
       {activeFilterCount > 0 && (
-        <div style={{ paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: 8 }}>{t('dashboard:filterMenu.appliedFilters')}</div>
+        <div style={{ paddingTop: 12, borderTop: isDarkMode ? '1px solid #424242' : '1px solid #f0f0f0' }}>
+          <div style={{ fontSize: '12px', color: isDarkMode ? '#a0a0a0' : '#666', marginBottom: 8 }}>{t('dashboard:filterMenu.appliedFilters')}</div>
           <Space wrap size={[4, 4]}>
             {!selectedLocations.includes('all') && (
               <Tag color="blue" closable onClose={() => setSelectedLocations(['all'])}>

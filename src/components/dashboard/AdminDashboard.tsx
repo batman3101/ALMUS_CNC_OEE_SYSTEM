@@ -737,20 +737,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   // 로딩 상태 표시 (초기 로딩만, 데이터 업데이트 시에는 스피너 오버레이 사용)
   if (dashboardLoading && !dashboardData && isClient) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '60vh',
         flexDirection: 'column',
         gap: '16px'
       }}>
         <Spin size="large" />
         <div style={{ color: '#666', fontSize: '16px' }}>
-          설비 현황 데이터를 불러오는 중입니다...
+          {t('adminDashboard.loadingMachineData')}
         </div>
         <div style={{ color: '#999', fontSize: '14px' }}>
-          60대 설비 정보를 로딩 중
+          {t('adminDashboard.loadingMachineCount', { count: 60 })}
         </div>
       </div>
     );
@@ -771,22 +771,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               {t('adminDashboard.description')}
               {productionRecords.length > 0 && (
                 <span style={{ marginLeft: 8, color: '#52c41a' }}>
-                  <WifiOutlined /> 실시간 연결 활성 ({productionRecords.length}개 기록)
+                  <WifiOutlined /> {t('adminDashboard.realtimeActive')} ({t('adminDashboard.recordCount', { count: productionRecords.length })})
                 </span>
               )}
               {recordsLoading && (
                 <span style={{ marginLeft: 8, color: '#1890ff' }}>
-                  <WifiOutlined /> 데이터 로딩 중...
+                  <WifiOutlined /> {t('adminDashboard.dataLoading')}
                 </span>
               )}
               {recordsError && (
                 <span style={{ marginLeft: 8, color: '#ff4d4f' }}>
-                  <WifiOutlined /> 연결 오류: {recordsError}
+                  <WifiOutlined /> {t('adminDashboard.connectionError')}: {recordsError}
                 </span>
               )}
               {!recordsLoading && productionRecords.length === 0 && !recordsError && (
                 <span style={{ marginLeft: 8, color: '#faad14' }}>
-                  <WifiOutlined /> 생산 기록 없음 - 데이터 입력 필요
+                  <WifiOutlined /> {t('adminDashboard.noProductionRecord')}
                 </span>
               )}
             </p>
@@ -801,7 +801,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               type={alertStats.critical > 0 ? "primary" : "default"}
               danger={alertStats.critical > 0}
             >
-              알림 ({alertStats.total})
+              {t('adminDashboard.notification')} ({alertStats.total})
             </Button>
           </Badge>
           <Button
@@ -820,23 +820,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       {/* 데이터 상태 알림 */}
       {!recordsLoading && productionRecords.length === 0 && !recordsError && (
         <Alert
-          message="생산 데이터 없음"
-          description="실시간 생산 데이터가 없습니다. 데이터 입력 페이지에서 생산 정보를 등록해주세요."
+          message={t('adminDashboard.noProductionData')}
+          description={t('adminDashboard.noProductionDataDesc')}
           type="warning"
           showIcon
           style={{ marginBottom: 24 }}
           action={
             <Button size="small" onClick={() => window.location.href = '/data-input'}>
-              데이터 입력하기
+              {t('adminDashboard.goToDataInput')}
             </Button>
           }
         />
       )}
-      
+
       {recordsError && (
         <Alert
-          message="데이터 로딩 오류"
-          description={`Supabase 연결 오류: ${recordsError}`}
+          message={t('adminDashboard.dataLoadError')}
+          description={`${t('adminDashboard.supabaseConnectionError')}: ${recordsError}`}
           type="error"
           showIcon
           style={{ marginBottom: 24 }}
@@ -845,7 +845,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               fetchDashboardData();
               if (refreshRecords) refreshRecords();
             }}>
-              다시 시도
+              {t('common.retry')}
             </Button>
           }
         />
@@ -881,7 +881,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             onClick={() => showMachineStatusDetail('stopped')}
             style={{ cursor: 'pointer' }}
           >
-            <Tooltip title="클릭하여 상세 정보 보기">
+            <Tooltip title={t('alerts.clickForDetails')}>
               <Statistic
                 title={t('statistics.maintenanceStop')}
                 value={machineStats.maintenance + machineStats.stopped}
@@ -933,13 +933,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         {/* 설비 목록 */}
         <Col xs={24} lg={16}>
-          <Card 
-            title={t('table.machineStatus')} 
+          <Card
+            title={t('table.machineStatus')}
             extra={
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, color: '#666' }}>{t('table.realtimeUpdate')}</span>
                 <span style={{ fontSize: 12, color: '#1890ff' }}>
-                  전체 {machineStats.total}대 중 {processedData.machineList.length}대 표시
+                  {t('adminDashboard.showingMachines', { total: machineStats.total, count: processedData.machineList.length })}
                 </span>
               </div>
             }
@@ -952,7 +952,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                 pageSize: 10, 
                 showSizeChanger: false,
                 total: dashboardData ? dashboardData.machines.length : processedData.machineList.length,
-                showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}대`
+                showTotal: (total, range) => t('table.machinesRange', { start: range[0], end: range[1], total })
               }}
               size="small"
               loading={dashboardLoading || recordsLoading}
@@ -975,7 +975,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
       {/* 실시간 알림 패널 */}
       <Drawer
-        title={`${t('alerts.allAlerts')} (${notifications.length + realtimeAlerts.length}개)`}
+        title={t('alerts.allAlertsCount', { count: notifications.length + realtimeAlerts.length })}
         placement="right"
         width={500}
         onClose={() => setShowNotificationPanel(false)}
@@ -1037,7 +1037,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           </Button>
           {alertStats.unacknowledged > 0 && (
             <Button onClick={clearAllAlerts} block>
-              {t('alerts.clearAll')} ({alertStats.unacknowledged}개)
+              {t('alerts.clearAllCount', { count: alertStats.unacknowledged })}
             </Button>
           )}
         </Space>

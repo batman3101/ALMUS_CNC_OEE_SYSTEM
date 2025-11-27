@@ -151,7 +151,13 @@
     "selectMachine": "Vui lòng chọn thiết bị",
     "shiftEndAlert": "Đã đến giờ kết thúc ca làm việc",
     "shiftEndDescription": "Vui lòng nhập kết quả sản xuất.",
-    "inputRecord": "Nhập kết quả"
+    "inputRecord": "Nhập kết quả",
+    "oeeDataCollecting": "Đang thu thập dữ liệu OEE",
+    "oeeDataCollectingDesc": "OEE sẽ được tính toán chính xác khi nhập kết quả sản xuất.",
+    "loadingOeeData": "Đang tải dữ liệu OEE...",
+    "inputProductionForOee": "Nhập kết quả sản xuất để tự động tính toán OEE.",
+    "loadingData": "Đang tải dữ liệu...",
+    "noAssignedMachines": "Không có thiết bị được phân công"
   },
   "productionInput": {
     "title": "Nhập kết quả sản xuất",
