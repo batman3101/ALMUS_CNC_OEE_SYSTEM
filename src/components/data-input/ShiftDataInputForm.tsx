@@ -41,6 +41,22 @@ const { Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
 
+// 기존 생산 기록 타입 정의
+interface ExistingProductionRecord {
+  record_id: string;
+  machine_id: string;
+  date: string;
+  shift: 'A' | 'B';
+  output_qty: number;
+  defect_qty: number;
+  planned_runtime?: number;
+  actual_runtime?: number;
+  availability?: number;
+  performance?: number;
+  quality?: number;
+  oee?: number;
+}
+
 interface ShiftDataInputFormProps {
   initialDate?: string;
 }
@@ -51,14 +67,19 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const { t } = useDataInputTranslation();
   const { machines, loading: machinesLoading, error: machinesError } = useMachines();
   const { profiles, loading: profilesLoading } = useUserProfiles();
-  const { message } = App.useApp();
-  
+  const { message, modal } = App.useApp();
+
   // 폼 상태
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(initialDate);
   const [activeShift, setActiveShift] = useState<'DAY' | 'NIGHT'>('DAY');
   const [loading, setLoading] = useState(false);
   const [loadingDowntime, setLoadingDowntime] = useState(false);
+
+  // 기존 생산 기록 관련 상태
+  const [existingDayRecord, setExistingDayRecord] = useState<ExistingProductionRecord | null>(null);
+  const [existingNightRecord, setExistingNightRecord] = useState<ExistingProductionRecord | null>(null);
+  const [loadingExistingRecords, setLoadingExistingRecords] = useState(false);
   
   // 교대조별 기본 가동시간 (분 단위)
   const [dayShiftOperatingMinutes, setDayShiftOperatingMinutes] = useState<number>(720); // 기본 12시간 = 720분
@@ -120,9 +141,123 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     return t(`downtime.reasons.${reasonKey}` as 'downtime.reasons.equipmentFailure');
   };
 
-  // 설비 선택 및 날짜 변경 시 비가동 데이터 로드
+  // 기존 생산 기록 로드 함수
+  const loadExistingProductionRecords = async (machineId: string, date: string) => {
+    try {
+      setLoadingExistingRecords(true);
+
+      const response = await fetch(
+        `/api/production-records?machine_id=${machineId}&startDate=${date}&endDate=${date}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.records && result.records.length > 0) {
+        // 주간조(A)와 야간조(B) 기록 분리
+        const dayRecord = result.records.find((r: ExistingProductionRecord) => r.shift === 'A');
+        const nightRecord = result.records.find((r: ExistingProductionRecord) => r.shift === 'B');
+
+        setExistingDayRecord(dayRecord || null);
+        setExistingNightRecord(nightRecord || null);
+
+        // 기존 데이터가 있으면 폼에 반영
+        if (dayRecord) {
+          setDayShiftData(prev => ({
+            ...prev,
+            actual_production: dayRecord.output_qty || 0,
+            defect_quantity: dayRecord.defect_qty || 0,
+            good_quantity: Math.max(0, (dayRecord.output_qty || 0) - (dayRecord.defect_qty || 0))
+          }));
+        }
+
+        if (nightRecord) {
+          setNightShiftData(prev => ({
+            ...prev,
+            actual_production: nightRecord.output_qty || 0,
+            defect_quantity: nightRecord.defect_qty || 0,
+            good_quantity: Math.max(0, (nightRecord.output_qty || 0) - (nightRecord.defect_qty || 0))
+          }));
+        }
+
+        if (dayRecord || nightRecord) {
+          message.info(t('messages.existingRecordLoaded'));
+        }
+      } else {
+        // 기존 기록 없음
+        setExistingDayRecord(null);
+        setExistingNightRecord(null);
+      }
+    } catch (error) {
+      console.error('Error loading existing production records:', error);
+      setExistingDayRecord(null);
+      setExistingNightRecord(null);
+    } finally {
+      setLoadingExistingRecords(false);
+    }
+  };
+
+  // 생산 기록 삭제 함수
+  const handleDeleteRecord = async (recordId: string, shiftType: 'DAY' | 'NIGHT') => {
+    modal.confirm({
+      title: t('messages.confirmDelete'),
+      content: t('messages.confirmDeleteDescription'),
+      okText: t('editMode.deleteRecord'),
+      cancelText: t('downtime.cancel'),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          setLoading(true);
+          const response = await fetch(`/api/production-records/${recordId}`, {
+            method: 'DELETE'
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const result = await response.json();
+
+          if (result.success) {
+            message.success(t('messages.recordDeleteSuccess'));
+
+            // 삭제된 교대조 상태 초기화
+            if (shiftType === 'DAY') {
+              setExistingDayRecord(null);
+              setDayShiftData(prev => ({
+                ...prev,
+                actual_production: 0,
+                defect_quantity: 0,
+                good_quantity: 0
+              }));
+            } else {
+              setExistingNightRecord(null);
+              setNightShiftData(prev => ({
+                ...prev,
+                actual_production: 0,
+                defect_quantity: 0,
+                good_quantity: 0
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error deleting production record:', error);
+          message.error(t('messages.recordDeleteFailed'));
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  };
+
+  // 설비 선택 및 날짜 변경 시 기존 생산 기록 및 비가동 데이터 로드
   React.useEffect(() => {
     if (selectedMachineId && selectedDate) {
+      // 기존 생산 기록 로드
+      loadExistingProductionRecords(selectedMachineId, selectedDate);
       // 주간조와 야간조 비가동 데이터 모두 로드
       loadDowntimeEntries(selectedMachineId, selectedDate, 'DAY');
       loadDowntimeEntries(selectedMachineId, selectedDate, 'NIGHT');
@@ -792,11 +927,72 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         </Card>
       )}
 
+      {/* 기존 생산 기록 알림 */}
+      {selectedMachineId && (existingDayRecord || existingNightRecord) && (
+        <Alert
+          message={t('editMode.existingRecordFound')}
+          description={
+            <div>
+              <Text>{t('editMode.existingRecordDescription')}</Text>
+              <div style={{ marginTop: 8 }}>
+                {existingDayRecord && (
+                  <div style={{ marginBottom: 4 }}>
+                    <Text type="secondary">{t('editMode.dayShiftRecordId')}: </Text>
+                    <Text code>{existingDayRecord.record_id}</Text>
+                    <Button
+                      type="link"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleDeleteRecord(existingDayRecord.record_id, 'DAY')}
+                      loading={loading}
+                      style={{ marginLeft: 8 }}
+                    >
+                      {t('editMode.deleteRecord')}
+                    </Button>
+                  </div>
+                )}
+                {existingNightRecord && (
+                  <div>
+                    <Text type="secondary">{t('editMode.nightShiftRecordId')}: </Text>
+                    <Text code>{existingNightRecord.record_id}</Text>
+                    <Button
+                      type="link"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleDeleteRecord(existingNightRecord.record_id, 'NIGHT')}
+                      loading={loading}
+                      style={{ marginLeft: 8 }}
+                    >
+                      {t('editMode.deleteRecord')}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          }
+          type="warning"
+          showIcon
+          style={{ marginBottom: '16px' }}
+        />
+      )}
+
+      {/* 기존 기록 로딩 표시 */}
+      {loadingExistingRecords && (
+        <Alert
+          message={t('recordList.checkingExistingRecords')}
+          type="info"
+          showIcon
+          style={{ marginBottom: '16px' }}
+        />
+      )}
+
       {/* 교대별 데이터 입력 */}
       {selectedMachineId && (
-        <Card 
-          title={t('dataEntry.shiftDataInput')} 
-          size="small" 
+        <Card
+          title={t('dataEntry.shiftDataInput')}
+          size="small"
           style={{ marginBottom: '16px' }}
         >
           <Tabs 
@@ -1086,19 +1282,22 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       {/* 저장 버튼 */}
       {selectedMachineId && (
         <div style={{ textAlign: 'center' }}>
-          <Button 
-            type="primary" 
-            htmlType="submit" 
+          <Button
+            type="primary"
+            htmlType="submit"
             loading={loading}
             icon={<SaveOutlined />}
             size="large"
             onClick={handleSave}
             disabled={
-              (dayShiftOff && nightShiftOff) || 
+              (dayShiftOff && nightShiftOff) ||
               (!dayShiftOff && !dayShiftData.actual_production && !nightShiftOff && !nightShiftData.actual_production)
             }
           >
-            {t('dataEntry.saveProductionData')}
+            {(existingDayRecord || existingNightRecord)
+              ? t('editMode.updateData')
+              : t('editMode.newRecord')
+            }
           </Button>
         </div>
       )}

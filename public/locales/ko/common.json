@@ -26,6 +26,7 @@
     "machines": "설비 현황",
     "myMachines": "내 설비 현황",
     "dataInput": "데이터 입력",
+    "productionRecords": "생산 기록 관리",
     "logInput": "로그 입력",
     "modelInfo": "모델 정보",
     "reports": "통계 리포트",
@@ -88,7 +89,13 @@
     "passwordRequired": "비밀번호를 입력하세요",
     "passwordMinLength": "비밀번호는 최소 6자 이상이어야 합니다",
     "passwordPlaceholder": "비밀번호를 입력하세요",
-    "loggingIn": "로그인 중..."
+    "loggingIn": "로그인 중...",
+    "authError": "인증 오류",
+    "verifyingAuth": "인증 정보를 확인하고 있습니다...",
+    "pleaseWait": "잠시만 기다려주세요",
+    "accessDenied": "접근 권한 없음",
+    "noPermission": "이 페이지에 접근할 권한이 없습니다.",
+    "goBack": "뒤로 가기"
   },
   "roles": {
     "admin": "관리자",

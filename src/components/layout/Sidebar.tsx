@@ -2,14 +2,15 @@
 
 import React from 'react';
 import { Layout, Menu, Grid } from 'antd';
-import { 
+import {
   DashboardOutlined,
   DesktopOutlined,
   EditOutlined,
   BarChartOutlined,
   SettingOutlined,
   UserOutlined,
-  AppstoreOutlined
+  AppstoreOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -78,6 +79,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             label: t('nav.dataInput'),
           },
           {
+            key: '/production-records',
+            icon: <FileTextOutlined />,
+            label: t('nav.productionRecords'),
+          },
+          {
             key: '/model-info',
             icon: <AppstoreOutlined />,
             label: t('nav.modelInfo'),
@@ -101,6 +107,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             key: '/data-input',
             icon: <EditOutlined />,
             label: t('nav.dataInput'),
+          },
+          {
+            key: '/production-records',
+            icon: <FileTextOutlined />,
+            label: t('nav.productionRecords'),
           },
           {
             key: '/model-info',

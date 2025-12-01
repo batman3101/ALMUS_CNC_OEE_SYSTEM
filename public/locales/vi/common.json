@@ -26,6 +26,7 @@
     "machines": "Tình trạng thiết bị",
     "myMachines": "Thiết bị của tôi",
     "dataInput": "Nhập dữ liệu",
+    "productionRecords": "Quản lý bản ghi sản xuất",
     "logInput": "Nhập nhật ký",
     "modelInfo": "Thông tin mẫu",
     "reports": "Báo cáo thống kê",
@@ -49,7 +50,13 @@
     "passwordRequired": "Vui lòng nhập mật khẩu",
     "passwordMinLength": "Mật khẩu phải có ít nhất 6 ký tự",
     "passwordPlaceholder": "Nhập mật khẩu của bạn",
-    "loggingIn": "Đang đăng nhập..."
+    "loggingIn": "Đang đăng nhập...",
+    "authError": "Lỗi xác thực",
+    "verifyingAuth": "Đang xác minh thông tin đăng nhập...",
+    "pleaseWait": "Vui lòng đợi",
+    "accessDenied": "Không có quyền truy cập",
+    "noPermission": "Bạn không có quyền truy cập trang này.",
+    "goBack": "Quay lại"
   },
   "roles": {
     "admin": "Quản trị viên",

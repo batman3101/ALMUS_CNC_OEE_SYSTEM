@@ -4,41 +4,47 @@ import React, { ReactNode } from 'react';
 import { Spin, Alert, Button } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import LoginForm from './LoginForm';
+
+type UserRole = 'admin' | 'engineer' | 'operator';
 
 interface ProtectedRouteProps {
   children: ReactNode;
   fallback?: ReactNode;
+  allowedRoles?: UserRole[];
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
-  children, 
-  fallback 
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  fallback,
+  allowedRoles
 }) => {
   const { user, loading, error } = useAuth();
+  const { t } = useLanguage();
 
   // 인증 오류가 있는 경우
   if (error && !loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
+      <div style={{
+        display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center', 
-        alignItems: 'center', 
+        justifyContent: 'center',
+        alignItems: 'center',
         minHeight: '100vh',
         padding: '20px'
       }}>
         <Alert
-          message="인증 오류"
+          message={t('auth.authError')}
           description={error}
           type="error"
           style={{ marginBottom: '20px', maxWidth: '500px' }}
         />
-        <Button 
+        <Button
           icon={<ReloadOutlined />}
           onClick={() => window.location.reload()}
         >
-          새로고침
+          {t('common.refresh')}
         </Button>
       </div>
     );
@@ -47,11 +53,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // 로딩 중일 때 (개선된 로딩 UI)
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
+      <div style={{
+        display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center', 
-        alignItems: 'center', 
+        justifyContent: 'center',
+        alignItems: 'center',
         minHeight: '100vh',
         backgroundColor: '#f5f5f5'
       }}>
@@ -64,10 +70,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         }}>
           <Spin size="large" />
           <div style={{ marginTop: '20px', fontSize: '16px', color: '#666' }}>
-            인증 정보를 확인하고 있습니다...
+            {t('auth.verifyingAuth')}
           </div>
           <div style={{ marginTop: '8px', fontSize: '12px', color: '#999' }}>
-            잠시만 기다려주세요
+            {t('auth.pleaseWait')}
           </div>
         </div>
       </div>
@@ -79,9 +85,9 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     if (fallback) {
       return <>{fallback}</>;
     }
-    
+
     return (
-      <div style={{ 
+      <div style={{
         minHeight: '100vh',
         backgroundColor: '#f5f5f5',
         display: 'flex',
@@ -97,6 +103,33 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
         </div>
       </div>
     );
+  }
+
+  // 역할 기반 접근 제어
+  if (allowedRoles && allowedRoles.length > 0) {
+    const userRole = user.role as UserRole;
+    if (!allowedRoles.includes(userRole)) {
+      return (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          padding: '20px'
+        }}>
+          <Alert
+            message={t('auth.accessDenied')}
+            description={t('auth.noPermission')}
+            type="warning"
+            style={{ marginBottom: '20px', maxWidth: '500px' }}
+          />
+          <Button onClick={() => window.history.back()}>
+            {t('auth.goBack')}
+          </Button>
+        </div>
+      );
+    }
   }
 
   // 인증된 경우 자식 컴포넌트 렌더링
