@@ -73,12 +73,13 @@ export async function POST(request: NextRequest) {
     console.log('Auth user created successfully:', authUserId);
 
     // Create user profile
+    // 모든 역할에서 담당 설비 저장 가능 (관리자가 모든 역할의 설비 할당 관리 가능)
     const profileInsertData = {
       user_id: authUserId,
       name,
       email,
       role,
-      assigned_machines: role === 'operator' ? assigned_machines : null
+      assigned_machines: assigned_machines || []
     };
     console.log('📋 프로필 삽입 데이터:', JSON.stringify(profileInsertData, null, 2));
     

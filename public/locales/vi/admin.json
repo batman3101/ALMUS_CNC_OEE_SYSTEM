@@ -44,6 +44,8 @@
     "assignMachines": "Phân công thiết bị",
     "availableMachines": "Thiết bị có sẵn",
     "assignedMachines": "Thiết bị được phân công",
+    "optional": "Tùy chọn",
+    "operatorMachineHint": "Người vận hành chỉ có thể truy cập các thiết bị được phân công.",
     "confirmDelete": "Bạn có chắc chắn muốn xóa người dùng này?",
     "deleteSuccess": "Người dùng đã được xóa thành công",
     "deleteError": "Có lỗi xảy ra khi xóa người dùng",

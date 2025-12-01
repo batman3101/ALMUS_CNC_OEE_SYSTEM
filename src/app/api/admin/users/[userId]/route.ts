@@ -15,12 +15,13 @@ export async function PUT(
     let authUpdated = false;
 
     // Update user profile
+    // 모든 역할에서 담당 설비 저장 가능 (관리자가 모든 역할의 설비 할당 관리 가능)
     const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .update({
         name,
         role,
-        assigned_machines: role === 'operator' ? assigned_machines : null,
+        assigned_machines: assigned_machines || [],
         updated_at: new Date().toISOString()
       })
       .eq('user_id', userId);

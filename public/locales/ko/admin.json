@@ -44,6 +44,8 @@
     "assignMachines": "담당 설비 할당",
     "availableMachines": "사용 가능한 설비",
     "assignedMachines": "할당된 설비",
+    "optional": "선택사항",
+    "operatorMachineHint": "운영자는 할당된 설비만 접근할 수 있습니다.",
     "confirmDelete": "이 사용자를 삭제하시겠습니까?",
     "deleteSuccess": "사용자가 성공적으로 삭제되었습니다",
     "deleteError": "사용자 삭제 중 오류가 발생했습니다",

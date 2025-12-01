@@ -85,7 +85,8 @@ const UserForm: React.FC<UserFormProps> = ({
           name: values.name,
           email: values.email,
           role: values.role,
-          assigned_machines: values.role === 'operator' ? targetKeys : undefined
+          // 모든 역할에서 담당 설비 저장 가능
+          assigned_machines: targetKeys.length > 0 ? targetKeys : []
         }, user.email);
         message.success(t('admin:userManagement.saveSuccess'));
       } else {
@@ -94,7 +95,8 @@ const UserForm: React.FC<UserFormProps> = ({
           email: values.email,
           password: values.password!,
           role: values.role,
-          assigned_machines: values.role === 'operator' ? targetKeys : undefined
+          // 모든 역할에서 담당 설비 저장 가능
+          assigned_machines: targetKeys.length > 0 ? targetKeys : []
         });
         message.success(t('admin:userManagement.saveSuccess'));
       }
@@ -119,7 +121,8 @@ const UserForm: React.FC<UserFormProps> = ({
   ];
 
   const selectedRole = Form.useWatch('role', form);
-  const showMachineAssignment = selectedRole === 'operator';
+  // 모든 역할에서 담당 설비 할당 항상 표시
+  const showMachineAssignment = true;
 
   return (
     <Modal
@@ -185,7 +188,17 @@ const UserForm: React.FC<UserFormProps> = ({
 
         {showMachineAssignment && (
           <Form.Item
-            label={t('admin:userManagement.assignMachines')}
+            label={
+              <span>
+                {t('admin:userManagement.assignMachines')}
+                {(selectedRole || user?.role) !== 'operator' && (
+                  <span style={{ color: '#999', fontWeight: 'normal', marginLeft: 8 }}>
+                    ({t('admin:userManagement.optional') || '선택사항'})
+                  </span>
+                )}
+              </span>
+            }
+            extra={(selectedRole || user?.role) === 'operator' ? t('admin:userManagement.operatorMachineHint') || '운영자는 할당된 설비만 접근할 수 있습니다.' : undefined}
           >
             <Transfer
               dataSource={transferData}
