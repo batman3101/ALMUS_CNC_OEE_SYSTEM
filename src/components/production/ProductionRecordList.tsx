@@ -16,7 +16,8 @@ import {
   Tag,
   Row,
   Col,
-  App
+  App,
+  theme
 } from 'antd';
 import {
   EditOutlined,
@@ -61,6 +62,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
   const { t } = useDataInputTranslation();
   const { machines, loading: machinesLoading } = useMachines();
   const { message: messageApi } = App.useApp();
+  const { token } = theme.useToken();
 
   // 상태
   const [records, setRecords] = useState<ProductionRecord[]>([]);
@@ -478,7 +480,13 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
         {editingRecord && (
           <div style={{ marginBottom: 16 }}>
             <Text strong>{t('recordList.editModal.recordInfo')}</Text>
-            <div style={{ marginTop: 8, padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
+            <div style={{
+              marginTop: 8,
+              padding: 12,
+              background: token.colorBgContainer,
+              border: `1px solid ${token.colorBorderSecondary}`,
+              borderRadius: token.borderRadius
+            }}>
               <Row gutter={16}>
                 <Col span={12}>
                   <Text type="secondary">{t('recordList.editModal.machine')}: </Text>
