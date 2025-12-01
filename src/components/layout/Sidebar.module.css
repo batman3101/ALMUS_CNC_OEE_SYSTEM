@@ -43,6 +43,12 @@
   font-size: 12px;
 }
 
+.logoImage {
+  flex-shrink: 0;
+  margin-right: 10px;
+  border-radius: 4px;
+}
+
 .menu {
   border-right: 0;
   height: calc(100vh - 64px);

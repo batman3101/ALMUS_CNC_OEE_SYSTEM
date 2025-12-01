@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { Layout, Menu, Grid } from 'antd';
 import {
   DashboardOutlined,
@@ -169,6 +170,14 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       }}
     >
       <div className={`${styles.logo} ${screens.xs ? styles.logoMobile : ''}`}>
+        <Image
+          src="/ALMUS symbol.png"
+          alt="ALMUS Logo"
+          width={32}
+          height={32}
+          className={styles.logoImage}
+          priority
+        />
         <span className={`${styles.logoText} ${screens.xs ? styles.logoTextMobile : ''}`}>
           {isLoading ? 'Loading...' : companyInfo.name}
         </span>
