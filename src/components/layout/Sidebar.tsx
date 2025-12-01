@@ -62,6 +62,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             key: '/data-input',
             icon: <EditOutlined />,
             label: t('nav.dataInput'),
+          },
+          {
+            key: '/production-records',
+            icon: <FileTextOutlined />,
+            label: t('nav.productionRecords'),
           }
         );
         break;

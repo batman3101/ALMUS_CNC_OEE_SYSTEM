@@ -31,7 +31,7 @@ function ProductionRecordsContent() {
 
 export default function ProductionRecordsPage() {
   return (
-    <ProtectedRoute allowedRoles={['admin', 'engineer']}>
+    <ProtectedRoute allowedRoles={['admin', 'engineer', 'operator']}>
       <AntdApp>
         <ProductionRecordsContent />
       </AntdApp>
