@@ -11,7 +11,8 @@ import {
   SettingOutlined,
   UserOutlined,
   AppstoreOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  LineChartOutlined
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -128,6 +129,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             key: '/reports',
             icon: <BarChartOutlined />,
             label: t('nav.reports'),
+          },
+          {
+            key: '/analytics',
+            icon: <LineChartOutlined />,
+            label: t('nav.analytics'),
           },
           {
             key: '/admin',
