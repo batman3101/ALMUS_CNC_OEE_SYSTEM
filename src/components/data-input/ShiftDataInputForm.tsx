@@ -34,6 +34,7 @@ import dayjs from 'dayjs';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
 import { useMachines } from '@/hooks/useMachines';
 import { useUserProfiles } from '@/hooks/useUserProfiles';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import type { ShiftProductionData, DowntimeEntry, DailyProductionData } from '@/types/dataInput';
 import { DOWNTIME_REASON_KEYS } from '@/types/dataInput';
 
@@ -68,6 +69,11 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const { machines, loading: machinesLoading, error: machinesError } = useMachines();
   const { profiles, loading: profilesLoading } = useUserProfiles();
   const { message, modal } = App.useApp();
+  const { getShiftTimes } = useSystemSettings();
+
+  // 시스템 설정에서 휴식 시간 가져오기
+  const shiftSettings = getShiftTimes();
+  const breakTimeMinutes = shiftSettings.breakTime || 60; // 기본값 60분
 
   // 폼 상태
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
@@ -325,10 +331,12 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     return data.process;
   };
 
-  // 기준 생산량(CAPA) 계산 (분 단위 입력)
-  const calculateCapacity = (tactTimeSeconds: number, operatingMinutes: number) => {
+  // 기준 생산량(CAPA) 계산 (분 단위 입력, 휴식 시간 차감 적용)
+  const calculateCapacity = (tactTimeSeconds: number, operatingMinutes: number, breakMinutes: number = 0) => {
     if (!tactTimeSeconds || !operatingMinutes) return 0;
-    return Math.floor((operatingMinutes * 60) / tactTimeSeconds);
+    // 실제 작업 가능 시간 = 가동시간 - 휴식시간
+    const actualOperatingMinutes = Math.max(0, operatingMinutes - breakMinutes);
+    return Math.floor((actualOperatingMinutes * 60) / tactTimeSeconds);
   };
 
   // 설비 선택 핸들러
@@ -585,12 +593,15 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       (!dayShiftOff ? dayShiftData.total_downtime_minutes : 0) + 
       (!nightShiftOff ? nightShiftData.total_downtime_minutes : 0);
 
-    // 기준 생산량(CAPA) = Tact Time * 교대조별 가동시간 합계
+    // 기준 생산량(CAPA) = Tact Time * 교대조별 가동시간 합계 (휴식 시간 차감)
     const tactTime = machineDetails.currentProcess?.tact_time_seconds || 120;
-    const totalOperatingMinutes = 
-      (!dayShiftOff ? dayShiftOperatingMinutes : 0) + 
+    const totalOperatingMinutes =
+      (!dayShiftOff ? dayShiftOperatingMinutes : 0) +
       (!nightShiftOff ? nightShiftOperatingMinutes : 0);
-    const plannedCapacity = calculateCapacity(tactTime, totalOperatingMinutes);
+    // 총 휴식 시간 = 휴무가 아닌 교대조 수 × 교대조당 휴식시간
+    const activeShiftCount = (!dayShiftOff ? 1 : 0) + (!nightShiftOff ? 1 : 0);
+    const totalBreakMinutes = activeShiftCount * breakTimeMinutes;
+    const plannedCapacity = calculateCapacity(tactTime, totalOperatingMinutes, totalBreakMinutes);
 
     // OEE 계산 (휴무 교대조 제외)
     const plannedOperatingTime = totalOperatingMinutes; // 분 단위
@@ -835,11 +846,11 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                 {!dayShiftOff && (
                   <div>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      ({Math.floor(dayShiftOperatingMinutes / 60)}{t('common.hours')} {dayShiftOperatingMinutes % 60}{t('common.minutes')})
+                      ({Math.floor(dayShiftOperatingMinutes / 60)}{t('common.hours')} {dayShiftOperatingMinutes % 60}{t('common.minutes')} - {t('shift.breakTime')} {breakTimeMinutes}{t('common.minutes')})
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
-                      CAPA: {machineDetails.currentProcess?.tact_time_seconds 
-                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes)
+                      CAPA: {machineDetails.currentProcess?.tact_time_seconds
+                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes, breakTimeMinutes)
                         : 0
                       }{t('common.pieces')}
                     </Text>
@@ -881,11 +892,11 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                 {!nightShiftOff && (
                   <div>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      ({Math.floor(nightShiftOperatingMinutes / 60)}{t('common.hours')} {nightShiftOperatingMinutes % 60}{t('common.minutes')})
+                      ({Math.floor(nightShiftOperatingMinutes / 60)}{t('common.hours')} {nightShiftOperatingMinutes % 60}{t('common.minutes')} - {t('shift.breakTime')} {breakTimeMinutes}{t('common.minutes')})
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
-                      CAPA: {machineDetails.currentProcess?.tact_time_seconds 
-                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes)
+                      CAPA: {machineDetails.currentProcess?.tact_time_seconds
+                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes, breakTimeMinutes)
                         : 0
                       }{t('common.pieces')}
                     </Text>
@@ -907,10 +918,10 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
             <Descriptions.Item label={t('schedule.dailyTotalCapa')} span={1}>
               <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
-                {machineDetails.currentProcess?.tact_time_seconds 
+                {machineDetails.currentProcess?.tact_time_seconds
                   ? (
-                      (!dayShiftOff ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes) : 0) +
-                      (!nightShiftOff ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes) : 0)
+                      (!dayShiftOff ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes, breakTimeMinutes) : 0) +
+                      (!nightShiftOff ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes, breakTimeMinutes) : 0)
                     )
                   : 0
                 }{t('common.pieces')}

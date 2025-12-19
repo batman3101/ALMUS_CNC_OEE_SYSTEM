@@ -56,15 +56,16 @@
   },
   "shift": {
     "dayShift": "Ca ngày",
-    "nightShift": "Ca đêm", 
+    "nightShift": "Ca đêm",
     "dayShiftTime": "Ca ngày (08:00-20:00)",
     "nightShiftTime": "Ca đêm (20:00-08:00)",
     "dayShiftBaseOperatingTime": "Thời gian vận hành cơ bản ca ngày",
     "nightShiftBaseOperatingTime": "Thời gian vận hành cơ bản ca đêm",
-    "dayShiftOff": "Nghỉ ca ngày", 
+    "dayShiftOff": "Nghỉ ca ngày",
     "nightShiftOff": "Nghỉ ca đêm",
     "dayShiftOffDescription": "Ca ngày đang được đặt nghỉ. Bạn có thể nhập dữ liệu sau khi hủy nghỉ trong thông tin thiết bị.",
-    "nightShiftOffDescription": "Ca đêm đang được đặt nghỉ. Bạn có thể nhập dữ liệu sau khi hủy nghỉ trong thông tin thiết bị."
+    "nightShiftOffDescription": "Ca đêm đang được đặt nghỉ. Bạn có thể nhập dữ liệu sau khi hủy nghỉ trong thông tin thiết bị.",
+    "breakTime": "Nghỉ"
   },
   "downtime": {
     "addDowntime": "Thêm thời gian ngừng hoạt động", 

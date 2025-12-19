@@ -64,7 +64,8 @@
     "dayShiftOff": "주간조 휴무",
     "nightShiftOff": "야간조 휴무",
     "dayShiftOffDescription": "주간조가 휴무로 설정되어 있습니다. 설비 정보에서 휴무를 해제하면 데이터를 입력할 수 있습니다.",
-    "nightShiftOffDescription": "야간조가 휴무로 설정되어 있습니다. 설비 정보에서 휴무를 해제하면 데이터를 입력할 수 있습니다."
+    "nightShiftOffDescription": "야간조가 휴무로 설정되어 있습니다. 설비 정보에서 휴무를 해제하면 데이터를 입력할 수 있습니다.",
+    "breakTime": "휴식"
   },
   "downtime": {
     "addDowntime": "비가동 시간 추가",
