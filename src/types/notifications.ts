@@ -27,7 +27,7 @@ export interface Notification {
   acknowledged_at?: string;
   acknowledged_by?: string;
   resolved_at?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // 알림 임계치 설정 인터페이스
@@ -93,7 +93,7 @@ export interface NotificationDetectionResult {
   message: string;
   threshold_value?: number;
   current_value?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // 알림 필터 옵션

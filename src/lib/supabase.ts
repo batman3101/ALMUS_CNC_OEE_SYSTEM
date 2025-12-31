@@ -79,14 +79,15 @@ export async function safeSupabaseOperation<T>(
     }
     
     return await operation(supabase);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 에러 정보를 더 상세히 로깅
+    const err = error as { message?: string; code?: string; details?: unknown; hint?: string; status?: number };
     const errorInfo = {
-      message: error?.message || 'Unknown error',
-      code: error?.code || 'UNKNOWN_CODE',
-      details: error?.details || null,
-      hint: error?.hint || null,
-      status: error?.status || null
+      message: err?.message || 'Unknown error',
+      code: err?.code || 'UNKNOWN_CODE',
+      details: err?.details || null,
+      hint: err?.hint || null,
+      status: err?.status || null
     };
     
     console.error('Supabase operation failed:', errorInfo);

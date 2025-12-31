@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Modal, Button, Typography, Space, Alert, Divider } from 'antd';
-import { ClockCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined } from '@ant-design/icons';
 import { Machine } from '@/types';
 import ProductionRecordInput from './ProductionRecordInput';
 import { useProductionRecords } from '@/hooks/useProductionRecords';

@@ -55,7 +55,7 @@ interface DailyMetrics {
 }
 
 // 설비 상태별 설정
-const getStateConfig = (state: MachineState, language: 'ko' | 'vi' = 'ko') => {
+const getStateConfig = (state: MachineState) => {
   const configs = {
     NORMAL_OPERATION: {
       color: 'success',
@@ -117,7 +117,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
   onRefresh,
   language = 'ko'
 }) => {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [, setCurrentTime] = useState(new Date());
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetrics | null>(null);
 
   // 현재 시간 업데이트 (1초마다)
@@ -275,8 +275,8 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
             {currentStateConfig ? (
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <Tag 
-                    color={currentStateConfig.color as any}
+                  <Tag
+                    color={currentStateConfig.color}
                     icon={currentStateConfig.icon}
                     style={{ 
                       padding: '8px 16px', 
@@ -407,7 +407,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
           >
             {dailyMetrics?.stateHistory ? (
               <Timeline
-                items={dailyMetrics.stateHistory.map((item, index) => {
+                items={dailyMetrics.stateHistory.map((item) => {
                   const config = getStateConfig(item.state, language);
                   const startTime = new Date(item.startTime);
                   const endTime = item.endTime ? new Date(item.endTime) : null;
@@ -421,7 +421,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
                       <div>
                         <Space direction="vertical" size="small">
                           <div>
-                            <Tag color={config.color as any}>
+                            <Tag color={config.color}>
                               {config.text[language]}
                             </Tag>
                             <Text type="secondary" style={{ marginLeft: 8 }}>

@@ -1,17 +1,17 @@
 'use client';
 
 import React from 'react';
-import { 
-  Card, 
-  Button, 
-  Select, 
-  Space, 
-  Typography, 
-  List, 
-  Badge, 
+import {
+  Card,
+  Button,
+  Select,
+  Space,
+  Typography,
+  List,
+  Badge,
   App,
   Row,
-  Col
+  Col,
 } from 'antd';
 import { 
   PlayCircleOutlined, 
@@ -23,7 +23,7 @@ import {
 import { useRealtimeMachines } from '@/hooks/useRealtimeMachines';
 import { MachineState } from '@/types';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { Option } = Select;
 
 // 설비 상태 옵션 (데이터베이스 enum 값과 일치)
@@ -59,9 +59,10 @@ export const RealtimeTestPanel: React.FC = () => {
       } else {
         message.error(`설비 상태 변경에 실패했습니다: ${error || '알 수 없는 오류'}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Status change error:', err);
-      message.error(`오류가 발생했습니다: ${err.message}`);
+      const errMessage = err instanceof Error ? err.message : '알 수 없는 오류';
+      message.error(`오류가 발생했습니다: ${errMessage}`);
     }
   };
 

@@ -43,9 +43,10 @@ export const useUserProfiles = () => {
       console.log(`Successfully loaded ${result.count} user profiles`);
       setProfiles(result.profiles || []);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error in fetchUserProfiles:', error);
-      setError(error.message || 'Failed to load user profiles');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load user profiles';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -11,7 +11,7 @@ import {
   TooltipProps,
 } from 'recharts';
 import { Card, Typography, Row, Col, Empty, Spin, Table } from 'antd';
-import { useDashboardTranslation } from '@/hooks/useTranslation';
+// import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 const { Title: AntTitle } = Typography;
 
@@ -71,7 +71,7 @@ const renderLabel = (entry: QualityDefectTypeData) => {
 };
 
 // 커스텀 범례 컴포넌트
-const CustomLegend: React.FC<{ payload?: any[] }> = ({ payload }) => {
+const CustomLegend: React.FC<{ payload?: Array<{ color: string; value: string }> }> = ({ payload }) => {
   if (!payload) return null;
 
   return (
@@ -97,7 +97,8 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
   error,
   showTable = true
 }) => {
-  const { t } = useDashboardTranslation();
+  // Translation hook available for future use
+  // const { t } = useDashboardTranslation();
   
   // 데이터 로깅 (디버깅용)
   React.useEffect(() => {

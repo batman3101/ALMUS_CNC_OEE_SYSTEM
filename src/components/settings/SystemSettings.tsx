@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Tabs, 
   Card, 
@@ -39,13 +39,14 @@ const SystemSettings: React.FC = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
-  const { 
-    settings, 
-    isLoading, 
-    error, 
-    refreshSettings, 
+  const {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    settings,
+    isLoading,
+    error,
+    refreshSettings,
     resetAllSettings,
-    lastUpdated 
+    lastUpdated
   } = useSystemSettings();
   
   const [activeTab, setActiveTab] = useState('general');

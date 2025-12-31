@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-import { Select, Space, Checkbox, Card, Row, Col, Divider } from 'antd';
+import { Select, Space, Checkbox, Card, Row, Col } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
 
 interface MachineComparisonChartProps {
@@ -29,7 +29,6 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   data,
   height = 400,
   chartType = 'bar',
-  onChartTypeChange,
   selectedMachines = []
 }) => {
   const { t } = useTranslation();
@@ -83,7 +82,7 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
     return labels[key] || key;
   };
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: { location: string; downtimeHours: number; defectRate: number }; color: string; dataKey: string; value: number }>; label?: string }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -102,7 +101,7 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
             {t('dashboard:comparisonChart.location')}: {data.location}
           </p>
           <div style={{ margin: '8px 0' }}>
-            {payload.map((entry: any, index: number) => (
+            {payload.map((entry, index: number) => (
               <p key={index} style={{ fontSize: '14px', margin: '0 0 4px 0', color: entry.color }}>
                 {getMetricLabel(entry.dataKey)}: {entry.value}%
               </p>

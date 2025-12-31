@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Table, Progress, Alert, Space, Button, Select, Spin, message, Badge, Drawer, List, Empty, Typography, Tag, Tooltip, Modal } from 'antd';
+import { Row, Col, Card, Statistic, Table, Progress, Alert, Space, Button, Spin, message, Badge, Drawer, List, Empty, Typography, Tag, Tooltip, Modal } from 'antd';
 import { 
   DashboardOutlined, 
   DesktopOutlined, 
@@ -34,8 +34,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const { notifications, acknowledgeNotification } = useNotifications();
   const { dateRange, getFormattedRange, preset } = useDateRange();
   const [dashboardLoading, setDashboardLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [statusDescriptions, setStatusDescriptions] = useState<any[]>([]);
+  const [dashboardData, setDashboardData] = useState<{
+    machines: Machine[];
+    production: unknown[];
+    models: unknown[];
+    oeeMetrics: Record<string, OEEMetrics>;
+  } | null>(null);
+  const [statusDescriptions, setStatusDescriptions] = useState<Array<{
+    status: string;
+    description_ko: string;
+    description_vi: string;
+  }>>([]);
 
   // 실시간 생산 기록 데이터 구독
   const {
@@ -60,7 +69,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   // });
 
   // 임시 빈 데이터로 대체
-  const realtimeAlerts: any[] = [];
+  const realtimeAlerts: Array<{
+    id: string | number;
+    priority: string;
+    message: string;
+    machineName?: string;
+    timestamp: string;
+    acknowledged: boolean;
+    type?: string;
+  }> = [];
   const alertStats = { total: 0, unacknowledged: 0, critical: 0, high: 0, byType: {} };
   const acknowledgeAlert = () => {};
   const clearAllAlerts = () => {};
@@ -233,21 +250,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       
       machinesData.forEach((machine: Machine) => {
         // 해당 설비의 생산 기록 찾기
-        const machineProduction = productionData.filter((p: any) => p.machine_id === machine.id);
+        interface ProductionData {
+          machine_id: string;
+          output_qty?: number;
+          defect_qty?: number;
+          actual_runtime?: number;
+          planned_runtime?: number;
+          ideal_runtime?: number;
+          oee?: number;
+          availability?: number;
+          performance?: number;
+          quality?: number;
+        }
+        const machineProduction = productionData.filter((p: unknown) => (p as ProductionData).machine_id === machine.id) as ProductionData[];
 
         if (machineProduction.length > 0) {
           // ✅ 실제 Supabase 데이터 사용 (hardcoded 값 제거)
-          const totalOutput = machineProduction.reduce((sum: number, p: any) => sum + (p.output_qty || 0), 0);
-          const totalDefects = machineProduction.reduce((sum: number, p: any) => sum + (p.defect_qty || 0), 0);
-          const totalActualRuntime = machineProduction.reduce((sum: number, p: any) => sum + (p.actual_runtime || 0), 0);
-          const totalPlannedRuntime = machineProduction.reduce((sum: number, p: any) => sum + (p.planned_runtime || 0), 0);
-          const totalIdealRuntime = machineProduction.reduce((sum: number, p: any) => sum + (p.ideal_runtime || 0), 0);
+          const totalOutput = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.output_qty || 0), 0);
+          const totalDefects = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.defect_qty || 0), 0);
+          const totalActualRuntime = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.actual_runtime || 0), 0);
+          const totalPlannedRuntime = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.planned_runtime || 0), 0);
+          const totalIdealRuntime = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.ideal_runtime || 0), 0);
 
           // production_records 테이블의 실제 OEE 값들을 평균내서 사용
-          const avgOee = machineProduction.reduce((sum: number, p: any) => sum + (p.oee || 0), 0) / machineProduction.length;
-          const avgAvailability = machineProduction.reduce((sum: number, p: any) => sum + (p.availability || 0), 0) / machineProduction.length;
-          const avgPerformance = machineProduction.reduce((sum: number, p: any) => sum + (p.performance || 0), 0) / machineProduction.length;
-          const avgQuality = machineProduction.reduce((sum: number, p: any) => sum + (p.quality || 0), 0) / machineProduction.length;
+          const avgOee = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.oee || 0), 0) / machineProduction.length;
+          const avgAvailability = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.availability || 0), 0) / machineProduction.length;
+          const avgPerformance = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.performance || 0), 0) / machineProduction.length;
+          const avgQuality = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.quality || 0), 0) / machineProduction.length;
 
           calculatedOeeMetrics[machine.id] = {
             // ✅ Supabase에서 가져온 실제 값들 사용 (DB에는 0~1 범위로 저장됨)
@@ -295,8 +324,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       // 데이터 저장 확인 로깅
       console.log('✅ DashboardData 저장 완료:', {
         machinesCount: machinesData.length,
-        sampleMachines: machinesData.slice(0, 3).map((m: any) => ({ name: m.name, state: m.current_state })),
-        normalCount: machinesData.filter((m: any) => m.current_state === 'NORMAL_OPERATION').length
+        sampleMachines: machinesData.slice(0, 3).map((m: Machine) => ({ name: m.name, state: m.current_state })),
+        normalCount: machinesData.filter((m: Machine) => m.current_state === 'NORMAL_OPERATION').length
       });
 
       if (process.env.NODE_ENV === 'development') {
@@ -363,12 +392,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       if (dashboardData?.machines?.length > 0) {
         console.log('실제 설비 데이터 상태별 카운트:', {
           total: dashboardData.machines.length,
-          normal: dashboardData.machines.filter((m: any) => m.current_state === 'NORMAL_OPERATION').length,
-          maintenance: dashboardData.machines.filter((m: any) => ['MAINTENANCE', 'PM_MAINTENANCE', 'INSPECTION'].includes(m.current_state)).length,
-          stopped: dashboardData.machines.filter((m: any) => ['TEMPORARY_STOP', 'PLANNED_STOP', 'BREAKDOWN_REPAIR'].includes(m.current_state)).length,
-          other: dashboardData.machines.filter((m: any) => !['NORMAL_OPERATION', 'MAINTENANCE', 'PM_MAINTENANCE', 'INSPECTION', 'TEMPORARY_STOP', 'PLANNED_STOP', 'BREAKDOWN_REPAIR'].includes(m.current_state)).length
+          normal: dashboardData.machines.filter((m: Machine) => m.current_state === 'NORMAL_OPERATION').length,
+          maintenance: dashboardData.machines.filter((m: Machine) => ['MAINTENANCE', 'PM_MAINTENANCE', 'INSPECTION'].includes(m.current_state || '')).length,
+          stopped: dashboardData.machines.filter((m: Machine) => ['TEMPORARY_STOP', 'PLANNED_STOP', 'BREAKDOWN_REPAIR'].includes(m.current_state || '')).length,
+          other: dashboardData.machines.filter((m: Machine) => !['NORMAL_OPERATION', 'MAINTENANCE', 'PM_MAINTENANCE', 'INSPECTION', 'TEMPORARY_STOP', 'PLANNED_STOP', 'BREAKDOWN_REPAIR'].includes(m.current_state || '')).length
         });
-        console.log('첫 10개 설비 상태:', dashboardData.machines.slice(0, 10).map((m: any) => ({ name: m.name, state: m.current_state })));
+        console.log('첫 10개 설비 상태:', dashboardData.machines.slice(0, 10).map((m: Machine) => ({ name: m.name, state: m.current_state })));
       }
 
       // 대시보드 데이터가 있으면 우선 사용 (강제 조건 확인)
@@ -377,21 +406,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         const { machines: dbMachines, oeeMetrics: dbOeeMetrics } = dashboardData;
         
         // 실제 데이터에서 전체 OEE 계산
-        const totalOEE = Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.oee, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
-        const totalAvailability = Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.availability, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
-        const totalPerformance = Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.performance, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
-        const totalQuality = Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.quality, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
+        const totalOEE = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.oee, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
+        const totalAvailability = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.availability, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
+        const totalPerformance = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.performance, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
+        const totalQuality = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.quality, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
         
         const overallMetrics: OEEMetrics = {
           availability: totalAvailability,
           performance: totalPerformance,
           quality: totalQuality,
           oee: totalOEE,
-          actual_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.actual_runtime, 0),
-          planned_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.planned_runtime, 0),
-          ideal_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.ideal_runtime, 0),
-          output_qty: Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.output_qty, 0),
-          defect_qty: Object.values(dbOeeMetrics).reduce((sum: number, metrics: any) => sum + metrics.defect_qty, 0)
+          actual_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.actual_runtime, 0),
+          planned_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.planned_runtime, 0),
+          ideal_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.ideal_runtime, 0),
+          output_qty: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.output_qty, 0),
+          defect_qty: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.defect_qty, 0)
         };
         
         // 설비 목록에 OEE 정보 추가
@@ -402,10 +431,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         }));
         
         // 알림 생성 (OEE 기반)
+        type MachineWithOEE = Machine & { oee: number; status: string };
         const alerts = machineList
-          .filter((machine: any) => machine.oee < 0.6 || machine.current_state !== 'NORMAL_OPERATION')
+          .filter((machine: MachineWithOEE) => machine.oee < 0.6 || machine.current_state !== 'NORMAL_OPERATION')
           .slice(0, 5)
-          .map((machine: any, index: number) => ({
+          .map((machine: MachineWithOEE, index: number) => ({
             id: index + 1,
             machine: machine.name,
             message: machine.oee < 0.6 ? 'OEE 60% 미만 지속' : 
@@ -449,7 +479,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         });
 
         // ✅ 날짜별로 집계 (A, B shift 평균) - 차트 가독성 향상
-        const dailyAggregated = filteredRecords.reduce((acc: any, record) => {
+        type DailyAggregatedItem = { date: string; records: typeof productionRecords };
+        const dailyAggregated = filteredRecords.reduce((acc: Record<string, DailyAggregatedItem>, record) => {
           const date = record.date;
           if (!acc[date]) {
             acc[date] = {
@@ -461,12 +492,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           return acc;
         }, {});
 
-        const trendData = Object.values(dailyAggregated).map((item: any) => {
+        const trendData = Object.values(dailyAggregated).map((item: DailyAggregatedItem) => {
           const records = item.records;
-          const avgAvailability = records.reduce((sum: number, r: any) => sum + (r.availability || 0), 0) / records.length;
-          const avgPerformance = records.reduce((sum: number, r: any) => sum + (r.performance || 0), 0) / records.length;
-          const avgQuality = records.reduce((sum: number, r: any) => sum + (r.quality || 0), 0) / records.length;
-          const avgOee = records.reduce((sum: number, r: any) => sum + (r.oee || 0), 0) / records.length;
+          const avgAvailability = records.reduce((sum: number, r) => sum + (r.availability || 0), 0) / records.length;
+          const avgPerformance = records.reduce((sum: number, r) => sum + (r.performance || 0), 0) / records.length;
+          const avgQuality = records.reduce((sum: number, r) => sum + (r.quality || 0), 0) / records.length;
+          const avgOee = records.reduce((sum: number, r) => sum + (r.oee || 0), 0) / records.length;
 
           return {
             date: item.date,
@@ -509,7 +540,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           machineProductionMap.get(record.machine_id).push(record);
         });
 
-        const machineList = Array.from(machineProductionMap.entries()).map(([machineId, records]: [string, any[]]) => {
+        const machineList = Array.from(machineProductionMap.entries()).map(([machineId, records]: [string, typeof productionRecords]) => {
           const avgOEE = records.reduce((sum, r) => sum + (r.oee || 0), 0) / records.length;
           
           return {
@@ -552,7 +583,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           });
 
         // ✅ 날짜별로 집계 (A, B shift 평균) - 차트 가독성 향상
-        const dailyAggregated = filteredRecords.reduce((acc: any, record) => {
+        type DailyAggregatedItem = { date: string; records: typeof productionRecords };
+        const dailyAggregated = filteredRecords.reduce((acc: Record<string, DailyAggregatedItem>, record) => {
           const date = record.date;
           if (!acc[date]) {
             acc[date] = {
@@ -564,12 +596,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           return acc;
         }, {});
 
-        const trendData = Object.values(dailyAggregated).map((item: any) => {
+        const trendData = Object.values(dailyAggregated).map((item: DailyAggregatedItem) => {
           const records = item.records;
-          const avgAvailability = records.reduce((sum: number, r: any) => sum + (r.availability || 0), 0) / records.length;
-          const avgPerformance = records.reduce((sum: number, r: any) => sum + (r.performance || 0), 0) / records.length;
-          const avgQuality = records.reduce((sum: number, r: any) => sum + (r.quality || 0), 0) / records.length;
-          const avgOee = records.reduce((sum: number, r: any) => sum + (r.oee || 0), 0) / records.length;
+          const avgAvailability = records.reduce((sum: number, r) => sum + (r.availability || 0), 0) / records.length;
+          const avgPerformance = records.reduce((sum: number, r) => sum + (r.performance || 0), 0) / records.length;
+          const avgQuality = records.reduce((sum: number, r) => sum + (r.quality || 0), 0) / records.length;
+          const avgOee = records.reduce((sum: number, r) => sum + (r.oee || 0), 0) / records.length;
 
           return {
             date: item.date,
@@ -675,12 +707,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const getDetailedMachineStatus = () => {
     if (!dashboardData?.machines) return { maintenance: [], stopped: [] };
     
-    const maintenanceMachines = dashboardData.machines.filter((m: any) => 
-      ['MAINTENANCE', 'PM_MAINTENANCE', 'INSPECTION'].includes(m.current_state)
+    const maintenanceMachines = dashboardData.machines.filter((m: Machine) =>
+      ['MAINTENANCE', 'PM_MAINTENANCE', 'INSPECTION'].includes(m.current_state || '')
     );
-    
-    const stoppedMachines = dashboardData.machines.filter((m: any) => 
-      ['TEMPORARY_STOP', 'PLANNED_STOP', 'BREAKDOWN_REPAIR', 'MODEL_CHANGE', 'PROGRAM_CHANGE', 'TOOL_CHANGE'].includes(m.current_state)
+
+    const stoppedMachines = dashboardData.machines.filter((m: Machine) =>
+      ['TEMPORARY_STOP', 'PLANNED_STOP', 'BREAKDOWN_REPAIR', 'MODEL_CHANGE', 'PROGRAM_CHANGE', 'TOOL_CHANGE'].includes(m.current_state || '')
     );
     
     return { maintenance: maintenanceMachines, stopped: stoppedMachines };
@@ -1170,8 +1202,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             : statusDetails.stopped;
           
           // 상태별로 그룹핑
-          const groupedMachines = machines.reduce((acc: any, machine: any) => {
-            const state = machine.current_state;
+          const groupedMachines = machines.reduce((acc: Record<string, Machine[]>, machine: Machine) => {
+            const state = machine.current_state || 'UNKNOWN';
             if (!acc[state]) acc[state] = [];
             acc[state].push(machine);
             return acc;
@@ -1182,7 +1214,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               {Object.keys(groupedMachines).length === 0 ? (
                 <Empty description={t('alerts.noMachinesInStatus')} />
               ) : (
-                Object.entries(groupedMachines).map(([state, machineList]: [string, any]) => (
+                Object.entries(groupedMachines).map(([state, machineList]: [string, Machine[]]) => (
                   <div key={state} style={{ marginBottom: 16 }}>
                     <h4>
                       <Badge 
@@ -1190,17 +1222,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                         text={getStatusText(state)}
                       />
                       <span style={{ marginLeft: 8, color: '#666' }}>
-                        ({(machineList as any[]).length}{t('alerts.units')})
+                        ({machineList.length}{t('alerts.units')})
                       </span>
                     </h4>
-                    <div style={{ 
-                      display: 'flex', 
-                      flexWrap: 'wrap', 
-                      gap: 8, 
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
                       marginLeft: 20,
                       marginBottom: 12
                     }}>
-                      {(machineList as any[]).map((machine: any) => (
+                      {machineList.map((machine: Machine) => (
                         <Tag 
                           key={machine.id}
                           color={state.includes('NORMAL') ? 'green' : 'orange'}

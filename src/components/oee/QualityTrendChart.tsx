@@ -13,7 +13,7 @@ import {
   TooltipProps,
 } from 'recharts';
 import { Card, Typography, Empty, Spin } from 'antd';
-import { useDashboardTranslation } from '@/hooks/useTranslation';
+// import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 const { Title: AntTitle } = Typography;
 
@@ -73,7 +73,8 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
   loading = false,
   error
 }) => {
-  const { t } = useDashboardTranslation();
+  // Translation hook available for future use
+  // const { t } = useDashboardTranslation();
   
   // 데이터 로깅 (디버깅용)
   React.useEffect(() => {

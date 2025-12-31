@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { ConfigProvider, theme as antdTheme } from 'antd';
+import React, { useEffect, useState, useMemo } from 'react';
+import { ConfigProvider } from 'antd';
 import { useThemeSettings } from '@/hooks/useThemeSettings';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 
@@ -14,22 +14,24 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const { antdTheme: customTheme } = useThemeSettings();
   const [isTransitioning, setIsTransitioning] = useState(false);
   
-  // getDisplaySettings 함수를 안전하게 가져오기
-  const getDisplaySettings = systemSettings?.getDisplaySettings || (() => ({
-    mode: 'light',
-    theme: {
-      primary: '#1890ff',
-      success: '#52c41a',
-      warning: '#faad14',
-      error: '#ff4d4f'
-    },
-    refreshInterval: 30,
-    chartAnimation: true,
-    compactMode: false,
-    showMachineImages: true,
-    sidebarCollapsed: false
-  }));
-  
+  // getDisplaySettings 함수를 메모이제이션
+  const getDisplaySettings = useMemo(() => {
+    return systemSettings?.getDisplaySettings || (() => ({
+      mode: 'light',
+      theme: {
+        primary: '#1890ff',
+        success: '#52c41a',
+        warning: '#faad14',
+        error: '#ff4d4f'
+      },
+      refreshInterval: 30,
+      chartAnimation: true,
+      compactMode: false,
+      showMachineImages: true,
+      sidebarCollapsed: false
+    }));
+  }, [systemSettings?.getDisplaySettings]);
+
   // 테마 전환 감지 및 부드러운 전환 처리
   useEffect(() => {
     const displaySettings = getDisplaySettings();
@@ -38,17 +40,17 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     setIsTransitioning(true);
     
     // CSS 변수 즉시 업데이트 (Ant Design과 별개로)
-    const root = document.documentElement;
-    
+    const rootEl = document.documentElement;
+
     // 테마별 CSS 커스텀 속성 적용
-    root.style.setProperty('--theme-transition-duration', '0.3s');
-    root.style.setProperty('--theme-bg-primary', displaySettings.mode === 'dark' ? '#000000' : '#ffffff');
-    root.style.setProperty('--theme-bg-secondary', displaySettings.mode === 'dark' ? '#141414' : '#f5f5f5');
-    root.style.setProperty('--theme-bg-elevated', displaySettings.mode === 'dark' ? '#1f1f1f' : '#ffffff');
-    root.style.setProperty('--theme-text-primary', displaySettings.mode === 'dark' ? 'rgba(255, 255, 255, 0.88)' : 'rgba(0, 0, 0, 0.88)');
-    root.style.setProperty('--theme-text-secondary', displaySettings.mode === 'dark' ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)');
-    root.style.setProperty('--theme-border', displaySettings.mode === 'dark' ? '#424242' : '#d9d9d9');
-    
+    rootEl.style.setProperty('--theme-transition-duration', '0.3s');
+    rootEl.style.setProperty('--theme-bg-primary', displaySettings.mode === 'dark' ? '#000000' : '#ffffff');
+    rootEl.style.setProperty('--theme-bg-secondary', displaySettings.mode === 'dark' ? '#141414' : '#f5f5f5');
+    rootEl.style.setProperty('--theme-bg-elevated', displaySettings.mode === 'dark' ? '#1f1f1f' : '#ffffff');
+    rootEl.style.setProperty('--theme-text-primary', displaySettings.mode === 'dark' ? 'rgba(255, 255, 255, 0.88)' : 'rgba(0, 0, 0, 0.88)');
+    rootEl.style.setProperty('--theme-text-secondary', displaySettings.mode === 'dark' ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)');
+    rootEl.style.setProperty('--theme-border', displaySettings.mode === 'dark' ? '#424242' : '#d9d9d9');
+
     // 전환 완료 처리
     const timer = setTimeout(() => {
       setIsTransitioning(false);
@@ -59,7 +61,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   // 초기 테마 설정 (페이지 로드 시)
   useEffect(() => {
-    const root = document.documentElement;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const docRoot = document.documentElement;
     
     // 전역 테마 전환 CSS 추가
     const existingStyle = document.getElementById('theme-transitions');

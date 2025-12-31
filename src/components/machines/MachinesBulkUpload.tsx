@@ -12,10 +12,7 @@ import {
   Card,
   Row,
   Col,
-  Progress,
-  Divider,
   Tag,
-  Modal,
   App,
   Spin
 } from 'antd';
@@ -23,7 +20,6 @@ import {
   UploadOutlined,
   DownloadOutlined,
   CheckCircleOutlined,
-  ExclamationCircleOutlined,
   SaveOutlined,
   EyeOutlined,
   FileExcelOutlined,
@@ -32,13 +28,12 @@ import {
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface';
 
 const { Title, Text, Paragraph } = Typography;
-const { Step } = Steps;
 
 interface ValidationError {
   row: number;
   field: string;
   message: string;
-  value: any;
+  value: unknown;
 }
 
 interface PreviewData {
@@ -62,7 +57,7 @@ interface UploadResult {
   error_rows?: number;
   preview_data?: PreviewData[];
   warnings?: string[];
-  inserted_machines?: any[];
+  inserted_machines?: unknown[];
 }
 
 const MachinesBulkUpload: React.FC = () => {
@@ -72,7 +67,8 @@ const MachinesBulkUpload: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
-  const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  // Preview modal state kept for future implementation
+  // const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData[]>([]);
   const [confirming, setConfirming] = useState(false);
 
@@ -257,7 +253,7 @@ const MachinesBulkUpload: React.FC = () => {
       dataIndex: 'value',
       key: 'value',
       width: 150,
-      render: (value: any) => (
+      render: (value: unknown) => (
         <Text code style={{ fontSize: '12px' }}>
           {value === null || value === undefined ? '(비어있음)' : String(value)}
         </Text>

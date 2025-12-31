@@ -276,7 +276,7 @@ export class RealTimeOEECalculator {
     // 현재 교대 시간 계산
     const now = new Date();
     const shiftStart = this.getCurrentShiftStart(now);
-    const shiftEnd = new Date(shiftStart.getTime() + 12 * 60 * 60 * 1000); // 12시간 교대
+    // shiftEnd는 향후 확장을 위해 계산 가능 (현재 미사용)
 
     // 실제 가동시간 계산
     const actualRuntime = OEECalculator.calculateActualRuntimeFromLogs(

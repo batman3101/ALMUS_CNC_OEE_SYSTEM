@@ -4,8 +4,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
-import { OEEMetrics, Machine, ProductionRecord, MachineState } from '@/types';
-import { addKoreanText, getKoreanTableOptions } from '@/lib/fonts';
+import { OEEMetrics, Machine, ProductionRecord } from '@/types';
+import { addKoreanText } from '@/lib/fonts';
 
 interface ReportData {
   machines: Machine[];
@@ -28,22 +28,9 @@ interface ChartData {
   type: 'oee-gauge' | 'trend' | 'downtime' | 'production';
 }
 
-// 설비 상태별 한글 이름 매핑
-const stateLabels: Record<MachineState, string> = {
-  NORMAL_OPERATION: '정상가동',
-  INSPECTION: '점검중',
-  BREAKDOWN_REPAIR: '고장수리',
-  PM_MAINTENANCE: '예방정비',
-  MODEL_CHANGE: '모델교체',
-  PLANNED_STOP: '계획정지',
-  PROGRAM_CHANGE: '프로그램교체',
-  TOOL_CHANGE: '공구교환',
-  TEMPORARY_STOP: '일시정지',
-};
-
 export class ReportTemplates {
   // 한국어 텍스트 표시 유틸리티
-  static async addKoreanTextToPDF(doc: jsPDF, text: string, x: number, y: number, options: any = {}): Promise<void> {
+  static async addKoreanTextToPDF(doc: jsPDF, text: string, x: number, y: number, options: Record<string, unknown> = {}): Promise<void> {
     addKoreanText(doc, text, x, y, options);
   }
 
@@ -194,7 +181,7 @@ export class ReportTemplates {
         }
       });
       
-      yPosition = (doc as any).lastAutoTable.finalY + 20;
+      yPosition = ((doc as unknown) as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20;
     }
 
     // === OEE 지표 요약 ===
@@ -370,7 +357,7 @@ export class ReportTemplates {
         }
       });
       
-      yPosition = (doc as any).lastAutoTable.finalY + 20;
+      yPosition = ((doc as unknown) as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 20;
     } else {
       doc.setFontSize(12);
       doc.text('No detailed data available.', 20, yPosition);
@@ -420,20 +407,22 @@ export class ReportTemplates {
         }
       });
       
-      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      yPosition = ((doc as unknown) as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
     }
 
       // 파일 저장
       const fileName = `OEE_Report_${data.reportType}_${data.dateRange[0]}_${data.dateRange[1]}.pdf`;
       doc.save(fileName);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('PDF 보고서 생성 중 오류:', error);
-      throw new Error(`PDF 보고서 생성 실패: ${error.message || '알 수 없는 오류'}`);
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      throw new Error(`PDF 보고서 생성 실패: ${errorMessage}`);
     }
   }
 
   // 레거시 테이블 그리기 함수 (autoTable로 대체됨)
-  static drawTable(doc: jsPDF, data: string[][], x: number, y: number, width: number) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static drawTable(_doc: jsPDF, _data: string[][], _x: number, _y: number, _width: number) {
     // autoTable 사용으로 대체됨 - 호환성을 위해 유지
     console.warn('drawTable은 deprecated됨. autoTable 사용 권장');
   }
@@ -543,7 +532,7 @@ export class ReportTemplates {
       
       const oeeDataArray = [
         oeeHeaders,
-        ...data.oeeData.map((oee, index) => [
+        ...data.oeeData.map((oee) => [
           (oee.availability * 100).toFixed(1),
           (oee.performance * 100).toFixed(1),
           (oee.quality * 100).toFixed(1),
@@ -613,37 +602,38 @@ export class ReportTemplates {
       // 파일 저장
       const fileName = `OEE_Report_${data.reportType}_${data.dateRange[0]}_${data.dateRange[1]}.xlsx`;
       XLSX.writeFile(workbook, fileName);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Excel 보고서 생성 중 오류:', error);
-      throw new Error(`Excel 보고서 생성 실패: ${error.message || '알 수 없는 오류'}`);
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      throw new Error(`Excel 보고서 생성 실패: ${errorMessage}`);
     }
   }
 
   // 분석 데이터 생성 헬퍼 함수
-  static generateAnalysisData(data: ReportData): any[][] {
-    const analysisData = [];
-    
+  static generateAnalysisData(data: ReportData): (string | number)[][] {
+    const analysisData: (string | number)[][] = [];
+
     if (data.groupBy === 'machine' && data.machines.length > 0) {
       analysisData.push(['설비별 분석', 'Machine Analysis']);
       analysisData.push(['설비명', '평균 OEE(%)', '평균 가동률(%)', '총 생산량', '불량률(%)']);
-      
+
       data.machines.forEach(machine => {
-        const machineOEE = data.oeeData.filter(oee => 
+        const machineOEE = data.oeeData.filter(() =>
           data.productionData.some(prod => prod.machine_id === machine.id)
         );
         const machineProduction = data.productionData.filter(prod => prod.machine_id === machine.id);
-        
+
         if (machineOEE.length > 0 || machineProduction.length > 0) {
-          const avgOEE = machineOEE.length > 0 ? 
+          const avgOEE = machineOEE.length > 0 ?
             (machineOEE.reduce((sum, oee) => sum + oee.oee, 0) / machineOEE.length * 100).toFixed(1) : '-';
-          const avgAvailability = machineOEE.length > 0 ? 
+          const avgAvailability = machineOEE.length > 0 ?
             (machineOEE.reduce((sum, oee) => sum + oee.availability, 0) / machineOEE.length * 100).toFixed(1) : '-';
           const totalOutput = machineProduction.reduce((sum, prod) => sum + prod.output_qty, 0);
           const totalDefects = machineProduction.reduce((sum, prod) => sum + prod.defect_qty, 0);
           const defectRate = totalOutput > 0 ? ((totalDefects / totalOutput) * 100).toFixed(2) : '0.00';
-          
+
           analysisData.push([
-            machine.name,
+            machine.name || '',
             avgOEE,
             avgAvailability,
             totalOutput,
@@ -652,7 +642,7 @@ export class ReportTemplates {
         }
       });
     }
-    
+
     return analysisData;
   }
 
@@ -665,7 +655,7 @@ export class ReportTemplates {
   ): Promise<void> {
     const templateData = {
       ...data,
-      reportType: templateType as any
+      reportType: templateType as ReportData['reportType']
     };
 
     if (format === 'pdf') {
@@ -772,7 +762,13 @@ export class ReportTemplates {
 
   // 보고서 미리보기 데이터 생성
   static generatePreviewData(data: ReportData): {
-    summary: any;
+    summary: {
+      reportType: string;
+      dateRange: [string, string];
+      machineCount: number;
+      oeeDataCount: number;
+      productionDataCount: number;
+    };
     chartCount: number;
     pageCount: number;
   } {

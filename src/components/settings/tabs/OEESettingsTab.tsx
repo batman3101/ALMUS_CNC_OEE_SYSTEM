@@ -15,7 +15,7 @@ import {
   Alert,
   theme
 } from 'antd';
-import { SaveOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { SaveOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useOEESettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
@@ -50,7 +50,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
   }, [settings, form]);
 
   // 설정 저장
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: Record<string, number>) => {
     try {
       setLoading(true);
       

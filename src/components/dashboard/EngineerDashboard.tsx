@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tabs, Select, DatePicker, Button, Space, Table, Statistic, Dropdown, Menu, Tag, Badge } from 'antd';
+import { Row, Col, Card, Tabs, Select, DatePicker, Button, Space, Table, Statistic, Dropdown, Tag, Badge } from 'antd';
 import { 
   BarChartOutlined, 
   DownloadOutlined,
@@ -32,7 +32,7 @@ interface EngineerDashboardProps {
 }
 
 export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError }) => {
-  const isClient = useClientOnly();
+  useClientOnly();
   const { user } = useAuth();
   const { t } = useTranslation();
   const { getDisplaySettings } = useSystemSettings();
@@ -66,15 +66,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   };
 
   // 실시간 데이터 훅 사용
-  const { 
-    machines, 
-    machineLogs, 
-    productionRecords, 
-    oeeMetrics, 
-    loading: realtimeLoading, 
-    error: realtimeError, 
-    refresh, 
-    isConnected 
+  const {
+    machines,
+    machineLogs,
+    oeeMetrics,
+    loading: realtimeLoading,
+    error: realtimeError,
+    refresh,
+    isConnected
   } = useRealtimeData(user?.id, user?.role);
 
   // 필터 옵션 데이터

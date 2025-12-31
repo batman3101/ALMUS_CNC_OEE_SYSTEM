@@ -225,7 +225,7 @@ export class DateTimeFormatter {
   /**
    * 유효성 검사
    */
-  isValid(date: any): boolean {
+  isValid(date: string | number | Date | dayjs.Dayjs | null | undefined): boolean {
     return dayjs(date).isValid();
   }
 
@@ -314,7 +314,7 @@ export const parseTime = (timeString: string) =>
 export const parseDateTime = (dateTimeString: string) => 
   getDateTimeFormatter().parseDateTime(dateTimeString);
 
-export const isValidDate = (date: any) => 
+export const isValidDate = (date: string | number | Date | dayjs.Dayjs | null | undefined) =>
   getDateTimeFormatter().isValid(date);
 
 export const getCurrentTime = () => 

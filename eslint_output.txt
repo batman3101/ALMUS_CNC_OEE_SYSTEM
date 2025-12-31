@@ -1,0 +1,451 @@
+
+C:\Work Drive\APP\CNC OEE\src\components\admin\MachineForm.tsx
+  107:6  warning  React Hook useEffect has a missing dependency: 'fetchProductModels'. Either include it or remove the dependency array   react-hooks/exhaustive-deps
+  133:6  warning  React Hook useEffect has a missing dependency: 'fetchModelProcesses'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\admin\MachineManagement.tsx
+  58:6  warning  React Hook useEffect has a missing dependency: 'loadMachines'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\admin\OEEAggregationManager.tsx
+  220:25  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\admin\UserForm.tsx
+  49:6  warning  React Hook useEffect has a missing dependency: 'loadMachines'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\admin\UserManagement.tsx
+  56:6  warning  React Hook useEffect has a missing dependency: 'loadUsers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\auth\LoginForm.tsx
+  37:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\auth\LoginFormInline.tsx
+  46:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\common\DateRangeSelector.tsx
+  52:5  error  'dateStrings' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\dashboard\AdminDashboard.tsx
+     4:76   error    'Select' is defined but never used                                                                                                                                                                                                                                          @typescript-eslint/no-unused-vars
+    37:54   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+    38:64   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+    63:25   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   236:61   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   240:73   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   241:74   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   242:80   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   243:81   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   244:79   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   247:68   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   248:77   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   249:76   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   250:72   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   298:58   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   299:46   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   366:53   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   367:58   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   368:54   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   369:52   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   371:81   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   380:84   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   381:93   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   382:92   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   383:88   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   390:85   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   391:86   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   392:84   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   393:81   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   394:81   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   406:29   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   408:26   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   452:62   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   464:69   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   466:67   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   467:66   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   468:62   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   469:58   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   512:108  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   555:62   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   567:69   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   569:67   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   570:66   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   571:62   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   572:58   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   650:6    warning  React Hook React.useMemo has missing dependencies: 'calculateRealTimeOEEMetrics', 'dashboardLoading', 'dateRange.endDate', 'dateRange.startDate', 'getStatusText', 'preset', 'recordsError', 'recordsLoading', and 't'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+   678:67   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+   682:63   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  1173:57   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  1173:71   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  1185:85   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  1193:43   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  1203:40   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+  1203:61   error    Unexpected any. Specify a different type                                                                                                                                                                                                                                    @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\dashboard\EngineerDashboard.tsx
+    4:95  error    'Menu' is defined but never used                                                                                                                                                                                 @typescript-eslint/no-unused-vars
+   35:9   error    'isClient' is assigned a value but never used                                                                                                                                                                    @typescript-eslint/no-unused-vars
+   72:5   error    'productionRecords' is assigned a value but never used                                                                                                                                                           @typescript-eslint/no-unused-vars
+  134:6   warning  React Hook React.useMemo has missing dependencies: 'oeeGradeLabels.excellent', 'oeeGradeLabels.fair', 'oeeGradeLabels.good', 'oeeGradeLabels.poor', and 't'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  498:6   warning  React Hook React.useMemo has a missing dependency: 'selectedPeriod'. Either include it or remove the dependency array                                                                                            react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\dashboard\OperatorDashboard.tsx
+    4:71  error  'Select' is defined but never used                  @typescript-eslint/no-unused-vars
+   18:10  error  'Machine' is defined but never used                 @typescript-eslint/no-unused-vars
+   18:19  error  'OEEMetrics' is defined but never used              @typescript-eslint/no-unused-vars
+   18:31  error  'MachineLog' is defined but never used              @typescript-eslint/no-unused-vars
+   22:59  error  'useMultipleTranslation' is defined but never used  @typescript-eslint/no-unused-vars
+   41:55  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+   55:53  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+   69:9   error  'isClient' is assigned a value but never used       @typescript-eslint/no-unused-vars
+   72:14  error  'dashboardT' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  190:21  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  213:38  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\data-input\DataInputForm.tsx
+   4:22  error  'Card' is defined but never used            @typescript-eslint/no-unused-vars
+   8:9   error  'Title' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  11:11  error  't' is assigned a value but never used      @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\data-input\ShiftDataInputForm.tsx
+  271:6  warning  React Hook React.useEffect has a missing dependency: 'loadExistingProductionRecords'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\layout\AppLayout.tsx
+  14:10  error  'LoginForm' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\MachineCard.tsx
+    4:40  error  'Tooltip' is defined but never used                 @typescript-eslint/no-unused-vars
+   11:3   error  'EnvironmentOutlined' is defined but never used     @typescript-eslint/no-unused-vars
+   57:16  error  'statusLoading' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  125:43  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\MachineDetail.tsx
+   58:46  error  'language' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  120:10  error  'currentTime' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  279:56  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+  410:61  error  'index' is defined but never used                 @typescript-eslint/no-unused-vars
+  424:57  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\MachineDetailModal.tsx
+   71:16  error  'statusLoading' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  153:51  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  210:58  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\MachineEditModal.tsx
+   78:54  error  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+   79:46  error  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  194:13  error  'result' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  198:21  error  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\MachineList.tsx
+   57:10  error    'statusDescriptions' is assigned a value but never used                                                         @typescript-eslint/no-unused-vars
+   57:64  error    Unexpected any. Specify a different type                                                                        @typescript-eslint/no-explicit-any
+   58:10  error    'statusLoading' is assigned a value but never used                                                              @typescript-eslint/no-unused-vars
+  182:6   warning  React Hook useMemo has an unnecessary dependency: 'language'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+  184:64  error    Unexpected any. Specify a different type                                                                        @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\MachineStatusInput.tsx
+  135:11  error  'currentStateText' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  152:58  error  Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+  160:53  error  Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+  182:18  error  'error' is defined but never used                      @typescript-eslint/no-unused-vars
+  244:54  error  Unexpected any. Specify a different type               @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\MachinesBulkUpload.tsx
+   15:3   error  'Progress' is defined but never used                         @typescript-eslint/no-unused-vars
+   16:3   error  'Divider' is defined but never used                          @typescript-eslint/no-unused-vars
+   18:3   error  'Modal' is defined but never used                            @typescript-eslint/no-unused-vars
+   26:3   error  'ExclamationCircleOutlined' is defined but never used        @typescript-eslint/no-unused-vars
+   35:9   error  'Step' is assigned a value but never used                    @typescript-eslint/no-unused-vars
+   41:10  error  Unexpected any. Specify a different type                     @typescript-eslint/no-explicit-any
+   65:23  error  Unexpected any. Specify a different type                     @typescript-eslint/no-explicit-any
+   75:10  error  'previewModalVisible' is assigned a value but never used     @typescript-eslint/no-unused-vars
+   75:31  error  'setPreviewModalVisible' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  260:23  error  Unexpected any. Specify a different type                     @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\machines\RealtimeTestPanel.tsx
+  26:9   error  'Title' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  62:19  error  Unexpected any. Specify a different type    @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\model-info\ModelInfoManager.tsx
+   20:3   error    'Divider' is defined but never used                                                                                                                                                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+   35:11  error    An empty interface declaration allows any non-nullish value, including literals like `0` and `""`.
+- If that's what you want, disable this lint rule with an inline comment or configure the 'allowInterfaces' rule option.
+- If you want a type meaning "any object", you probably want `object` instead.
+- If you want a type meaning "any value", you probably want `unknown` instead  @typescript-eslint/no-empty-object-type
+  100:6   warning  React Hook useEffect has missing dependencies: 'fetchModels' and 'fetchProcesses'. Either include them or remove the dependency array                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+  103:42  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+  134:21  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+  145:44  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+  186:21  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+  274:19  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+  288:19  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+  361:19  error    Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\notifications\NotificationPanel.tsx
+  13:3  error  'Divider' is defined but never used  @typescript-eslint/no-unused-vars
+  14:3  error  'Tooltip' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\oee\DowntimeChart.tsx
+  203:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  203:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  240:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  240:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\oee\IndependentOEETrendChart.tsx
+   17:28  error  'Select' is defined but never used                              @typescript-eslint/no-unused-vars
+   33:9   error  'RangePicker' is assigned a value but never used                @typescript-eslint/no-unused-vars
+   66:5   error  'dateRange' is assigned a value but never used                  @typescript-eslint/no-unused-vars
+   68:5   error  'handleDateRangeChange' is assigned a value but never used      @typescript-eslint/no-unused-vars
+   72:9   error  'handlePeriodChangeWrapper' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  208:9   error  'periodOptions' is assigned a value but never used              @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\oee\MachineComparisonChart.tsx
+    4:16  error  'Select' is defined but never used                  @typescript-eslint/no-unused-vars
+    4:69  error  'Tooltip' is defined but never used                 @typescript-eslint/no-unused-vars
+    6:47  error  'SortAscendingOutlined' is defined but never used   @typescript-eslint/no-unused-vars
+    6:70  error  'SortDescendingOutlined' is defined but never used  @typescript-eslint/no-unused-vars
+   55:3   error  'period' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  106:54  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  111:32  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  174:19  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+  174:28  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\oee\OEEMetrics.tsx
+    5:44  error    'FileExcelOutlined' is defined but never used                                                                     @typescript-eslint/no-unused-vars
+    5:63  error    'FilePdfOutlined' is defined but never used                                                                       @typescript-eslint/no-unused-vars
+   11:10  error    'OEECalculator' is defined but never used                                                                         @typescript-eslint/no-unused-vars
+   11:25  error    'RealTimeOEECalculator' is defined but never used                                                                 @typescript-eslint/no-unused-vars
+   12:40  error    'MachineLog' is defined but never used                                                                            @typescript-eslint/no-unused-vars
+   12:52  error    'ProductionRecord' is defined but never used                                                                      @typescript-eslint/no-unused-vars
+   85:10  error    'dateRange' is assigned a value but never used                                                                    @typescript-eslint/no-unused-vars
+  101:46  error    Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+  102:52  error    Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+  103:56  error    Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+  147:6   warning  React Hook useEffect has a missing dependency: 'handleRefresh'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\oee\OEETrendChart.tsx
+  18:10  error  'format' is defined but never used  @typescript-eslint/no-unused-vars
+  19:10  error  'ko' is defined but never used      @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\oee\QualityDefectTypeChart.tsx
+   74:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  100:11  error  't' is assigned a value but never used    @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\oee\QualityTrendChart.tsx
+  76:11  error  't' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\production\ProductionManager.tsx
+   65:14  error  'error' is defined but never used  @typescript-eslint/no-unused-vars
+  118:47  error  'data' is defined but never used   @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\production\ProductionRecordInput.tsx
+    5:10  error  'ProductionRecord' is defined but never used  @typescript-eslint/no-unused-vars
+  101:47  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  104:44  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\production\ShiftEndNotification.tsx
+  5:31  error  'ExclamationCircleOutlined' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\quality\DefectRateTrendChart.tsx
+   5:10  error  'Card' is defined but never used          @typescript-eslint/no-unused-vars
+  40:54  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\quality\DefectTypeAnalysisChart.tsx
+    4:61  error  'Legend' is defined but never used        @typescript-eslint/no-unused-vars
+    5:16  error  'Space' is defined but never used         @typescript-eslint/no-unused-vars
+   46:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   70:81  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  136:32  error  'index' is defined but never used         @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\quality\MachineComparisonChart.tsx
+    5:51  error  'Divider' is defined but never used            @typescript-eslint/no-unused-vars
+   32:3   error  'onChartTypeChange' is defined but never used  @typescript-eslint/no-unused-vars
+   86:54  error  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  105:34  error  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\quality\QualityPerformanceChart.tsx
+  16:10  error  'Card' is defined but never used             @typescript-eslint/no-unused-vars
+  49:3   error  'period' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\reports\ReportDashboard.tsx
+   23:3   error    'BarChartOutlined' is defined but never used                                                                        @typescript-eslint/no-unused-vars
+   24:3   error    'LineChartOutlined' is defined but never used                                                                       @typescript-eslint/no-unused-vars
+   25:3   error    'PieChartOutlined' is defined but never used                                                                        @typescript-eslint/no-unused-vars
+   27:3   error    'DownloadOutlined' is defined but never used                                                                        @typescript-eslint/no-unused-vars
+   42:23  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   59:12  error    'initialLoading' is assigned a value but never used                                                                 @typescript-eslint/no-unused-vars
+   68:50  error    Unexpected any. Specify a different type                                                                            @typescript-eslint/no-explicit-any
+   71:10  error    'dateRange' is assigned a value but never used                                                                      @typescript-eslint/no-unused-vars
+  143:6   warning  React Hook useEffect has a missing dependency: 'fetchReportData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\components\reports\ReportExportModal.tsx
+  63:48  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\reports\ReportGenerator.tsx
+   5:46  error  'DownloadOutlined' is defined but never used  @typescript-eslint/no-unused-vars
+  78:21  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\reports\ReportPreview.tsx
+  30:50  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\reports\ReportTemplates.tsx
+    8:25  error  'getKoreanTableOptions' is defined but never used  @typescript-eslint/no-unused-vars
+   32:7   error  'stateLabels' is assigned a value but never used   @typescript-eslint/no-unused-vars
+   46:92  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  197:27  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  373:27  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  423:27  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  429:21  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  436:20  error  'doc' is defined but never used                    @typescript-eslint/no-unused-vars
+  436:32  error  'data' is defined but never used                   @typescript-eslint/no-unused-vars
+  436:50  error  'x' is defined but never used                      @typescript-eslint/no-unused-vars
+  436:61  error  'y' is defined but never used                      @typescript-eslint/no-unused-vars
+  436:72  error  'width' is defined but never used                  @typescript-eslint/no-unused-vars
+  546:35  error  'index' is defined but never used                  @typescript-eslint/no-unused-vars
+  616:21  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  623:50  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  631:48  error  'oee' is defined but never used                    @typescript-eslint/no-unused-vars
+  668:35  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  775:14  error  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\settings\SystemSettings.tsx
+   3:27  error  'useEffect' is defined but never used          @typescript-eslint/no-unused-vars
+  43:5   error  'settings' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\settings\tabs\DisplaySettingsTab.tsx
+   59:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  107:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\settings\tabs\GeneralSettingsTab.tsx
+   23:9   error  'Option' is assigned a value but never used         @typescript-eslint/no-unused-vars
+   31:21  error  'updateSetting' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   63:37  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+   79:19  error  '_' is defined but never used                       @typescript-eslint/no-unused-vars
+  182:37  error  Unexpected any. Specify a different type            @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\settings\tabs\NotificationSettingsTab.tsx
+  58:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\settings\tabs\OEESettingsTab.tsx
+  18:24  error  'InfoCircleOutlined' is defined but never used  @typescript-eslint/no-unused-vars
+  53:37  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\settings\tabs\SettingsAuditTab.tsx
+   23:3   error    'ExportOutlined' is defined but never used                                                                        @typescript-eslint/no-unused-vars
+   72:6   warning  React Hook useEffect has a missing dependency: 'loadAuditData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  126:31  error    Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+  193:23  error    Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+  204:23  error    Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\components\settings\tabs\ShiftSettingsTab.tsx
+  77:13  error  'bStart' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  78:13  error  'bEnd' is assigned a value but never used    @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\components\theme\ThemeProvider.tsx
+   3:38  error    'useCallback' is defined but never used                                                                                                                                                                                                                         @typescript-eslint/no-unused-vars
+   4:35  error    'antdTheme' is defined but never used                                                                                                                                                                                                                           @typescript-eslint/no-unused-vars
+  18:9   warning  The 'getDisplaySettings' logical expression could make the dependencies of useEffect Hook (at line 58) change on every render. Move it inside the useEffect callback. Alternatively, wrap the initialization of 'getDisplaySettings' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  62:11  error    'root' is assigned a value but never used                                                                                                                                                                                                                       @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\contexts\AuthContext.tsx
+    5:20  error    'checkSupabaseConnection' is defined but never used                                                                   @typescript-eslint/no-unused-vars
+    5:45  error    'safeSupabaseOperation' is defined but never used                                                                     @typescript-eslint/no-unused-vars
+    6:33  error    'AppError' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+    6:43  error    'ErrorCodes' is defined but never used                                                                                @typescript-eslint/no-unused-vars
+   96:26  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  220:21  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  253:21  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  296:23  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  346:23  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  436:6   warning  React Hook useEffect has a missing dependency: 'setLoadingTimeout'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\contexts\LanguageContext.tsx
+  95:6  warning  React Hook useEffect has a missing dependency: 'getSetting'. Either include it or remove the dependency array                             react-hooks/exhaustive-deps
+  95:7  warning  React Hook useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\contexts\NotificationContext.tsx
+    7:3   error  'NotificationType' is defined but never used         @typescript-eslint/no-unused-vars
+  129:11  error  'notificationId' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  134:52  error  Unexpected any. Specify a different type             @typescript-eslint/no-explicit-any
+  137:34  error  Unexpected any. Specify a different type             @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\contexts\SystemSettingsContext.tsx
+  10:3   error  'SystemSetting' is defined but never used  @typescript-eslint/no-unused-vars
+  19:20  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+  20:72  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+  80:39  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+  90:89  error  Unexpected any. Specify a different type   @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useAdminOperations.ts
+  2:10  error  'supabase' is defined but never used  @typescript-eslint/no-unused-vars
+  3:15  error  'User' is defined but never used      @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useMachines.ts
+   64:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   98:71  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  110:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useModelProcesses.ts
+  1:20  error  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useOEEChartData.ts
+  133:6  warning  React Hook useCallback has unnecessary dependencies: 'machineId' and 'selectedShifts'. Either exclude them or remove the dependency array       react-hooks/exhaustive-deps
+  140:6  warning  React Hook useCallback has unnecessary dependencies: 'machineId' and 'selectedShifts'. Either exclude them or remove the dependency array       react-hooks/exhaustive-deps
+  145:6  warning  React Hook useEffect has missing dependencies: 'dateRange', 'fetchChartData', and 'period'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useRealtimeData.ts
+    6:10  error    'calculateOEE' is defined but never used                                                                                                             @typescript-eslint/no-unused-vars
+   14:16  error    Unexpected any. Specify a different type                                                                                                             @typescript-eslint/no-explicit-any
+   55:6   warning  React Hook useCallback has missing dependencies: 'loadInitialData' and 'updateConnectionStatus'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  205:6   warning  React Hook useCallback has a missing dependency: 'userId'. Either include it or remove the dependency array                                          react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useRealtimeMachines.ts
+   73:19  error    Unexpected any. Specify a different type                                                                                                                                 @typescript-eslint/no-explicit-any
+   79:6   warning  React Hook useCallback has missing dependencies: 'filters.currentState', 'filters.isActive', and 'filters.location'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+   85:23  error    Unexpected any. Specify a different type                                                                                                                                 @typescript-eslint/no-explicit-any
+  157:21  error    Unexpected any. Specify a different type                                                                                                                                 @typescript-eslint/no-explicit-any
+  173:6   warning  React Hook useEffect has missing dependencies: 'initialData.length' and 'refreshMachines'. Either include them or remove the dependency array                            react-hooks/exhaustive-deps
+  204:19  error    Unexpected any. Specify a different type                                                                                                                                 @typescript-eslint/no-explicit-any
+  231:19  error    Unexpected any. Specify a different type                                                                                                                                 @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useRealtimeNotifications.ts
+   30:23  error    Unexpected any. Specify a different type                                                                                                            @typescript-eslint/no-explicit-any
+   37:14  error    Unexpected any. Specify a different type                                                                                                            @typescript-eslint/no-explicit-any
+   92:3   error    'machines' is assigned a value but never used                                                                                                       @typescript-eslint/no-unused-vars
+  291:6   warning  React Hook useEffect has missing dependencies: 'aggregatedData' and 'productionRecords.length'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useRealtimeProductionRecords.ts
+   48:23  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  126:21  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  204:21  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  220:6   warning  React Hook useEffect has a missing dependency: 'filters.dateRange'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  247:19  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+  272:19  error    Unexpected any. Specify a different type                                                                              @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useSystemSettings.ts
+  174:25  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  270:41  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  272:67  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useThemeSettings.ts
+  5:10  error  'ConfigProvider' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\hooks\useUserProfiles.ts
+  46:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Work Drive\APP\CNC OEE\src\lib\fonts.ts
+  126:9  error  'koreanFont' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\lib\logger.ts
+  60:39  error  '_entry' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\lib\systemSettings.ts
+  462:25  error  '_category' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\utils\notificationDetector.ts
+  5:15  error  'NotificationType' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Work Drive\APP\CNC OEE\src\utils\reportUtils.ts
+  28:31  error  '_element' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 303 problems (276 errors, 27 warnings)
+

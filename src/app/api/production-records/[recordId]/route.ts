@@ -54,13 +54,14 @@ export async function GET(
       record: record
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in GET /api/production-records/[recordId]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to fetch production record',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
@@ -105,7 +106,7 @@ export async function PUT(
     }
 
     // 업데이트할 데이터 구성
-    const updateData: any = {};
+    const updateData: Record<string, number | undefined> = {};
     if (output_qty !== undefined) updateData.output_qty = output_qty;
     if (defect_qty !== undefined) updateData.defect_qty = defect_qty;
     if (actual_runtime !== undefined) updateData.actual_runtime = actual_runtime;
@@ -143,13 +144,14 @@ export async function PUT(
       record: updatedRecord
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in PUT /api/production-records/[recordId]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to update production record',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
@@ -205,13 +207,14 @@ export async function DELETE(
       }
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in DELETE /api/production-records/[recordId]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to delete production record',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
@@ -245,7 +248,7 @@ export async function PATCH(
     }
 
     // 업데이트할 데이터 구성 (모든 필드 허용)
-    const updateData: any = {};
+    const updateData: Record<string, number | undefined> = {};
     const allowedFields = [
       'output_qty', 'defect_qty', 'actual_runtime', 'planned_runtime',
       'availability', 'performance', 'quality', 'oee'
@@ -286,13 +289,14 @@ export async function PATCH(
       updated_fields: Object.keys(updateData)
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in PATCH /api/production-records/[recordId]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to patch production record',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }

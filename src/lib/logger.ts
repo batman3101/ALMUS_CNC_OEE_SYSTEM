@@ -14,7 +14,7 @@ interface LogEntry {
   timestamp: string;
   level: LogLevel;
   message: string;
-  data?: any;
+  data?: unknown;
   category?: string;
   userId?: string;
   sessionId?: string;
@@ -43,7 +43,7 @@ class Logger {
     return level >= this.logLevel;
   }
 
-  private formatMessage(level: LogLevel, message: string, data?: any): string {
+  private formatMessage(level: LogLevel, message: string, data?: unknown): string {
     const timestamp = new Date().toISOString();
     const levelName = LogLevel[level];
     const dataStr = data ? ` | Data: ${JSON.stringify(data)}` : '';
@@ -57,21 +57,17 @@ class Logger {
     }
   }
 
-  private async sendToExternalService(entry: LogEntry): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private async sendToExternalService(_entry: LogEntry): Promise<void> {
     // 프로덕션 환경에서 외부 로깅 서비스로 전송
     // 예: Sentry, LogRocket, DataDog 등
     if (this.isProduction) {
-      try {
-        // TODO: 실제 로깅 서비스 연동
-        // await externalLoggingService.send(entry);
-      } catch (error) {
-        // 로깅 자체의 오류는 console에만 출력
-        console.error('Failed to send log to external service:', error);
-      }
+      // TODO: 실제 로깅 서비스 연동
+      // await externalLoggingService.send(_entry);
     }
   }
 
-  public debug(message: string, data?: any, category?: string): void {
+  public debug(message: string, data?: unknown, category?: string): void {
     if (!this.shouldLog(LogLevel.DEBUG)) return;
 
     const entry: LogEntry = {
@@ -89,7 +85,7 @@ class Logger {
     }
   }
 
-  public info(message: string, data?: any, category?: string): void {
+  public info(message: string, data?: unknown, category?: string): void {
     if (!this.shouldLog(LogLevel.INFO)) return;
 
     const entry: LogEntry = {
@@ -109,7 +105,7 @@ class Logger {
     this.sendToExternalService(entry);
   }
 
-  public warn(message: string, data?: any, category?: string): void {
+  public warn(message: string, data?: unknown, category?: string): void {
     if (!this.shouldLog(LogLevel.WARN)) return;
 
     const entry: LogEntry = {
@@ -132,7 +128,7 @@ class Logger {
     this.sendToExternalService(entry);
   }
 
-  public error(message: string, error?: Error | any, category?: string): void {
+  public error(message: string, error?: Error | unknown, category?: string): void {
     if (!this.shouldLog(LogLevel.ERROR)) return;
 
     const errorData = error instanceof Error 
@@ -189,10 +185,10 @@ const logger = Logger.getInstance();
 
 // 편의 함수들 내보내기
 export const log = {
-  debug: (message: string, data?: any, category?: string) => logger.debug(message, data, category),
-  info: (message: string, data?: any, category?: string) => logger.info(message, data, category),
-  warn: (message: string, data?: any, category?: string) => logger.warn(message, data, category),
-  error: (message: string, error?: Error | any, category?: string) => logger.error(message, error, category),
+  debug: (message: string, data?: unknown, category?: string) => logger.debug(message, data, category),
+  info: (message: string, data?: unknown, category?: string) => logger.info(message, data, category),
+  warn: (message: string, data?: unknown, category?: string) => logger.warn(message, data, category),
+  error: (message: string, error?: Error | unknown, category?: string) => logger.error(message, error, category),
   setUser: (userId: string, sessionId?: string) => logger.setUser(userId, sessionId),
   setLogLevel: (level: LogLevel) => logger.setLogLevel(level),
   getLogBuffer: () => logger.getLogBuffer(),

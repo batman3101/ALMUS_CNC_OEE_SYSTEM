@@ -11,7 +11,6 @@ import {
 import { usePathname } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { LoginForm } from '@/components/auth/LoginForm';
 import Sidebar from './Sidebar';
 import LanguageToggle from './LanguageToggle';
 import ThemeToggle from './ThemeToggle';

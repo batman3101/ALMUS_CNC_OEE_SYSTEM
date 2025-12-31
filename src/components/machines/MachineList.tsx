@@ -54,8 +54,16 @@ const MachineList: React.FC<MachineListProps> = ({
     modelFilter: 'all',
     activeFilter: 'all'
   });
-  const [statusDescriptions, setStatusDescriptions] = useState<any[]>([]);
-  const [statusLoading, setStatusLoading] = useState(false);
+  interface StatusDescription {
+    status: string;
+    description_ko: string;
+    description_vi: string;
+    color_code?: string;
+    is_active?: boolean;
+    display_order?: number;
+  }
+  const [, setStatusDescriptions] = useState<StatusDescription[]>([]);
+  const [, setStatusLoading] = useState(false);
   
   // 페이지네이션 상태
   const [currentPage, setCurrentPage] = useState(1);
@@ -179,9 +187,10 @@ const MachineList: React.FC<MachineListProps> = ({
     });
     
     return options;
-  }, [language, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t]);
 
-  const handleFilterChange = (key: keyof FilterOptions, value: any) => {
+  const handleFilterChange = (key: keyof FilterOptions, value: string | MachineState | 'all') => {
     setFilters(prev => ({
       ...prev,
       [key]: value

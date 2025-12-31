@@ -70,9 +70,10 @@ export const useRealtimeMachines = ({
       if (error) throw error;
 
       setMachines(data || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching machines:', err);
-      setError(err.message || '설비 데이터를 불러오는데 실패했습니다.');
+      const errorMessage = err instanceof Error ? err.message : '설비 데이터를 불러오는데 실패했습니다.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -81,8 +82,8 @@ export const useRealtimeMachines = ({
   // 실시간 구독 설정
   useEffect(() => {
     console.log('Setting up realtime subscription for machines');
-    
-    let subscription: any = null;
+
+    let subscription: ReturnType<typeof supabase.channel> | null = null;
 
     const setupRealtime = async () => {
       try {
@@ -154,9 +155,10 @@ export const useRealtimeMachines = ({
               setLoading(false);
             }
           });
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error setting up realtime subscription:', err);
-        setError(err.message);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(errorMessage);
         setLoading(false);
       }
     };
@@ -201,9 +203,10 @@ export const useRealtimeMachines = ({
 
       console.log('Machine status updated successfully');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating machine status:', err);
-      setError(`설비 상태 업데이트 실패: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`설비 상태 업데이트 실패: ${errorMessage}`);
       return false;
     }
   }, []);
@@ -228,9 +231,10 @@ export const useRealtimeMachines = ({
 
       console.log('Machine updated successfully');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating machine:', err);
-      setError(err.message);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
       return false;
     }
   }, []);

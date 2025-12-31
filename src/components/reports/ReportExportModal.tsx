@@ -60,7 +60,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
 
       const reportConfig: ReportConfig = {
         reportType: values.reportType,
-        dateRange: values.dateRange.map((date: any) => date.format('YYYY-MM-DD')) as [string, string],
+        dateRange: values.dateRange.map((date: { format: (str: string) => string }) => date.format('YYYY-MM-DD')) as [string, string],
         selectedMachines: values.selectedMachines || machines.map(m => m.id),
         includeCharts: values.includeCharts ?? true,
         includeOEE: values.includeOEE ?? true,

@@ -68,15 +68,16 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
 }) => {
   const { t, i18n } = useMachinesTranslation();
   const currentLanguage = (i18n?.language as 'ko' | 'vi') || language;
-  const { 
-    getAllStatusOptions,
-    isLoading: statusLoading 
+  const {
+    getAllStatusOptions
   } = useMachineStatusTranslations(currentLanguage);
   const { message } = App.useApp();
   const [form] = Form.useForm<EditFormData>();
   const [loading, setLoading] = useState(false);
-  const [productModels, setProductModels] = useState<any[]>([]);
-  const [processes, setProcesses] = useState<any[]>([]);
+  interface ProductModel { id: string; model_name: string; tact_time?: number; }
+  interface ProcessItem { id: string; process_name: string; tact_time?: number; }
+  const [productModels, setProductModels] = useState<ProductModel[]>([]);
+  const [processes, setProcesses] = useState<ProcessItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [processesLoading, setProcessesLoading] = useState(false);
 
@@ -191,13 +192,14 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
         throw new Error(errorData.message || `HTTP ${response.status}`);
       }
 
-      const result = await response.json();
+      await response.json();
       message.success(t('edit.successMessage'));
       onSuccess();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating machine:', error);
-      message.error(`${t('edit.errorMessage')}: ${error.message}`);
+      const errMessage = error instanceof Error ? error.message : String(error);
+      message.error(`${t('edit.errorMessage')}: ${errMessage}`);
     } finally {
       setLoading(false);
     }

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { 
-  Notification, 
-  NotificationContextType, 
-  NotificationType,
-  NotificationSeverity 
+import {
+  Notification,
+  NotificationContextType,
+  NotificationSeverity
 } from '@/types/notifications';
+import type { Machine } from '@/types';
 import { useAuth } from './AuthContext';
 import { showToast } from '@/components/notifications';
 import { useLanguage } from './LanguageContext';
@@ -126,15 +126,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.log('✅ 이미 확인된 알림 수:', acknowledgedNotifications.size);
 
       const notifications: Notification[] = [];
-      let notificationId = 1;
 
       // 비정상 상태 설비에 대한 알림 생성 (확인되지 않은 것만)
       console.log('🔍 비정상 상태 설비 검색 중...');
 
-      const abnormalMachines = machines.filter((m: any) => m.current_state !== 'NORMAL_OPERATION');
+      const abnormalMachines = machines.filter((m: Machine) => m.current_state !== 'NORMAL_OPERATION');
       console.log('⚠️ 비정상 상태 설비 발견:', abnormalMachines.length, '대');
 
-      machines.forEach((machine: any) => {
+      machines.forEach((machine: Machine) => {
         if (machine.current_state !== 'NORMAL_OPERATION') {
           const notificationKey = `${machine.id}_${machine.current_state}`;
 

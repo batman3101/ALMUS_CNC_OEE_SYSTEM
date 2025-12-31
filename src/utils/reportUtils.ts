@@ -1,9 +1,9 @@
-import { Chart } from 'chart.js';
+import { Chart, ChartData, ChartOptions } from 'chart.js';
 
 export interface ChartConfig {
   type: 'bar' | 'line' | 'pie' | 'doughnut';
-  data: any;
-  options?: any;
+  data: ChartData;
+  options?: ChartOptions;
 }
 
 export class ReportUtils {
@@ -25,7 +25,8 @@ export class ReportUtils {
   /**
    * HTML 요소를 이미지로 변환
    */
-  static async elementToImage(element: HTMLElement): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static async elementToImage(_element: HTMLElement): Promise<string> {
     // html2canvas 라이브러리가 필요하지만, 여기서는 기본 구현만 제공
     return new Promise((resolve) => {
       // 실제 구현에서는 html2canvas를 사용
@@ -36,7 +37,7 @@ export class ReportUtils {
   /**
    * 데이터를 CSV 형식으로 변환
    */
-  static arrayToCSV(data: any[][]): string {
+  static arrayToCSV(data: (string | number | boolean | null | undefined)[][]): string {
     return data.map(row => 
       row.map(cell => 
         typeof cell === 'string' && cell.includes(',') 

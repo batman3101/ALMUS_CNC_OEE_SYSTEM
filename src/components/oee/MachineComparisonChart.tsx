@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Card, Select, Button, Space, Table, Empty, Spin, Checkbox, Tooltip, Tag, Pagination } from 'antd';
+import { Card, Button, Space, Table, Empty, Spin, Checkbox, Tag, Pagination } from 'antd';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
-import { BarChartOutlined, LineChartOutlined, SortAscendingOutlined, SortDescendingOutlined } from '@ant-design/icons';
+import { BarChartOutlined, LineChartOutlined } from '@ant-design/icons';
 
 interface MachineComparisonData {
   machine_name: string;
@@ -52,7 +52,6 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   height = 400,
   chartType = 'bar',
   selectedMetrics = ['oee', 'availability', 'performance', 'quality'],
-  period = 'month',
   showTable = false,
   loading = false,
   onChartTypeChange,
@@ -103,12 +102,12 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   };
 
   // 커스텀 툴팁
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ color: string; dataKey: string; value: number }>; label?: string }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white p-3 border border-gray-200 shadow-lg rounded">
           <p className="font-semibold">{label}</p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index: number) => (
             <p key={index} style={{ color: entry.color }}>
               {METRIC_LABELS[entry.dataKey as keyof typeof METRIC_LABELS]}: {entry.value.toFixed(1)}%
             </p>
@@ -171,7 +170,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
       dataIndex: 'ranking',
       key: 'ranking',
       width: 60,
-      render: (_: any, __: any, index: number) => (
+      render: (_: unknown, __: unknown, index: number) => (
         <Tag color={index < 3 ? 'gold' : 'default'}>{index + 1}</Tag>
       )
     },

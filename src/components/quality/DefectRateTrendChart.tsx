@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Card } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
 
 interface DefectRateTrendChartProps {
@@ -37,7 +36,7 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
   // 목표 불량률 (일반적으로 2% 이하)
   const targetDefectRate = 2.0;
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: { shift: string; defectRate: number; defectQty: number; outputQty: number }; color: string }>; label?: string }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (

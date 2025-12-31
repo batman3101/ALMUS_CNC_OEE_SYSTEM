@@ -44,8 +44,8 @@ export const useRealtimeProductionRecords = ({
   // 실시간 구독 설정
   useEffect(() => {
     console.log('Setting up realtime subscription for production_records');
-    
-    let subscription: any = null;
+
+    let subscription: ReturnType<typeof supabase.channel> | null = null;
 
     // 생산 기록 새로고침 함수 (useEffect 내부에서 정의)
     const refreshRecords = async () => {
@@ -123,9 +123,10 @@ export const useRealtimeProductionRecords = ({
 
         setRecords(data || []);
         console.log(`📊 Loaded ${data?.length || 0} production records`);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error fetching production records:', err);
-        setError(err.message || '생산 기록을 불러오는데 실패했습니다.');
+        const errorMessage = err instanceof Error ? err.message : '생산 기록을 불러오는데 실패했습니다.';
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -201,9 +202,10 @@ export const useRealtimeProductionRecords = ({
               setLoading(false);
             }
           });
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error setting up production records realtime subscription:', err);
-        setError(err.message);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(errorMessage);
         setLoading(false);
       }
     };
@@ -244,9 +246,10 @@ export const useRealtimeProductionRecords = ({
 
       console.log('Production record updated successfully');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating production record:', err);
-      setError(`생산 기록 업데이트 실패: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`생산 기록 업데이트 실패: ${errorMessage}`);
       return false;
     }
   }, []);
@@ -269,9 +272,10 @@ export const useRealtimeProductionRecords = ({
 
       console.log('Production record deleted successfully');
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting production record:', err);
-      setError(`생산 기록 삭제 실패: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`생산 기록 삭제 실패: ${errorMessage}`);
       return false;
     }
   }, []);

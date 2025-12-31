@@ -54,6 +54,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
   // 권한 확인
   useEffect(() => {
     checkPermissions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 초기 데이터 로드
@@ -62,6 +63,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
       loadAggregationLogs();
       findMissingAggregations();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canTrigger]);
 
   const checkPermissions = async () => {
@@ -217,7 +219,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
         { text: '완료', value: 'completed' },
         { text: '실패', value: 'failed' },
       ],
-      onFilter: (value: any, record: AggregationLogEntry) => record.status === value,
+      onFilter: (value: string | number | boolean, record: AggregationLogEntry) => record.status === value,
     },
     {
       title: '처리 레코드',

@@ -57,7 +57,7 @@ export const removeFromLocalStorage = (key: string): boolean => {
 };
 
 // JSON 객체를 로컬 스토리지에 저장
-export const setJsonToLocalStorage = (key: string, value: any): boolean => {
+export const setJsonToLocalStorage = (key: string, value: unknown): boolean => {
   try {
     const jsonString = JSON.stringify(value);
     return setToLocalStorage(key, jsonString);
@@ -68,7 +68,7 @@ export const setJsonToLocalStorage = (key: string, value: any): boolean => {
 };
 
 // 로컬 스토리지에서 JSON 객체 가져오기
-export const getJsonFromLocalStorage = <T = any>(key: string): T | null => {
+export const getJsonFromLocalStorage = <T = unknown>(key: string): T | null => {
   const value = getFromLocalStorage(key);
   if (!value) {
     return null;

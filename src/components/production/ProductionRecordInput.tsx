@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback, memo } from 'react';
 import { Modal, Form, InputNumber, Button, message, Space, Typography, Divider, theme } from 'antd';
-import { ProductionRecord, Machine } from '@/types';
+import { Machine } from '@/types';
 import { z } from 'zod';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 
@@ -98,10 +98,10 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
   const inputStyle = useMemo(() => ({ width: '100%' }), []);
 
   // formatter/parser 함수들 메모이제이션
-  const numberFormatter = useCallback((value: any) => 
+  const numberFormatter = useCallback((value: number | undefined) =>
     `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ','), []);
-  
-  const numberParser = useCallback((value: any) => 
+
+  const numberParser = useCallback((value: string | undefined) =>
     value!.replace(/\$\s?|(,*)/g, ''), []);
 
   const handleSubmit = useCallback(async () => {

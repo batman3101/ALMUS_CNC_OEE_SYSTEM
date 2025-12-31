@@ -20,7 +20,6 @@ import { useMessage } from '@/hooks/useMessage';
 import type { UploadFile } from 'antd/es/upload/interface';
 
 const { Title, Text } = Typography;
-const { Option } = Select;
 
 interface GeneralSettingsTabProps {
   onSettingsChange?: () => void;
@@ -28,7 +27,7 @@ interface GeneralSettingsTabProps {
 
 const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChange }) => {
   const { t, changeLanguage } = useLanguage();
-  const { settings, updateSetting, updateMultipleSettings } = useGeneralSettings();
+  const { settings, updateMultipleSettings } = useGeneralSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -60,7 +59,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
   }, [settings, form]);
 
   // 설정 저장
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: Record<string, unknown>) => {
     try {
       setLoading(true);
       
@@ -76,7 +75,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
 
       // SettingUpdate 형태로 변환 (category 포함)
       const updates = Object.entries(values)
-        .filter(([_, value]) => value !== undefined && value !== null) // null/undefined 값 제외
+        .filter(([, value]) => value !== undefined && value !== null) // null/undefined 값 제외
         .map(([key, value]) => ({
           category: 'general' as const,
           setting_key: key,
@@ -179,7 +178,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
   };
 
   // 업로드 상태 변경 처리
-  const handleUploadChange = (info: any) => {
+  const handleUploadChange = (info: { fileList: Array<{ uid: string; name: string; status?: string; url?: string }> }) => {
     let fileList = [...info.fileList];
     fileList = fileList.slice(-1); // 파일 개수 제한 (1개만)
     setLogoFileList(fileList);

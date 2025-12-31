@@ -15,12 +15,11 @@ import {
   Tooltip,
   Modal
 } from 'antd';
-import { 
-  ReloadOutlined, 
-  SearchOutlined, 
+import {
+  ReloadOutlined,
+  SearchOutlined,
   EyeOutlined,
   FilterOutlined,
-  ExportOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -123,7 +122,7 @@ const SettingsAuditTab: React.FC = () => {
   };
 
   // 값 포맷팅
-  const formatValue = (value: any) => {
+  const formatValue = (value: unknown) => {
     if (value === null || value === undefined) {
       return <Text type="secondary">null</Text>;
     }
@@ -190,7 +189,7 @@ const SettingsAuditTab: React.FC = () => {
       dataIndex: 'old_value',
       key: 'old_value',
       width: 150,
-      render: (value: any) => (
+      render: (value: unknown) => (
         <div style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {formatValue(value)}
         </div>
@@ -201,7 +200,7 @@ const SettingsAuditTab: React.FC = () => {
       dataIndex: 'new_value',
       key: 'new_value',
       width: 150,
-      render: (value: any) => (
+      render: (value: unknown) => (
         <div style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {formatValue(value)}
         </div>

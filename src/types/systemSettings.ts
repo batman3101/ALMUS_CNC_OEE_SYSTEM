@@ -8,11 +8,11 @@ export interface SystemSetting {
   id: string;
   category: SettingCategory;
   setting_key: string;
-  setting_value: any;
-  default_value: any;
+  setting_value: string | number | boolean | object | unknown[];
+  default_value: string | number | boolean | object | unknown[];
   description?: string;
   data_type: 'string' | 'number' | 'boolean' | 'object' | 'array';
-  validation_rules?: any;
+  validation_rules?: Record<string, unknown>;
   is_active: boolean;
   is_system: boolean;
   created_at: string;
@@ -26,8 +26,8 @@ export interface SystemSettingAudit {
   setting_id: string;
   category: SettingCategory;
   setting_key: string;
-  old_value?: any;
-  new_value: any;
+  old_value?: unknown;
+  new_value: unknown;
   changed_by?: string;
   changed_at: string;
   change_reason?: string;
@@ -36,13 +36,13 @@ export interface SystemSettingAudit {
 export interface SettingUpdate {
   category: SettingCategory;
   setting_key: string;
-  setting_value: any;
+  setting_value: unknown;
   change_reason?: string;
 }
 
 export interface SettingsGroup {
   category: SettingCategory;
-  settings: Record<string, any>;
+  settings: Record<string, unknown>;
 }
 
 // 카테고리별 설정 인터페이스
@@ -109,14 +109,14 @@ export interface SettingValidationRule {
   min?: number;
   max?: number;
   pattern?: RegExp;
-  validator?: (value: any) => boolean | string;
+  validator?: (value: unknown) => boolean | string;
 }
 
 export interface SettingDefinition {
   key: string;
   category: SettingCategory;
   value_type: SettingValueType;
-  default_value: any;
+  default_value: unknown;
   description: string;
   validation?: SettingValidationRule;
   is_system: boolean;

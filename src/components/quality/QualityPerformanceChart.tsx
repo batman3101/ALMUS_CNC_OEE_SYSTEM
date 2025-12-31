@@ -13,7 +13,7 @@ import {
   Legend,
   ChartOptions,
 } from 'chart.js';
-import { Card, Typography, Row, Col, Statistic } from 'antd';
+import { Typography, Row, Col, Statistic } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -46,7 +46,6 @@ interface QualityPerformanceChartProps {
 export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = ({
   data,
   height = 300,
-  period = 'month'
 }) => {
   const { t } = useTranslation();
 

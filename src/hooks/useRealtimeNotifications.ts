@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { notification, message } from 'antd';
+import type { ProductionRecord, Machine } from '@/types';
 
 interface NotificationRule {
   id: string;
@@ -27,14 +28,14 @@ interface ProductionAlert {
 }
 
 interface UseRealtimeNotificationsProps {
-  productionRecords?: any[];
+  productionRecords?: ProductionRecord[];
   aggregatedData?: {
     totalProduction: number;
     totalDefects: number;
     avgOEE: number;
     avgQuality: number;
   };
-  machines?: any[];
+  _machines?: Machine[];
 }
 
 // 기본 알림 규칙
@@ -89,7 +90,8 @@ const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
 export const useRealtimeNotifications = ({
   productionRecords = [],
   aggregatedData,
-  machines = []
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _machines = []
 }: UseRealtimeNotificationsProps = {}) => {
   const [alerts, setAlerts] = useState<ProductionAlert[]>([]);
   const [rules, setRules] = useState<NotificationRule[]>(DEFAULT_NOTIFICATION_RULES);

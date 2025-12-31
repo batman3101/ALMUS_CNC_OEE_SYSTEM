@@ -123,8 +123,9 @@ export function addKoreanText(
 
 // autoTable에서 사용할 한국어 지원 옵션
 export const getKoreanTableOptions = () => {
-  const koreanFont = detectKoreanFont();
-  
+  // detectKoreanFont() is called for potential future font customization
+  detectKoreanFont();
+
   return {
     styles: {
       font: 'helvetica', // jsPDF 기본 폰트 유지

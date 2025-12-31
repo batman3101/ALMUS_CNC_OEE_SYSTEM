@@ -43,18 +43,19 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
     try {
       await login(values.email, values.password);
       onSuccess?.();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Login error:', err);
 
       let errorMessage = t('loginFailed');
       const errorCode = ErrorCodes.AUTHENTICATION_FAILED;
+      const errMsg = err instanceof Error ? err.message : '';
 
-      if (err.message?.includes('Invalid login credentials') ||
-          err.message?.includes('이메일 또는 비밀번호가 올바르지 않습니다')) {
+      if (errMsg.includes('Invalid login credentials') ||
+          errMsg.includes('이메일 또는 비밀번호가 올바르지 않습니다')) {
         errorMessage = t('invalidCredentials');
-      } else if (err.message?.includes('Email not confirmed')) {
+      } else if (errMsg.includes('Email not confirmed')) {
         errorMessage = t('emailNotConfirmed');
-      } else if (err.message?.includes('Too many requests')) {
+      } else if (errMsg.includes('Too many requests')) {
         errorMessage = t('tooManyRequests');
       }
 

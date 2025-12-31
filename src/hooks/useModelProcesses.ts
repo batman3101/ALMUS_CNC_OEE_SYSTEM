@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { Database } from '@/types/database';
 
 type ModelProcess = Database['public']['Tables']['model_processes']['Row'];

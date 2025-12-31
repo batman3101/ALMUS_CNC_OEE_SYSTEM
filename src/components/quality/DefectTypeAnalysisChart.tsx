@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { List, Space, Tag } from 'antd';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { List, Tag } from 'antd';
 
 interface DefectTypeAnalysisChartProps {
   data: Array<{
@@ -43,7 +43,7 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
     return defectTypes.filter(item => item.value > 0);
   }, [data]);
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number }> }) => {
     if (active && payload && payload.length) {
       const data = payload[0];
       const total = defectTypeData.reduce((sum, item) => sum + item.value, 0);
@@ -67,7 +67,7 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
     return null;
   };
 
-  const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+  const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: { cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; percent: number }) => {
     if (percent < 0.05) return null; // 5% 미만은 레이블 숨김
     
     const RADIAN = Math.PI / 180;
@@ -133,7 +133,7 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
           <List
             size="small"
             dataSource={defectTypeData}
-            renderItem={(item, index) => {
+            renderItem={(item) => {
               const total = defectTypeData.reduce((sum, entry) => sum + entry.value, 0);
               const percentage = ((item.value / total) * 100).toFixed(1);
               

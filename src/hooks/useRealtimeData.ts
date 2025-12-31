@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Machine, MachineLog, ProductionRecord, OEEMetrics } from '@/types';
-import { calculateOEE } from '@/utils/oeeCalculator';
+import { Machine, MachineLog, ProductionRecord, OEEMetrics, User } from '@/types';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface RealtimeDataState {
@@ -11,7 +10,7 @@ interface RealtimeDataState {
   machineLogs: MachineLog[];
   productionRecords: ProductionRecord[];
   oeeMetrics: Record<string, OEEMetrics>;
-  userProfile: any | null;
+  userProfile: User | null;
   loading: boolean;
   error: string | null;
   connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';

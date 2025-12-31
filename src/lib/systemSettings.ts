@@ -4,15 +4,12 @@ import { supabase } from './supabase';
 import { log, LogCategories } from './logger';
 import type {
   SystemSetting,
-  SystemSettingAudit,
   SettingUpdate,
   SettingCategory,
   SettingsResponse,
   SettingUpdateResponse,
   SettingsAuditResponse,
-  AllSystemSettings,
-  SettingDefinition,
-  SettingValidationRule
+  AllSystemSettings
 } from '@/types/systemSettings';
 
 /**
@@ -20,7 +17,7 @@ import type {
  */
 export class SystemSettingsService {
   private static instance: SystemSettingsService;
-  private settingsCache: Map<string, any> = new Map();
+  private settingsCache: Map<string, unknown> = new Map();
   private lastCacheUpdate: number = 0;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5분
 
@@ -60,8 +57,8 @@ export class SystemSettingsService {
         // Service Role을 사용해서 다시 시도 (RLS 우회)
         try {
           console.log('📋 No settings found with regular client, trying with service role...');
-          
-          const { data: serviceData, error: serviceError } = await this.getSettingsWithServiceRole();
+
+          const { data: serviceData } = await this.getSettingsWithServiceRole();
           
           if (serviceData && serviceData.length > 0) {
             console.log('✅ Settings retrieved with service role:', serviceData.length);
@@ -95,7 +92,7 @@ export class SystemSettingsService {
   /**
    * Service Role을 사용하여 설정 조회 (RLS 우회)
    */
-  private async getSettingsWithServiceRole(): Promise<{ data: SystemSetting[] | null; error: any }> {
+  private async getSettingsWithServiceRole(): Promise<{ data: SystemSetting[] | null; error: unknown }> {
     try {
       // 서버 사이드에서만 실행 가능
       if (typeof window !== 'undefined') {
@@ -164,7 +161,7 @@ export class SystemSettingsService {
   /**
    * 특정 설정값 조회
    */
-  async getSetting(category: SettingCategory, key: string): Promise<any> {
+  async getSetting(category: SettingCategory, key: string): Promise<unknown> {
     try {
       // 캐시에서 먼저 확인
       const cacheKey = `${category}.${key}`;
@@ -220,7 +217,7 @@ export class SystemSettingsService {
       });
 
       // 1차 시도: 일반 클라이언트 RPC 호출
-      const { data, error } = await supabase
+      const { error } = await supabase
         .rpc('update_system_setting', {
           p_category: update.category,
           p_key: update.setting_key,
@@ -346,7 +343,7 @@ export class SystemSettingsService {
         }
       );
       
-      const { data, error } = await serviceClient
+      const { error: rpcError } = await serviceClient
         .rpc('update_system_setting', {
           p_category: update.category,
           p_key: update.setting_key,
@@ -354,9 +351,9 @@ export class SystemSettingsService {
           p_reason: update.change_reason
         });
 
-      if (error) {
-        console.error('Service Role RPC 호출 실패:', error);
-        return { success: false, error: error.message };
+      if (rpcError) {
+        console.error('Service Role RPC 호출 실패:', rpcError);
+        return { success: false, error: rpcError.message };
       }
 
       return { success: true };
@@ -462,7 +459,8 @@ export class SystemSettingsService {
   /**
    * 기본 설정값으로 초기화
    */
-  async resetToDefaults(category?: SettingCategory): Promise<SettingUpdateResponse> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async resetToDefaults(_category?: SettingCategory): Promise<SettingUpdateResponse> {
     try {
       // 간단한 구현
       return { success: true, message: 'Reset functionality not implemented yet' };
@@ -488,7 +486,7 @@ export class SystemSettingsService {
   /**
    * 값 타입 검증
    */
-  private validateValueType(value: any, expectedType: string): boolean {
+  private validateValueType(value: unknown, expectedType: string): boolean {
     switch (expectedType) {
       case 'string':
         return typeof value === 'string';

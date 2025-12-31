@@ -1,7 +1,6 @@
-import { 
-  NotificationDetectionResult, 
-  NotificationType, 
-  NotificationSeverity 
+import {
+  NotificationDetectionResult,
+  NotificationSeverity
 } from '@/types/notifications';
 import { OEEMetrics, Machine, MachineLog } from '@/types';
 

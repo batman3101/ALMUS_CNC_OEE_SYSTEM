@@ -171,7 +171,7 @@ export function useSystemSettings() {
     parseDate: (dateString: string) => parseDate(dateString),
     parseTime: (timeString: string) => parseTime(timeString),
     parseDateTime: (dateTimeString: string) => parseDateTime(dateTimeString),
-    isValidDate: (date: any) => isValidDate(date),
+    isValidDate: (date: unknown) => isValidDate(date),
 
     /**
      * 현재 시간 조회 (타임존 적용)
@@ -267,9 +267,9 @@ export function useCategorySettings<T extends SettingCategory>(category: T) {
   
   return {
     settings: getSettingsByCategory(category) as AllSystemSettings[T],
-    updateSetting: (key: string, value: any, reason?: string) => 
+    updateSetting: (key: string, value: unknown, reason?: string) =>
       updateSetting({ category, setting_key: key, setting_value: value, change_reason: reason }),
-    updateMultipleSettings: (updates: Array<{ key: string; value: any; reason?: string }>) =>
+    updateMultipleSettings: (updates: Array<{ key: string; value: unknown; reason?: string }>) =>
       updateMultipleSettings(updates.map(update => ({
         category,
         setting_key: update.key,

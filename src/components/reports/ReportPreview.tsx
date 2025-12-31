@@ -27,7 +27,25 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   reportData,
   onGenerate
 }) => {
-  const [previewData, setPreviewData] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<{
+    summary: {
+      period: string;
+      totalMachines: number;
+      avgOEE: number;
+      avgAvailability: number;
+      avgPerformance: number;
+      avgQuality: number;
+    };
+    machines: Array<{
+      id: string;
+      name: string;
+      location?: string;
+      avgOEE?: number;
+      availability?: number;
+      performance?: number;
+      quality?: number;
+    }>;
+  } | null>(null);
 
   useEffect(() => {
     const preview = ReportTemplates.generatePreviewData(reportData);

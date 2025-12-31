@@ -55,14 +55,15 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
   }, []);
 
   // 설정 저장
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: Record<string, unknown>) => {
     try {
       setLoading(true);
       
       // 이메일 형식 검증
-      if (values.email_notifications_enabled && values.notification_email) {
+      const emailValue = values.notification_email;
+      if (values.email_notifications_enabled && typeof emailValue === 'string') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(values.notification_email)) {
+        if (!emailRegex.test(emailValue)) {
           showError(t('settings.notification.invalidEmail'));
           return;
         }

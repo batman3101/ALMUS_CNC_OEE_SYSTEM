@@ -65,16 +65,17 @@ if (typeof window !== 'undefined') {
   };
 
   // 전역 React 객체 버전 패치 (Ant Design 호환성용)
-  if (typeof (window as any).React !== 'undefined') {
+  const windowWithReact = window as Window & { React?: { version?: string } };
+  if (typeof windowWithReact.React !== 'undefined') {
     try {
-      const ReactObj = (window as any).React;
-      if (ReactObj.version && ReactObj.version.startsWith('19')) {
+      const ReactObj = windowWithReact.React;
+      if (ReactObj?.version && ReactObj.version.startsWith('19')) {
         Object.defineProperty(ReactObj, 'version', {
           get() { return '18.3.1'; },
           configurable: true
         });
       }
-    } catch (e) {
+    } catch {
       // 에러 무시
     }
   }

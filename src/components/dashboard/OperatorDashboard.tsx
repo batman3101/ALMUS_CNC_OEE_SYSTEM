@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Row, Col, Card, Button, Space, Badge, Timeline, Alert, Tabs, Select, Pagination, Table, Segmented } from 'antd';
+import { Row, Col, Card, Button, Space, Badge, Timeline, Alert, Tabs, Pagination, Table, Segmented } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -15,11 +15,11 @@ import {
 import { MachineStatusInput } from '@/components/machines';
 import { OEEGauge } from '@/components/oee';
 import { ProductionRecordInput } from '@/components/production';
-import { Machine, OEEMetrics, MachineLog, MachineState } from '@/types';
+import { MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMachinesTranslation, useDashboardTranslation, useMultipleTranslation } from '@/hooks/useTranslation';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 // Removed deprecated TabPane import
 
@@ -38,7 +38,7 @@ const getStateIcon = (state: MachineState) => {
   }
 };
 
-const getStateText = (state: MachineState, machinesT: any) => {
+const getStateText = (state: MachineState, machinesT: (key: string) => string) => {
   const stateMap = {
     'NORMAL_OPERATION': machinesT('states.NORMAL_OPERATION'),
     'MAINTENANCE': machinesT('states.MAINTENANCE'),
@@ -52,7 +52,7 @@ const getStateText = (state: MachineState, machinesT: any) => {
   return stateMap[state] || state;
 };
 
-const formatDuration = (minutes: number, machinesT: any): string => {
+const formatDuration = (minutes: number, machinesT: (key: string) => string): string => {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   if (hours > 0) {
@@ -66,10 +66,9 @@ interface OperatorDashboardProps {
 }
 
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
-  const isClient = useClientOnly();
+  useClientOnly();
   const { user } = useAuth();
   const { t: machinesT } = useMachinesTranslation();
-  const { t: dashboardT } = useDashboardTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
   const [showProductionInput, setShowProductionInput] = useState(false);
@@ -187,10 +186,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       // 실시간 데이터 강제 새로고침 (Realtime이 동작하지 않을 경우 대비)
       refresh();
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('상태 변경 실패:', error);
       // 에러 메시지를 사용자에게 표시 (message는 antd에서 import 필요)
-      alert(`상태 변경 실패: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      alert(`상태 변경 실패: ${errorMessage}`);
     }
   };
 
@@ -205,12 +205,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   }, [processedData.assignedMachines, currentPage, pageSize]);
 
   // 테이블 컬럼 정의
+  type MachineRowData = { id: string; name: string; current_state: MachineState; currentDuration: number; oee: number };
   const tableColumns = [
     {
       title: machinesT('labels.machineName'),
       dataIndex: 'name',
       key: 'name',
-      render: (name: string, record: any) => (
+      render: (name: string, record: MachineRowData) => (
         <span
           style={{
             fontWeight: selectedMachine === record.id ? 'bold' : 'normal',

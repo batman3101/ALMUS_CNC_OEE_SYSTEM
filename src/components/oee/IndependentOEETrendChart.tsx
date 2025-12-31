@@ -14,7 +14,7 @@ import {
   ChartOptions,
   Filler,
 } from 'chart.js';
-import { Card, Typography, Select, DatePicker, Row, Col, Spin } from 'antd';
+import { Card, Typography, Row, Col, Spin } from 'antd';
 import { useOEEChartData } from '@/hooks/useOEEChartData';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
 
@@ -30,7 +30,6 @@ ChartJS.register(
 );
 
 const { Title: AntTitle } = Typography;
-const { RangePicker } = DatePicker;
 
 interface IndependentOEETrendChartProps {
   title?: string;
@@ -63,12 +62,11 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
     loading,
     error,
     period,
-    dateRange,
     handlePeriodChange: internalHandlePeriodChange,
-    handleDateRangeChange
   } = useOEEChartData(initialPeriod, customDateRange, machineId, selectedShifts);
   
   // 기간 변경 핸들러 - 외부 콜백이 있으면 사용
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handlePeriodChangeWrapper = React.useCallback((newPeriod: 'daily' | 'weekly' | 'monthly') => {
     if (onPeriodChange) {
       // 외부에서 기간을 관리하는 경우, 내부 형식을 외부 형식으로 변환
@@ -204,12 +202,7 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
     },
   };
 
-  // 기간 선택 옵션
-  const periodOptions = [
-    { label: '일별 (7일)', value: 'daily' },
-    { label: '주별 (30일)', value: 'weekly' },
-    { label: '월별 (90일)', value: 'monthly' },
-  ];
+  // Note: handlePeriodChangeWrapper is defined above using React.useCallback
 
   if (error) {
     return (

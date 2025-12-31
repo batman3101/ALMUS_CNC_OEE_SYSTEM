@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Card, Button, Space, App } from 'antd';
-import { FileExcelOutlined, FilePdfOutlined, DownloadOutlined } from '@ant-design/icons';
+import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { ReportExportModal } from './ReportExportModal';
 import { ReportTemplates } from './ReportTemplates';
 import { useReportsTranslation } from '@/hooks/useTranslation';
@@ -75,9 +75,9 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
       }
       
       message.success(`${type.toUpperCase()} 보고서가 성공적으로 생성되었습니다.`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('보고서 생성 실패:', error);
-      const errorMessage = error?.message || '알 수 없는 오류가 발생했습니다.';
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
       message.error(`보고서 생성 중 오류가 발생했습니다: ${errorMessage}`);
     } finally {
       setLoading(false);

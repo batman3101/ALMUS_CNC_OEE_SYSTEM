@@ -61,7 +61,7 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const realtimeChannelRef = useRef<any>(null);
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isComponentMountedRef = useRef(true);
 
   const fetchMachines = useCallback(async (isBackgroundRefresh: boolean = false) => {
@@ -95,7 +95,7 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
       console.log(`Successfully loaded ${result.count} machines ${isBackgroundRefresh ? '(background)' : ''}`);
       
       // Supabase join 결과를 표준 형태로 변환
-      const processedMachines = (result.machines || []).map((machine: any) => ({
+      const processedMachines = (result.machines || []).map((machine: Machine & { product_models?: unknown; model_processes?: unknown }) => ({
         ...machine,
         production_model: machine.product_models,
         current_process: machine.model_processes
@@ -107,10 +107,11 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
         setLastUpdated(new Date());
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error in fetchMachines:', error);
       if (isComponentMountedRef.current) {
-        setError(error.message || 'Failed to load machines');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load machines';
+        setError(errorMessage);
       }
     } finally {
       if (!isBackgroundRefresh && isComponentMountedRef.current) {

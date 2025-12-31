@@ -17,7 +17,6 @@ import {
   Row,
   Col,
   Select,
-  Divider
 } from 'antd';
 import {
   PlusOutlined,
@@ -32,7 +31,7 @@ import type { ProductModel, ModelProcess } from '@/types/modelInfo';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
-interface ModelInfoManagerProps {}
+type ModelInfoManagerProps = Record<string, never>;
 
 const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   const { t } = useModelInfoTranslation();
@@ -97,10 +96,11 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   useEffect(() => {
     fetchModels();
     fetchProcesses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 모델 저장
-  const handleSaveModel = async (values: any) => {
+  const handleSaveModel = async (values: { model_name: string; description?: string }) => {
     try {
       if (editingModel) {
         // 수정
@@ -131,9 +131,9 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       setEditingModel(null);
       modelForm.resetFields();
       fetchModels();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('모델 저장 오류:', error);
-      if (error.code === '23505') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
         message.error(t('messages.modelNameExists'));
       } else {
         message.error(t('messages.modelSaveFailed'));
@@ -142,7 +142,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   };
 
   // 공정 저장
-  const handleSaveProcess = async (values: any) => {
+  const handleSaveProcess = async (values: { process_name: string; tact_time_seconds: number; process_order?: number; cavity_count?: number }) => {
     try {
       if (editingProcess) {
         // 수정
@@ -183,9 +183,9 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       setEditingProcess(null);
       processForm.resetFields();
       fetchProcesses();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('공정 저장 오류:', error);
-      if (error.code === '23505') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
         message.error(t('에러.중복공정명'));
       } else {
         message.error(t('에러.공정저장실패'));
@@ -271,7 +271,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     {
       title: t('컬럼.공정수'),
       key: 'process_count',
-      render: (_: any, record: ProductModel) => {
+      render: (_: unknown, record: ProductModel) => {
         const count = processes.filter(p => p.model_id === record.id).length;
         return <Tag color={count > 0 ? 'blue' : 'default'}>{count}{t('단위.개')}</Tag>;
       }
@@ -285,7 +285,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     {
       title: t('컬럼.작업'),
       key: 'actions',
-      render: (_: any, record: ProductModel) => (
+      render: (_: unknown, record: ProductModel) => (
         <Space>
           <Button
             type="link"
@@ -358,7 +358,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     {
       title: t('컬럼.작업'),
       key: 'actions',
-      render: (_: any, record: ModelProcess) => (
+      render: (_: unknown, record: ModelProcess) => (
         <Space>
           <Button
             type="link"

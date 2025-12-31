@@ -2,14 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tabs, DatePicker, Select, Space, Button, Spin } from 'antd';
-import { ReloadOutlined, DownloadOutlined, FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
 import { OEEGauge } from './OEEGauge';
 import { OEETrendChart } from './OEETrendChart';
 import { DowntimeChart } from './DowntimeChart';
 import { ProductionChart } from './ProductionChart';
 import { ReportGenerator } from '@/components/reports';
-import { OEECalculator, RealTimeOEECalculator } from '@/utils/oeeCalculator';
-import { OEEMetrics as OEEMetricsType, MachineLog, ProductionRecord } from '@/types';
+import { OEEMetrics as OEEMetricsType } from '@/types';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const { RangePicker } = DatePicker;
@@ -82,7 +81,7 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
   const { formatDate, formatDateTime, getAntdDateFormat } = useSystemSettings();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
-  const [dateRange, setDateRange] = useState<[string, string] | null>(null);
+  const [, setDateRange] = useState<[string, string] | null>(null);
   const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
 
@@ -98,9 +97,9 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
     output_qty: 0,
     defect_qty: 0
   });
-  const [trendData, setTrendData] = useState<any[]>([]);
-  const [downtimeData, setDowntimeData] = useState<any[]>([]);
-  const [productionData, setProductionData] = useState<any[]>([]);
+  const [trendData, setTrendData] = useState<unknown[]>([]);
+  const [downtimeData, setDowntimeData] = useState<unknown[]>([]);
+  const [productionData, setProductionData] = useState<Array<{ date: string; shift: string; output_qty: number; defect_qty: number }>>([]);
 
   // 데이터 새로고침
   const handleRefresh = async () => {

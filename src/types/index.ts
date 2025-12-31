@@ -101,14 +101,14 @@ export interface AuthContextType {
 export interface LanguageContextType {
   language: 'ko' | 'vi';
   changeLanguage: (lang: 'ko' | 'vi') => void;
-  t: (key: string, options?: any) => string;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
 // 에러 타입
 export interface AppError {
   code: string;
   message: string;
-  details?: any;
+  details?: unknown;
 }
 
 export enum ErrorCodes {

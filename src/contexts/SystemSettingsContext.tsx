@@ -6,8 +6,7 @@ import { supabase } from '@/lib/supabase';
 import type {
   AllSystemSettings,
   SettingUpdate,
-  SettingCategory,
-  SystemSetting
+  SettingCategory
 } from '@/types/systemSettings';
 
 interface SystemSettingsContextType {
@@ -16,8 +15,8 @@ interface SystemSettingsContextType {
   error: string | null;
   
   // 설정 조회
-  getSetting: <T = any>(category: SettingCategory, key: string) => T | null;
-  getSettingsByCategory: (category: SettingCategory) => Record<string, any>;
+  getSetting: <T = unknown>(category: SettingCategory, key: string) => T | null;
+  getSettingsByCategory: (category: SettingCategory) => Record<string, unknown>;
   
   // 설정 업데이트
   updateSetting: (update: SettingUpdate) => Promise<boolean>;
@@ -77,17 +76,17 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
   /**
    * 특정 설정값 조회
    */
-  const getSetting = useCallback(<T = any>(category: SettingCategory, key: string): T | null => {
+  const getSetting = useCallback(<T = unknown>(category: SettingCategory, key: string): T | null => {
     const categorySettings = settings[category];
     if (!categorySettings) return null;
-    
+
     return categorySettings[key] as T || null;
   }, [settings]);
 
   /**
    * 카테고리별 설정 조회
    */
-  const getSettingsByCategory = useCallback((category: SettingCategory): Record<string, any> => {
+  const getSettingsByCategory = useCallback((category: SettingCategory): Record<string, unknown> => {
     return settings[category] || {};
   }, [settings]);
 

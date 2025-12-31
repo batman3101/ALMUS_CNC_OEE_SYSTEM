@@ -20,11 +20,7 @@ import {
 import {
   FileExcelOutlined,
   FilePdfOutlined,
-  BarChartOutlined,
-  LineChartOutlined,
-  PieChartOutlined,
   EyeOutlined,
-  DownloadOutlined
 } from '@ant-design/icons';
 import { ReportGenerator } from './ReportGenerator';
 import { ReportTemplates } from './ReportTemplates';
@@ -39,7 +35,17 @@ interface ReportDashboardProps {
   machines?: Machine[];
   className?: string;
   loading?: boolean;
-  productionRecords?: any[];
+  productionRecords?: Array<{
+    availability?: number;
+    performance?: number;
+    quality?: number;
+    oee?: number;
+    actual_runtime?: number;
+    planned_runtime?: number;
+    ideal_runtime?: number;
+    output_qty?: number;
+    defect_qty?: number;
+  }>;
   aggregatedData?: {
     totalProduction: number;
     totalDefects: number;
@@ -56,7 +62,8 @@ interface ReportDashboardProps {
 export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   machines = [],
   className,
-  loading: initialLoading = false,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  loading: _initialLoading = false,
   productionRecords = [],
   aggregatedData,
   onRefreshRecords
@@ -65,10 +72,10 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
-  const [previewData, setPreviewData] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<unknown>(null);
   const [previewType, setPreviewType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [selectedMachines, setSelectedMachines] = useState<string[]>([]);
-  const [dateRange, setDateRange] = useState<[string, string] | null>(null);
+  const [, setDateRange] = useState<[string, string] | null>(null);
   const [reportData, setReportData] = useState<{
     oeeData: OEEMetrics[];
     productionData: ProductionRecord[];

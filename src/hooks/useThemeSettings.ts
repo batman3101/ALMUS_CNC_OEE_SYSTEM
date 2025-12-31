@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useSystemSettings } from './useSystemSettings';
-import { ConfigProvider, theme } from 'antd';
+import { theme } from 'antd';
 
 /**
  * 테마 설정을 실시간으로 적용하는 훅

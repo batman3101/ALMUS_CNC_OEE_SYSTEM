@@ -74,8 +74,9 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
       // 교대 시간 검증
       const aStart = dayjs(processedValues.shift_a_start, 'HH:mm');
       const aEnd = dayjs(processedValues.shift_a_end, 'HH:mm');
-      const bStart = dayjs(processedValues.shift_b_start, 'HH:mm');
-      const bEnd = dayjs(processedValues.shift_b_end, 'HH:mm');
+      // B shift times are unused for now but kept for future validation
+      // const bStart = dayjs(processedValues.shift_b_start, 'HH:mm');
+      // const bEnd = dayjs(processedValues.shift_b_end, 'HH:mm');
 
       // A교대 시간 검증 (같은 날)
       if (aStart.isAfter(aEnd)) {

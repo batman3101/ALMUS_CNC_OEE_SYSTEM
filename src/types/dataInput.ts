@@ -165,7 +165,7 @@ export interface DataInputFormState {
 // API 응답 타입
 export interface DataInputResponse {
   success: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
 }
 

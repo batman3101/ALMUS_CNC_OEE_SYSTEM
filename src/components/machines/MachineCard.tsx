@@ -1,14 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Card, Tag, Typography, Space, Tooltip } from 'antd';
-import { 
-  PlayCircleOutlined, 
-  PauseCircleOutlined, 
+import { Card, Tag, Typography, Space } from 'antd';
+import {
+  PlayCircleOutlined,
+  PauseCircleOutlined,
   ToolOutlined,
   WarningOutlined,
   ClockCircleOutlined,
-  EnvironmentOutlined,
   SettingOutlined
 } from '@ant-design/icons';
 import { Machine, MachineState } from '@/types';
@@ -53,8 +52,7 @@ const MachineCard: React.FC<MachineCardProps> = ({
   const {
     getStatusText,
     getStatusColorCode,
-    getAntdColorFromHex,
-    isLoading: statusLoading
+    getAntdColorFromHex
   } = useMachineStatusTranslations(language);
   
   // 현재 상태의 설정 정보 생성
@@ -121,8 +119,8 @@ const MachineCard: React.FC<MachineCardProps> = ({
 
         {stateConfig && (
           <div className="machine-status" style={{ marginBottom: 12 }}>
-            <Tag 
-              color={stateConfig.color as any}
+            <Tag
+              color={stateConfig.color}
               icon={stateConfig.icon}
               style={{ marginBottom: 8 }}
             >

@@ -47,9 +47,9 @@ export const DateRangeSelector: React.FC<DateRangeSelectorProps> = ({
   /**
    * 날짜 범위 선택기 변경 핸들러
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleRangeChange = (
-    dates: [Dayjs | null, Dayjs | null] | null,
-    dateStrings: [string, string]
+    dates: [Dayjs | null, Dayjs | null] | null
   ) => {
     if (dates && dates[0] && dates[1]) {
       handlePresetChange('custom', {

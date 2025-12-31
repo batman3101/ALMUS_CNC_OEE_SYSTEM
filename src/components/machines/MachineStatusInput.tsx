@@ -13,14 +13,14 @@ import {
   Tag,
   Divider
 } from 'antd';
-import { 
-  PlayCircleOutlined, 
-  PauseCircleOutlined, 
+import {
+  PlayCircleOutlined,
+  PauseCircleOutlined,
   ToolOutlined,
   WarningOutlined,
-  ClockCircleOutlined,
   SettingOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
 import { Machine, MachineState } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
@@ -132,8 +132,6 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
       icon: newStateIcon,
       text: newStateText
     };
-    const currentStateText = currentStateConfig?.text || t('statusChange.unknown');
-
     // 상태 변경 확인 모달
     confirm({
       title: t('statusChange.confirmTitle'),
@@ -149,7 +147,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
                 <Text type="secondary">
                   {t('statusChange.currentStateLabel')}
                 </Text>
-                <Tag color={currentStateConfig?.color as any} style={{ marginLeft: 8 }}>
+                <Tag color={currentStateConfig?.color as string} style={{ marginLeft: 8 }}>
                   {currentStateConfig?.icon} {currentStateConfig?.text}
                 </Tag>
               </div>
@@ -157,7 +155,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
                 <Text type="secondary">
                   {t('statusChange.newStateLabel')}
                 </Text>
-                <Tag color={newStateConfig.color as any} style={{ marginLeft: 8 }}>
+                <Tag color={newStateConfig.color as string} style={{ marginLeft: 8 }}>
                   {newStateConfig.icon} {newStateConfig.text}
                 </Tag>
               </div>
@@ -179,7 +177,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
           await onStatusChange(machine?.id || '', selectedState);
           message.success(t('statusChange.successMessage'));
           onClose();
-        } catch (error) {
+        } catch {
           message.error(t('statusChange.errorMessage'));
         } finally {
           setLoading(false);
@@ -240,8 +238,8 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
             </Text>
             {currentStateConfig ? (
               <Space direction="vertical" size="small">
-                <Tag 
-                  color={currentStateConfig.color as any}
+                <Tag
+                  color={currentStateConfig.color as string}
                   icon={currentStateConfig.icon}
                   style={{ padding: '4px 12px', fontSize: '14px' }}
                 >

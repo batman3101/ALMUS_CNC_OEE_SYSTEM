@@ -15,8 +15,6 @@ import {
   Filler,
 } from 'chart.js';
 import { Card, Typography, Select, DatePicker, Row, Col } from 'antd';
-import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 ChartJS.register(

@@ -56,25 +56,24 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
   }, [settings, form]);
 
   // 설정 저장
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: Record<string, unknown>) => {
     try {
       setLoading(true);
       
       // 색상 값 처리
+      type ColorValue = string | { toHexString?: () => string };
+      const getColorString = (val: unknown, defaultColor: string): string => {
+        if (typeof val === 'string') return val;
+        const colorVal = val as ColorValue | undefined;
+        return colorVal?.toHexString?.() || defaultColor;
+      };
+
       const processedValues = {
         ...values,
-        theme_primary_color: typeof values.theme_primary_color === 'string' 
-          ? values.theme_primary_color 
-          : values.theme_primary_color?.toHexString?.() || '#1890ff',
-        theme_success_color: typeof values.theme_success_color === 'string' 
-          ? values.theme_success_color 
-          : values.theme_success_color?.toHexString?.() || '#52c41a',
-        theme_warning_color: typeof values.theme_warning_color === 'string' 
-          ? values.theme_warning_color 
-          : values.theme_warning_color?.toHexString?.() || '#faad14',
-        theme_error_color: typeof values.theme_error_color === 'string' 
-          ? values.theme_error_color 
-          : values.theme_error_color?.toHexString?.() || '#ff4d4f'
+        theme_primary_color: getColorString(values.theme_primary_color, '#1890ff'),
+        theme_success_color: getColorString(values.theme_success_color, '#52c41a'),
+        theme_warning_color: getColorString(values.theme_warning_color, '#faad14'),
+        theme_error_color: getColorString(values.theme_error_color, '#ff4d4f')
       };
 
       const updates = Object.entries(processedValues).map(([key, value]) => ({
@@ -104,12 +103,12 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
   };
 
   // 테마 색상 적용
-  const applyThemeColors = (colors: any) => {
+  const applyThemeColors = (colors: Record<string, unknown>) => {
     const root = document.documentElement;
-    root.style.setProperty('--ant-primary-color', colors.theme_primary_color);
-    root.style.setProperty('--ant-success-color', colors.theme_success_color);
-    root.style.setProperty('--ant-warning-color', colors.theme_warning_color);
-    root.style.setProperty('--ant-error-color', colors.theme_error_color);
+    root.style.setProperty('--ant-primary-color', String(colors.theme_primary_color || ''));
+    root.style.setProperty('--ant-success-color', String(colors.theme_success_color || ''));
+    root.style.setProperty('--ant-warning-color', String(colors.theme_warning_color || ''));
+    root.style.setProperty('--ant-error-color', String(colors.theme_error_color || ''));
   };
 
   // 기본 색상으로 재설정

@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
-import { supabase, checkSupabaseConnection, safeSupabaseOperation } from '@/lib/supabase';
-import { User, AuthContextType, AppError, ErrorCodes } from '@/types';
+import { supabase } from '@/lib/supabase';
+import { User, AuthContextType } from '@/types';
 import { log, LogCategories } from '@/lib/logger';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -93,17 +93,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } else {
           console.warn('⚠️ 서버 API 조회 실패:', response.status);
         }
-      } catch (apiError: any) {
+      } catch (apiError: unknown) {
         // timeout 정리 (에러 발생 시)
         if (timeoutId) {
           clearTimeout(timeoutId);
           timeoutId = null;
         }
         
-        if (apiError.name === 'AbortError') {
+        const isAbortError = apiError instanceof Error && apiError.name === 'AbortError';
+        if (isAbortError) {
           console.warn('⚠️ 서버 API 타임아웃 또는 취소됨 (5초), 일반 클라이언트로 재시도');
         } else {
-          console.warn('⚠️ 서버 API 오류, 일반 클라이언트로 재시도:', apiError.message);
+          const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error';
+          console.warn('⚠️ 서버 API 오류, 일반 클라이언트로 재시도:', errorMessage);
         }
       }
       
@@ -217,17 +219,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       safeSetState(setUser, userProfile);
       
       console.log('🎉 로그인 및 프로필 로딩 완료:', userProfile.email);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ 로그인 전체 오류:', error);
       log.error('Login error', error, LogCategories.AUTH);
-      
+
       // 오류 상태 설정 (로그인 상태는 유지)
-      if (typeof error.message === 'string' && error.message.length > 0) {
-        safeSetState(setError, error.message);
+      const errorMessage = error instanceof Error ? error.message : '';
+      if (errorMessage.length > 0) {
+        safeSetState(setError, errorMessage);
       } else {
         safeSetState(setError, '로그인 중 예기치 못한 오류가 발생했습니다.');
       }
-      
+
       throw error;
     }
   };
@@ -250,7 +253,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error('Logout error', error, LogCategories.AUTH);
       // 오류가 있어도 로그인 페이지로 이동
       if (typeof window !== 'undefined') {
@@ -293,18 +296,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // 항상 Supabase 세션 확인 (개발 환경에서도 실제 인증 시스템 사용)
         await getSession();
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('❌ 인증 초기화 실패:', error);
         log.error('인증 초기화 실패', error, LogCategories.AUTH);
         safeSetState(setUser, null);
-        
+
         // 더 구체적인 오류 메시지
-        if (error.message?.includes('fetch') || error.message?.includes('network')) {
+        const errorMessage = error instanceof Error ? error.message : '';
+        if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
           safeSetState(setError, '네트워크 연결을 확인해주세요. 서버에 연결할 수 없습니다.');
         } else {
           safeSetState(setError, '인증 시스템 초기화에 실패했습니다. 페이지를 새로고침해주세요.');
         }
-        
+
         safeSetState(setLoading, false);
         clearLoadingTimeout();
       }
@@ -343,13 +347,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           safeSetState(setUser, null);
           safeSetState(setError, null);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('❌ getSession 오류:', error);
         log.error('Error in getSession', error, LogCategories.AUTH);
         safeSetState(setUser, null);
-        
+
         // 네트워크 연결 문제와 기타 오류를 구분
-        if (error.message?.includes('fetch') || error.message?.includes('network')) {
+        const errorMessage = error instanceof Error ? error.message : '';
+        if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
           safeSetState(setError, '네트워크 연결을 확인하고 다시 시도해주세요.');
         } else {
           safeSetState(setError, '세션 확인 중 오류가 발생했습니다.');

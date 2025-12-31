@@ -64,11 +64,10 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
 }) => {
   const { t, i18n } = useMachinesTranslation();
   const currentLanguage = (i18n?.language as 'ko' | 'vi') || language;
-  const { 
-    getStatusText, 
-    getStatusColorCode, 
-    getAntdColorFromHex,
-    isLoading: statusLoading 
+  const {
+    getStatusText,
+    getStatusColorCode,
+    getAntdColorFromHex
   } = useMachineStatusTranslations(currentLanguage);
   const [editModalVisible, setEditModalVisible] = useState(false);
 
@@ -149,8 +148,8 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                 </Title>
                 <Space style={{ marginTop: 8 }}>
                   {stateConfig && (
-                    <Tag 
-                      color={stateConfig.color as any}
+                    <Tag
+                      color={stateConfig.color}
                       style={{ fontSize: '14px', padding: '4px 12px' }}
                       icon={stateConfig.icon}
                     >
@@ -207,7 +206,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                   <Descriptions column={1} size="small">
                     <Descriptions.Item label={t('fields.currentStatus')}>
                       {stateConfig && (
-                        <Tag color={stateConfig.color as any} icon={stateConfig.icon}>
+                        <Tag color={stateConfig.color} icon={stateConfig.icon}>
                           {stateConfig.text}
                         </Tag>
                       )}

@@ -55,13 +55,14 @@ export async function GET(
       machine: machine
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in GET /api/machines/[machineId]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to fetch machine',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
@@ -171,13 +172,14 @@ export async function PUT(
       machine: updatedMachine
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in PUT /api/machines/[machineId]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to update machine',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }
@@ -199,7 +201,7 @@ export async function PATCH(
     const { current_state, production_model_id, current_process_id } = body;
 
     // 운영 정보만 업데이트 허용
-    const updateData: any = {};
+    const updateData: Record<string, string | null> = {};
     
     if (current_state !== undefined) {
       updateData.current_state = current_state;
@@ -318,13 +320,14 @@ export async function PATCH(
       machine: updatedMachine
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error updating machine:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to update machine',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }

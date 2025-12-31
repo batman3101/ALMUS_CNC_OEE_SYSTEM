@@ -40,13 +40,14 @@ export async function GET(
       model: model
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in GET /api/product-models/[id]:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to fetch product model',
-        message: error.message,
+        message: errorMessage,
         details: process.env.NODE_ENV === 'development' ? error : undefined
       },
       { status: 500 }

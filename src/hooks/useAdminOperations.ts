@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { User, Machine } from '@/types';
+import type { Machine } from '@/types';
 
 interface CreateUserData {
   name: string;

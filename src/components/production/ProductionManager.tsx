@@ -62,7 +62,7 @@ export const ProductionManager: React.FC<ProductionManagerProps> = ({
       
       setShowManualInput(false);
       setSelectedMachine(null);
-    } catch (error) {
+    } catch {
       message.error('생산 실적 입력 중 오류가 발생했습니다');
     }
   };
@@ -115,7 +115,7 @@ export const ProductionManager: React.FC<ProductionManagerProps> = ({
       {/* 교대 종료 자동 알림 시스템 */}
       <ShiftEndNotification
         machines={shiftNotification.pendingMachines}
-        onProductionRecordSubmit={(machineId, data) => {
+        onProductionRecordSubmit={(machineId) => {
           shiftNotification.markMachineCompleted(machineId);
           message.success('생산 실적이 입력되었습니다');
         }}

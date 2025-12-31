@@ -200,7 +200,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       dataIndex: 'rank',
       key: 'rank',
       width: 60,
-      render: (_: any, __: any, index: number) => index + 1,
+      render: (_: unknown, __: unknown, index: number) => index + 1,
     },
     {
       title: t('dashboard:chart.downtimeCause'),
@@ -237,7 +237,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       title: t('dashboard:chart.cumulativeRatio'),
       key: 'cumulative',
       align: 'right' as const,
-      render: (_: any, __: any, index: number) => {
+      render: (_: unknown, __: unknown, index: number) => {
         const cumulative = chartData[index]?.cumulativePercentage || 0;
         return `${cumulative.toFixed(1)}%`;
       },
