@@ -615,7 +615,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       machine_id: selectedMachineId || '',
       date: selectedDate,
       day_shift: dayShiftData,
+      day_shift_off: dayShiftOff,
       night_shift: nightShiftData,
+      night_shift_off: nightShiftOff,
       total_production: totalProduction,
       total_defects: totalDefects,
       total_good_quantity: totalGoodQuantity,
@@ -1300,10 +1302,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
             icon={<SaveOutlined />}
             size="large"
             onClick={handleSave}
-            disabled={
-              (dayShiftOff && nightShiftOff) ||
-              (!dayShiftOff && !dayShiftData.actual_production && !nightShiftOff && !nightShiftData.actual_production)
-            }
           >
             {(existingDayRecord || existingNightRecord)
               ? t('editMode.updateData')

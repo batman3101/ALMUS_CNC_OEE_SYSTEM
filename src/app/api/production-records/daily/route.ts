@@ -14,7 +14,9 @@ export async function POST(request: NextRequest) {
       machine_id,
       date,
       day_shift,
+      day_shift_off,
       night_shift,
+      night_shift_off,
       total_production,
       total_defects,
       total_good_quantity,
@@ -55,9 +57,9 @@ export async function POST(request: NextRequest) {
 
     // 실제 데이터베이스에 저장하는 로직
     const savedRecords = [];
-    
-    // 주간 교대 데이터 저장 (활성화된 경우)
-    if (day_shift && day_shift.actual_production > 0) {
+
+    // 주간 교대 데이터 저장 (휴무가 아닌 경우 - 생산량 0이어도 저장 가능)
+    if (day_shift && !day_shift_off) {
       const dayShiftRecord = {
         machine_id,
         date,
@@ -93,8 +95,8 @@ export async function POST(request: NextRequest) {
       console.log('Day shift record saved:', dayRecord.record_id);
     }
 
-    // 야간 교대 데이터 저장 (활성화된 경우)
-    if (night_shift && night_shift.actual_production > 0) {
+    // 야간 교대 데이터 저장 (휴무가 아닌 경우 - 생산량 0이어도 저장 가능)
+    if (night_shift && !night_shift_off) {
       const nightShiftRecord = {
         machine_id,
         date,
@@ -131,6 +133,19 @@ export async function POST(request: NextRequest) {
     }
     
     console.log(`Successfully saved ${savedRecords.length} production records for machine ${machine.name} on ${date}`);
+
+    // 양쪽 교대조 모두 휴무인 경우
+    if (day_shift_off && night_shift_off) {
+      return NextResponse.json({
+        success: true,
+        message: `${date} - 주간조/야간조 모두 휴무로 설정되어 생산 기록이 저장되지 않았습니다.`,
+        records_saved: 0,
+        record_ids: [],
+        machine_name: machine.name,
+        date: date,
+        is_holiday: true
+      });
+    }
 
     // 성공 응답
     return NextResponse.json({

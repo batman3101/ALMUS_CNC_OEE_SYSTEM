@@ -78,19 +78,21 @@ export interface ProductionEntry {
 export interface DailyProductionData {
   machine_id: string;
   date: string;
-  
+
   // 주간조 데이터
   day_shift: ShiftProductionData;
-  
-  // 야간조 데이터  
+  day_shift_off?: boolean; // 주간조 휴무 여부
+
+  // 야간조 데이터
   night_shift: ShiftProductionData;
-  
+  night_shift_off?: boolean; // 야간조 휴무 여부
+
   // 일일 합계
   total_production: number;
   total_defects: number;
   total_good_quantity: number;
   total_downtime_minutes: number;
-  
+
   // OEE 계산 (모델 무관)
   planned_capacity: number; // 일일 계획 생산량
   availability: number; // 가용성
