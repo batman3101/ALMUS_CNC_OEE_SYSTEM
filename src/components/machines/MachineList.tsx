@@ -77,7 +77,6 @@ const MachineList: React.FC<MachineListProps> = ({
         const { data, error } = await supabase
           .from('machine_status_descriptions')
           .select('*')
-          .eq('is_active', true)
           .order('display_order');
 
         if (error) {

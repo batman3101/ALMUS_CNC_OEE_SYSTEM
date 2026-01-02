@@ -69,7 +69,8 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
   const { t, i18n } = useMachinesTranslation();
   const currentLanguage = (i18n?.language as 'ko' | 'vi') || language;
   const {
-    getAllStatusOptions
+    getAllStatusOptions,
+    isLoading: statusLoading
   } = useMachineStatusTranslations(currentLanguage);
   const { message } = App.useApp();
   const [form] = Form.useForm<EditFormData>();
