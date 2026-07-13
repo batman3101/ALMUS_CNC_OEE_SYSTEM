@@ -46,25 +46,21 @@ export const ProductionManager: React.FC<ProductionManagerProps> = ({
   const handleProductionRecordSubmit = async (data: { output_qty: number; defect_qty: number }) => {
     if (!selectedMachine) return;
 
-    try {
-      await createProductionRecord({
-        machine_id: selectedMachine.id,
-        output_qty: data.output_qty,
-        defect_qty: data.defect_qty,
-        shift: currentShift.shift,
-        date: format(new Date(), 'yyyy-MM-dd')
-      });
+    // 실패 시 예외가 그대로 전파되어야 ProductionRecordInput이 성공 토스트를
+    // 띄우지 않고 모달을 열어둔 채 오류를 표시한다 (여기서 삼키면 안 됨)
+    await createProductionRecord({
+      machine_id: selectedMachine.id,
+      output_qty: data.output_qty,
+      defect_qty: data.defect_qty,
+      shift: currentShift.shift,
+      date: format(new Date(), 'yyyy-MM-dd')
+    });
 
-      message.success(`${selectedMachine.name}의 생산 실적이 입력되었습니다`);
-      
-      // 교대 알림에서 해당 설비 완료 처리
-      shiftNotification.markMachineCompleted(selectedMachine.id);
-      
-      setShowManualInput(false);
-      setSelectedMachine(null);
-    } catch {
-      message.error('생산 실적 입력 중 오류가 발생했습니다');
-    }
+    // 교대 알림에서 해당 설비 완료 처리
+    shiftNotification.markMachineCompleted(selectedMachine.id);
+
+    setShowManualInput(false);
+    setSelectedMachine(null);
   };
 
   return (

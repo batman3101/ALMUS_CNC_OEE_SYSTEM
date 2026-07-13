@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Table,
   Card,
@@ -84,8 +84,12 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
   const [editForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
 
+  // 요청 경쟁 상태 방지를 위한 시퀀스 가드
+  const fetchRequestSeqRef = useRef(0);
+
   // 생산 기록 조회
   const fetchRecords = useCallback(async () => {
+    const requestId = ++fetchRequestSeqRef.current;
     try {
       setLoading(true);
 
@@ -112,16 +116,26 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
 
       const result = await response.json();
 
+      // 이 응답이 가장 최근 요청의 응답이 아니면 무시 (경쟁 상태 방지)
+      if (requestId !== fetchRequestSeqRef.current) {
+        return;
+      }
+
       setRecords(result.records || []);
       setPagination(prev => ({
         ...prev,
         total: result.pagination?.total || 0
       }));
     } catch (error) {
+      if (requestId !== fetchRequestSeqRef.current) {
+        return;
+      }
       console.error('Error fetching production records:', error);
       messageApi.error(t('recordList.loadError'));
     } finally {
-      setLoading(false);
+      if (requestId === fetchRequestSeqRef.current) {
+        setLoading(false);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.current, pagination.pageSize, selectedMachineId, dateRange, selectedShift, messageApi, t]);
@@ -144,8 +158,15 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
   const handleEditSave = async () => {
     if (!editingRecord) return;
 
+    let values: { output_qty: number; defect_qty: number };
     try {
-      const values = await editForm.validateFields();
+      values = await editForm.validateFields();
+    } catch {
+      // 유효성 검사 실패: AntD가 필드별 오류를 이미 표시하므로 저장 실패 메시지는 띄우지 않음
+      return;
+    }
+
+    try {
       setSaving(true);
 
       // 양품 수량 계산
@@ -344,7 +365,10 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
                 allowClear
                 loading={machinesLoading}
                 value={selectedMachineId}
-                onChange={setSelectedMachineId}
+                onChange={(value) => {
+                  setSelectedMachineId(value);
+                  setPagination(prev => ({ ...prev, current: 1 }));
+                }}
                 style={{ width: '100%' }}
                 showSearch
                 optionFilterProp="children"
@@ -362,7 +386,10 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
               <Text strong>{t('recordList.dateRange')}</Text>
               <RangePicker
                 value={dateRange}
-                onChange={(dates) => setDateRange(dates)}
+                onChange={(dates) => {
+                  setDateRange(dates);
+                  setPagination(prev => ({ ...prev, current: 1 }));
+                }}
                 style={{ width: '100%' }}
                 format="YYYY-MM-DD"
               />
@@ -375,7 +402,10 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
                 placeholder={t('recordList.allShifts')}
                 allowClear
                 value={selectedShift}
-                onChange={setSelectedShift}
+                onChange={(value) => {
+                  setSelectedShift(value);
+                  setPagination(prev => ({ ...prev, current: 1 }));
+                }}
                 style={{ width: '100%' }}
               >
                 <Option value="A">{t('shift.dayShift')}</Option>
@@ -390,7 +420,6 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
                 icon={<SearchOutlined />}
                 onClick={() => {
                   setPagination(prev => ({ ...prev, current: 1 }));
-                  fetchRecords();
                 }}
               >
                 {t('recordList.search')}
@@ -524,12 +553,14 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
             <InputNumber
               style={{ width: '100%' }}
               min={0}
+              precision={0}
               addonAfter={t('common.pieces')}
             />
           </Form.Item>
           <Form.Item
             name="defect_qty"
             label={t('recordList.editModal.defectQty')}
+            dependencies={['output_qty']}
             rules={[
               { required: true, message: t('recordList.editModal.defectQtyRequired') },
               { type: 'number', min: 0, message: t('recordList.editModal.minZero') },
@@ -546,6 +577,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
             <InputNumber
               style={{ width: '100%' }}
               min={0}
+              precision={0}
               addonAfter={t('common.pieces')}
             />
           </Form.Item>

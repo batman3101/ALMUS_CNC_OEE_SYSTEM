@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Form,
   Input,
@@ -58,6 +58,28 @@ interface ExistingProductionRecord {
   oee?: number;
 }
 
+// POST /api/production-records/daily 요청 페이로드 (서버가 OEE 지표를 자체 계산하므로
+// 클라이언트는 원시 입력값만 전송한다)
+interface ShiftSavePayload {
+  actual_production: number;
+  defect_quantity: number;
+  operating_minutes: number;
+  total_downtime_minutes: number;
+}
+
+interface DailyProductionSavePayload {
+  machine_id: string;
+  date: string;
+  day_shift_off: boolean;
+  night_shift_off: boolean;
+  day_shift: ShiftSavePayload;
+  night_shift: ShiftSavePayload;
+}
+
+// AbortController에 의한 취소 여부 확인
+const isAbortError = (error: unknown): boolean =>
+  error instanceof Error && error.name === 'AbortError';
+
 interface ShiftDataInputFormProps {
   initialDate?: string;
 }
@@ -98,7 +120,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   // 설비 관련 데이터 상태
   const [machineDetails, setMachineDetails] = useState<{
     productionModel: { model_name: string } | null;
-    currentProcess: { process_name: string; tact_time_seconds: number } | null;
+    currentProcess: { process_name: string; tact_time_seconds: number; cavity_count?: number } | null;
     loading: boolean;
     error: string | null;
   }>({
@@ -137,7 +159,11 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
   // 비가동 시간 모달 상태
   const [downtimeModalVisible, setDowntimeModalVisible] = useState(false);
+  const [downtimeSubmitting, setDowntimeSubmitting] = useState(false);
   const [downtimeForm] = Form.useForm();
+
+  // 설비/날짜 변경 시 오래된(stale) 응답이 최신 상태를 덮어쓰지 않도록 하는 요청 순번 가드
+  const loadRequestIdRef = useRef(0);
 
   // 비가동 사유 목록 (번역 키 사용)
   const downtimeReasons = DOWNTIME_REASON_KEYS;
@@ -148,19 +174,32 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   };
 
   // 기존 생산 기록 로드 함수
-  const loadExistingProductionRecords = async (machineId: string, date: string) => {
+  // requestId/signal은 설비/날짜를 빠르게 전환할 때 이전 요청의 응답이 최신 상태를 덮어쓰는 것을 방지한다 (F6)
+  const loadExistingProductionRecords = async (
+    machineId: string,
+    date: string,
+    requestId?: number,
+    signal?: AbortSignal
+  ) => {
+    const isStale = () => requestId !== undefined && requestId !== loadRequestIdRef.current;
+
     try {
       setLoadingExistingRecords(true);
 
       const response = await fetch(
-        `/api/production-records?machine_id=${machineId}&startDate=${date}&endDate=${date}`
+        `/api/production-records?machine_id=${machineId}&startDate=${date}&endDate=${date}`,
+        { signal }
       );
+
+      if (isStale()) return;
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
       const result = await response.json();
+
+      if (isStale()) return;
 
       if (result.records && result.records.length > 0) {
         // 주간조(A)와 야간조(B) 기록 분리
@@ -170,13 +209,20 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         setExistingDayRecord(dayRecord || null);
         setExistingNightRecord(nightRecord || null);
 
-        // 기존 데이터가 있으면 폼에 반영
+        // 기존 데이터가 있으면 폼에 반영, 없으면 이전 설비/날짜의 값이 남아있지 않도록 0으로 초기화 (F1)
         if (dayRecord) {
           setDayShiftData(prev => ({
             ...prev,
             actual_production: dayRecord.output_qty || 0,
             defect_quantity: dayRecord.defect_qty || 0,
             good_quantity: Math.max(0, (dayRecord.output_qty || 0) - (dayRecord.defect_qty || 0))
+          }));
+        } else {
+          setDayShiftData(prev => ({
+            ...prev,
+            actual_production: 0,
+            defect_quantity: 0,
+            good_quantity: 0
           }));
         }
 
@@ -187,22 +233,44 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
             defect_quantity: nightRecord.defect_qty || 0,
             good_quantity: Math.max(0, (nightRecord.output_qty || 0) - (nightRecord.defect_qty || 0))
           }));
+        } else {
+          setNightShiftData(prev => ({
+            ...prev,
+            actual_production: 0,
+            defect_quantity: 0,
+            good_quantity: 0
+          }));
         }
 
         if (dayRecord || nightRecord) {
           message.info(t('messages.existingRecordLoaded'));
         }
       } else {
-        // 기존 기록 없음
+        // 기존 기록 없음 - 이전 설비/날짜에서 남아있는 수량도 함께 초기화 (F1)
         setExistingDayRecord(null);
         setExistingNightRecord(null);
+        setDayShiftData(prev => ({
+          ...prev,
+          actual_production: 0,
+          defect_quantity: 0,
+          good_quantity: 0
+        }));
+        setNightShiftData(prev => ({
+          ...prev,
+          actual_production: 0,
+          defect_quantity: 0,
+          good_quantity: 0
+        }));
       }
     } catch (error) {
+      if (isAbortError(error) || isStale()) return;
       console.error('Error loading existing production records:', error);
       setExistingDayRecord(null);
       setExistingNightRecord(null);
     } finally {
-      setLoadingExistingRecords(false);
+      if (!isStale()) {
+        setLoadingExistingRecords(false);
+      }
     }
   };
 
@@ -261,13 +329,31 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
   // 설비 선택 및 날짜 변경 시 기존 생산 기록 및 비가동 데이터 로드
   React.useEffect(() => {
-    if (selectedMachineId && selectedDate) {
-      // 기존 생산 기록 로드
-      loadExistingProductionRecords(selectedMachineId, selectedDate);
-      // 주간조와 야간조 비가동 데이터 모두 로드
-      loadDowntimeEntries(selectedMachineId, selectedDate, 'DAY');
-      loadDowntimeEntries(selectedMachineId, selectedDate, 'NIGHT');
+    if (!selectedMachineId || !selectedDate) {
+      return;
     }
+
+    // 이 effect 실행에 대한 고유 요청 순번 발급 + 이전 요청 취소 (F6)
+    const requestId = ++loadRequestIdRef.current;
+    const controller = new AbortController();
+
+    // 설비/날짜가 바뀌면 이전 설비의 휴무 여부, 가동시간, 비가동 목록이 남아있지 않도록 즉시 초기화 (F1)
+    setDayShiftOff(false);
+    setNightShiftOff(false);
+    setDayShiftOperatingMinutes(720);
+    setNightShiftOperatingMinutes(720);
+    setDayShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
+    setNightShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
+
+    // 기존 생산 기록 로드
+    loadExistingProductionRecords(selectedMachineId, selectedDate, requestId, controller.signal);
+    // 주간조와 야간조 비가동 데이터 모두 로드
+    loadDowntimeEntries(selectedMachineId, selectedDate, 'DAY', requestId, controller.signal);
+    loadDowntimeEntries(selectedMachineId, selectedDate, 'NIGHT', requestId, controller.signal);
+
+    return () => {
+      controller.abort();
+    };
   }, [selectedMachineId, selectedDate]);
 
   // 현재 교대 데이터 가져오기
@@ -331,12 +417,17 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     return data.process;
   };
 
-  // 기준 생산량(CAPA) 계산 (분 단위 입력, 휴식 시간 차감 적용)
-  const calculateCapacity = (tactTimeSeconds: number, operatingMinutes: number, breakMinutes: number = 0) => {
+  // 기준 생산량(CAPA) 계산 (분 단위 입력, 휴식 시간 차감 적용, 캐비티 수 반영) (F2)
+  const calculateCapacity = (
+    tactTimeSeconds: number,
+    operatingMinutes: number,
+    breakMinutes: number = 0,
+    cavityCount: number = 1
+  ) => {
     if (!tactTimeSeconds || !operatingMinutes) return 0;
     // 실제 작업 가능 시간 = 가동시간 - 휴식시간
     const actualOperatingMinutes = Math.max(0, operatingMinutes - breakMinutes);
-    return Math.floor((actualOperatingMinutes * 60) / tactTimeSeconds);
+    return Math.floor((actualOperatingMinutes * 60) / tactTimeSeconds) * Math.max(1, cavityCount);
   };
 
   // 설비 선택 핸들러
@@ -426,20 +517,34 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   };
 
   // 비가동 데이터 로드
-  const loadDowntimeEntries = async (machineId: string, date: string, shift: 'DAY' | 'NIGHT') => {
+  // requestId/signal은 설비/날짜를 빠르게 전환할 때 이전 요청의 응답이 최신 상태를 덮어쓰는 것을 방지한다 (F6)
+  const loadDowntimeEntries = async (
+    machineId: string,
+    date: string,
+    shift: 'DAY' | 'NIGHT',
+    requestId?: number,
+    signal?: AbortSignal
+  ) => {
+    const isStale = () => requestId !== undefined && requestId !== loadRequestIdRef.current;
+
     try {
       setLoadingDowntime(true);
       const shiftCode = shift === 'DAY' ? 'A' : 'B';
 
       const response = await fetch(
-        `/api/downtime-entries?machine_id=${machineId}&date=${date}&shift=${shiftCode}`
+        `/api/downtime-entries?machine_id=${machineId}&date=${date}&shift=${shiftCode}`,
+        { signal }
       );
+
+      if (isStale()) return;
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
       const result = await response.json();
+
+      if (isStale()) return;
 
       if (result.success && result.data) {
         const entries: DowntimeEntry[] = result.data;
@@ -463,6 +568,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         console.log(`Loaded ${entries.length} downtime entries for ${shift} shift`);
       }
     } catch (error) {
+      if (isAbortError(error) || isStale()) return;
       console.error('Error loading downtime entries:', error);
       // 로드 실패 시 빈 배열로 초기화 (에러 메시지는 표시하지 않음)
       if (shift === 'DAY') {
@@ -479,7 +585,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         }));
       }
     } finally {
-      setLoadingDowntime(false);
+      if (!isStale()) {
+        setLoadingDowntime(false);
+      }
     }
   };
 
@@ -490,7 +598,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       return;
     }
 
+    // 이중 클릭으로 동일한 비가동 기록이 두 번 저장되는 것을 방지 (F7)
+    if (downtimeSubmitting) {
+      return;
+    }
+
     try {
+      setDowntimeSubmitting(true);
       setLoading(true);
 
       const startTime = dayjs(values.start_time);
@@ -539,6 +653,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
     } finally {
       setLoading(false);
+      setDowntimeSubmitting(false);
     }
   };
 
@@ -593,15 +708,21 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       (!dayShiftOff ? dayShiftData.total_downtime_minutes : 0) + 
       (!nightShiftOff ? nightShiftData.total_downtime_minutes : 0);
 
-    // 기준 생산량(CAPA) = Tact Time * 교대조별 가동시간 합계 (휴식 시간 차감)
-    const tactTime = machineDetails.currentProcess?.tact_time_seconds || 120;
+    // 기준 생산량(CAPA) = Tact Time * 교대조별 가동시간 (휴식 시간 차감, 캐비티 수 반영) (F2)
+    const tactTimeSeconds = machineDetails.currentProcess?.tact_time_seconds;
+    const cavityCount = machineDetails.currentProcess?.cavity_count || 1;
     const totalOperatingMinutes =
       (!dayShiftOff ? dayShiftOperatingMinutes : 0) +
       (!nightShiftOff ? nightShiftOperatingMinutes : 0);
-    // 총 휴식 시간 = 휴무가 아닌 교대조 수 × 교대조당 휴식시간
-    const activeShiftCount = (!dayShiftOff ? 1 : 0) + (!nightShiftOff ? 1 : 0);
-    const totalBreakMinutes = activeShiftCount * breakTimeMinutes;
-    const plannedCapacity = calculateCapacity(tactTime, totalOperatingMinutes, totalBreakMinutes);
+    // 화면에 표시되는 교대별 CAPA(공정 미설정 시 0으로 표시되는 것 포함)를 각각 계산 후 합산하여,
+    // 일일 합계 CAPA 표시값과 항상 일치시킨다 (F3)
+    const dayCapacity = !dayShiftOff && tactTimeSeconds
+      ? calculateCapacity(tactTimeSeconds, dayShiftOperatingMinutes, breakTimeMinutes, cavityCount)
+      : 0;
+    const nightCapacity = !nightShiftOff && tactTimeSeconds
+      ? calculateCapacity(tactTimeSeconds, nightShiftOperatingMinutes, breakTimeMinutes, cavityCount)
+      : 0;
+    const plannedCapacity = dayCapacity + nightCapacity;
 
     // OEE 계산 (휴무 교대조 제외)
     const plannedOperatingTime = totalOperatingMinutes; // 분 단위
@@ -630,6 +751,10 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     };
   };
 
+  // 교대별 불량 수량이 생산 수량을 초과하는지 검증 (F4)
+  const isDayQuantityInvalid = !dayShiftOff && dayShiftData.defect_quantity > dayShiftData.actual_production;
+  const isNightQuantityInvalid = !nightShiftOff && nightShiftData.defect_quantity > nightShiftData.actual_production;
+
   // 데이터 저장
   const handleSave = async () => {
     if (!selectedMachineId) {
@@ -637,18 +762,44 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       return;
     }
 
+    // 저장 전 교차 검증: 불량 수량이 생산 수량보다 클 수 없음 (F4)
+    if (isDayQuantityInvalid || isNightQuantityInvalid) {
+      message.error(t('recordList.editModal.defectExceedsOutput'));
+      return;
+    }
+
     try {
       setLoading(true);
-      const dailyData = calculateDailyData();
 
-      console.log('Saving daily production data:', dailyData);
+      // MANDATORY API CONTRACT: 서버가 availability/performance/quality/oee/planned_capacity를
+      // 자체 계산하므로, 클라이언트가 계산한 지표는 전송하지 않고 원시 입력값만 보낸다.
+      const payload: DailyProductionSavePayload = {
+        machine_id: selectedMachineId,
+        date: selectedDate,
+        day_shift_off: dayShiftOff,
+        night_shift_off: nightShiftOff,
+        day_shift: {
+          actual_production: dayShiftData.actual_production,
+          defect_quantity: dayShiftData.defect_quantity,
+          operating_minutes: dayShiftOperatingMinutes,
+          total_downtime_minutes: dayShiftData.total_downtime_minutes
+        },
+        night_shift: {
+          actual_production: nightShiftData.actual_production,
+          defect_quantity: nightShiftData.defect_quantity,
+          operating_minutes: nightShiftOperatingMinutes,
+          total_downtime_minutes: nightShiftData.total_downtime_minutes
+        }
+      };
+
+      console.log('Saving daily production data:', payload);
 
       const response = await fetch('/api/production-records/daily', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(dailyData)
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -657,10 +808,26 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       }
 
       const result = await response.json();
-      message.success(result.message || t('messages.productionDataSaved'));
-      
-      // 폼 초기화
+
+      // 삭제된 교대 기록이 있으면 메시지에 함께 안내 (F5)
+      const deletedCount = Array.isArray(result.deleted_shifts) ? result.deleted_shifts.length : 0;
+      const deletedSuffix = deletedCount > 0
+        ? t('messages.deletedShiftsSuffix', { count: deletedCount })
+        : '';
+
+      if (result.is_holiday || result.records_saved === 0) {
+        // 실제로 저장된 기록이 없는 경우 (양쪽 교대 모두 휴무 등) 성공 토스트를 띄우지 않는다 (F5)
+        message.warning(`${result.message || t('messages.noRecordsSaved')}${deletedSuffix}`);
+      } else {
+        message.success(`${result.message || t('messages.productionDataSaved')}${deletedSuffix}`);
+      }
+
+      // 폼 초기화 (수량뿐 아니라 휴무 여부/가동시간도 초기화하여 다음 입력에 값이 남지 않도록 함) (F1)
       setSelectedMachineId(null);
+      setDayShiftOff(false);
+      setNightShiftOff(false);
+      setDayShiftOperatingMinutes(720);
+      setNightShiftOperatingMinutes(720);
       setDayShiftData({
         shift: 'DAY',
         shift_name: t('shift.dayShift'),
@@ -852,7 +1019,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds
-                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes, breakTimeMinutes)
+                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes, breakTimeMinutes, machineDetails.currentProcess.cavity_count || 1)
                         : 0
                       }{t('common.pieces')}
                     </Text>
@@ -898,7 +1065,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds
-                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes, breakTimeMinutes)
+                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes, breakTimeMinutes, machineDetails.currentProcess.cavity_count || 1)
                         : 0
                       }{t('common.pieces')}
                     </Text>
@@ -920,13 +1087,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
             <Descriptions.Item label={t('schedule.dailyTotalCapa')} span={1}>
               <Text strong style={{ color: '#52c41a', fontSize: '16px' }}>
-                {machineDetails.currentProcess?.tact_time_seconds
-                  ? (
-                      (!dayShiftOff ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes, breakTimeMinutes) : 0) +
-                      (!nightShiftOff ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes, breakTimeMinutes) : 0)
-                    )
-                  : 0
-                }{t('common.pieces')}
+                {/* 화면에 표시되는 두 교대별 CAPA의 합과 항상 일치하도록 dailyData.planned_capacity를 그대로 사용 (F3) */}
+                {dailyData.planned_capacity}{t('common.pieces')}
               </Text>
             </Descriptions.Item>
 
@@ -1074,11 +1236,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                             onChange={(value) => handleProductionChange('actual_production', value || 0)}
                             addonAfter={t('common.pieces')}
                             disabled={dayShiftOff}
+                            min={0}
+                            precision={0}
                           />
                         </Space>
                       </Col>
                     </Row>
-                    
+
                     <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
@@ -1090,7 +1254,15 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                             onChange={(value) => handleProductionChange('defect_quantity', value || 0)}
                             addonAfter={t('common.pieces')}
                             disabled={dayShiftOff}
+                            min={0}
+                            precision={0}
+                            status={isDayQuantityInvalid ? 'error' : undefined}
                           />
+                          {isDayQuantityInvalid && (
+                            <Text type="danger" style={{ fontSize: 12 }}>
+                              {t('recordList.editModal.defectExceedsOutput')}
+                            </Text>
+                          )}
                         </Space>
                       </Col>
                       <Col xs={24} sm={12}>
@@ -1171,11 +1343,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                             onChange={(value) => handleProductionChange('actual_production', value || 0)}
                             addonAfter={t('common.pieces')}
                             disabled={nightShiftOff}
+                            min={0}
+                            precision={0}
                           />
                         </Space>
                       </Col>
                     </Row>
-                    
+
                     <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
                       <Col xs={24} sm={12}>
                         <Space direction="vertical" style={{ width: '100%' }}>
@@ -1187,7 +1361,15 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                             onChange={(value) => handleProductionChange('defect_quantity', value || 0)}
                             addonAfter={t('common.pieces')}
                             disabled={nightShiftOff}
+                            min={0}
+                            precision={0}
+                            status={isNightQuantityInvalid ? 'error' : undefined}
                           />
+                          {isNightQuantityInvalid && (
+                            <Text type="danger" style={{ fontSize: 12 }}>
+                              {t('recordList.editModal.defectExceedsOutput')}
+                            </Text>
+                          )}
                         </Space>
                       </Col>
                       <Col xs={24} sm={12}>
@@ -1389,13 +1571,16 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
           <div style={{ textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => {
-                setDowntimeModalVisible(false);
-                downtimeForm.resetFields();
-              }}>
+              <Button
+                onClick={() => {
+                  setDowntimeModalVisible(false);
+                  downtimeForm.resetFields();
+                }}
+                disabled={downtimeSubmitting}
+              >
                 {t('downtime.cancel')}
               </Button>
-              <Button type="primary" htmlType="submit">
+              <Button type="primary" htmlType="submit" loading={downtimeSubmitting} disabled={downtimeSubmitting}>
                 {t('downtime.add')}
               </Button>
             </Space>

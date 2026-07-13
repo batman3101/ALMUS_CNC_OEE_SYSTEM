@@ -88,9 +88,10 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   
   // 누적 비율 계산
   const totalDowntime = sortedData.reduce((sum, item) => sum + item.duration, 0);
+  const totalCount = downtimeData.reduce((sum, item) => sum + item.count, 0);
   let cumulativePercentage = 0;
   const chartData = sortedData.map(item => {
-    cumulativePercentage += (item.duration / totalDowntime) * 100;
+    cumulativePercentage += totalDowntime > 0 ? (item.duration / totalDowntime) * 100 : 0;
     return {
       ...item,
       cumulativePercentage
@@ -269,16 +270,16 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
         <Col>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#faad14' }}>
-              {downtimeData.reduce((sum, item) => sum + item.count, 0)}
+              {totalCount}
             </div>
             <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.totalOccurrences')}</div>
           </div>
         </Col>
-        
+
         <Col>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>
-              {downtimeData.length > 0 ? (totalDowntime / downtimeData.reduce((sum, item) => sum + item.count, 0)).toFixed(1) : 0}
+              {totalCount > 0 ? (totalDowntime / totalCount).toFixed(1) : 0}
             </div>
             <div style={{ fontSize: 12, color: '#666' }}>{t('dashboard:chart.averageDuration')}</div>
           </div>

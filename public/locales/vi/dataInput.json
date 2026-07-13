@@ -114,7 +114,9 @@
     "recordDeleteFailed": "Xóa thất bại",
     "confirmDelete": "Bạn có muốn xóa không?",
     "confirmDeleteDescription": "Bản ghi sản xuất này không thể khôi phục sau khi xóa.",
-    "noExistingRecord": "Không có bản ghi sản xuất nào. Vui lòng nhập mới."
+    "noExistingRecord": "Không có bản ghi sản xuất nào. Vui lòng nhập mới.",
+    "noRecordsSaved": "Không có bản ghi sản xuất nào được lưu.",
+    "deletedShiftsSuffix": " (Đã xóa {{count}} ca)"
   },
   "editMode": {
     "existingRecordFound": "Tìm thấy dữ liệu hiện có",

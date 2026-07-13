@@ -149,43 +149,85 @@ export const useRealtimeProductionRecords = ({
               schema: 'public',
               table: 'production_records'
             },
-            (payload) => {
+            async (payload) => {
               console.log('Production records realtime event received:', payload);
-              
+
               const { eventType, new: newRecord, old: oldRecord } = payload;
-              
+
+              if (eventType === 'INSERT') {
+                if (!newRecord) return;
+
+                // 목록 조회에 적용된 필터를 신규 행에도 동일하게 적용
+                const matchesMachine = !filters.machineId || newRecord.machine_id === filters.machineId;
+                const matchesShift = !filters.shift || filters.shift === 'ALL' || newRecord.shift === filters.shift;
+                const matchesDateRange = !filters.dateRange ||
+                  (newRecord.date >= filters.dateRange.start && newRecord.date <= filters.dateRange.end);
+
+                if (!matchesMachine || !matchesShift || !matchesDateRange) {
+                  return;
+                }
+
+                // 목록의 다른 행과 동일하게 machines 조인이 포함된 형태로 다시 조회
+                const { data: joinedRecord, error: fetchError } = await supabase
+                  .from('production_records')
+                  .select(`
+                    record_id,
+                    machine_id,
+                    date,
+                    shift,
+                    planned_runtime,
+                    actual_runtime,
+                    ideal_runtime,
+                    output_qty,
+                    defect_qty,
+                    availability,
+                    performance,
+                    quality,
+                    oee,
+                    created_at,
+                    machines:machine_id (
+                      id,
+                      name,
+                      location,
+                      equipment_type
+                    )
+                  `)
+                  .eq('record_id', newRecord.record_id)
+                  .single();
+
+                if (fetchError || !joinedRecord) {
+                  console.error('Failed to load joined production record for realtime insert:', fetchError);
+                  return;
+                }
+
+                setRecords(prevRecords => {
+                  if (prevRecords.find(r => r.record_id === joinedRecord.record_id)) {
+                    return prevRecords;
+                  }
+                  return [joinedRecord as unknown as ProductionRecord, ...prevRecords];
+                });
+                console.log('Production record added:', newRecord.record_id);
+                return;
+              }
+
               setRecords(prevRecords => {
                 let updatedRecords = [...prevRecords];
-                
-                switch (eventType) {
-                  case 'INSERT':
-                    // 새 생산 기록 추가
-                    if (newRecord && !updatedRecords.find(r => r.record_id === newRecord.record_id)) {
-                      updatedRecords.unshift(newRecord as ProductionRecord);
-                      console.log('Production record added:', newRecord.record_id);
+
+                if (eventType === 'UPDATE') {
+                  if (newRecord) {
+                    const index = updatedRecords.findIndex(r => r.record_id === newRecord.record_id);
+                    if (index !== -1) {
+                      updatedRecords[index] = { ...updatedRecords[index], ...newRecord };
+                      console.log('Production record updated:', newRecord.record_id);
                     }
-                    break;
-                    
-                  case 'UPDATE':
-                    // 생산 기록 정보 업데이트
-                    if (newRecord) {
-                      const index = updatedRecords.findIndex(r => r.record_id === newRecord.record_id);
-                      if (index !== -1) {
-                        updatedRecords[index] = { ...updatedRecords[index], ...newRecord };
-                        console.log('Production record updated:', newRecord.record_id);
-                      }
-                    }
-                    break;
-                    
-                  case 'DELETE':
-                    // 생산 기록 삭제
-                    if (oldRecord) {
-                      updatedRecords = updatedRecords.filter(r => r.record_id !== oldRecord.record_id);
-                      console.log('Production record deleted:', oldRecord.record_id);
-                    }
-                    break;
+                  }
+                } else if (eventType === 'DELETE') {
+                  if (oldRecord) {
+                    updatedRecords = updatedRecords.filter(r => r.record_id !== oldRecord.record_id);
+                    console.log('Production record deleted:', oldRecord.record_id);
+                  }
                 }
-                
+
                 return updatedRecords;
               });
             }

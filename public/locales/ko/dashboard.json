@@ -147,7 +147,8 @@
     "runningMachines": "정상 가동",
     "maintenanceStop": "점검/정지",
     "overallOee": "전체 OEE",
-    "unit": "대"
+    "unit": "대",
+    "machinesWithDataCount": "{{count}}/{{total}}대 데이터 반영"
   },
   "status": {
     "normal": "정상",

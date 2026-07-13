@@ -114,7 +114,9 @@
     "recordDeleteFailed": "삭제 실패",
     "confirmDelete": "삭제하시겠습니까?",
     "confirmDeleteDescription": "이 생산 기록을 삭제하면 복구할 수 없습니다.",
-    "noExistingRecord": "저장된 생산 기록이 없습니다. 새로 입력해주세요."
+    "noExistingRecord": "저장된 생산 기록이 없습니다. 새로 입력해주세요.",
+    "noRecordsSaved": "저장된 생산 기록이 없습니다.",
+    "deletedShiftsSuffix": " ({{count}}개 교대 기록 삭제됨)"
   },
   "editMode": {
     "existingRecordFound": "기존 데이터 발견",

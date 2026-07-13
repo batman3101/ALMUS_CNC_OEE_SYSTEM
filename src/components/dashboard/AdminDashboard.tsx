@@ -39,6 +39,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     production: unknown[];
     models: unknown[];
     oeeMetrics: Record<string, OEEMetrics>;
+    machinesWithData: string[];
   } | null>(null);
   const [statusDescriptions, setStatusDescriptions] = useState<Array<{
     status: string;
@@ -126,8 +127,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   };
 
   // 실시간 OEE 메트릭 계산
+  // 주의: aggregatedData는 useCallback으로 반환되는 "함수"이므로 항상 truthy함 - 반드시 호출해서 결과를 확인해야 함
   const calculateRealTimeOEEMetrics = (): OEEMetrics => {
-    if (!aggregatedData) {
+    const aggregated = aggregatedData();
+
+    if (!aggregated || aggregated.recordCount === 0) {
       return {
         availability: 0,
         performance: 0,
@@ -142,15 +146,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     }
 
     return {
-      availability: aggregatedData.avgAvailability / 100,
-      performance: aggregatedData.avgPerformance / 100,
-      quality: aggregatedData.avgQuality / 100,
-      oee: aggregatedData.avgOEE / 100,
+      availability: aggregated.avgAvailability / 100,
+      performance: aggregated.avgPerformance / 100,
+      quality: aggregated.avgQuality / 100,
+      oee: aggregated.avgOEE / 100,
       actual_runtime: productionRecords.reduce((sum, record) => sum + (record.actual_runtime || 0), 0),
       planned_runtime: productionRecords.reduce((sum, record) => sum + (record.planned_runtime || 0), 0),
       ideal_runtime: productionRecords.reduce((sum, record) => sum + (record.ideal_runtime || 0), 0),
-      output_qty: aggregatedData.totalProduction,
-      defect_qty: aggregatedData.totalDefects
+      output_qty: aggregated.totalProduction,
+      defect_qty: aggregated.totalDefects
     };
   };
 
@@ -245,9 +249,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
       // OEE 계산 (실제 데이터 기반)
       const calculatedOeeMetrics: Record<string, OEEMetrics> = {};
-      
+      // 생산 기록이 실제로 존재하는 설비 목록 (전체 OEE 평균 계산 시 데이터 없는 설비 제외용)
+      const machinesWithData: string[] = [];
+
       console.log('Processing OEE calculations for machines:', machinesData.length);
-      
+
       machinesData.forEach((machine: Machine) => {
         // 해당 설비의 생산 기록 찾기
         interface ProductionData {
@@ -265,6 +271,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         const machineProduction = productionData.filter((p: unknown) => (p as ProductionData).machine_id === machine.id) as ProductionData[];
 
         if (machineProduction.length > 0) {
+          machinesWithData.push(machine.id);
           // ✅ 실제 Supabase 데이터 사용 (hardcoded 값 제거)
           const totalOutput = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.output_qty || 0), 0);
           const totalDefects = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.defect_qty || 0), 0);
@@ -315,7 +322,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         machines: machinesData,
         production: productionData,
         models: modelsData,
-        oeeMetrics: calculatedOeeMetrics
+        oeeMetrics: calculatedOeeMetrics,
+        machinesWithData
       });
 
       // 상태 설명 데이터 저장
@@ -403,24 +411,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       // 대시보드 데이터가 있으면 우선 사용 (강제 조건 확인)
       if (dashboardData && dashboardData.machines && Array.isArray(dashboardData.machines) && dashboardData.machines.length > 0) {
         console.log('✅ 실제 데이터베이스 데이터 처리 시작 - 설비 수:', dashboardData.machines.length);
-        const { machines: dbMachines, oeeMetrics: dbOeeMetrics } = dashboardData;
-        
-        // 실제 데이터에서 전체 OEE 계산
-        const totalOEE = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.oee, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
-        const totalAvailability = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.availability, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
-        const totalPerformance = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.performance, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
-        const totalQuality = Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.quality, 0) / Math.max(Object.keys(dbOeeMetrics).length, 1);
-        
+        const { machines: dbMachines, oeeMetrics: dbOeeMetrics, machinesWithData: dbMachinesWithData } = dashboardData;
+
+        // 생산 기록이 있는 설비만 전체 OEE 평균 계산에 포함 (데이터 없는 설비의 0%가 평균을 희석시키지 않도록)
+        const metricsWithData: OEEMetrics[] = (dbMachinesWithData || [])
+          .map(machineId => dbOeeMetrics[machineId])
+          .filter((metrics): metrics is OEEMetrics => !!metrics);
+        const machinesWithDataCount = metricsWithData.length;
+
+        const totalOEE = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.oee, 0) / machinesWithDataCount : 0;
+        const totalAvailability = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.availability, 0) / machinesWithDataCount : 0;
+        const totalPerformance = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.performance, 0) / machinesWithDataCount : 0;
+        const totalQuality = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.quality, 0) / machinesWithDataCount : 0;
+
         const overallMetrics: OEEMetrics = {
           availability: totalAvailability,
           performance: totalPerformance,
           quality: totalQuality,
           oee: totalOEE,
-          actual_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.actual_runtime, 0),
-          planned_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.planned_runtime, 0),
-          ideal_runtime: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.ideal_runtime, 0),
-          output_qty: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.output_qty, 0),
-          defect_qty: Object.values(dbOeeMetrics).reduce((sum: number, metrics: OEEMetrics) => sum + metrics.defect_qty, 0)
+          actual_runtime: metricsWithData.reduce((sum, metrics) => sum + metrics.actual_runtime, 0),
+          planned_runtime: metricsWithData.reduce((sum, metrics) => sum + metrics.planned_runtime, 0),
+          ideal_runtime: metricsWithData.reduce((sum, metrics) => sum + metrics.ideal_runtime, 0),
+          output_qty: metricsWithData.reduce((sum, metrics) => sum + metrics.output_qty, 0),
+          defect_qty: metricsWithData.reduce((sum, metrics) => sum + metrics.defect_qty, 0)
         };
         
         // 설비 목록에 OEE 정보 추가
@@ -522,12 +535,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           overallMetrics,
           machineList,
           alerts,
-          trendData
+          trendData,
+          machinesWithDataCount
         };
       }
-      
+
       // 실시간 생산 기록 데이터가 있으면 사용 (로딩 완료 후)
-      if (!recordsLoading && productionRecords.length > 0 && aggregatedData) {
+      // 주의: aggregatedData는 함수이므로 항상 truthy함 - 호출 결과에 실제 집계 데이터(recordCount > 0)가 있는지 확인해야 함
+      if (!recordsLoading && productionRecords.length > 0 && aggregatedData().recordCount > 0) {
         console.log('Using realtime production records:', productionRecords.length);
         const realTimeMetrics = calculateRealTimeOEEMetrics();
         
@@ -626,7 +641,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           overallMetrics: realTimeMetrics,
           machineList,
           alerts,
-          trendData // ✅ 실시간 데이터로 변환된 trendData 반환
+          trendData, // ✅ 실시간 데이터로 변환된 trendData 반환
+          machinesWithDataCount: machineList.length
         };
       }
 
@@ -641,7 +657,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           },
           machineList: [],
           alerts: [],
-          trendData: []
+          trendData: [],
+          machinesWithDataCount: 0
         };
       }
 
@@ -676,7 +693,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           severity: 'error' as const,
           time: '지금'
         }],
-        trendData: []
+        trendData: [],
+        machinesWithDataCount: 0
       };
     }
   }, [productionRecords, aggregatedData, dashboardData, dashboardData?.machines?.length]);

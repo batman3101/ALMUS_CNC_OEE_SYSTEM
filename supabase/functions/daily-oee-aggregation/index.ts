@@ -106,13 +106,18 @@ class OEECalculator {
   }
 
   /**
-   * 이론 생산시간 계산
+   * 이론 생산시간 계산 (Cavity 반영)
    */
-  static calculateIdealRuntime(outputQty: number, tactTime: number): number {
-    if (tactTime <= 0) return 0;
-    return (outputQty * tactTime) / 60; // 분 단위로 변환
+  static calculateIdealRuntime(outputQty: number, tactTime: number, cavity: number = 1): number {
+    if (tactTime <= 0 || outputQty <= 0) return 0;
+    const effectiveCavity = cavity > 0 ? cavity : 1;
+    return ((outputQty / effectiveCavity) * tactTime) / 60; // 분 단위로 변환
   }
 }
+
+// 기본값 (공정 정보가 없는 설비)
+const DEFAULT_TACT_SECONDS = 120;
+const DEFAULT_CAVITY = 1;
 
 /**
  * 교대 시간 계산 유틸리티
@@ -170,10 +175,10 @@ serve(async (req) => {
 
     console.log(`Starting daily OEE aggregation for date: ${targetDateStr}`);
 
-    // 활성 설비 목록 조회
+    // 활성 설비 목록 조회 (현재 공정의 Tact Time / Cavity 포함)
     const { data: machines, error: machinesError } = await supabase
-      .from('machines')
-      .select('id, name, default_tact_time')
+      .from('machines_with_production_info')
+      .select('id, name, current_tact_time, current_cavity_count')
       .eq('is_active', true);
 
     if (machinesError) {
@@ -229,19 +234,25 @@ serve(async (req) => {
           // 계획 가동시간 계산
           const plannedRuntime = ShiftUtils.calculatePlannedRuntime();
 
-          // 생산 수량 (기존 실적이 있으면 사용, 없으면 Tact Time 기반 추정)
-          let outputQty = existingRecord?.output_qty || 0;
-          let defectQty = existingRecord?.defect_qty || 0;
+          // Tact Time / Cavity (공정 정보가 없거나 0 이하이면 기본값 사용)
+          const tactTime = machine.current_tact_time && machine.current_tact_time > 0
+            ? machine.current_tact_time
+            : DEFAULT_TACT_SECONDS;
+          const cavity = machine.current_cavity_count && machine.current_cavity_count > 0
+            ? machine.current_cavity_count
+            : DEFAULT_CAVITY;
 
-          // 생산 실적이 없고 실제 가동시간이 있으면 Tact Time 기반으로 추정
-          if (!existingRecord && actualRuntime > 0) {
-            const estimatedOutput = Math.floor(actualRuntime * 60 / machine.default_tact_time);
-            outputQty = estimatedOutput;
-            console.log(`Estimated output for machine ${machine.name}, shift ${shift}: ${estimatedOutput} units`);
+          // 생산 수량 (작업자가 입력한 실적이 있는 경우에만 사용)
+          // 실적이 없으면 추정하지 않는다 (추정값은 성능을 항상 100%로 만들어 지표를 왜곡함)
+          const outputQty = existingRecord?.output_qty || 0;
+          const defectQty = existingRecord?.defect_qty || 0;
+
+          if (!existingRecord) {
+            console.log(`No production record for machine ${machine.name}, shift ${shift} - output_qty 0으로 집계`);
           }
 
-          // 이론 생산시간 계산
-          const idealRuntime = OEECalculator.calculateIdealRuntime(outputQty, machine.default_tact_time);
+          // 이론 생산시간 계산 (Cavity 반영)
+          const idealRuntime = OEECalculator.calculateIdealRuntime(outputQty, tactTime, cavity);
 
           // OEE 지표 계산
           const availability = OEECalculator.calculateAvailability(actualRuntime, plannedRuntime);

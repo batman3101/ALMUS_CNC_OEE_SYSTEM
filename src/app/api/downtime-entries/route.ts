@@ -21,12 +21,12 @@ export async function POST(request: NextRequest) {
       operator_id
     } = body;
 
-    // 필수 필드 검증
-    if (!machine_id || !date || !shift || !start_time || !reason) {
+    // 필수 필드 검증 (end_time 미지정 시 현재 시각으로 대체하면 비정상적인 duration이 계산되므로 필수)
+    if (!machine_id || !date || !shift || !start_time || !end_time || !reason) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Machine ID, date, shift, start_time, and reason are required'
+          error: 'Machine ID, date, shift, start_time, end_time, and reason are required'
         },
         { status: 400 }
       );
@@ -61,9 +61,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 기간(duration) 계산
+    // 기간(duration) 계산 - 음수 방지
     const startTime = new Date(start_time);
-    const endTime = end_time ? new Date(end_time) : new Date();
+    const endTime = new Date(end_time);
+
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'start_time and end_time must be valid date-times'
+        },
+        { status: 400 }
+      );
+    }
+
+    if (endTime.getTime() < startTime.getTime()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '종료 시간은 시작 시간보다 빠를 수 없습니다'
+        },
+        { status: 400 }
+      );
+    }
+
     const durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
 
     // 비가동 데이터 저장

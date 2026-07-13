@@ -102,43 +102,93 @@ export const useRealtimeMachines = ({
               schema: 'public',
               table: 'machines'
             },
-            (payload) => {
+            async (payload) => {
               console.log('Realtime event received:', payload);
-              
+
               const { eventType, new: newRecord, old: oldRecord } = payload;
-              
+
+              if (eventType === 'INSERT') {
+                if (!newRecord) return;
+
+                // 목록 조회에 적용된 필터를 신규 행에도 동일하게 적용
+                const matchesActive = filters.isActive === undefined || newRecord.is_active === filters.isActive;
+                const matchesLocation = !filters.location || newRecord.location === filters.location;
+                const matchesState = !filters.currentState || newRecord.current_state === filters.currentState;
+
+                if (!matchesActive || !matchesLocation || !matchesState) {
+                  return;
+                }
+
+                // 목록의 다른 행과 동일하게 product_models/model_processes 조인이 포함된 형태로 다시 조회
+                const { data: joinedMachine, error: fetchError } = await supabase
+                  .from('machines')
+                  .select(`
+                    id,
+                    name,
+                    location,
+                    equipment_type,
+                    is_active,
+                    current_state,
+                    production_model_id,
+                    current_process_id,
+                    created_at,
+                    updated_at,
+                    product_models:production_model_id (
+                      id,
+                      model_name,
+                      description
+                    ),
+                    model_processes:current_process_id (
+                      id,
+                      process_name,
+                      process_order,
+                      tact_time_seconds
+                    )
+                  `)
+                  .eq('id', newRecord.id)
+                  .single();
+
+                if (fetchError || !joinedMachine) {
+                  console.error('Failed to load joined machine for realtime insert:', fetchError);
+                  return;
+                }
+
+                setMachines(prevMachines => {
+                  if (prevMachines.find(m => m.id === joinedMachine.id)) {
+                    return prevMachines;
+                  }
+                  // 이름순 정렬 위치에 맞춰 삽입
+                  const insertIndex = prevMachines.findIndex(m => (m.name || '') > (joinedMachine.name || ''));
+                  const updatedMachines = [...prevMachines];
+                  if (insertIndex === -1) {
+                    updatedMachines.push(joinedMachine as unknown as Machine);
+                  } else {
+                    updatedMachines.splice(insertIndex, 0, joinedMachine as unknown as Machine);
+                  }
+                  return updatedMachines;
+                });
+                console.log('Machine added:', newRecord.name);
+                return;
+              }
+
               setMachines(prevMachines => {
                 let updatedMachines = [...prevMachines];
-                
-                switch (eventType) {
-                  case 'INSERT':
-                    // 새 설비 추가
-                    if (newRecord && !updatedMachines.find(m => m.id === newRecord.id)) {
-                      updatedMachines.push(newRecord as Machine);
-                      console.log('Machine added:', newRecord.name);
+
+                if (eventType === 'UPDATE') {
+                  if (newRecord) {
+                    const index = updatedMachines.findIndex(m => m.id === newRecord.id);
+                    if (index !== -1) {
+                      updatedMachines[index] = { ...updatedMachines[index], ...newRecord };
+                      console.log('Machine updated:', newRecord.name);
                     }
-                    break;
-                    
-                  case 'UPDATE':
-                    // 설비 정보 업데이트
-                    if (newRecord) {
-                      const index = updatedMachines.findIndex(m => m.id === newRecord.id);
-                      if (index !== -1) {
-                        updatedMachines[index] = { ...updatedMachines[index], ...newRecord };
-                        console.log('Machine updated:', newRecord.name);
-                      }
-                    }
-                    break;
-                    
-                  case 'DELETE':
-                    // 설비 삭제
-                    if (oldRecord) {
-                      updatedMachines = updatedMachines.filter(m => m.id !== oldRecord.id);
-                      console.log('Machine deleted:', oldRecord.name);
-                    }
-                    break;
+                  }
+                } else if (eventType === 'DELETE') {
+                  if (oldRecord) {
+                    updatedMachines = updatedMachines.filter(m => m.id !== oldRecord.id);
+                    console.log('Machine deleted:', oldRecord.name);
+                  }
                 }
-                
+
                 return updatedMachines;
               });
             }

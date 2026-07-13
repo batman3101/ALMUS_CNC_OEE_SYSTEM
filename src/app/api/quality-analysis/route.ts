@@ -40,14 +40,24 @@ export async function GET(request: NextRequest) {
       .gt('output_qty', 0)
       .order('date', { ascending: false });
 
-    // 설비 필터링
+    // 설비 필터링 (단일 ID 또는 콤마로 구분된 다중 ID 지원)
     if (machineId) {
-      baseQuery = baseQuery.eq('machine_id', machineId);
+      const machineIds = machineId.split(',').map(id => id.trim()).filter(Boolean);
+      if (machineIds.length > 1) {
+        baseQuery = baseQuery.in('machine_id', machineIds);
+      } else if (machineIds.length === 1) {
+        baseQuery = baseQuery.eq('machine_id', machineIds[0]);
+      }
     }
 
-    // 교대 필터링
+    // 교대 필터링 (단일 값 또는 콤마로 구분된 다중 값 지원)
     if (shift) {
-      baseQuery = baseQuery.eq('shift', shift);
+      const shifts = shift.split(',').map(s => s.trim()).filter(Boolean);
+      if (shifts.length > 1) {
+        baseQuery = baseQuery.in('shift', shifts);
+      } else if (shifts.length === 1) {
+        baseQuery = baseQuery.eq('shift', shifts[0]);
+      }
     }
 
     const { data: qualityRecords, error: recordsError } = await baseQuery;
@@ -138,12 +148,12 @@ export async function GET(request: NextRequest) {
       machine.total_output += record.output_qty || 0;
       machine.total_defects += record.defect_qty || 0;
       machine.total_good += (record.output_qty || 0) - (record.defect_qty || 0);
-      machine.avg_quality += record.quality || 0;
     });
 
     // 설비별 통계 완성 및 트렌드 분석
     const machineAnalysis = Object.values(machineQuality).map(machine => {
-      machine.avg_quality = machine.avg_quality / machine.records_count;
+      // 레코드 단순 평균이 아닌 총 양품수/총 생산수 비율로 계산 (Simpson's paradox 방지, defect_rate와 동일한 방식)
+      machine.avg_quality = machine.total_output > 0 ? (machine.total_good / machine.total_output) * 100 : 0;
       machine.defect_rate = machine.total_output > 0 ? (machine.total_defects / machine.total_output) * 100 : 0;
 
       // 해당 설비의 모든 기록
@@ -298,6 +308,12 @@ export async function GET(request: NextRequest) {
       poor: machineAnalysis.filter(m => m.avg_quality < 90).length // 90% 미만
     };
 
+    // Best/Worst 성과 분석 (설비 수가 적을 때 상위/하위 목록이 겹치지 않도록 구성)
+    const bestCount = Math.min(5, machineAnalysis.length);
+    const worstCount = Math.min(5, machineAnalysis.length - bestCount);
+    const bestPerformers = machineAnalysis.slice(0, bestCount);
+    const worstPerformers = machineAnalysis.slice(machineAnalysis.length - worstCount).reverse();
+
     // 응답 구성
     const response = {
       summary: {
@@ -336,14 +352,14 @@ export async function GET(request: NextRequest) {
         compliance_rate: Math.round(s.compliance_rate * 100) / 100
       })),
       quality_ranking: {
-        best_performers: machineAnalysis.slice(0, 5).map(m => ({
+        best_performers: bestPerformers.map(m => ({
           machine_id: m.machine_id,
           machine_name: m.machine_name,
           avg_quality: Math.round(m.avg_quality * 100) / 100,
           defect_rate: Math.round(m.defect_rate * 100) / 100,
           compliance_rate: Math.round(m.compliance_rate * 100) / 100
         })),
-        worst_performers: machineAnalysis.slice(-5).reverse().map(m => ({
+        worst_performers: worstPerformers.map(m => ({
           machine_id: m.machine_id,
           machine_name: m.machine_name,
           avg_quality: Math.round(m.avg_quality * 100) / 100,

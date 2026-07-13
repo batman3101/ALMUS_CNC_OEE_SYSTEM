@@ -18,8 +18,10 @@ import { ProductionRecordInput } from '@/components/production';
 import { MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { useProductionRecords } from '@/hooks/useProductionRecords';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { getCurrentShiftInfo } from '@/utils/shiftUtils';
 
 // Removed deprecated TabPane import
 
@@ -83,9 +85,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     oeeMetrics, 
     loading, 
     error, 
-    refresh, 
-    isConnected 
+    refresh,
+    isConnected
   } = useRealtimeData(user?.id, user?.role);
+
+  const { createProductionRecord } = useProductionRecords();
 
 
   // 에러 핸들링
@@ -548,13 +552,19 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       {showProductionInput && selectedMachine && (
         <ProductionRecordInput
           machine={processedData.assignedMachines.find(m => m.id === selectedMachine) || null}
-          shift="A"
+          shift={getCurrentShiftInfo().shift}
           date={new Date().toISOString().split('T')[0]}
           visible={showProductionInput}
           onClose={() => setShowProductionInput(false)}
           onSubmit={async (data) => {
-            console.log('생산 실적 입력:', data);
-            setShowProductionInput(false);
+            await createProductionRecord({
+              machine_id: selectedMachine,
+              output_qty: data.output_qty,
+              defect_qty: data.defect_qty,
+              shift: getCurrentShiftInfo().shift,
+              date: new Date().toISOString().split('T')[0]
+            });
+            refresh();
           }}
         />
       )}

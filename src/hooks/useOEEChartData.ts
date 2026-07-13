@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { format } from 'date-fns';
 
 interface OEEChartData {
   date: string;
@@ -56,8 +57,10 @@ export const useOEEChartData = (
     }
 
     return {
-      start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0]
+      // toISOString()은 UTC 기준으로 변환되어 KST 새벽 시간대(B조 근무 중)에 날짜가 하루 밀리는 문제가 있었음.
+      // 로컬 달력 날짜를 그대로 사용하도록 date-fns format으로 변경.
+      start_date: format(startDate, 'yyyy-MM-dd'),
+      end_date: format(endDate, 'yyyy-MM-dd')
     };
   }, []);
 
@@ -124,32 +127,25 @@ export const useOEEChartData = (
     }
   }, [getDateRangeForPeriod, externalCustomDateRange, machineId, selectedShifts]);
 
-  // 기간 변경 핸들러
+  // 기간 변경 핸들러 (실제 조회는 아래 통합 effect가 상태 변경을 감지해서 수행)
   const handlePeriodChange = useCallback((newPeriod: 'daily' | 'weekly' | 'monthly') => {
     console.log('📈 차트 기간 변경:', period, '->', newPeriod);
     setPeriod(newPeriod);
     setDateRange(null); // 사용자 정의 날짜 범위 초기화
-    fetchChartData(newPeriod, null);
-  }, [fetchChartData, period, machineId, selectedShifts]);
+  }, [period]);
 
-  // 날짜 범위 변경 핸들러
+  // 날짜 범위 변경 핸들러 (실제 조회는 아래 통합 effect가 상태 변경을 감지해서 수행)
   const handleDateRangeChange = useCallback((dates: [string, string] | null) => {
     console.log('📅 차트 날짜 범위 변경:', dates);
     setDateRange(dates);
-    fetchChartData(period, dates);
-  }, [fetchChartData, period, machineId, selectedShifts]);
+  }, []);
 
-  // 초기 데이터 로드
+  // 기간/날짜범위/설비/교대 필터가 바뀔 때마다 재조회.
+  // fetchChartData는 machineId, selectedShifts, externalCustomDateRange가 실제로 변경될 때만
+  // 재생성되므로(내부에서 조회 결과 상태를 의존하지 않음) 무한 루프 없이 안전하게 의존성에 포함할 수 있음.
   useEffect(() => {
     fetchChartData(period, dateRange);
-  }, []); // 의존성 배열을 비워서 초기화 시에만 호출
-
-  // 외부 커스텀 날짜 범위 변경 감지
-  useEffect(() => {
-    if (externalCustomDateRange) {
-      fetchChartData(period, null); // 외부 범위는 fetchChartData에서 처리
-    }
-  }, [externalCustomDateRange, period, fetchChartData]);
+  }, [period, dateRange, externalCustomDateRange, machineId, selectedShifts, fetchChartData]);
 
   return {
     chartData,

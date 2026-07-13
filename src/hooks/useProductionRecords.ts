@@ -22,22 +22,27 @@ export const useProductionRecords = () => {
     setError(null);
 
     try {
-      // TODO: Supabase 연동 시 실제 API 호출로 대체
-      const record: ProductionRecord = {
-        record_id: `prod_${Date.now()}`,
-        machine_id: data.machine_id,
-        date: data.date || format(new Date(), 'yyyy-MM-dd'),
-        shift: data.shift,
-        output_qty: data.output_qty,
-        defect_qty: data.defect_qty,
-        created_at: new Date().toISOString(),
-      };
+      const response = await fetch('/api/production-records', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          machine_id: data.machine_id,
+          date: data.date || format(new Date(), 'yyyy-MM-dd'),
+          shift: data.shift,
+          output_qty: data.output_qty,
+          defect_qty: data.defect_qty,
+        }),
+      });
 
-      // 임시 지연 (실제 API 호출 시뮬레이션)
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const result = await response.json();
 
-      console.log('생산 실적 입력:', record);
-      return record;
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '생산 실적 입력 중 오류가 발생했습니다');
+      }
+
+      return result.record as ProductionRecord;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '생산 실적 입력 중 오류가 발생했습니다';
       setError(errorMessage);

@@ -63,6 +63,8 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isComponentMountedRef = useRef(true);
+  // 훅 인스턴스별 고유 Realtime 채널 이름 (동시 마운트 시 채널 충돌 방지)
+  const channelNameRef = useRef(`machines-changes-${Math.random().toString(36).slice(2)}`);
 
   const fetchMachines = useCallback(async (isBackgroundRefresh: boolean = false) => {
     try {
@@ -182,9 +184,9 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
         supabase.removeChannel(realtimeChannelRef.current);
       }
 
-      // 새 채널 생성
+      // 새 채널 생성 (인스턴스별 고유 이름 사용)
       const channel = supabase
-        .channel('machines-changes')
+        .channel(channelNameRef.current)
         .on(
           'postgres_changes',
           {
@@ -231,8 +233,11 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
 
   // 초기 데이터 로드 및 실시간 연결 설정
   useEffect(() => {
+    // 이펙트가 재실행되는 경우(StrictMode, refreshInterval 변경 등)를 대비해 마운트 상태를 재설정
+    isComponentMountedRef.current = true;
+
     fetchMachines();
-    
+
     // 폴링 방식 자동 새로고침 설정
     if (enableAutoRefresh) {
       startAutoRefresh();

@@ -42,14 +42,24 @@ export async function GET(request: NextRequest) {
       .lte('date', toDate.toISOString().split('T')[0])
       .order('date', { ascending: false });
 
-    // 설비 필터링
+    // 설비 필터링 (단일 ID 또는 콤마로 구분된 다중 ID 지원)
     if (machineId) {
-      baseQuery = baseQuery.eq('machine_id', machineId);
+      const machineIds = machineId.split(',').map(id => id.trim()).filter(Boolean);
+      if (machineIds.length > 1) {
+        baseQuery = baseQuery.in('machine_id', machineIds);
+      } else if (machineIds.length === 1) {
+        baseQuery = baseQuery.eq('machine_id', machineIds[0]);
+      }
     }
 
-    // 교대 필터링
+    // 교대 필터링 (단일 값 또는 콤마로 구분된 다중 값 지원)
     if (shift) {
-      baseQuery = baseQuery.eq('shift', shift);
+      const shifts = shift.split(',').map(s => s.trim()).filter(Boolean);
+      if (shifts.length > 1) {
+        baseQuery = baseQuery.in('shift', shifts);
+      } else if (shifts.length === 1) {
+        baseQuery = baseQuery.eq('shift', shifts[0]);
+      }
     }
 
     const { data: productionRecords, error: recordsError } = await baseQuery;
@@ -97,6 +107,8 @@ export async function GET(request: NextRequest) {
       total_output: number;
       total_good_qty: number;
       total_defect_qty: number;
+      total_planned_runtime: number;
+      total_actual_runtime: number;
       defect_rate: number;
       utilization_rate: number;
       efficiency_score: number;
@@ -122,6 +134,8 @@ export async function GET(request: NextRequest) {
           total_output: 0,
           total_good_qty: 0,
           total_defect_qty: 0,
+          total_planned_runtime: 0,
+          total_actual_runtime: 0,
           defect_rate: 0,
           utilization_rate: 0,
           efficiency_score: 0,
@@ -132,21 +146,23 @@ export async function GET(request: NextRequest) {
 
       const machine = machineProductivity[machineId];
       machine.records_count++;
-      machine.avg_oee += record.oee || 0;
-      machine.avg_availability += record.availability || 0;
       machine.avg_performance += record.performance || 0;
       machine.avg_quality += record.quality || 0;
       machine.total_output += record.output_qty || 0;
       machine.total_defect_qty += record.defect_qty || 0;
       machine.total_good_qty += (record.output_qty || 0) - (record.defect_qty || 0);
+      machine.total_planned_runtime += record.planned_runtime || 0;
+      machine.total_actual_runtime += record.actual_runtime || 0;
     });
 
     // 설비별 평균값 계산
     const machineAnalysis = Object.values(machineProductivity).map(machine => {
-      machine.avg_oee = machine.avg_oee / machine.records_count;
-      machine.avg_availability = machine.avg_availability / machine.records_count;
+      // 가동률은 레코드 단순 평균이 아닌 총 실제가동시간/총 계획가동시간 비율로 계산 (Simpson's paradox 방지)
+      machine.avg_availability = machine.total_planned_runtime > 0 ? machine.total_actual_runtime / machine.total_planned_runtime : 0;
       machine.avg_performance = machine.avg_performance / machine.records_count;
       machine.avg_quality = machine.avg_quality / machine.records_count;
+      // OEE = 가동률 × 성능 × 품질 정의에 따라 재계산 (oee 컬럼의 단순 평균은 레코드 수에 따라 왜곡됨)
+      machine.avg_oee = machine.avg_availability * machine.avg_performance * machine.avg_quality;
       machine.defect_rate = machine.total_output > 0 ? (machine.total_defect_qty / machine.total_output) * 100 : 0;
       machine.utilization_rate = machine.avg_availability;
       machine.efficiency_score = (machine.avg_oee * 0.4) + (machine.avg_performance * 0.3) + (machine.avg_quality * 0.3);
@@ -213,7 +229,7 @@ export async function GET(request: NextRequest) {
       shiftAnalysis[shift].avg_performance += record.performance || 0;
       shiftAnalysis[shift].avg_quality += record.quality || 0;
       shiftAnalysis[shift].total_output += record.output_qty || 0;
-      shiftAnalysis[shift].total_good_qty += record.good_qty || 0;
+      shiftAnalysis[shift].total_good_qty += (record.output_qty || 0) - (record.defect_qty || 0);
     });
 
     // 교대별 평균값 계산
@@ -272,7 +288,7 @@ export async function GET(request: NextRequest) {
       day.avg_performance += record.performance || 0;
       day.avg_quality += record.quality || 0;
       day.total_output += record.output_qty || 0;
-      day.total_good_qty += record.good_qty || 0;
+      day.total_good_qty += (record.output_qty || 0) - (record.defect_qty || 0);
     });
 
     // 일별 평균값 계산 및 정렬
@@ -293,9 +309,11 @@ export async function GET(request: NextRequest) {
       return day;
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Top/Bottom 성과 분석
-    const topPerformers = machineAnalysis.slice(0, 5);
-    const bottomPerformers = machineAnalysis.slice(-5).reverse();
+    // Top/Bottom 성과 분석 (설비 수가 적을 때 상위/하위 목록이 겹치지 않도록 구성)
+    const topCount = Math.min(5, machineAnalysis.length);
+    const bottomCount = Math.min(5, machineAnalysis.length - topCount);
+    const topPerformers = machineAnalysis.slice(0, topCount);
+    const bottomPerformers = machineAnalysis.slice(machineAnalysis.length - bottomCount).reverse();
 
     // 응답 구성
     const response = {
@@ -315,7 +333,7 @@ export async function GET(request: NextRequest) {
           total_good_qty: totalGoodQty,
           total_defect_qty: totalDefectQty,
           overall_defect_rate: totalOutputQty > 0 ? Math.round(((totalDefectQty / totalOutputQty) * 100) * 100) / 100 : 0,
-          utilization_rate: Math.round(((totalActualRuntime / totalPlannedRuntime) * 100) * 100) / 100
+          utilization_rate: totalPlannedRuntime > 0 ? Math.round(((totalActualRuntime / totalPlannedRuntime) * 100) * 100) / 100 : 0
         },
         unique_machines: new Set((productionRecords || []).map(r => r.machine_id)).size,
         shifts_analyzed: new Set((productionRecords || []).map(r => r.shift)).size

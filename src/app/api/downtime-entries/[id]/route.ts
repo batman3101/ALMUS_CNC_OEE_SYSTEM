@@ -101,7 +101,7 @@ export async function PATCH(
     if (body.reason) updateData.reason = body.reason;
     if (body.description !== undefined) updateData.description = body.description;
 
-    // duration_minutes 재계산
+    // duration_minutes 재계산 - 음수 방지
     if (body.start_time || body.end_time) {
       // 기존 데이터 조회
       const { data: existingEntry } = await supabaseAdmin
@@ -111,8 +111,42 @@ export async function PATCH(
         .single();
 
       if (existingEntry) {
-        const startTime = new Date(body.start_time || existingEntry.start_time);
-        const endTime = new Date(body.end_time || existingEntry.end_time);
+        const startTimeValue = body.start_time || existingEntry.start_time;
+        const endTimeValue = body.end_time || existingEntry.end_time;
+
+        if (!endTimeValue) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'end_time is required to recalculate duration'
+            },
+            { status: 400 }
+          );
+        }
+
+        const startTime = new Date(startTimeValue);
+        const endTime = new Date(endTimeValue);
+
+        if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'start_time and end_time must be valid date-times'
+            },
+            { status: 400 }
+          );
+        }
+
+        if (endTime.getTime() < startTime.getTime()) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: '종료 시간은 시작 시간보다 빠를 수 없습니다'
+            },
+            { status: 400 }
+          );
+        }
+
         updateData.duration_minutes = Math.round(
           (endTime.getTime() - startTime.getTime()) / (1000 * 60)
         );

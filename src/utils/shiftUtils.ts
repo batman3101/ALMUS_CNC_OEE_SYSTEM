@@ -1,4 +1,4 @@
-import { setHours, setMinutes, setSeconds, isAfter, isBefore, format } from 'date-fns';
+import { setHours, setMinutes, setSeconds, isBefore, format } from 'date-fns';
 
 export interface ShiftInfo {
   shift: 'A' | 'B';
@@ -14,33 +14,41 @@ export interface ShiftInfo {
  */
 export const getCurrentShiftInfo = (currentTime: Date = new Date()): ShiftInfo => {
   const today = new Date(currentTime);
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
   const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-  
-  // A조 시간 설정 (08:00 - 20:00)
+
+  // A조 시간 설정 (오늘 08:00 - 20:00)
   const aShiftStart = setSeconds(setMinutes(setHours(today, 8), 0), 0);
   const aShiftEnd = setSeconds(setMinutes(setHours(today, 20), 0), 0);
-  
-  // B조 시간 설정 (20:00 - 08:00 다음날)
-  const bShiftStart = setSeconds(setMinutes(setHours(today, 20), 0), 0);
-  const bShiftEnd = setSeconds(setMinutes(setHours(tomorrow, 8), 0), 0);
 
-  if (isAfter(currentTime, aShiftStart) && isBefore(currentTime, aShiftEnd)) {
-    // A조 시간대
+  // A조 시간대: 08:00(포함) ~ 20:00(미포함)
+  if (!isBefore(currentTime, aShiftStart) && isBefore(currentTime, aShiftEnd)) {
     return {
       shift: 'A',
       startTime: aShiftStart,
       endTime: aShiftEnd,
       isActive: true
     };
-  } else {
-    // B조 시간대
-    return {
-      shift: 'B',
-      startTime: bShiftStart,
-      endTime: bShiftEnd,
-      isActive: true
-    };
   }
+
+  // B조 시간대: 자정 ~ 08:00 이전이면 어제 20:00에 시작해 오늘 08:00에 종료,
+  //            20:00 이후면 오늘 20:00에 시작해 내일 08:00에 종료
+  let bShiftStart: Date;
+  let bShiftEnd: Date;
+  if (isBefore(currentTime, aShiftStart)) {
+    bShiftStart = setSeconds(setMinutes(setHours(yesterday, 20), 0), 0);
+    bShiftEnd = aShiftStart;
+  } else {
+    bShiftStart = aShiftEnd;
+    bShiftEnd = setSeconds(setMinutes(setHours(tomorrow, 8), 0), 0);
+  }
+
+  return {
+    shift: 'B',
+    startTime: bShiftStart,
+    endTime: bShiftEnd,
+    isActive: true
+  };
 };
 
 /**
@@ -75,7 +83,7 @@ export const formatShiftTime = (shiftInfo: ShiftInfo): string => {
 export const getShiftTimeRanges = (date: Date) => {
   const targetDate = new Date(date);
   const nextDay = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000);
-  
+
   return {
     A: {
       start: setSeconds(setMinutes(setHours(targetDate, 8), 0), 0),

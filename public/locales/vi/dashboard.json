@@ -147,7 +147,8 @@
     "runningMachines": "Hoạt động bình thường",
     "maintenanceStop": "Bảo trì/Dừng",
     "overallOee": "OEE tổng thể",
-    "unit": ""
+    "unit": "",
+    "machinesWithDataCount": "{{count}}/{{total}} máy có dữ liệu"
   },
   "status": {
     "normal": "Bình thường",

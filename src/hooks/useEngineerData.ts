@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { format } from 'date-fns';
 
 interface OEETrendData {
   date: string;
@@ -112,8 +113,10 @@ export const useEngineerData = (
     }
 
     return {
-      start_date: startDate.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0]
+      // toISOString()은 UTC 기준으로 변환되어 KST 새벽 시간대(B조 근무 중)에 날짜가 하루 밀리는 문제가 있었음.
+      // 로컬 달력 날짜를 그대로 사용하도록 date-fns format으로 변경.
+      start_date: format(startDate, 'yyyy-MM-dd'),
+      end_date: format(endDate, 'yyyy-MM-dd')
     };
   }, [customDateRange]);
 

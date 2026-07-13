@@ -296,6 +296,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     </div>
   );
 
+  // 다중 설비 선택을 콤마 구분 목록으로 변환 (API 계약: machine_id는 단일 또는 콤마 구분 목록을 허용)
+  const selectedMachineIds = React.useMemo(() => {
+    if (selectedMachines.length === 0 || selectedMachines.includes('all')) {
+      return undefined;
+    }
+    return selectedMachines.join(',');
+  }, [selectedMachines]);
+
   // 엔지니어 분석 데이터 훅 사용
   const {
     oeeData,
@@ -304,7 +312,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     loading: engineerDataLoading,
     error: engineerDataError,
     refreshData: refreshEngineerData
-  } = useEngineerData(selectedPeriod, selectedMachines[0] !== 'all' ? selectedMachines[0] : undefined, customDateRange, selectedShifts);
+  } = useEngineerData(selectedPeriod, selectedMachineIds, customDateRange, selectedShifts);
 
   // 데이터 변경 추적을 위한 로깅
   React.useEffect(() => {

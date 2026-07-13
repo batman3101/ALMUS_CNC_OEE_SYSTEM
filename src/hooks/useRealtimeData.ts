@@ -34,31 +34,39 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
   const channelsRef = useRef<RealtimeChannel[]>([]);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   // 연결 상태 업데이트 함수
   const updateConnectionStatus = useCallback((status: 'connecting' | 'connected' | 'disconnected' | 'error') => {
+    if (!isMountedRef.current) return;
     setState(prev => ({ ...prev, connectionStatus: status }));
   }, []);
 
-  // 자동 재연결 함수
+  // 자동 재연결 함수 (재구독 포함)
   const scheduleReconnect = useCallback(() => {
+    // 언마운트된 컴포넌트에는 재연결 타이머를 재장전하지 않음
+    if (!isMountedRef.current) return;
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
-    
+
     reconnectTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
       console.log('🔄 실시간 연결 재시도...');
       updateConnectionStatus('connecting');
       loadInitialData();
+      setupRealtimeSubscriptions();
     }, 5000); // 5초 후 재연결 시도
   }, []);
 
   // 초기 데이터 로드 (성능 최적화)
   const loadInitialData = useCallback(async () => {
+    if (!isMountedRef.current) return;
     try {
-      setState(prev => ({ 
-        ...prev, 
-        loading: true, 
+      setState(prev => ({
+        ...prev,
+        loading: true,
         error: null,
         connectionStatus: 'connecting'
       }));
@@ -72,7 +80,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           .select('*')
           .eq('user_id', userId)
           .single();
-        
+
         if (!profileError) {
           userProfile = profile;
         }
@@ -169,6 +177,8 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         });
       }
 
+      if (!isMountedRef.current) return;
+
       setState(prev => ({
         ...prev,
         machines: machines || [],
@@ -191,13 +201,16 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
     } catch (error) {
       console.error('❌ 초기 데이터 로드 실패:', error);
+
+      if (!isMountedRef.current) return;
+
       setState(prev => ({
         ...prev,
         loading: false,
         error: error instanceof Error ? error.message : '데이터 로드에 실패했습니다.',
         connectionStatus: 'error'
       }));
-      
+
       // 에러 발생시 자동 재연결 스케줄
       scheduleReconnect();
     }
@@ -225,7 +238,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     }
 
     console.log('🔗 실시간 구독 설정 시작...');
-    
+
     // 기존 채널 정리
     cleanupChannels();
 
@@ -246,10 +259,12 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         },
         (payload) => {
           console.log('📊 Machine log 변경:', payload.eventType, payload.new?.log_id);
-          
+
+          if (!isMountedRef.current) return;
+
           setState(prev => {
             let newLogs = [...prev.machineLogs];
-            
+
             if (payload.eventType === 'INSERT') {
               newLogs = [payload.new as MachineLog, ...newLogs.slice(0, 99)];
             } else if (payload.eventType === 'UPDATE') {
@@ -260,9 +275,9 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
             } else if (payload.eventType === 'DELETE') {
               newLogs = newLogs.filter(log => log.log_id !== payload.old.log_id);
             }
-            
-            return { 
-              ...prev, 
+
+            return {
+              ...prev,
               machineLogs: newLogs,
               lastUpdated: Date.now()
             };
@@ -296,14 +311,16 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         },
         (payload) => {
           console.log('Production record change:', payload);
-          
+
+          if (!isMountedRef.current) return;
+
           setState(prev => {
             let newRecords = [...prev.productionRecords];
             const newOeeMetrics = { ...prev.oeeMetrics };
-            
+
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const record = payload.new as ProductionRecord;
-              
+
               if (payload.eventType === 'INSERT') {
                 newRecords = [record, ...newRecords];
               } else {
@@ -312,7 +329,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
                   newRecords[index] = record;
                 }
               }
-              
+
               // OEE 지표 업데이트
               newOeeMetrics[record.machine_id] = {
                 availability: record.availability || 0,
@@ -326,16 +343,24 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
                 defect_qty: record.defect_qty || 0
               };
             }
-            
-            return { 
-              ...prev, 
+
+            return {
+              ...prev,
               productionRecords: newRecords,
               oeeMetrics: newOeeMetrics
             };
           });
         }
       )
-      .subscribe();
+      .subscribe((status, error) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Production records 구독 오류:', error);
+          scheduleReconnect();
+        } else if (status === 'CLOSED') {
+          console.warn('⚠️ Production records 구독 연결 종료');
+          scheduleReconnect();
+        }
+      });
 
     // 설비 정보 실시간 구독
     const machinesChannel = supabase
@@ -349,10 +374,12 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         },
         (payload) => {
           console.log('Machine change:', payload);
-          
+
+          if (!isMountedRef.current) return;
+
           setState(prev => {
             let newMachines = [...prev.machines];
-            
+
             if (payload.eventType === 'INSERT') {
               newMachines = [...newMachines, payload.new as Machine];
             } else if (payload.eventType === 'UPDATE') {
@@ -363,16 +390,24 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
             } else if (payload.eventType === 'DELETE') {
               newMachines = newMachines.filter(m => m.id !== payload.old.id);
             }
-            
+
             return { ...prev, machines: newMachines };
           });
         }
       )
-      .subscribe();
+      .subscribe((status, error) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Machines 구독 오류:', error);
+          scheduleReconnect();
+        } else if (status === 'CLOSED') {
+          console.warn('⚠️ Machines 구독 연결 종료');
+          scheduleReconnect();
+        }
+      });
 
     // 채널 참조 저장
     channelsRef.current = [machineLogsChannel, productionChannel, machinesChannel];
-    
+
     console.log('🔗 실시간 구독 설정 완료');
   }, [cleanupChannels, updateConnectionStatus, scheduleReconnect]);
 
@@ -386,9 +421,11 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
     // 정리 함수
     return () => {
+      isMountedRef.current = false;
       cleanupChannels();
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
     };
   }, [loadInitialData, setupRealtimeSubscriptions, cleanupChannels]);
@@ -411,7 +448,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     if (userRole === 'operator') {
       // 운영자는 담당 설비만 접근
       const assignedMachineIds = state.userProfile?.assigned_machines || [];
-      
+
       if (assignedMachineIds.length === 0) {
         return {
           ...state,
@@ -421,15 +458,15 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         };
       }
 
-      const filteredMachines = state.machines.filter(machine => 
+      const filteredMachines = state.machines.filter(machine =>
         assignedMachineIds.includes(machine.id)
       );
-      
-      const filteredLogs = state.machineLogs.filter(log => 
+
+      const filteredLogs = state.machineLogs.filter(log =>
         assignedMachineIds.includes(log.machine_id)
       );
-      
-      const filteredRecords = state.productionRecords.filter(record => 
+
+      const filteredRecords = state.productionRecords.filter(record =>
         assignedMachineIds.includes(record.machine_id)
       );
 

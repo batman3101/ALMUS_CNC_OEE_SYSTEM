@@ -128,21 +128,21 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
         <div>
           <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.avgDefectRate')}:</span>{' '}
           <span style={{
-            color: chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length > targetDefectRate ? '#ff4d4f' : '#52c41a'
+            color: chartData.length > 0 && (chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length) > targetDefectRate ? '#ff4d4f' : '#52c41a'
           }}>
-            {(chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length).toFixed(2)}%
+            {chartData.length > 0 ? (chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length).toFixed(2) : '0.00'}%
           </span>
         </div>
         <div>
           <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.maxDefectRate')}:</span>{' '}
           <span style={{ color: '#ff4d4f' }}>
-            {Math.max(...chartData.map(item => item.defectRate)).toFixed(2)}%
+            {chartData.length > 0 ? Math.max(...chartData.map(item => item.defectRate)).toFixed(2) : '0.00'}%
           </span>
         </div>
         <div>
           <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.minDefectRate')}:</span>{' '}
           <span style={{ color: '#52c41a' }}>
-            {Math.min(...chartData.map(item => item.defectRate)).toFixed(2)}%
+            {chartData.length > 0 ? Math.min(...chartData.map(item => item.defectRate)).toFixed(2) : '0.00'}%
           </span>
         </div>
       </div>
