@@ -1097,8 +1097,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           const allAlerts = [
             ...notifications.map(notification => ({
               id: notification.id,
-              priority: notification.severity === 'error' ? 'critical' : 
-                       notification.severity === 'warning' ? 'high' : 'medium',
+              priority: notification.severity,
               message: notification.message,
               machineName: notification.machine_name,
               timestamp: notification.created_at,

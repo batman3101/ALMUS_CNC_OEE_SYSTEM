@@ -145,48 +145,48 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
           console.log(`🚨 새 알림 생성: ${machine.name} - ${machine.current_state}`);
           let message = '';
-          let severity: NotificationSeverity = 'warning';
+          let severity: NotificationSeverity = 'high';
 
           switch (machine.current_state) {
             case 'TEMPORARY_STOP':
               message = `${machine.name}이(가) 일시정지 상태입니다.`;
-              severity = 'warning';
+              severity = 'high';
               break;
-            case 'MAINTENANCE':
             case 'PM_MAINTENANCE':
             case 'INSPECTION':
               message = `${machine.name}이(가) 점검 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'BREAKDOWN_REPAIR':
               message = `${machine.name}에서 고장이 발생했습니다.`;
-              severity = 'error';
+              severity = 'critical';
               break;
             case 'MODEL_CHANGE':
               message = `${machine.name}에서 모델 교체 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'PROGRAM_CHANGE':
               message = `${machine.name}에서 프로그램 교체 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'TOOL_CHANGE':
               message = `${machine.name}에서 공구 교환 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'PLANNED_STOP':
               message = `${machine.name}이(가) 계획 정지 상태입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             default:
               message = `${machine.name}의 상태를 확인해주세요.`;
-              severity = 'warning';
+              severity = 'high';
           }
 
           notifications.push({
             id: notificationKey, // 고유한 키로 ID 설정
-            type: machine.current_state === 'BREAKDOWN_REPAIR' ? 'EQUIPMENT_ERROR' :
-                  machine.current_state === 'TEMPORARY_STOP' ? 'OEE_LOW' : 'MAINTENANCE',
+            type: machine.current_state === 'BREAKDOWN_REPAIR' ||
+                  machine.current_state === 'TEMPORARY_STOP'
+                  ? 'MACHINE_STOPPED' : 'MAINTENANCE_DUE',
             severity,
             title: `설비 상태 알림`,
             message,
@@ -198,8 +198,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             acknowledged: false,
             status: 'active'
           });
-
-          notificationId++;
         }
       });
 
