@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
 
-// 기본값 (교대 12시간 = 720분)
-const DEFAULT_PLANNED_RUNTIME = 720;
 const DEFAULT_TACT_SECONDS = 120;
 const DEFAULT_CAVITY = 1;
 
@@ -53,16 +52,17 @@ function validateQuantities(
 }
 
 // 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시)
+// 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
 function calculateShiftMetrics(params: {
   operatingMinutes: number;
+  breakMinutes: number;
   downtimeMinutes: number;
   outputQty: number;
   defectQty: number;
   tactSeconds: number;
   cavity: number;
 }) {
-  const plannedRuntime =
-    params.operatingMinutes > 0 ? params.operatingMinutes : DEFAULT_PLANNED_RUNTIME;
+  const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
   const downtime = clamp(params.downtimeMinutes, 0, plannedRuntime);
   const actualRuntime = Math.max(0, plannedRuntime - downtime);
   const idealRuntime =
@@ -156,37 +156,17 @@ export async function POST(request: NextRequest) {
         ? productionInfo.current_cavity_count
         : DEFAULT_CAVITY;
 
-    const savedRecords: SavedRecord[] = [];
-    const deletedShifts: ('A' | 'B')[] = [];
+    // 휴식 시간(system_settings)은 하루 단위로 한 번만 조회하여 두 교대에 동일하게 적용
+    const breakMinutes = await getBreakTimeMinutes();
 
-    // 휴무 교대는 기존 기록 삭제
-    const deleteShiftRecord = async (shift: 'A' | 'B') => {
-      const { data: deleted, error: deleteError } = await supabaseAdmin
-        .from('production_records')
-        .delete()
-        .eq('machine_id', machine_id)
-        .eq('date', date)
-        .eq('shift', shift)
-        .select('record_id');
-
-      if (deleteError) {
-        console.error(`Error deleting ${shift} shift record:`, deleteError);
-        throw new Error(`${shift} 교대 기록 삭제 실패: ${deleteError.message}`);
-      }
-
-      if (deleted && deleted.length > 0) {
-        deletedShifts.push(shift);
-        console.log(`Deleted ${deleted.length} record(s) for shift ${shift}`);
-      }
-    };
-
-    // 교대별 기록 저장 (서버에서 지표 재계산)
-    const saveShiftRecord = async (shift: 'A' | 'B', shiftData: ShiftInputData) => {
+    // 교대별 저장 레코드 구성 (서버에서 지표 재계산)
+    const buildShiftRecord = (shiftData: ShiftInputData) => {
       const outputQty = shiftData.actual_production;
       const defectQty = shiftData.defect_quantity;
 
       const metrics = calculateShiftMetrics({
         operatingMinutes: toNumber(shiftData.operating_minutes),
+        breakMinutes,
         downtimeMinutes: toNumber(shiftData.total_downtime_minutes),
         outputQty,
         defectQty,
@@ -194,10 +174,7 @@ export async function POST(request: NextRequest) {
         cavity
       });
 
-      const record = {
-        machine_id,
-        date,
-        shift,
+      return {
         planned_runtime: Math.round(metrics.plannedRuntime),
         actual_runtime: Math.round(metrics.actualRuntime),
         ideal_runtime: Math.round(metrics.idealRuntime),
@@ -208,38 +185,31 @@ export async function POST(request: NextRequest) {
         quality: Math.round(metrics.quality * 10000) / 10000,
         oee: Math.round(metrics.oee * 10000) / 10000
       };
-
-      const { data: savedRecord, error: saveError } = await supabaseAdmin
-        .from('production_records')
-        .upsert(record, {
-          onConflict: 'machine_id,date,shift',
-          ignoreDuplicates: false
-        })
-        .select()
-        .single();
-
-      if (saveError) {
-        console.error(`Error saving ${shift} shift data:`, saveError);
-        throw new Error(`${shift === 'A' ? '주간' : '야간'} 교대 데이터 저장 실패: ${saveError.message}`);
-      }
-
-      savedRecords.push(savedRecord);
-      console.log(`${shift} shift record saved:`, savedRecord.record_id);
     };
 
-    // 주간 교대 (A): 휴무면 삭제, 아니면 저장
-    if (day_shift_off) {
-      await deleteShiftRecord('A');
-    } else if (day_shift) {
-      await saveShiftRecord('A', day_shift);
+    // 주간(A)/야간(B) 교대의 삭제·저장을 하나의 트랜잭션에서 처리한다.
+    // (기존에는 교대별 delete/upsert 를 개별 왕복으로 실행해, 중간 실패 시 하루치가
+    //  반쪽만 적용된 채로 남는 문제가 있었다)
+    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('save_daily_production', {
+      p_machine_id: machine_id,
+      p_date: date,
+      p_day_shift_off: Boolean(day_shift_off),
+      p_night_shift_off: Boolean(night_shift_off),
+      p_day_record: !day_shift_off && day_shift ? buildShiftRecord(day_shift) : null,
+      p_night_record: !night_shift_off && night_shift ? buildShiftRecord(night_shift) : null
+    });
+
+    if (rpcError) {
+      console.error('Error saving daily production records:', rpcError);
+      throw new Error(`일일 생산 데이터 저장 실패: ${rpcError.message}`);
     }
 
-    // 야간 교대 (B): 휴무면 삭제, 아니면 저장
-    if (night_shift_off) {
-      await deleteShiftRecord('B');
-    } else if (night_shift) {
-      await saveShiftRecord('B', night_shift);
-    }
+    const rpcData = (rpcResult ?? {}) as {
+      saved_records?: SavedRecord[];
+      deleted_shifts?: ('A' | 'B')[];
+    };
+    const savedRecords: SavedRecord[] = rpcData.saved_records ?? [];
+    const deletedShifts: ('A' | 'B')[] = rpcData.deleted_shifts ?? [];
 
     console.log(
       `Saved ${savedRecords.length} / deleted ${deletedShifts.length} production records for machine ${machine.name} on ${date}`

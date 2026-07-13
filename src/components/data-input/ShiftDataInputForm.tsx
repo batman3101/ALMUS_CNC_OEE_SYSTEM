@@ -93,9 +93,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const { message, modal } = App.useApp();
   const { getShiftTimes } = useSystemSettings();
 
-  // 시스템 설정에서 휴식 시간 가져오기
+  // 시스템 설정에서 휴식 시간 가져오기 (getSetting 반환 타입이 느슨하므로 숫자로 정규화)
   const shiftSettings = getShiftTimes();
-  const breakTimeMinutes = shiftSettings.breakTime || 60; // 기본값 60분
+  const breakTimeMinutes: number = Number(shiftSettings.breakTime) || 60; // 기본값 60분
 
   // 폼 상태
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
@@ -417,6 +417,11 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     return data.process;
   };
 
+  // 계획 가동시간 = max(0, 가동시간 - 휴식시간)
+  // 서버(/api/production-records/daily → src/lib/plannedRuntime.ts)가 저장하는 planned_runtime 과 동일한 정의
+  const calculatePlannedRuntime = (operatingMinutes: number): number =>
+    Math.max(0, operatingMinutes - breakTimeMinutes);
+
   // 기준 생산량(CAPA) 계산 (분 단위 입력, 휴식 시간 차감 적용, 캐비티 수 반영) (F2)
   const calculateCapacity = (
     tactTimeSeconds: number,
@@ -711,9 +716,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     // 기준 생산량(CAPA) = Tact Time * 교대조별 가동시간 (휴식 시간 차감, 캐비티 수 반영) (F2)
     const tactTimeSeconds = machineDetails.currentProcess?.tact_time_seconds;
     const cavityCount = machineDetails.currentProcess?.cavity_count || 1;
-    const totalOperatingMinutes =
-      (!dayShiftOff ? dayShiftOperatingMinutes : 0) +
-      (!nightShiftOff ? nightShiftOperatingMinutes : 0);
     // 화면에 표시되는 교대별 CAPA(공정 미설정 시 0으로 표시되는 것 포함)를 각각 계산 후 합산하여,
     // 일일 합계 CAPA 표시값과 항상 일치시킨다 (F3)
     const dayCapacity = !dayShiftOff && tactTimeSeconds
@@ -724,11 +726,29 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       : 0;
     const plannedCapacity = dayCapacity + nightCapacity;
 
-    // OEE 계산 (휴무 교대조 제외)
-    const plannedOperatingTime = totalOperatingMinutes; // 분 단위
-    const actualOperatingTime = Math.max(0, plannedOperatingTime - totalDowntime);
+    // OEE 계산 (휴무 교대조 제외) - 서버가 저장하는 값과 동일한 정의를 사용한다.
+    //   계획 가동시간 = 가동시간 - 휴식시간
+    //   실 가동시간   = max(0, 계획 가동시간 - 비가동시간)
+    //   성능          = 이론 가동시간(생산량 기준) / 실 가동시간
+    const dayPlannedRuntime = !dayShiftOff ? calculatePlannedRuntime(dayShiftOperatingMinutes) : 0;
+    const nightPlannedRuntime = !nightShiftOff ? calculatePlannedRuntime(nightShiftOperatingMinutes) : 0;
+    const dayActualRuntime = Math.max(
+      0,
+      dayPlannedRuntime - (!dayShiftOff ? dayShiftData.total_downtime_minutes : 0)
+    );
+    const nightActualRuntime = Math.max(
+      0,
+      nightPlannedRuntime - (!nightShiftOff ? nightShiftData.total_downtime_minutes : 0)
+    );
+
+    const plannedOperatingTime = dayPlannedRuntime + nightPlannedRuntime; // 분 단위
+    const actualOperatingTime = dayActualRuntime + nightActualRuntime;
+    const idealRuntime = tactTimeSeconds
+      ? (totalProduction / Math.max(1, cavityCount)) * tactTimeSeconds / 60
+      : 0;
+
     const availability = plannedOperatingTime > 0 ? actualOperatingTime / plannedOperatingTime : 0;
-    const performance = plannedCapacity > 0 ? Math.min(1, totalProduction / plannedCapacity) : 0;
+    const performance = actualOperatingTime > 0 ? Math.min(1, idealRuntime / actualOperatingTime) : 0;
     const quality = totalProduction > 0 ? totalGoodQuantity / totalProduction : 1;
     const oee = availability * performance * quality;
 
@@ -1015,7 +1035,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                 {!dayShiftOff && (
                   <div>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      ({Math.floor(dayShiftOperatingMinutes / 60)}{t('common.hours')} {dayShiftOperatingMinutes % 60}{t('common.minutes')} - {t('shift.breakTime')} {breakTimeMinutes}{t('common.minutes')})
+                      ({Math.floor(dayShiftOperatingMinutes / 60)}{t('common.hours')} {dayShiftOperatingMinutes % 60}{t('common.minutes')} - {t('shift.breakTime')} {breakTimeMinutes}{t('common.minutes')} = {calculatePlannedRuntime(dayShiftOperatingMinutes)}{t('common.minutes')})
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds
@@ -1061,7 +1081,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                 {!nightShiftOff && (
                   <div>
                     <Text type="secondary" style={{ fontSize: '12px' }}>
-                      ({Math.floor(nightShiftOperatingMinutes / 60)}{t('common.hours')} {nightShiftOperatingMinutes % 60}{t('common.minutes')} - {t('shift.breakTime')} {breakTimeMinutes}{t('common.minutes')})
+                      ({Math.floor(nightShiftOperatingMinutes / 60)}{t('common.hours')} {nightShiftOperatingMinutes % 60}{t('common.minutes')} - {t('shift.breakTime')} {breakTimeMinutes}{t('common.minutes')} = {calculatePlannedRuntime(nightShiftOperatingMinutes)}{t('common.minutes')})
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds

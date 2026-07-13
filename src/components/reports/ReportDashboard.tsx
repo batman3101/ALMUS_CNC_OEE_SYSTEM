@@ -25,8 +25,34 @@ import {
 import { ReportGenerator } from './ReportGenerator';
 import { ReportTemplates } from './ReportTemplates';
 import { useReportsTranslation } from '@/hooks/useTranslation';
-import { OEEMetrics, Machine, ProductionRecord } from '@/types';
+import { Machine, ProductionRecord } from '@/types';
+import { OEEMetrics } from '@/types/reports';
 import { ReportUtils } from '@/utils/reportUtils';
+
+// 설비/기간 필터를 실제 보고서 데이터(OEE + 생산실적)에 적용
+// oeeData와 productionData는 항상 동일 인덱스로 1:1 매핑되어 생성되므로
+// 생산실적을 기준으로 필터링하고 동일 인덱스의 OEE 항목을 함께 선택한다.
+const filterReportData = (
+  source: { oeeData: OEEMetrics[]; productionData: ProductionRecord[] },
+  machineIds: string[],
+  range: [string, string] | null
+): { oeeData: OEEMetrics[]; productionData: ProductionRecord[] } => {
+  const productionData: ProductionRecord[] = [];
+  const oeeData: OEEMetrics[] = [];
+
+  source.productionData.forEach((record, index) => {
+    const matchesMachine = machineIds.length === 0 || machineIds.includes(record.machine_id);
+    const matchesDate = !range || (record.date >= range[0] && record.date <= range[1]);
+    if (matchesMachine && matchesDate) {
+      productionData.push(record);
+      if (source.oeeData[index]) {
+        oeeData.push(source.oeeData[index]);
+      }
+    }
+  });
+
+  return { oeeData, productionData };
+};
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -35,17 +61,7 @@ interface ReportDashboardProps {
   machines?: Machine[];
   className?: string;
   loading?: boolean;
-  productionRecords?: Array<{
-    availability?: number;
-    performance?: number;
-    quality?: number;
-    oee?: number;
-    actual_runtime?: number;
-    planned_runtime?: number;
-    ideal_runtime?: number;
-    output_qty?: number;
-    defect_qty?: number;
-  }>;
+  productionRecords?: ProductionRecord[];
   aggregatedData?: {
     totalProduction: number;
     totalDefects: number;
@@ -75,7 +91,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const [previewData, setPreviewData] = useState<unknown>(null);
   const [previewType, setPreviewType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [selectedMachines, setSelectedMachines] = useState<string[]>([]);
-  const [, setDateRange] = useState<[string, string] | null>(null);
+  const [dateRange, setDateRange] = useState<[string, string] | null>(null);
   const [reportData, setReportData] = useState<{
     oeeData: OEEMetrics[];
     productionData: ProductionRecord[];
@@ -87,8 +103,9 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   // 실시간 생산 기록 데이터 업데이트 처리
   useEffect(() => {
     if (productionRecords.length > 0) {
-      // OEE 데이터 계산
+      // OEE 데이터 계산 (설비별 집계를 위해 machine_id를 함께 보관)
       const oeeData: OEEMetrics[] = productionRecords.map(record => ({
+        machine_id: record.machine_id,
         availability: record.availability || 0,
         performance: record.performance || 0,
         quality: record.quality || 0,
@@ -111,11 +128,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const fetchReportData = async () => {
     try {
       setLoading(true);
-      
-      // 생산 데이터 가져오기
-      const productionResponse = await fetch('/api/production-records');
+
+      // 생산 데이터 가져오기 (선택된 기간이 있으면 서버 필터링에 활용)
+      const params = new URLSearchParams();
+      if (dateRange) {
+        params.set('startDate', dateRange[0]);
+        params.set('endDate', dateRange[1]);
+      }
+      const query = params.toString();
+      const productionResponse = await fetch(`/api/production-records${query ? `?${query}` : ''}`);
       let productionData: ProductionRecord[] = [];
-      
+
       if (productionResponse.ok) {
         const prodData = await productionResponse.json();
         productionData = prodData.records || [];
@@ -123,6 +146,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       // OEE 데이터 - production_records의 실제 데이터 사용 (Mock 데이터 제거)
       const oeeData: OEEMetrics[] = productionData.map(record => ({
+        machine_id: record.machine_id,
         availability: record.availability || 0,
         performance: record.performance || 0,
         quality: record.quality || 0,
@@ -155,7 +179,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     try {
       const endDate = new Date().toISOString().split('T')[0];
       const startDate = new Date();
-      
+
       switch (template) {
         case 'daily':
           startDate.setDate(startDate.getDate() - 1);
@@ -168,15 +192,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           break;
       }
 
-      // 미리보기 데이터 준비
+      // 미리보기 데이터 준비 (템플릿 기간 + 선택된 설비로 실제 데이터 필터링)
+      const templateRange: [string, string] = [startDate.toISOString().split('T')[0], endDate];
+      const filtered = filterReportData(reportData, selectedMachines, templateRange);
       const previewContent = {
-        period: `${startDate.toISOString().split('T')[0]} ~ ${endDate}`,
-        machines: selectedMachines.length > 0 
+        period: `${templateRange[0]} ~ ${templateRange[1]}`,
+        machines: selectedMachines.length > 0
           ? machines.filter(m => selectedMachines.includes(m.id))
           : machines,
         stats: calculateStats(),
-        oeeData: reportData.oeeData.slice(0, template === 'daily' ? 1 : template === 'weekly' ? 7 : 30),
-        productionData: reportData.productionData.slice(0, template === 'daily' ? 1 : template === 'weekly' ? 7 : 30)
+        oeeData: filtered.oeeData,
+        productionData: filtered.productionData
       };
 
       setPreviewData(previewContent);
@@ -196,7 +222,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     try {
       const endDate = new Date().toISOString().split('T')[0];
       const startDate = new Date();
-      
+
       switch (template) {
         case 'daily':
           startDate.setDate(startDate.getDate() - 1);
@@ -209,14 +235,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           break;
       }
 
+      const templateRange: [string, string] = [startDate.toISOString().split('T')[0], endDate];
+      const filtered = filterReportData(reportData, selectedMachines, templateRange);
+
       const reportConfig = {
-        machines: selectedMachines.length > 0 
+        machines: selectedMachines.length > 0
           ? machines.filter(m => selectedMachines.includes(m.id))
           : machines,
-        oeeData: reportData.oeeData,
-        productionData: reportData.productionData,
+        oeeData: filtered.oeeData,
+        productionData: filtered.productionData,
         reportType: 'summary' as const,
-        dateRange: [startDate.toISOString().split('T')[0], endDate] as [string, string],
+        dateRange: templateRange,
         selectedMachines: selectedMachines.length > 0 ? selectedMachines : machines.map(m => m.id),
         includeCharts: true,
         includeOEE: true,
@@ -279,6 +308,10 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   };
 
   const stats = calculateStats();
+  // 상단 통계 카드의 불량률: 생산량이 0이면 NaN이 아닌 0을 표시
+  const defectRate = stats.totalOutput > 0 ? (stats.totalDefects / stats.totalOutput) * 100 : 0;
+  // 사용자 정의 보고서(ReportGenerator)에 전달할 데이터: 선택된 설비 + 선택된 기간으로 필터링
+  const filteredReportData = filterReportData(reportData, selectedMachines, dateRange);
 
   const quickReportButtons = [
     { key: 'daily', label: t('types.daily'), template: 'daily' as const },
@@ -319,8 +352,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
               />
             </Col>
             <Col xs={24} md={8}>
-              <Button 
-                type="primary" 
+              <Button
+                type="primary"
                 block
                 onClick={onRefreshRecords || fetchReportData}
                 loading={loading}
@@ -381,11 +414,11 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             <Card>
               <Statistic
                 title={t('metrics.defectRate')}
-                value={stats.totalDefects / stats.totalOutput * 100}
+                value={defectRate}
                 precision={2}
                 suffix="%"
-                valueStyle={{ 
-                  color: stats.totalDefects / stats.totalOutput > 0.05 ? '#ff4d4f' : '#52c41a' 
+                valueStyle={{
+                  color: defectRate > 5 ? '#ff4d4f' : '#52c41a'
                 }}
               />
             </Card>
@@ -431,12 +464,12 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
         {/* 사용자 정의 보고서 생성 */}
         <ReportGenerator
-          machines={selectedMachines.length > 0 
+          machines={selectedMachines.length > 0
             ? machines.filter(m => selectedMachines.includes(m.id))
             : machines
           }
-          oeeData={reportData.oeeData}
-          productionData={reportData.productionData}
+          oeeData={filteredReportData.oeeData}
+          productionData={filteredReportData.productionData}
         />
 
         {/* 미리보기 모달 */}

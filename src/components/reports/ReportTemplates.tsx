@@ -4,7 +4,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
-import { OEEMetrics, Machine, ProductionRecord } from '@/types';
+import { Machine, ProductionRecord } from '@/types';
+import { OEEMetrics } from '@/types/reports';
 import { addKoreanText } from '@/lib/fonts';
 
 interface ReportData {
@@ -322,10 +323,11 @@ export class ReportTemplates {
 
       // 간단한 상세 데이터 테이블
       const detailData = data.machines.slice(0, 10).map((machine, index) => {
-        // 해당 설비의 평균 OEE 계산 (실제 데이터가 있다면 필터링)
-        const avgOEE = data.oeeData.length > 0 ? 
-          ((data.oeeData.reduce((sum, oee) => sum + oee.oee, 0) / data.oeeData.length) * 100).toFixed(1) : '0.0';
-        
+        // 해당 설비의 평균 OEE 계산 (설비별 실제 데이터로 필터링)
+        const machineOEE = data.oeeData.filter(oee => oee.machine_id === machine.id);
+        const avgOEE = machineOEE.length > 0 ?
+          ((machineOEE.reduce((sum, oee) => sum + oee.oee, 0) / machineOEE.length) * 100).toFixed(1) : '0.0';
+
         return [
           (index + 1).toString(),
           machine.name || '-',
@@ -618,9 +620,7 @@ export class ReportTemplates {
       analysisData.push(['설비명', '평균 OEE(%)', '평균 가동률(%)', '총 생산량', '불량률(%)']);
 
       data.machines.forEach(machine => {
-        const machineOEE = data.oeeData.filter(() =>
-          data.productionData.some(prod => prod.machine_id === machine.id)
-        );
+        const machineOEE = data.oeeData.filter(oee => oee.machine_id === machine.id);
         const machineProduction = data.productionData.filter(prod => prod.machine_id === machine.id);
 
         if (machineOEE.length > 0 || machineProduction.length > 0) {

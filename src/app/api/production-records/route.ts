@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
 
-// 기본값 (교대 12시간 = 720분)
-const DEFAULT_PLANNED_RUNTIME = 720;
 const DEFAULT_TACT_SECONDS = 120;
 const DEFAULT_CAVITY = 1;
 
@@ -24,15 +23,17 @@ function validateQuantities(outputQty: unknown, defectQty: unknown): string | nu
 }
 
 // OEE 지표 계산 (서버가 단일 진실 공급원)
+// 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
 function calculateOEEMetrics(params: {
-  plannedRuntime: number;
+  operatingMinutes: number;
+  breakMinutes: number;
   actualRuntime: number;
   outputQty: number;
   defectQty: number;
   tactSeconds: number;
   cavity: number;
 }) {
-  const plannedRuntime = params.plannedRuntime > 0 ? params.plannedRuntime : DEFAULT_PLANNED_RUNTIME;
+  const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
   const actualRuntime = clamp(params.actualRuntime, 0, plannedRuntime);
   const idealRuntime = (params.outputQty / Math.max(1, params.cavity)) * params.tactSeconds / 60;
 
@@ -229,9 +230,12 @@ export async function POST(request: NextRequest) {
         ? productionInfo.current_cavity_count
         : DEFAULT_CAVITY;
 
-    // OEE 계산 (기본 계획시간 12시간 = 720분, Cavity 반영, 0~1 클램프)
+    // OEE 계산 (계획 가동시간 = 가동시간 - 휴식시간, Cavity 반영, 0~1 클램프)
+    // 요청의 planned_runtime 은 교대 가동시간(분)으로 해석하며, 미전송 시 12시간(720분)을 사용한다.
+    const breakMinutes = await getBreakTimeMinutes();
     const metrics = calculateOEEMetrics({
-      plannedRuntime: planned_runtime || DEFAULT_PLANNED_RUNTIME,
+      operatingMinutes: Number(planned_runtime),
+      breakMinutes,
       actualRuntime: actual_runtime || 0,
       outputQty: outputQtyValue,
       defectQty: defectQtyValue,

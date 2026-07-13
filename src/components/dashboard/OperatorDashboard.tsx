@@ -12,6 +12,7 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { MachineStatusInput } from '@/components/machines';
 import { OEEGauge } from '@/components/oee';
 import { ProductionRecordInput } from '@/components/production';
@@ -201,6 +202,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   // 교대 종료 알림 체크
   const currentHour = new Date().getHours();
   const isShiftEnd = currentHour === 8 || currentHour === 20;
+
+  // 생산 실적 입력에 사용할 업무일자: 로컬(UTC 아님) 기준이며, 자정을 넘어 진행 중인 B조는
+  // 교대 시작일(전날)을 업무일자로 사용한다 (ShiftDataInputForm과 동일하게 야간 교대는 시작일 기준)
+  const currentShiftInfo = getCurrentShiftInfo();
+  const productionBusinessDate = dayjs(currentShiftInfo.startTime).format('YYYY-MM-DD');
 
   // 페이지네이션된 설비 목록
   const paginatedMachines = useMemo(() => {
@@ -552,8 +558,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       {showProductionInput && selectedMachine && (
         <ProductionRecordInput
           machine={processedData.assignedMachines.find(m => m.id === selectedMachine) || null}
-          shift={getCurrentShiftInfo().shift}
-          date={new Date().toISOString().split('T')[0]}
+          shift={currentShiftInfo.shift}
+          date={productionBusinessDate}
           visible={showProductionInput}
           onClose={() => setShowProductionInput(false)}
           onSubmit={async (data) => {
@@ -561,8 +567,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
               machine_id: selectedMachine,
               output_qty: data.output_qty,
               defect_qty: data.defect_qty,
-              shift: getCurrentShiftInfo().shift,
-              date: new Date().toISOString().split('T')[0]
+              shift: currentShiftInfo.shift,
+              date: productionBusinessDate
             });
             refresh();
           }}

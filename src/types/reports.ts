@@ -117,6 +117,8 @@ export interface ReportExportOptions {
 
 // OEE 지표를 다시 export (기존 타입과 호환성 유지)
 export interface OEEMetrics {
+  // 설비별 집계를 위해 각 OEE 항목이 어느 설비의 것인지 식별 (report 생성 시 필수)
+  machine_id?: string;
   availability: number;
   performance: number;
   quality: number;

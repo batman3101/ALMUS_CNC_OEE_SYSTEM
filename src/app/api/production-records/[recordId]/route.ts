@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import {
+  DEFAULT_OPERATING_MINUTES,
+  getBreakTimeMinutes,
+  resolvePlannedRuntime
+} from '@/lib/plannedRuntime';
 
-// 기본값 (교대 12시간 = 720분)
-const DEFAULT_PLANNED_RUNTIME = 720;
 const DEFAULT_TACT_SECONDS = 120;
 const DEFAULT_CAVITY = 1;
 
@@ -78,19 +81,25 @@ async function buildUpdateData(
     return { error: validationError };
   }
 
-  const plannedRuntimeInput =
+  // 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
+  // - body.planned_runtime 이 오면 교대 가동시간(분)으로 해석하여 휴식시간을 차감한다.
+  // - 오지 않으면 이미 저장된 planned_runtime(차감이 끝난 값)을 그대로 유지한다. (중복 차감 방지)
+  // - 저장된 값도 없으면 기본 가동시간(720분)에서 휴식시간을 차감한 값을 사용한다.
+  const breakMinutes = await getBreakTimeMinutes();
+
+  const storedPlannedRuntime = existing.planned_runtime ?? 0;
+  const plannedRuntime =
     body.planned_runtime !== undefined
-      ? Number(body.planned_runtime)
-      : existing.planned_runtime ?? DEFAULT_PLANNED_RUNTIME;
+      ? resolvePlannedRuntime(Number(body.planned_runtime), breakMinutes)
+      : storedPlannedRuntime > 0
+        ? storedPlannedRuntime
+        : resolvePlannedRuntime(DEFAULT_OPERATING_MINUTES, breakMinutes);
+
   const actualRuntimeInput =
     body.actual_runtime !== undefined
       ? Number(body.actual_runtime)
       : existing.actual_runtime ?? 0;
 
-  const plannedRuntime =
-    Number.isFinite(plannedRuntimeInput) && plannedRuntimeInput > 0
-      ? plannedRuntimeInput
-      : DEFAULT_PLANNED_RUNTIME;
   const actualRuntime = clamp(
     Number.isFinite(actualRuntimeInput) ? actualRuntimeInput : 0,
     0,
