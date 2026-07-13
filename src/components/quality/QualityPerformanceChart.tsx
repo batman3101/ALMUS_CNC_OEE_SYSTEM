@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
+  ChartData,
 } from 'chart.js';
 import { Typography, Row, Col, Statistic } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
@@ -221,7 +222,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
     <div>
       {/* 차트 */}
       <div style={{ height, marginBottom: 24 }}>
-        <Line data={lineChartData} options={options} />
+        <Line data={lineChartData as ChartData<'line', number[], string>} options={options} />
       </div>
 
       {/* 통계 요약 */}

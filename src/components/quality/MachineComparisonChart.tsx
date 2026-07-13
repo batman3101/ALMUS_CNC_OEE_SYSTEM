@@ -16,7 +16,7 @@ interface MachineComparisonChartProps {
     quality: number;
     downtimeHours: number;
     defectRate: number;
-    trend: 'up' | 'down';
+    trend: 'up' | 'down' | 'neutral';
     trendValue: number;
   }>;
   height?: number;

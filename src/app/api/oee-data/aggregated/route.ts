@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
           total_runtime: totalRuntime,
           planned_runtime: plannedRuntime,
         };
-      }).filter(Boolean);
+      }).filter((item): item is NonNullable<typeof item> => item !== null);
 
       // 시간순 정렬
       return aggregatedResults.sort((a, b) => {

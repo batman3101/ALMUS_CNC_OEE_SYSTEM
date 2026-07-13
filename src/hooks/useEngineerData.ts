@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
+import { DowntimeData, ProductionData, isMachineState } from '@/types';
 
 interface OEETrendData {
   date: string;
@@ -7,23 +8,6 @@ interface OEETrendData {
   performance: number;
   quality: number;
   oee: number;
-  shift: 'A' | 'B' | 'C' | 'D';
-}
-
-interface DowntimeData {
-  state: string;
-  duration: number;
-  count: number;
-  percentage: number;
-}
-
-interface ProductionData {
-  date: string;
-  output_qty: number;
-  defect_qty: number;
-  good_qty: number;
-  defect_rate: number;
-  target_qty: number;
   shift: 'A' | 'B' | 'C' | 'D';
 }
 
@@ -177,13 +161,17 @@ export const useEngineerData = (
 
       const data: DowntimeAnalysisResponse = await response.json();
       
-      // API 응답을 차트용 데이터로 변환
-      const downtimeAnalysis: DowntimeData[] = data.downtime_by_cause.map(item => ({
-        state: item.state,
-        duration: item.total_duration,
-        count: item.occurrence_count,
-        percentage: item.percentage
-      }));
+      // API 응답을 차트용 데이터로 변환 (알 수 없는 상태값은 제외)
+      const downtimeAnalysis: DowntimeData[] = [];
+      for (const item of data.downtime_by_cause) {
+        if (!isMachineState(item.state)) continue;
+        downtimeAnalysis.push({
+          state: item.state,
+          duration: item.total_duration,
+          count: item.occurrence_count,
+          percentage: item.percentage
+        });
+      }
 
       console.log('다운타임 분석 데이터:', { sampleData: downtimeAnalysis.slice(0, 3), totalCount: downtimeAnalysis.length });
 

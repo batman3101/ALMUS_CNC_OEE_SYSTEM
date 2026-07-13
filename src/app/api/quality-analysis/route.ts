@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -129,8 +130,8 @@ export async function GET(request: NextRequest) {
 
     (qualityRecords || []).forEach(record => {
       const machineId = record.machine_id;
-      const machineName = record.machines?.name || 'Unknown';
-      const equipmentType = record.machines?.equipment_type || 'Unknown';
+      const machineName = unwrapJoin(record.machines)?.name || 'Unknown';
+      const equipmentType = unwrapJoin(record.machines)?.equipment_type || 'Unknown';
 
       if (!machineQuality[machineId]) {
         machineQuality[machineId] = {
@@ -386,7 +387,7 @@ export async function GET(request: NextRequest) {
       detailed_records: analysisType === 'detail' ? (qualityRecords || []).map(record => ({
         record_id: record.record_id,
         machine_id: record.machine_id,
-        machine_name: record.machines?.name || 'Unknown',
+        machine_name: unwrapJoin(record.machines)?.name || 'Unknown',
         date: record.date,
         shift: record.shift,
         quality: Math.round(toQualityPercent(record.quality) * 100) / 100,

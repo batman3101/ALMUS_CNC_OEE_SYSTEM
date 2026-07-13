@@ -4,11 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Tabs, DatePicker, Select, Space, Button, Spin } from 'antd';
 import { ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
 import { OEEGauge } from './OEEGauge';
-import { OEETrendChart } from './OEETrendChart';
+import { OEETrendChart, OEETrendData } from './OEETrendChart';
 import { DowntimeChart } from './DowntimeChart';
 import { ProductionChart } from './ProductionChart';
 import { ReportGenerator } from '@/components/reports';
-import { OEEMetrics as OEEMetricsType } from '@/types';
+import { OEEMetrics as OEEMetricsType, DowntimeData, ProductionData } from '@/types';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const { RangePicker } = DatePicker;
@@ -35,7 +35,7 @@ const fetchOEEMetrics = async (machineId: string): Promise<OEEMetricsType | null
   }
 };
 
-const fetchDowntimeAnalysis = async (machineId: string) => {
+const fetchDowntimeAnalysis = async (machineId: string): Promise<DowntimeData[]> => {
   try {
     const response = await fetch(`/api/machines/${machineId}/downtime-analysis`);
     if (!response.ok) return [];
@@ -47,7 +47,7 @@ const fetchDowntimeAnalysis = async (machineId: string) => {
   }
 };
 
-const fetchTrendData = async (machineId: string) => {
+const fetchTrendData = async (machineId: string): Promise<OEETrendData[]> => {
   try {
     const response = await fetch(`/api/machines/${machineId}/trend-data?days=7`);
     if (!response.ok) return [];
@@ -59,7 +59,7 @@ const fetchTrendData = async (machineId: string) => {
   }
 };
 
-const fetchProductionData = async (machineId: string) => {
+const fetchProductionData = async (machineId: string): Promise<ProductionData[]> => {
   try {
     const response = await fetch(`/api/machines/${machineId}/production?days=7`);
     if (!response.ok) return [];
@@ -97,9 +97,9 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
     output_qty: 0,
     defect_qty: 0
   });
-  const [trendData, setTrendData] = useState<unknown[]>([]);
-  const [downtimeData, setDowntimeData] = useState<unknown[]>([]);
-  const [productionData, setProductionData] = useState<Array<{ date: string; shift: string; output_qty: number; defect_qty: number }>>([]);
+  const [trendData, setTrendData] = useState<OEETrendData[]>([]);
+  const [downtimeData, setDowntimeData] = useState<DowntimeData[]>([]);
+  const [productionData, setProductionData] = useState<ProductionData[]>([]);
 
   // 데이터 새로고침
   const handleRefresh = async () => {
@@ -177,8 +177,6 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
       id: machineId,
       name: machineName,
       location: 'Production Floor',
-      model_type: 'CNC Machine',
-      default_tact_time: 60,
       is_active: true,
       created_at: formatDateTime(new Date()),
       updated_at: formatDateTime(new Date())
@@ -189,7 +187,7 @@ export const OEEMetrics: React.FC<OEEMetricsProps> = ({
       record_id: `record_${index}`,
       machine_id: machineId,
       date: prod.date,
-      shift: prod.shift,
+      shift: prod.shift ?? 'A' as const,
       output_qty: prod.output_qty,
       defect_qty: prod.defect_qty,
       created_at: formatDateTime(new Date())

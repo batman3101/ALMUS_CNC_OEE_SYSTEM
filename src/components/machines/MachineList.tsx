@@ -104,7 +104,7 @@ const MachineList: React.FC<MachineListProps> = ({
         const matchesSearch =
           (machine.name || '').toLowerCase().includes(searchLower) ||
           (machine.location || '').toLowerCase().includes(searchLower) ||
-          (machine.model_type || '').toLowerCase().includes(searchLower);
+          (machine.production_model?.model_name || '').toLowerCase().includes(searchLower);
 
         if (!matchesSearch) return false;
       }

@@ -87,10 +87,14 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
       // 각 설비별 추정 생산량 계산 (12시간 교대에서 휴식 시간을 제외한 실가동 시간 기준)
       const estimates: Record<string, number> = {};
       const shiftTimes = getShiftTimes();
-      const estimatedRuntime = Math.max(0, SHIFT_DURATION_MINUTES - shiftTimes.breakTime); // 분
+      const estimatedRuntime = Math.max(0, SHIFT_DURATION_MINUTES - Number(shiftTimes.breakTime)); // 분
       machines.forEach(machine => {
         const cavityCount = machine.current_cavity_count || 1;
-        estimates[machine.id] = calculateEstimatedOutput(machine.default_tact_time, estimatedRuntime, cavityCount);
+        // machines 테이블에는 tact time 컬럼이 없다.
+        // Tact Time은 machines_with_production_info 뷰의 current_tact_time
+        // 또는 조인된 current_process.tact_time_seconds에서 읽어야 한다.
+        const tactTime = machine.current_tact_time ?? machine.current_process?.tact_time_seconds ?? 0;
+        estimates[machine.id] = calculateEstimatedOutput(tactTime, estimatedRuntime, cavityCount);
       });
       setEstimatedOutputs(estimates);
 

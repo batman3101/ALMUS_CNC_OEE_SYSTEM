@@ -31,7 +31,7 @@ const getStateIcon = (state: MachineState) => {
   switch (state) {
     case 'NORMAL_OPERATION':
       return <PlayCircleOutlined style={{ color: '#52c41a' }} />;
-    case 'MAINTENANCE':
+    case 'INSPECTION':
       return <ToolOutlined style={{ color: '#faad14' }} />;
     case 'TEMPORARY_STOP':
     case 'PLANNED_STOP':
@@ -44,7 +44,8 @@ const getStateIcon = (state: MachineState) => {
 const getStateText = (state: MachineState, machinesT: (key: string) => string) => {
   const stateMap = {
     'NORMAL_OPERATION': machinesT('states.NORMAL_OPERATION'),
-    'MAINTENANCE': machinesT('states.MAINTENANCE'),
+    'INSPECTION': machinesT('states.INSPECTION'),
+    'BREAKDOWN_REPAIR': machinesT('states.BREAKDOWN_REPAIR'),
     'PM_MAINTENANCE': machinesT('states.PM_MAINTENANCE'),
     'MODEL_CHANGE': machinesT('states.MODEL_CHANGE'),
     'PLANNED_STOP': machinesT('states.PLANNED_STOP'),
@@ -71,7 +72,7 @@ interface OperatorDashboardProps {
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
   useClientOnly();
   const { user } = useAuth();
-  const { t: machinesT } = useMachinesTranslation();
+  const { t: machinesT, language } = useMachinesTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
   const [showProductionInput, setShowProductionInput] = useState(false);
@@ -130,6 +131,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
 
           return {
             ...machine,
+            // 담당 설비는 항상 실제 상태값을 가지고 있다는 것이 이 화면의 전제(카드뷰에서도 machine.current_state! 로 취급)
+            current_state: machine.current_state as MachineState,
             oee: oeeMetrics[machine.id]?.oee || 0,
             currentDuration
           };
@@ -454,13 +457,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                 label: machinesT('operator.recentWork'),
                 children: (
                   <Card size="small">
-                    <Timeline 
-                      size="small"
+                    <Timeline
                       items={processedData.recentLogs.slice(0, 8).map(log => ({
                         key: log.log_id,
                         dot: getStateIcon(log.state),
-                        color: log.state === 'NORMAL_OPERATION' ? 'green' : 
-                               log.state === 'MAINTENANCE' ? 'orange' : 'red',
+                        color: log.state === 'NORMAL_OPERATION' ? 'green' :
+                               log.state === 'INSPECTION' ? 'orange' : 'red',
                         children: (
                           <div style={{ fontSize: 12 }}>
                             <div style={{ fontWeight: 'bold' }}>
@@ -550,7 +552,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           visible={showStatusInput}
           onClose={() => setShowStatusInput(false)}
           onStatusChange={handleStatusChange}
-          language={(machinesT.i18n?.language as 'ko' | 'vi') || 'ko'}
+          language={language}
         />
       )}
 

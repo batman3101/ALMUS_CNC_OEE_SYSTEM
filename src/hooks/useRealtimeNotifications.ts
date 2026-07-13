@@ -222,14 +222,14 @@ export const useRealtimeNotifications = ({
 
         switch (rule.type) {
           case 'oee_target':
-            value = record.oee * 100; // 백분율로 변환
+            value = (record.oee || 0) * 100; // 백분율로 변환
             if (rule.condition === 'below' && value < rule.threshold) {
               shouldAlert = true;
             }
             break;
 
           case 'quality_issue':
-            value = record.quality * 100; // 백분율로 변환
+            value = (record.quality || 0) * 100; // 백분율로 변환
             if (rule.condition === 'below' && value < rule.threshold) {
               shouldAlert = true;
             }

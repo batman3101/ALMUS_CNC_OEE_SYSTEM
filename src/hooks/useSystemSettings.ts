@@ -2,6 +2,7 @@
 
 import { useSystemSettings as useSystemSettingsContext } from '@/contexts/SystemSettingsContext';
 import { useMemo, useEffect } from 'react';
+import type { Dayjs } from 'dayjs';
 import type { SettingCategory, AllSystemSettings } from '@/types/systemSettings';
 import { 
   initializeDateTimeFormatter, 
@@ -171,7 +172,7 @@ export function useSystemSettings() {
     parseDate: (dateString: string) => parseDate(dateString),
     parseTime: (timeString: string) => parseTime(timeString),
     parseDateTime: (dateTimeString: string) => parseDateTime(dateTimeString),
-    isValidDate: (date: unknown) => isValidDate(date),
+    isValidDate: (date: string | number | Date | Dayjs | null | undefined) => isValidDate(date),
 
     /**
      * 현재 시간 조회 (타임존 적용)

@@ -57,6 +57,23 @@ const filterReportData = (
 const { RangePicker } = DatePicker;
 const { Option } = Select;
 
+interface PreviewStats {
+  avgOEE: number;
+  avgAvailability: number;
+  avgPerformance: number;
+  avgQuality: number;
+  totalOutput: number;
+  totalDefects: number;
+}
+
+interface PreviewData {
+  period: string;
+  machines: Machine[];
+  stats: PreviewStats;
+  oeeData: OEEMetrics[];
+  productionData: ProductionRecord[];
+}
+
 interface ReportDashboardProps {
   machines?: Machine[];
   className?: string;
@@ -88,7 +105,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
-  const [previewData, setPreviewData] = useState<unknown>(null);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewType, setPreviewType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [selectedMachines, setSelectedMachines] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<[string, string] | null>(null);

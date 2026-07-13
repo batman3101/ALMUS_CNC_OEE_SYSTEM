@@ -3,17 +3,10 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTranslation } from '@/hooks/useTranslation';
+import { ProductionData } from '@/types';
 
 interface DefectRateTrendChartProps {
-  data: Array<{
-    date: string;
-    output_qty: number;
-    defect_qty: number;
-    good_qty: number;
-    defect_rate: number;
-    target_qty: number;
-    shift: 'A' | 'B' | 'C' | 'D';
-  }>;
+  data: ProductionData[];
   height?: number;
   period?: 'week' | 'month' | 'quarter';
 }
@@ -99,7 +92,7 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
               y={targetDefectRate}
               stroke="#ff4d4f"
               strokeDasharray="5 5"
-              label={{ value: t('dashboard:qualityChart.targetDefectRate'), position: "topRight" }}
+              label={{ value: t('dashboard:qualityChart.targetDefectRate'), position: "insideTopRight" }}
             />
             
             <Line

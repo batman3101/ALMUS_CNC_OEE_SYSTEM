@@ -15,7 +15,7 @@ import {
 import dayjs from 'dayjs';
 import { OEEGauge, IndependentOEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
 import { DefectRateTrendChart, QualityPerformanceChart, MachineComparisonChart } from '@/components/quality';
-import { OEEMetrics } from '@/types';
+import { OEEMetrics, DowntimeData } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useEngineerData } from '@/hooks/useEngineerData';
@@ -103,12 +103,18 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     // 실제 설비 데이터에서 위치 추출
     const locations = [...new Set(machines.map(m => m.location).filter(Boolean))];
     
-    // OEE 등급별 설비 분류 (실제 데이터 기반)
+    // OEE 등급별 설비 분류 (실제 데이터 기반 - useRealtimeData가 계산한 oeeMetrics 사용.
+    // machines 테이블에는 oee_efficiency 컬럼이 없으므로 machine_logs/production_records 기반
+    // 실시간 집계값(oeeMetrics)에서 설비별 OEE를 조회한다.)
+    const machineOeeValues = machines
+      .map(m => oeeMetrics[m.id]?.oee)
+      .filter((oee): oee is number => typeof oee === 'number');
+
     const oeeGrades = {
-      excellent: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'excellent').length,
-      good: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'good').length,
-      fair: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'fair').length,
-      poor: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'poor').length
+      excellent: machineOeeValues.filter(oee => getOEEGrade(oee) === 'excellent').length,
+      good: machineOeeValues.filter(oee => getOEEGrade(oee) === 'good').length,
+      fair: machineOeeValues.filter(oee => getOEEGrade(oee) === 'fair').length,
+      poor: machineOeeValues.filter(oee => getOEEGrade(oee) === 'poor').length
     };
     
     return {
@@ -133,7 +139,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         { value: 'poor', label: oeeGradeLabels.poor, count: oeeGrades.poor }
       ]
     };
-  }, [machines]);
+  }, [machines, oeeMetrics]);
 
   // 활성 필터 개수 계산
   const activeFilterCount = React.useMemo(() => {
@@ -510,7 +516,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           });
         }
         return acc;
-      }, [] as Array<{ state: string; duration: number; count: number; percentage: number }>);
+      }, [] as DowntimeData[]);
 
     const totalDowntime = downtimeAnalysis.reduce((sum, item) => sum + item.duration, 0);
     downtimeAnalysis.forEach(item => {

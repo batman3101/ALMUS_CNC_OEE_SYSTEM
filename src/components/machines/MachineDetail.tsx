@@ -55,8 +55,16 @@ interface DailyMetrics {
 }
 
 // 설비 상태별 설정
-const getStateConfig = (state: MachineState) => {
-  const configs = {
+interface StateConfigEntry {
+  color: string;
+  icon: React.ReactNode;
+  text: { ko: string; vi: string };
+  bgColor: string;
+  borderColor: string;
+}
+
+const getStateConfig = (state: MachineState): StateConfigEntry => {
+  const configs: Record<MachineState, StateConfigEntry> = {
     NORMAL_OPERATION: {
       color: 'success',
       icon: <PlayCircleOutlined />,
@@ -64,10 +72,24 @@ const getStateConfig = (state: MachineState) => {
       bgColor: '#f6ffed',
       borderColor: '#52c41a'
     },
-    MAINTENANCE: {
+    INSPECTION: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: { ko: '점검중', vi: 'Bảo trì' },
+      text: { ko: '점검중', vi: 'Đang kiểm tra' },
+      bgColor: '#fffbe6',
+      borderColor: '#faad14'
+    },
+    BREAKDOWN_REPAIR: {
+      color: 'error',
+      icon: <WarningOutlined />,
+      text: { ko: '고장수리중', vi: 'Đang sửa chữa hỏng hóc' },
+      bgColor: '#fff2f0',
+      borderColor: '#ff4d4f'
+    },
+    PM_MAINTENANCE: {
+      color: 'warning',
+      icon: <ToolOutlined />,
+      text: { ko: 'PM중', vi: 'Bảo trì định kỳ' },
       bgColor: '#fffbe6',
       borderColor: '#faad14'
     },
@@ -185,8 +207,8 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
     fetchDailyMetrics();
   }, [machine.id]);
 
-  const currentStateConfig = machine.current_state 
-    ? getStateConfig(machine.current_state, language)
+  const currentStateConfig = machine.current_state
+    ? getStateConfig(machine.current_state)
     : null;
 
   // 현재 상태 지속 시간 계산 (실제 데이터 기반)
@@ -229,10 +251,10 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
                 <EnvironmentOutlined />
                 <Text type="secondary">{machine.location}</Text>
                 <Divider type="vertical" />
-                <Text type="secondary">{machine.model_type}</Text>
+                <Text type="secondary">{machine.production_model?.model_name}</Text>
                 <Divider type="vertical" />
                 <Text type="secondary">
-                  Tact Time: {machine.default_tact_time}s
+                  Tact Time: {machine.current_process?.tact_time_seconds}s
                 </Text>
               </Space>
             </Space>
@@ -408,7 +430,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
             {dailyMetrics?.stateHistory ? (
               <Timeline
                 items={dailyMetrics.stateHistory.map((item) => {
-                  const config = getStateConfig(item.state, language);
+                  const config = getStateConfig(item.state);
                   const startTime = new Date(item.startTime);
                   const endTime = item.endTime ? new Date(item.endTime) : null;
                   

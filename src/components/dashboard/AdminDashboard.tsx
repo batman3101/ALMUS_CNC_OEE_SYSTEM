@@ -80,7 +80,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     type?: string;
   }> = [];
   const alertStats = { total: 0, unacknowledged: 0, critical: 0, high: 0, byType: {} };
-  const acknowledgeAlert = () => {};
+  // 알림 확인 처리는 NotificationContext가 담당한다 (여기서는 호출부 시그니처만 맞춘다)
+  const acknowledgeAlert = (id?: string | number) => { void id; };
   const clearAllAlerts = () => {};
   const requestNotificationPermission = () => Promise.resolve('granted');
 
@@ -98,7 +99,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       // 상태 설명 데이터가 없으면 기본 번역 사용
       const stateMap: Record<string, string> = {
         'NORMAL_OPERATION': t('status.normalOperation'),
-        'MAINTENANCE': t('status.maintenance'),
         'PM_MAINTENANCE': t('status.maintenance'),
         'INSPECTION': t('status.inspection'),
         'BREAKDOWN_REPAIR': t('status.breakdownRepair'),
@@ -389,7 +389,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         dashboardData: dashboardData ? 'exists' : 'null',
         machinesCount: dashboardData?.machines?.length || 0,
         productionRecordsCount: productionRecords.length,
-        aggregatedData: aggregatedData ? 'exists' : 'null',
+        aggregatedData: aggregatedData() ? 'exists' : 'null',
         recordsLoading,
         recordsError,
         selectedPreset: preset,
@@ -397,7 +397,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       });
       
       // 실제 설비 데이터 로깅
-      if (dashboardData?.machines?.length > 0) {
+      if (dashboardData && dashboardData.machines.length > 0) {
         console.log('실제 설비 데이터 상태별 카운트:', {
           total: dashboardData.machines.length,
           normal: dashboardData.machines.filter((m: Machine) => m.current_state === 'NORMAL_OPERATION').length,
@@ -451,8 +451,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           .map((machine: MachineWithOEE, index: number) => ({
             id: index + 1,
             machine: machine.name,
-            message: machine.oee < 0.6 ? 'OEE 60% 미만 지속' : 
-                     machine.current_state === 'MAINTENANCE' ? '점검 중' : 
+            message: machine.oee < 0.6 ? 'OEE 60% 미만 지속' :
+                     machine.current_state === 'INSPECTION' ? '점검 중' :
                      machine.current_state === 'TEMPORARY_STOP' ? '일시 정지' :
                      '설비 상태 확인 필요',
             severity: machine.oee < 0.5 ? 'error' as const : 'warning' as const,
@@ -480,7 +480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           },
           totalRecords: productionRecords.length,
           filteredCount: filteredRecords.length,
-          dateRange: filteredRecords.length > 0 ? {
+          filteredDateRange: filteredRecords.length > 0 ? {
             start: filteredRecords[0]?.date,
             end: filteredRecords[filteredRecords.length - 1]?.date
           } : 'No data',
@@ -562,14 +562,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             id: machineId,
             name: `CNC-${machineId.padStart(3, '0')}`,
             location: 'Production Floor',
-            model_type: 'CNC Machine',
-            default_tact_time: 120,
             is_active: true,
-            current_state: avgOEE > 0.7 ? 'NORMAL_OPERATION' as const : 'MAINTENANCE' as const,
+            current_state: avgOEE > 0.7 ? 'NORMAL_OPERATION' as const : 'INSPECTION' as const,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             oee: avgOEE,
-            status: getStatusText(avgOEE > 0.7 ? 'NORMAL_OPERATION' : 'MAINTENANCE')
+            status: getStatusText(avgOEE > 0.7 ? 'NORMAL_OPERATION' : 'INSPECTION')
           };
         });
 
@@ -1102,9 +1100,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               machineName: notification.machine_name,
               timestamp: notification.created_at,
               acknowledged: notification.acknowledged,
-              type: 'general' // 일반 알림 표시
+              type: 'general' as const // 일반 알림 표시
             })),
-            ...realtimeAlerts.map(alert => ({ ...alert, type: 'realtime' }))
+            ...realtimeAlerts.map(alert => ({ ...alert, type: 'realtime' as const }))
           ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
           // 필터링 적용
@@ -1172,7 +1170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                          alert.priority === 'high' ? t('alerts.high') : t('alerts.medium')}
                       </Tag>
                       {alert.type === 'general' && (
-                        <Tag color="green" size="small">{t('alerts.equipment')}</Tag>
+                        <Tag color="green">{t('alerts.equipment')}</Tag>
                       )}
                     </div>
                   }

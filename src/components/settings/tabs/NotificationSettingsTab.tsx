@@ -203,7 +203,6 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
               <Alert
                 message={t('settings.notification.browserHint')}
                 type="info"
-                size="small"
                 style={{ marginTop: '12px' }}
               />
             </Card>
@@ -250,7 +249,6 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
               <Alert
                 message={t('settings.notification.emailHint')}
                 type="info"
-                size="small"
               />
             </Card>
           </Col>
@@ -280,7 +278,6 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
               <Alert
                 message={t('settings.notification.soundHint')}
                 type="info"
-                size="small"
               />
             </Card>
           </Col>
@@ -307,7 +304,6 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
               <Alert
                 message={t('settings.notification.intervalHint')}
                 type="info"
-                size="small"
               />
             </Card>
           </Col>

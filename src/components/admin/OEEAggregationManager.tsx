@@ -25,6 +25,7 @@ import {
   HistoryOutlined
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
+import type { ColumnsType } from 'antd/es/table';
 import {
   OEEAggregationService,
   AggregationLogEntry,
@@ -192,7 +193,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
     );
   };
 
-  const columns = [
+  const columns: ColumnsType<AggregationLogEntry> = [
     {
       title: '대상 날짜',
       dataIndex: 'target_date',
@@ -219,7 +220,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
         { text: '완료', value: 'completed' },
         { text: '실패', value: 'failed' },
       ],
-      onFilter: (value: string | number | boolean, record: AggregationLogEntry) => record.status === value,
+      onFilter: (value: React.Key | boolean, record: AggregationLogEntry) => record.status === value,
     },
     {
       title: '처리 레코드',

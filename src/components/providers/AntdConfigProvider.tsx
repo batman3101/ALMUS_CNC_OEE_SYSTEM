@@ -1,7 +1,7 @@
 'use client';
 
 import React, { ReactNode, useMemo } from 'react';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, theme as antdTheme } from 'antd';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import 'dayjs/locale/vi';
@@ -38,14 +38,14 @@ export const AntdConfigProvider: React.FC<AntdConfigProviderProps> = ({ children
     
     return {
       token: {
-        colorPrimary: displaySettings.theme.primary,
-        colorSuccess: displaySettings.theme.success,
-        colorWarning: displaySettings.theme.warning,
-        colorError: displaySettings.theme.error,
+        colorPrimary: String(displaySettings.theme.primary),
+        colorSuccess: String(displaySettings.theme.success),
+        colorWarning: String(displaySettings.theme.warning),
+        colorError: String(displaySettings.theme.error),
         borderRadius: 6,
         wireframe: false,
       },
-      algorithm: displaySettings.mode === 'dark' ? 'darkAlgorithm' : 'defaultAlgorithm',
+      algorithm: displaySettings.mode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
       components: {
         DatePicker: {
           // 시스템 설정에 따른 기본 날짜 형식

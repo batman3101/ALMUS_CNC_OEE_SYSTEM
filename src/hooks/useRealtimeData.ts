@@ -244,12 +244,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
     // 설비 로그 실시간 구독 (최적화)
     const machineLogsChannel = supabase
-      .channel('machine_logs_changes', {
-        config: {
-          heartbeat_interval: 30000, // 30초마다 heartbeat
-          self_healing: true
-        }
-      })
+      .channel('machine_logs_changes')
       .on(
         'postgres_changes',
         {
@@ -258,7 +253,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           table: 'machine_logs'
         },
         (payload) => {
-          console.log('📊 Machine log 변경:', payload.eventType, payload.new?.log_id);
+          console.log('📊 Machine log 변경:', payload.eventType, (payload.new as Partial<MachineLog>).log_id);
 
           if (!isMountedRef.current) return;
 

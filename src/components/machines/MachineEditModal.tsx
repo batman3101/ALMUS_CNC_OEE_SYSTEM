@@ -18,7 +18,7 @@ import {
   SaveOutlined,
   CloseOutlined
 } from '@ant-design/icons';
-import { Machine } from '@/types';
+import { Machine, MachineProductModel, MachineProcessInfo, unwrapJoin } from '@/types';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 
@@ -75,10 +75,8 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
   const { message } = App.useApp();
   const [form] = Form.useForm<EditFormData>();
   const [loading, setLoading] = useState(false);
-  interface ProductModel { id: string; model_name: string; tact_time?: number; }
-  interface ProcessItem { id: string; process_name: string; tact_time?: number; }
-  const [productModels, setProductModels] = useState<ProductModel[]>([]);
-  const [processes, setProcesses] = useState<ProcessItem[]>([]);
+  const [productModels, setProductModels] = useState<MachineProductModel[]>([]);
+  const [processes, setProcesses] = useState<MachineProcessInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [processesLoading, setProcessesLoading] = useState(false);
 
@@ -131,8 +129,8 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
       // 약간의 딜레이 후 폼 값 설정
       setTimeout(() => {
         // 폼 초기값 설정 (생산 모델과 공정은 실제 데이터 기반으로)
-        const productionModelId = machine.production_model?.id || machine.product_models?.id || machine.production_model_id;
-        const currentProcessId = machine.current_process?.id || machine.model_processes?.id || machine.current_process_id;
+        const productionModelId = machine.production_model?.id || unwrapJoin(machine.product_models)?.id || machine.production_model_id;
+        const currentProcessId = machine.current_process?.id || unwrapJoin(machine.model_processes)?.id || machine.current_process_id;
         
         form.setFieldsValue({
           name: machine.name,

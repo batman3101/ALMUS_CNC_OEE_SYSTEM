@@ -7,6 +7,8 @@ import timezone from 'dayjs/plugin/timezone';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+import { unwrapJoin } from '@/types';
+
 export const dynamic = 'force-dynamic';
 
 // 영업시간 기준 기본값 (system_settings 조회 실패 시 사용, src/utils/shiftUtils.ts 정의와 동일)
@@ -274,7 +276,7 @@ export async function GET(request: NextRequest) {
       .map(log => ({
         log_id: log.log_id,
         machine_id: log.machine_id,
-        machine_name: log.machines?.name || 'Unknown',
+        machine_name: unwrapJoin(log.machines)?.name || 'Unknown',
         state: log.state,
         start_time: log.start_time,
         end_time: log.end_time,
@@ -287,7 +289,7 @@ export async function GET(request: NextRequest) {
     const manualEntryRows: UnifiedDowntimeRow[] = downtimeEntries.map(entry => ({
       log_id: entry.id,
       machine_id: entry.machine_id,
-      machine_name: entry.machines?.name || 'Unknown',
+      machine_name: unwrapJoin(entry.machines)?.name || 'Unknown',
       state: mapReasonToState(entry.reason),
       start_time: entry.start_time,
       end_time: entry.end_time,

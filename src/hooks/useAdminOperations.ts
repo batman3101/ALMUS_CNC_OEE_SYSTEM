@@ -110,7 +110,7 @@ export const useAdminOperations = () => {
     }
   };
 
-  const fetchMachines = async () => {
+  const fetchMachines = async (): Promise<Machine[]> => {
     setLoading(true);
     try {
       const response = await fetch('/api/admin/machines');
@@ -118,7 +118,7 @@ export const useAdminOperations = () => {
         throw new Error('Failed to fetch machines');
       }
       const data = await response.json();
-      return data.machines;
+      return (data.machines || []) as Machine[];
     } catch (error) {
       console.error('Error fetching machines:', error);
       throw error;

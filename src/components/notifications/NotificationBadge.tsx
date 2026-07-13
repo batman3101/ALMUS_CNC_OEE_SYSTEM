@@ -46,7 +46,7 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
         type="text"
         icon={<BellOutlined />}
         onClick={onClick}
-        size={size}
+        size={size === 'default' ? 'middle' : size}
         style={{
           color: count > 0 ? getBadgeColor(severity) : undefined
         }}

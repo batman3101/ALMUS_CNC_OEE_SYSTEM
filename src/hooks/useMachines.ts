@@ -2,43 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-
-export interface Machine {
-  id: string;
-  name: string;
-  location: string;
-  equipment_type: string;
-  is_active: boolean;
-  current_state: string;
-  production_model_id: string | null;
-  current_process_id: string | null;
-  created_at?: string;
-  updated_at?: string;
-  // 조인된 데이터
-  production_model?: {
-    id: string;
-    model_name: string;
-    description: string;
-  } | null;
-  current_process?: {
-    id: string;
-    process_name: string;
-    process_order: number;
-    tact_time_seconds: number;
-  } | null;
-  // Supabase join 결과 처리
-  product_models?: {
-    id: string;
-    model_name: string;
-    description: string;
-  } | null;
-  model_processes?: {
-    id: string;
-    process_name: string;
-    process_order: number;
-    tact_time_seconds: number;
-  } | null;
-}
+import { Machine, unwrapJoin } from '@/types';
 
 export interface UseMachinesOptions {
   enableAutoRefresh?: boolean;
@@ -96,11 +60,11 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
 
       console.log(`Successfully loaded ${result.count} machines ${isBackgroundRefresh ? '(background)' : ''}`);
       
-      // Supabase join 결과를 표준 형태로 변환
-      const processedMachines = (result.machines || []).map((machine: Machine & { product_models?: unknown; model_processes?: unknown }) => ({
+      // Supabase join 결과(객체 또는 배열)를 표준 형태로 변환
+      const processedMachines = (result.machines || []).map((machine: Machine) => ({
         ...machine,
-        production_model: machine.product_models,
-        current_process: machine.model_processes
+        production_model: unwrapJoin(machine.product_models) ?? null,
+        current_process: unwrapJoin(machine.model_processes) ?? null
       }));
       
       // 컴포넌트가 마운트된 경우에만 상태 업데이트

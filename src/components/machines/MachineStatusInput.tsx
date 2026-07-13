@@ -264,7 +264,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
             <Space>
               <Text type="secondary">{machine?.location || t('statusChange.noLocationInfo')}</Text>
               <Divider type="vertical" />
-              <Text type="secondary">{machine?.model_type || t('statusChange.noModelInfo')}</Text>
+              <Text type="secondary">{machine?.production_model?.model_name || t('statusChange.noModelInfo')}</Text>
             </Space>
           </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, type ThemeConfig } from 'antd';
 import { useThemeSettings } from '@/hooks/useThemeSettings';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 
@@ -113,7 +113,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   }, []);
 
   return (
-    <ConfigProvider theme={customTheme}>
+    <ConfigProvider theme={customTheme as ThemeConfig}>
       <div 
         className={`theme-provider-wrapper ${isTransitioning ? 'theme-transitioning' : ''}`}
         style={{

@@ -110,8 +110,8 @@ const UserForm: React.FC<UserFormProps> = ({
     }
   };
 
-  const handleTransferChange = (newTargetKeys: string[]) => {
-    setTargetKeys(newTargetKeys);
+  const handleTransferChange = (newTargetKeys: React.Key[]) => {
+    setTargetKeys(newTargetKeys.map(String));
   };
 
   const roleOptions = [

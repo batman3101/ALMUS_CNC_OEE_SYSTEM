@@ -13,9 +13,11 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
+  ChartData,
 } from 'chart.js';
 import { Card, Typography, Table, Row, Col } from 'antd';
-import { MachineState } from '@/types';
+import type { ColumnsType } from 'antd/es/table';
+import { MachineState, DowntimeData } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
 
 ChartJS.register(
@@ -31,13 +33,6 @@ ChartJS.register(
 
 const { Title: AntTitle } = Typography;
 
-interface DowntimeData {
-  state: MachineState;
-  duration: number; // 분 단위
-  count: number; // 발생 횟수
-  percentage: number; // 전체 다운타임 대비 비율
-}
-
 interface DowntimeChartProps {
   data: DowntimeData[];
   title?: string;
@@ -48,7 +43,6 @@ interface DowntimeChartProps {
 // 설비 상태별 색상 매핑
 const stateColors: Record<MachineState, string> = {
   NORMAL_OPERATION: '#13c2c2',
-  MAINTENANCE: '#1890ff',
   PM_MAINTENANCE: '#fa8c16',
   INSPECTION: '#1890ff',
   BREAKDOWN_REPAIR: '#ff4d4f',
@@ -195,7 +189,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   };
 
   // 테이블 컬럼 정의
-  const tableColumns = [
+  const tableColumns: ColumnsType<DowntimeData & { key: number }> = [
     {
       title: t('dashboard:chart.rank'),
       dataIndex: 'rank',
@@ -253,7 +247,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
 
       {/* 파레토 차트 */}
       <div style={{ height, marginBottom: showTable ? 24 : 0 }}>
-        <Bar data={barChartData} options={options} />
+        <Bar data={barChartData as ChartData<'bar', number[], string>} options={options} />
       </div>
 
       {/* 요약 통계 */}
@@ -306,7 +300,6 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
             dataSource={sortedData.map((item, index) => ({ ...item, key: index }))}
             pagination={false}
             size="small"
-            variant="outlined"
           />
         </div>
       )}

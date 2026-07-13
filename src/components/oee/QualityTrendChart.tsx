@@ -10,7 +10,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipProps,
+  TooltipContentProps,
 } from 'recharts';
 import { Card, Typography, Empty, Spin } from 'antd';
 // import { useDashboardTranslation } from '@/hooks/useTranslation';
@@ -33,7 +33,7 @@ interface QualityTrendChartProps {
 }
 
 // 커스텀 툴팁 컴포넌트
-const CustomTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload, label }) => {
+const CustomTooltip: React.FC<TooltipContentProps<number, string>> = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload as QualityTrendData;
     return (
@@ -183,7 +183,7 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
                 fontSize={12}
                 domain={[0, 'dataMax + 1']}
               />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={CustomTooltip} />
               <Legend
                 wrapperStyle={{
                   paddingTop: '20px',

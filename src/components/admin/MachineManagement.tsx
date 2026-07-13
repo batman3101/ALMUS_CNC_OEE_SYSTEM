@@ -104,10 +104,14 @@ const MachineManagement: React.FC = () => {
 
   const filteredMachines = machines.filter(machine => {
     // 텍스트 검색 필터
+    // machine.production_model_name / current_process_name: /api/admin/machines가
+    // product_models/model_processes 조인을 flat 필드로 변환해 내려준다 (nested production_model/current_process 아님)
+    const modelName = machine.production_model_name;
+    const processName = machine.current_process_name;
     const matchesSearch = machine.name.toLowerCase().includes(searchText.toLowerCase()) ||
       machine.location.toLowerCase().includes(searchText.toLowerCase()) ||
-      (machine.model_type && machine.model_type.toLowerCase().includes(searchText.toLowerCase())) ||
-      (machine.processing_step && machine.processing_step.toLowerCase().includes(searchText.toLowerCase()));
+      (!!modelName && modelName.toLowerCase().includes(searchText.toLowerCase())) ||
+      (!!processName && processName.toLowerCase().includes(searchText.toLowerCase()));
     
     // 상태 필터
     const matchesStatus = statusFilter === 'all' || 
@@ -174,8 +178,8 @@ const MachineManagement: React.FC = () => {
       title: t('table.columns.createdDate'),
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (date) => new Date(date).toLocaleDateString(),
-      sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      render: (date) => date ? new Date(date).toLocaleDateString() : '-',
+      sorter: (a, b) => (a.created_at ? new Date(a.created_at).getTime() : 0) - (b.created_at ? new Date(b.created_at).getTime() : 0),
     },
     {
       title: t('table.columns.actions'),

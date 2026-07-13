@@ -31,7 +31,7 @@ ChartJS.register(
 const { Title: AntTitle } = Typography;
 const { RangePicker } = DatePicker;
 
-interface OEETrendData {
+export interface OEETrendData {
   date: string;
   availability: number;
   performance: number;

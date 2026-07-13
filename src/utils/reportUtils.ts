@@ -93,7 +93,7 @@ export class ReportUtils {
   static getStateColor(state: string): string {
     const colors: Record<string, string> = {
       'NORMAL_OPERATION': '#52c41a',
-      'MAINTENANCE': '#faad14',
+      'INSPECTION': '#faad14',
       'MODEL_CHANGE': '#1890ff',
       'PLANNED_STOP': '#722ed1',
       'PROGRAM_CHANGE': '#13c2c2',

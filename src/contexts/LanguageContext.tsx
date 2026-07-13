@@ -38,7 +38,7 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     const initializeLanguage = async () => {
       try {
         // 1. 먼저 SystemSettings에서 언어 설정 확인
-        const systemLanguage = getSetting<string>('general', 'language');
+        const systemLanguage = getSetting('general', 'language');
         let targetLanguage: 'ko' | 'vi' = 'ko';
 
         if (systemLanguage) {
@@ -51,10 +51,10 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
             targetLanguage = localLanguage;
             console.log('언어 설정을 localStorage에서 로드:', targetLanguage);
 
-            // SystemSettings에 저장
+            // SystemSettings에 저장 (DB 의 canonical key 는 default_language)
             await updateSetting({
               category: 'general',
-              setting_key: 'language',
+              setting_key: 'default_language',
               setting_value: targetLanguage
             });
           }
@@ -84,7 +84,7 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
   useEffect(() => {
     if (!isInitialized || systemSettingsLoading) return;
 
-    const systemLanguage = getSetting<string>('general', 'language');
+    const systemLanguage = getSetting('general', 'language');
     if (systemLanguage && systemLanguage !== language) {
       const newLanguage = systemLanguage as 'ko' | 'vi';
       console.log('SystemSettings에서 언어 변경 감지:', newLanguage);
@@ -109,10 +109,10 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
       // 3. localStorage 업데이트
       setStoredLanguage(lang);
       
-      // 4. SystemSettings 업데이트
+      // 4. SystemSettings 업데이트 (DB 의 canonical key 는 default_language)
       const success = await updateSetting({
         category: 'general',
-        setting_key: 'language',
+        setting_key: 'default_language',
         setting_value: lang
       });
 

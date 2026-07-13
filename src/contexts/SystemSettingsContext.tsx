@@ -6,7 +6,11 @@ import { supabase } from '@/lib/supabase';
 import type {
   AllSystemSettings,
   SettingUpdate,
-  SettingCategory
+  SettingCategory,
+  SettingKey,
+  SettingValueOf,
+  GetSetting,
+  GetSettingsByCategory
 } from '@/types/systemSettings';
 
 interface SystemSettingsContextType {
@@ -15,8 +19,8 @@ interface SystemSettingsContextType {
   error: string | null;
   
   // 설정 조회
-  getSetting: <T = unknown>(category: SettingCategory, key: string) => T | null;
-  getSettingsByCategory: (category: SettingCategory) => Record<string, unknown>;
+  getSetting: GetSetting;
+  getSettingsByCategory: GetSettingsByCategory;
   
   // 설정 업데이트
   updateSetting: (update: SettingUpdate) => Promise<boolean>;
@@ -76,18 +80,21 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
   /**
    * 특정 설정값 조회
    */
-  const getSetting = useCallback(<T = unknown>(category: SettingCategory, key: string): T | null => {
-    const categorySettings = settings[category];
+  const getSetting = useCallback(<C extends SettingCategory, K extends SettingKey<C>>(
+    category: C,
+    key: K
+  ): SettingValueOf<C, K> | null => {
+    const categorySettings = settings[category] as AllSystemSettings[C] | undefined;
     if (!categorySettings) return null;
 
-    return (categorySettings[key] as T) ?? null;
+    return (categorySettings[key] as SettingValueOf<C, K>) ?? null;
   }, [settings]);
 
   /**
    * 카테고리별 설정 조회
    */
-  const getSettingsByCategory = useCallback((category: SettingCategory): Record<string, unknown> => {
-    return settings[category] || {};
+  const getSettingsByCategory = useCallback(<C extends SettingCategory>(category: C): Partial<AllSystemSettings[C]> => {
+    return settings[category] ?? {};
   }, [settings]);
 
   /**
@@ -99,13 +106,14 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
       
       if (result.success) {
         // 로컬 상태 업데이트
-        setSettings(prev => ({
-          ...prev,
-          [update.category]: {
-            ...prev[update.category],
-            [update.setting_key]: update.setting_value
-          }
-        }));
+        setSettings(prev => {
+          const categorySettings: Record<string, unknown> = { ...prev[update.category] };
+          categorySettings[update.setting_key] = update.setting_value;
+          return {
+            ...prev,
+            [update.category]: categorySettings
+          } as Partial<AllSystemSettings>;
+        });
         setLastUpdated(new Date());
         return true;
       } else {
@@ -129,14 +137,14 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
       if (result.success) {
         // 로컬 상태 업데이트
         setSettings(prev => {
-          const newSettings = { ...prev };
+          const newSettings = { ...prev } as Record<string, Record<string, unknown>>;
           updates.forEach(update => {
             if (!newSettings[update.category]) {
               newSettings[update.category] = {};
             }
             newSettings[update.category][update.setting_key] = update.setting_value;
           });
-          return newSettings;
+          return newSettings as Partial<AllSystemSettings>;
         });
         setLastUpdated(new Date());
         return true;
@@ -207,16 +215,21 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
     const channel = supabase
       .channel('system_settings_changes')
       .on('broadcast', { event: 'setting_changed' }, (payload) => {
-        const { category, key, value } = payload.payload;
-        
+        const { category, key, value } = payload.payload as {
+          category: SettingCategory;
+          key: string;
+          value: unknown;
+        };
+
         // 로컬 상태 업데이트
-        setSettings(prev => ({
-          ...prev,
-          [category]: {
-            ...prev[category],
-            [key]: value
-          }
-        }));
+        setSettings(prev => {
+          const categorySettings: Record<string, unknown> = { ...prev[category] };
+          categorySettings[key] = value;
+          return {
+            ...prev,
+            [category]: categorySettings
+          } as Partial<AllSystemSettings>;
+        });
         setLastUpdated(new Date());
       })
       .subscribe();

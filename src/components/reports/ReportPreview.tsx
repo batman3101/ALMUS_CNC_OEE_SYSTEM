@@ -27,25 +27,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   reportData,
   onGenerate
 }) => {
-  const [previewData, setPreviewData] = useState<{
-    summary: {
-      period: string;
-      totalMachines: number;
-      avgOEE: number;
-      avgAvailability: number;
-      avgPerformance: number;
-      avgQuality: number;
-    };
-    machines: Array<{
-      id: string;
-      name: string;
-      location?: string;
-      avgOEE?: number;
-      availability?: number;
-      performance?: number;
-      quality?: number;
-    }>;
-  } | null>(null);
+  const [previewData, setPreviewData] = useState<ReturnType<typeof ReportTemplates.generatePreviewData> | null>(null);
 
   useEffect(() => {
     const preview = ReportTemplates.generatePreviewData(reportData);
@@ -90,7 +72,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
       <Row gutter={[16, 16]}>
         {/* 보고서 기본 정보 */}
         <Col span={24}>
-          <Descriptions title="보고서 정보" variant="outlined" size="small">
+          <Descriptions title="보고서 정보" size="small">
             <Descriptions.Item label="보고서 유형">
               <Tag color="blue">{reportTypeLabels[reportData.reportType]}</Tag>
             </Descriptions.Item>

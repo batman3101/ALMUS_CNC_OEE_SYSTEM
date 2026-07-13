@@ -1,12 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    // Allow production builds to complete even if there are ESLint errors
-    ignoreDuringBuilds: true,
+    // 빌드 시 ESLint 검사 수행 (에러가 있으면 빌드 실패)
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    // Allow production builds to complete even if there are TypeScript errors
-    ignoreBuildErrors: true,
+    // 빌드 시 타입 검사 수행 (에러가 있으면 빌드 실패).
+    // 이 스위치가 켜져 있던 동안 존재하지 않는 컬럼을 읽는 버그
+    // (good_qty, machines.default_tact_time 등)가 프로덕션까지 도달했다.
+    ignoreBuildErrors: false,
   },
   // React compiler and optimizations
   compiler: {
