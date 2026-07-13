@@ -38,11 +38,11 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     const initializeLanguage = async () => {
       try {
         // 1. 먼저 SystemSettings에서 언어 설정 확인
-        const systemLanguage = getSetting<{value: string}>('ui', 'language');
+        const systemLanguage = getSetting<string>('general', 'language');
         let targetLanguage: 'ko' | 'vi' = 'ko';
 
-        if (systemLanguage?.value) {
-          targetLanguage = systemLanguage.value as 'ko' | 'vi';
+        if (systemLanguage) {
+          targetLanguage = systemLanguage as 'ko' | 'vi';
           console.log('언어 설정을 SystemSettings에서 로드:', targetLanguage);
         } else {
           // 2. SystemSettings에 없다면 localStorage에서 확인
@@ -50,12 +50,12 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
           if (localLanguage) {
             targetLanguage = localLanguage;
             console.log('언어 설정을 localStorage에서 로드:', targetLanguage);
-            
+
             // SystemSettings에 저장
             await updateSetting({
-              category: 'ui',
+              category: 'general',
               setting_key: 'language',
-              setting_value: { value: targetLanguage }
+              setting_value: targetLanguage
             });
           }
         }
@@ -84,15 +84,15 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
   useEffect(() => {
     if (!isInitialized || systemSettingsLoading) return;
 
-    const systemLanguage = getSetting<{value: string}>('ui', 'language');
-    if (systemLanguage?.value && systemLanguage.value !== language) {
-      const newLanguage = systemLanguage.value as 'ko' | 'vi';
+    const systemLanguage = getSetting<string>('general', 'language');
+    if (systemLanguage && systemLanguage !== language) {
+      const newLanguage = systemLanguage as 'ko' | 'vi';
       console.log('SystemSettings에서 언어 변경 감지:', newLanguage);
       setLanguage(newLanguage);
       i18n.changeLanguage(newLanguage);
       setStoredLanguage(newLanguage);
     }
-  }, [getSetting('ui', 'language'), language, isInitialized, systemSettingsLoading, i18n]);
+  }, [getSetting('general', 'language'), language, isInitialized, systemSettingsLoading, i18n]);
 
   const changeLanguage = useCallback(async (lang: 'ko' | 'vi') => {
     if (language === lang) return;
@@ -111,9 +111,9 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
       
       // 4. SystemSettings 업데이트
       const success = await updateSetting({
-        category: 'ui',
+        category: 'general',
         setting_key: 'language',
-        setting_value: { value: lang }
+        setting_value: lang
       });
 
       if (success) {

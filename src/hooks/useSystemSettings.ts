@@ -37,31 +37,31 @@ export function useSystemSettings() {
      * 회사 정보 조회
      */
     getCompanyInfo: () => ({
-      name: context.getSetting('general', 'company_name') || 'ALMUS TECH',
-      logo: context.getSetting('general', 'company_logo_url') || '',
-      timezone: context.getSetting('general', 'timezone') || 'Asia/Ho_Chi_Minh',
-      language: context.getSetting('general', 'language') || 'vi',
-      dateFormat: context.getSetting('general', 'date_format') || 'DD/MM/YYYY',
-      timeFormat: context.getSetting('general', 'time_format') || 'HH:mm:ss'
+      name: context.getSetting('general', 'company_name') ?? 'ALMUS TECH',
+      logo: context.getSetting('general', 'company_logo_url') ?? '',
+      timezone: context.getSetting('general', 'timezone') ?? 'Asia/Ho_Chi_Minh',
+      language: context.getSetting('general', 'language') ?? 'vi',
+      dateFormat: context.getSetting('general', 'date_format') ?? 'DD/MM/YYYY',
+      timeFormat: context.getSetting('general', 'time_format') ?? 'HH:mm:ss'
     }),
 
     /**
      * OEE 목표값 조회
      */
     getOEETargets: () => ({
-      oee: context.getSetting('oee', 'target_oee') || 0.85,
-      availability: context.getSetting('oee', 'target_availability') || 0.90,
-      performance: context.getSetting('oee', 'target_performance') || 0.95,
-      quality: context.getSetting('oee', 'target_quality') || 0.99
+      oee: context.getSetting('oee', 'target_oee') ?? 0.85,
+      availability: context.getSetting('oee', 'target_availability') ?? 0.90,
+      performance: context.getSetting('oee', 'target_performance') ?? 0.95,
+      quality: context.getSetting('oee', 'target_quality') ?? 0.99
     }),
 
     /**
      * OEE 임계값 조회
      */
     getOEEThresholds: () => ({
-      low: context.getSetting('oee', 'low_oee_threshold') || 0.60,
-      critical: context.getSetting('oee', 'critical_oee_threshold') || 0.40,
-      downtimeAlert: context.getSetting('oee', 'downtime_alert_minutes') || 30
+      low: context.getSetting('oee', 'low_oee_threshold') ?? 0.60,
+      critical: context.getSetting('oee', 'critical_oee_threshold') ?? 0.40,
+      downtimeAlert: context.getSetting('oee', 'downtime_alert_minutes') ?? 30
     }),
 
     /**
@@ -69,44 +69,44 @@ export function useSystemSettings() {
      */
     getShiftTimes: () => ({
       shiftA: {
-        start: context.getSetting('shift', 'shift_a_start') || '08:00',
-        end: context.getSetting('shift', 'shift_a_end') || '20:00'
+        start: context.getSetting('shift', 'shift_a_start') ?? '08:00',
+        end: context.getSetting('shift', 'shift_a_end') ?? '20:00'
       },
       shiftB: {
-        start: context.getSetting('shift', 'shift_b_start') || '20:00',
-        end: context.getSetting('shift', 'shift_b_end') || '08:00'
+        start: context.getSetting('shift', 'shift_b_start') ?? '20:00',
+        end: context.getSetting('shift', 'shift_b_end') ?? '08:00'
       },
-      breakTime: context.getSetting('shift', 'break_time_minutes') || 60,
-      bufferTime: context.getSetting('shift', 'shift_change_buffer_minutes') || 15
+      breakTime: context.getSetting('shift', 'break_time_minutes') ?? 60,
+      bufferTime: context.getSetting('shift', 'shift_change_buffer_minutes') ?? 15
     }),
 
     /**
      * 알림 설정 조회
      */
     getNotificationSettings: () => ({
-      email: context.getSetting('notification', 'email_notifications_enabled') || false,
-      browser: context.getSetting('notification', 'browser_notifications_enabled') || false,
-      sound: context.getSetting('notification', 'sound_notifications_enabled') || false,
-      checkInterval: context.getSetting('notification', 'alert_check_interval_seconds') || 60,
-      emailAddress: context.getSetting('notification', 'notification_email') || ''
+      email: context.getSetting('notification', 'email_notifications_enabled') ?? false,
+      browser: context.getSetting('notification', 'browser_notifications_enabled') ?? false,
+      sound: context.getSetting('notification', 'sound_notifications_enabled') ?? false,
+      checkInterval: context.getSetting('notification', 'alert_check_interval_seconds') ?? 60,
+      emailAddress: context.getSetting('notification', 'notification_email') ?? ''
     }),
 
     /**
      * 화면 설정 조회
      */
     getDisplaySettings: () => ({
-      mode: context.getSetting('display', 'theme_mode') || 'light',
+      mode: context.getSetting('display', 'theme_mode') ?? 'light',
       theme: {
-        primary: context.getSetting('display', 'theme_primary_color') || '#1890ff',
-        success: context.getSetting('display', 'theme_success_color') || '#52c41a',
-        warning: context.getSetting('display', 'theme_warning_color') || '#faad14',
-        error: context.getSetting('display', 'theme_error_color') || '#ff4d4f'
+        primary: context.getSetting('display', 'theme_primary_color') ?? '#1890ff',
+        success: context.getSetting('display', 'theme_success_color') ?? '#52c41a',
+        warning: context.getSetting('display', 'theme_warning_color') ?? '#faad14',
+        error: context.getSetting('display', 'theme_error_color') ?? '#ff4d4f'
       },
-      refreshInterval: context.getSetting('display', 'dashboard_refresh_interval_seconds') || 30,
-      chartAnimation: context.getSetting('display', 'chart_animation_enabled') || true,
-      compactMode: context.getSetting('display', 'compact_mode') || false,
-      showMachineImages: context.getSetting('display', 'show_machine_images') || true,
-      sidebarCollapsed: context.getSetting('display', 'sidebar_collapsed') || false
+      refreshInterval: context.getSetting('display', 'dashboard_refresh_interval_seconds') ?? 30,
+      chartAnimation: context.getSetting('display', 'chart_animation_enabled') ?? true,
+      compactMode: context.getSetting('display', 'compact_mode') ?? false,
+      showMachineImages: context.getSetting('display', 'show_machine_images') ?? true,
+      sidebarCollapsed: context.getSetting('display', 'sidebar_collapsed') ?? false
     }),
 
     /**
@@ -220,7 +220,7 @@ export function useSystemSettings() {
      * 언어별 포맷팅
      */
     formatNumber: (value: number, type: 'percentage' | 'decimal' | 'integer' = 'decimal') => {
-      const language = context.getSetting('general', 'language') || 'ko';
+      const language = context.getSetting('general', 'language') ?? 'ko';
       const locale = language === 'ko' ? 'ko-KR' : 'vi-VN';
       
       switch (type) {

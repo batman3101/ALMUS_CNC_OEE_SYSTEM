@@ -80,7 +80,7 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
     const categorySettings = settings[category];
     if (!categorySettings) return null;
 
-    return categorySettings[key] as T || null;
+    return (categorySettings[key] as T) ?? null;
   }, [settings]);
 
   /**

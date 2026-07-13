@@ -458,12 +458,39 @@ export class SystemSettingsService {
 
   /**
    * 기본 설정값으로 초기화
+   * (감사 추적이 남는 update_system_setting RPC를 통해 기본값을 다시 기록한다)
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async resetToDefaults(_category?: SettingCategory): Promise<SettingUpdateResponse> {
+  async resetToDefaults(category?: SettingCategory): Promise<SettingUpdateResponse> {
     try {
-      // 간단한 구현
-      return { success: true, message: 'Reset functionality not implemented yet' };
+      const definitions = this.getDefaultSettings().filter(
+        def => !category || def.category === category
+      );
+
+      if (definitions.length === 0) {
+        return {
+          success: false,
+          error: `No default settings found${category ? ` for category ${category}` : ''}`
+        };
+      }
+
+      const results = await Promise.all(
+        definitions.map(def => this.updateSetting({
+          category: def.category,
+          setting_key: def.key,
+          setting_value: def.default_value,
+          change_reason: 'Reset to default value'
+        }))
+      );
+
+      const failedResets = results.filter(result => !result.success);
+      if (failedResets.length > 0) {
+        return {
+          success: false,
+          error: `Failed to reset ${failedResets.length} of ${definitions.length} settings to defaults`
+        };
+      }
+
+      return { success: true, message: 'Settings reset to defaults successfully' };
     } catch (error) {
       console.error('Error in resetToDefaults:', error);
       return { success: false, error: 'Failed to reset settings to defaults' };

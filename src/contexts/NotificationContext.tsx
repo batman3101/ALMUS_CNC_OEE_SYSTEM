@@ -272,10 +272,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       // 현재 알림에서 machine_id와 state 추출
       const notification = state.notifications.find(n => n.id === id);
       if (notification) {
-        // ID가 "machineId_state" 형식으로 되어 있음
-        const [machineId, machineState] = id.split('_');
-        if (machineId && machineState) {
-          saveAcknowledgedNotification(machineId, machineState);
+        // ID가 "machineId_state" 형식으로 되어 있음 (state 자체에 '_'가 포함될 수 있으므로 첫 '_'만 기준으로 분리)
+        const separatorIndex = id.indexOf('_');
+        if (separatorIndex > 0) {
+          const machineId = id.slice(0, separatorIndex);
+          const machineState = id.slice(separatorIndex + 1);
+          if (machineId && machineState) {
+            saveAcknowledgedNotification(machineId, machineState);
+          }
         }
       }
 
@@ -355,9 +359,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
       // 현재 모든 활성 알림을 확인됨으로 표시하고 로컬스토리지에 저장
       state.notifications.forEach(notification => {
-        const [machineId, machineState] = notification.id.split('_');
-        if (machineId && machineState) {
-          saveAcknowledgedNotification(machineId, machineState);
+        // state 자체에 '_'가 포함될 수 있으므로 첫 '_'만 기준으로 분리
+        const separatorIndex = notification.id.indexOf('_');
+        if (separatorIndex > 0) {
+          const machineId = notification.id.slice(0, separatorIndex);
+          const machineState = notification.id.slice(separatorIndex + 1);
+          if (machineId && machineState) {
+            saveAcknowledgedNotification(machineId, machineState);
+          }
         }
       });
 
