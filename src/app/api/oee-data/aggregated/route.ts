@@ -3,6 +3,69 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * analytics_oee_daily RPC 가 돌려주는 "일 단위" 사전집계 행.
+ *
+ * 이전에는 이 라우트가 production_records 를 `.select('*')` 로 전부 가져와
+ * (30일 전체 설비 기준 약 37,000행 / 13MB) Node 의 Map 으로 그룹핑했다.
+ * 이제 DB 가 일 단위까지 집계해 주고, 라우트는 그 결과를 기간(주/월/년)으로
+ * 롤업하기만 한다. 기간 키 산출과 라벨 생성이 로컬 타임존에 의존하는
+ * Date 연산이라 그 부분은 의도적으로 Node 에 남겨 동작을 그대로 보존한다.
+ */
+interface DailyAggregateRow {
+  date: string;
+  records_count: number;
+  sum_availability: number;
+  sum_performance: number;
+  sum_quality: number;
+  sum_oee: number;
+  total_output: number;
+  total_defects: number;
+  total_runtime: number;
+  planned_runtime: number;
+}
+
+/** 기간(일/주/월/년) 단위로 누적한 합계 */
+interface PeriodBucket {
+  records_count: number;
+  sum_availability: number;
+  sum_performance: number;
+  sum_quality: number;
+  sum_oee: number;
+  total_output: number;
+  total_defects: number;
+  total_runtime: number;
+  planned_runtime: number;
+}
+
+interface AggregatedPeriod {
+  period: string;
+  label: string;
+  machine_id: string;
+  availability: number;
+  performance: number;
+  quality: number;
+  oee: number;
+  total_output: number;
+  total_defects: number;
+  total_runtime: number;
+  planned_runtime: number;
+}
+
+type TrendKey = 'oee' | 'availability' | 'performance' | 'quality';
+
+const emptyBucket = (): PeriodBucket => ({
+  records_count: 0,
+  sum_availability: 0,
+  sum_performance: 0,
+  sum_quality: 0,
+  sum_oee: 0,
+  total_output: 0,
+  total_defects: 0,
+  total_runtime: 0,
+  planned_runtime: 0,
+});
+
 // GET /api/oee-data/aggregated - 집계된 OEE 데이터 조회
 export async function GET(request: NextRequest) {
   try {
@@ -14,19 +77,10 @@ export async function GET(request: NextRequest) {
 
     // 실제 production_records에서 집계 데이터 조회
     const generateRealAggregatedData = async (period: string, machineId: string | null) => {
-      let query = supabaseAdmin
-        .from('production_records')
-        .select('*');
-
-      // 설비 필터
-      if (machineId) {
-        query = query.eq('machine_id', machineId);
-      }
-
-      // 날짜 필터 설정
+      // 날짜 필터 설정 (start_date/end_date 파라미터는 기존과 동일하게 메타데이터에만 반영된다)
       const now = new Date();
       const startDate = new Date();
-      
+
       switch (period) {
         case 'daily':
           startDate.setDate(now.getDate() - 30);
@@ -42,25 +96,29 @@ export async function GET(request: NextRequest) {
           break;
       }
 
-      query = query.gte('date', startDate.toISOString().split('T')[0]);
-      
-      const { data: records, error } = await query;
-      
+      // 집계는 DB에서 수행한다.
+      const { data, error } = await supabaseAdmin.rpc('analytics_oee_daily', {
+        p_start_date: startDate.toISOString().split('T')[0],
+        p_machine_id: machineId,
+      });
+
       if (error) {
         console.error('Error fetching production records for aggregation:', error);
         return [];
       }
 
-      // 기간별로 데이터 그룹핑 및 집계
-      const groupedData = new Map();
-      
-      (records || []).forEach(record => {
+      const dailyRows = (data ?? []) as DailyAggregateRow[];
+
+      // 일 단위 집계를 기간별로 그룹핑
+      const groupedData = new Map<string, PeriodBucket>();
+
+      dailyRows.forEach(row => {
         let periodKey: string;
-        const recordDate = new Date(record.date);
-        
+        const recordDate = new Date(row.date);
+
         switch (period) {
           case 'daily':
-            periodKey = record.date;
+            periodKey = row.date;
             break;
           case 'weekly':
             const weekStart = new Date(recordDate);
@@ -74,32 +132,30 @@ export async function GET(request: NextRequest) {
             periodKey = recordDate.getFullYear().toString();
             break;
           default:
-            periodKey = record.date;
+            periodKey = row.date;
         }
 
-        if (!groupedData.has(periodKey)) {
-          groupedData.set(periodKey, []);
-        }
-        groupedData.get(periodKey).push(record);
+        const bucket = groupedData.get(periodKey) ?? emptyBucket();
+        bucket.records_count += row.records_count;
+        bucket.sum_availability += row.sum_availability;
+        bucket.sum_performance += row.sum_performance;
+        bucket.sum_quality += row.sum_quality;
+        bucket.sum_oee += row.sum_oee;
+        bucket.total_output += row.total_output;
+        bucket.total_defects += row.total_defects;
+        bucket.total_runtime += row.total_runtime;
+        bucket.planned_runtime += row.planned_runtime;
+        groupedData.set(periodKey, bucket);
       });
 
       // 집계 계산
-      const aggregatedResults = Array.from(groupedData.entries()).map(([periodKey, records]) => {
-        const totalRecords = records.length;
-        
-        if (totalRecords === 0) {
-          return null;
-        }
+      const aggregatedResults: AggregatedPeriod[] = Array.from(groupedData.entries()).map(([periodKey, bucket]) => {
+        const totalRecords = bucket.records_count;
 
-        const avgAvailability = records.reduce((sum: number, r: Record<string, unknown>) => sum + parseFloat(String(r.availability || 0)), 0) / totalRecords;
-        const avgPerformance = records.reduce((sum: number, r: Record<string, unknown>) => sum + parseFloat(String(r.performance || 0)), 0) / totalRecords;
-        const avgQuality = records.reduce((sum: number, r: Record<string, unknown>) => sum + parseFloat(String(r.quality || 0)), 0) / totalRecords;
-        const avgOEE = records.reduce((sum: number, r: Record<string, unknown>) => sum + parseFloat(String(r.oee || 0)), 0) / totalRecords;
-
-        const totalOutput = records.reduce((sum: number, r: Record<string, unknown>) => sum + (Number(r.output_qty) || 0), 0);
-        const totalDefects = records.reduce((sum: number, r: Record<string, unknown>) => sum + (Number(r.defect_qty) || 0), 0);
-        const totalRuntime = records.reduce((sum: number, r: Record<string, unknown>) => sum + (Number(r.actual_runtime) || 0), 0);
-        const plannedRuntime = records.reduce((sum: number, r: Record<string, unknown>) => sum + (Number(r.planned_runtime) || 480), 0);
+        const avgAvailability = bucket.sum_availability / totalRecords;
+        const avgPerformance = bucket.sum_performance / totalRecords;
+        const avgQuality = bucket.sum_quality / totalRecords;
+        const avgOEE = bucket.sum_oee / totalRecords;
 
         // 라벨 생성
         let label: string;
@@ -130,12 +186,12 @@ export async function GET(request: NextRequest) {
           performance: Math.round(avgPerformance * 1000) / 1000,
           quality: Math.round(avgQuality * 1000) / 1000,
           oee: Math.round(avgOEE * 1000) / 1000,
-          total_output: totalOutput,
-          total_defects: totalDefects,
-          total_runtime: totalRuntime,
-          planned_runtime: plannedRuntime,
+          total_output: bucket.total_output,
+          total_defects: bucket.total_defects,
+          total_runtime: bucket.total_runtime,
+          planned_runtime: bucket.planned_runtime,
         };
-      }).filter((item): item is NonNullable<typeof item> => item !== null);
+      });
 
       // 시간순 정렬
       return aggregatedResults.sort((a, b) => {
@@ -149,15 +205,15 @@ export async function GET(request: NextRequest) {
     const aggregatedData = await generateRealAggregatedData(period, machineId);
 
     // 트렌드 분석
-    const calculateTrend = (data: Record<string, unknown>[], key: string) => {
+    const calculateTrend = (data: AggregatedPeriod[], key: TrendKey) => {
       if (data.length < 2) return 0;
-      
+
       const recent = data.slice(0, Math.ceil(data.length / 2));
       const older = data.slice(Math.ceil(data.length / 2));
-      
+
       const recentAvg = recent.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / recent.length;
       const olderAvg = older.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / older.length;
-      
+
       return ((recentAvg - olderAvg) / olderAvg) * 100;
     };
 
@@ -187,7 +243,7 @@ export async function GET(request: NextRequest) {
       ),
       statistics: {
         ...Object.fromEntries(
-          Object.entries(overallStats).map(([key, value]) => 
+          Object.entries(overallStats).map(([key, value]) =>
             [key, typeof value === 'number' ? Math.round(value * 1000) / 1000 : value]
           )
         ),

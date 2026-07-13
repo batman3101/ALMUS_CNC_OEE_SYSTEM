@@ -17,16 +17,27 @@ const nextConfig = {
       exclude: ['error']
     } : false,
   },
-  // Disable static optimization for better development experience
   experimental: {
     // Improve hot reload performance
     optimizeCss: false,
-    // Better error handling in development
-    workerThreads: false,
-    cpus: 1,
+    // Tree-shake barrel re-exports (src/components/*/index.ts) so importing
+    // one named export from a barrel doesn't pull in every module the
+    // barrel re-exports (this is how jsPDF/xlsx/html2canvas previously
+    // leaked into the /dashboard and /analytics bundles via the oee and
+    // reports barrels). Extend this list when new component barrels are
+    // added.
+    optimizePackageImports: [
+      '@/components/oee',
+      '@/components/reports',
+      '@/components/dashboard',
+      '@/components/machines',
+      '@/components/quality',
+      '@/components/production',
+      '@/components/admin',
+    ],
   },
   // Webpack configuration
-  webpack: (config, { dev, isServer }) => {
+  webpack: (config, { dev }) => {
     // Better cache configuration
     if (dev) {
       config.cache = {
@@ -36,16 +47,7 @@ const nextConfig = {
         },
       };
     }
-    
-    // Fix for hot reload issues
-    if (dev && !isServer) {
-      config.watchOptions = {
-        poll: 1000,
-        aggregateTimeout: 300,
-        ignored: ['**/node_modules', '**/.next'],
-      };
-    }
-    
+
     // Resolve alias for better imports
     config.resolve.alias = {
       ...config.resolve.alias,

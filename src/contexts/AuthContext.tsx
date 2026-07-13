@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback, useMemo } from 'react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { User, AuthContextType } from '@/types';
@@ -30,14 +30,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // (setState, value)를 따로 받으면 제네릭 추론이 두 인자 사이에서 충돌해 각 setState의
   // 실제 타입(예: Dispatch<SetStateAction<User | null>>)과 어긋나므로, 호출부에서 이미
   // 타입 검사된 setter 호출 자체를 넘겨받는다.
-  const safeSetState = (updateFn: () => void) => {
+  // 참조(ref)만 사용하므로 항상 동일한 identity를 유지한다 (deps: [])
+  const safeSetState = useCallback((updateFn: () => void) => {
     if (isMountedRef.current) {
       updateFn();
     }
-  };
+  }, []);
 
   // 사용자 프로필 정보 가져오기 (메모리 누수 방지 최적화)
-  const fetchUserProfile = async (supabaseUser: SupabaseUser): Promise<User | null> => {
+  // ref와 외부 모듈(supabase/log)만 참조하고 상태(state)에 의존하지 않으므로 deps: []로 고정 identity 유지
+  const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser): Promise<User | null> => {
     // 컴포넌트가 언마운트된 경우 early return
     if (!isMountedRef.current) {
       return null;
@@ -174,10 +176,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('🔄 오류로 인해 null 반환 - 로그인 필요');
       return null;
     }
-  };
+  }, []);
 
   // 로그인 함수 (향상된 디버깅과 오류 처리)
-  const login = async (email: string, password: string): Promise<void> => {
+  // fetchUserProfile, safeSetState가 고정 identity이므로 login도 고정 identity를 유지한다
+  const login = useCallback(async (email: string, password: string): Promise<void> => {
     try {
       console.log('🔑 로그인 시도:', { email });
       setError(null); // 이전 오류 초기화
@@ -236,10 +239,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       throw error;
     }
-  };
+  }, [fetchUserProfile, safeSetState]);
 
   // 로그아웃 함수
-  const logout = async (): Promise<void> => {
+  // safeSetState가 고정 identity이므로 logout도 고정 identity를 유지한다
+  const logout = useCallback(async (): Promise<void> => {
     try {
       // 즉시 사용자 상태 초기화 (UI 반응성 개선)
       safeSetState(() => setUser(null));
@@ -263,7 +267,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         window.location.href = '/login';
       }
     }
-  };
+  }, [safeSetState]);
 
   // 로딩 타임아웃 설정 함수
   const setLoadingTimeout = () => {
@@ -441,15 +445,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         subscription.unsubscribe();
       }
     };
-  }, []);
+    // fetchUserProfile/safeSetState는 고정 identity([] deps)이므로 추가해도 마운트 1회 실행 의미는 유지된다.
+    // setLoadingTimeout은 기존과 동일하게 의도적으로 제외한다 (매 렌더 재생성되는 함수라 넣으면 매 렌더 재구독됨).
+  }, [fetchUserProfile, safeSetState]);
 
-  const value: AuthContextType = {
+  // login/logout은 이제 고정 identity를 가지므로, 이 value는 user/loading/error가
+  // 실제로 바뀔 때만 새 identity를 얻는다 (구독 중인 모든 useAuth() 소비자의 불필요한 재렌더링 방지)
+  const value: AuthContextType = useMemo(() => ({
     user,
     login,
     logout,
     loading,
     error,
-  };
+  }), [user, login, logout, loading, error]);
 
   return (
     <AuthContext.Provider value={value}>

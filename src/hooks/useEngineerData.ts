@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
 import { DowntimeData, ProductionData, isMachineState } from '@/types';
+import { fetchJsonDeduped } from '@/lib/requestCache';
 
 interface OEETrendData {
   date: string;
@@ -70,6 +71,9 @@ export const useEngineerData = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 진행 중인 새로고침이 있을 때 중복 호출을 막기 위한 가드
+  const isFetchingRef = useRef(false);
+
   // 기간별 날짜 계산 (커스텀 날짜 범위 우선 사용)
   const getDateRange = useCallback((period: 'week' | 'month' | 'quarter') => {
     // 커스텀 날짜 범위가 있으면 우선 사용
@@ -118,10 +122,10 @@ export const useEngineerData = (
         })
       });
 
-      const response = await fetch(`/api/productivity-analysis?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch OEE trend data');
-
-      const data: ProductivityAnalysisResponse = await response.json();
+      // 동일 요청 중복 제거: OEE 추이 차트(useOEEChartData)가 같은 URL 을 조회하므로 캐시를 공유한다.
+      const data = await fetchJsonDeduped<ProductivityAnalysisResponse>(
+        `/api/productivity-analysis?${params}`
+      );
       
       // API 응답을 차트용 데이터로 변환 (API는 이미 0-1 범위 소수점으로 반환)
       const trendData: OEETrendData[] = data.trends.daily.map(item => ({
@@ -221,6 +225,13 @@ export const useEngineerData = (
 
   // 모든 데이터 새로고침
   const refreshData = useCallback(async () => {
+    // 이미 진행 중인 새로고침이 있으면 중복 호출을 건너뜀 (겹쳐 호출되는 요청 방지)
+    if (isFetchingRef.current) {
+      console.log('⏭️ 엔지니어 데이터 새로고침이 이미 진행 중이라 건너뜀');
+      return;
+    }
+    isFetchingRef.current = true;
+
     const dateRangeInfo = customDateRange ? `커스텀: ${customDateRange[0]} ~ ${customDateRange[1]}` : `기간: ${selectedPeriod}`;
     const shiftInfo = selectedShifts && !selectedShifts.includes('all') ? selectedShifts.join(',') : 'all';
     console.log(`🔄 엔지니어 데이터 새로고침 시작 - ${dateRangeInfo}, 설비: ${machineId || 'all'}, 교대: ${shiftInfo}`);
@@ -239,10 +250,11 @@ export const useEngineerData = (
       setError(error instanceof Error ? error.message : 'Failed to refresh data');
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   }, [selectedPeriod, machineId, customDateRange, selectedShifts, fetchOEETrendData, fetchDowntimeData, fetchProductionData]);
 
-  // 기간이나 커스텀 날짜 범위 변경시 데이터 재조회
+  // 기간, 설비, 날짜 범위, 교대 필터 변경시 데이터 재조회 (이 훅이 유일한 조회 주체)
   useEffect(() => {
     refreshData();
   }, [refreshData]);

@@ -20,9 +20,11 @@ import { useDashboardTranslation } from '@/hooks/useTranslation';
 import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecords';
 import { DateRangeSelector } from '@/components/common/DateRangeSelector';
 import { useDateRange } from '@/contexts/DateRangeContext';
+import { fetchMachines } from '@/lib/machinesCache';
 
-
-
+// 대시보드가 지원하는 최대 기간(최근 30일 프리셋)을 커버하는 행수 상한.
+// 설비 800대 × 2교대 × 30일 ≈ 48,000행이므로 50,000행이면 프리셋 전 구간이 잘리지 않는다.
+const ADMIN_RECORD_LIMIT = 50000;
 
 interface AdminDashboardProps {
   onError?: (error: Error) => void;
@@ -36,10 +38,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<{
     machines: Machine[];
-    production: unknown[];
     models: unknown[];
-    oeeMetrics: Record<string, OEEMetrics>;
-    machinesWithData: string[];
   } | null>(null);
   const [statusDescriptions, setStatusDescriptions] = useState<Array<{
     status: string;
@@ -47,14 +46,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     description_vi: string;
   }>>([]);
 
+  // 선택된 기간 (생산 기록 조회의 단일 기준)
+  const formattedRange = getFormattedRange();
+
   // 실시간 생산 기록 데이터 구독
+  // ✅ 생산 기록의 단일 소스: 선택된 기간 + 행수 상한을 명시적으로 전달한다
+  //    (별도의 /api/production-records 호출은 제거됨)
   const {
     records: productionRecords,
     loading: recordsLoading,
     error: recordsError,
     aggregatedData,
     refreshRecords
-  } = useRealtimeProductionRecords();
+  } = useRealtimeProductionRecords({
+    filters: {
+      dateRange: {
+        start: formattedRange.startDate,
+        end: formattedRange.endDate
+      }
+    },
+    limit: ADMIN_RECORD_LIMIT
+  });
 
   // 실시간 알림 시스템 (현재 NotificationContext로 대체하여 비활성화)
   // const {
@@ -158,23 +170,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     };
   };
 
-  // 실제 데이터 가져오기
-  const fetchDashboardData = async () => {
+  // 실제 데이터 가져오기 (생산 기록은 실시간 훅이 담당하므로 여기서 조회하지 않는다)
+  const fetchDashboardData = async (options?: { force?: boolean }) => {
     try {
       setDashboardLoading(true);
 
-      // 날짜 범위 가져오기
-      const formattedRange = getFormattedRange();
-
       // 병렬로 모든 데이터 가져오기
-      const [machinesRes, productionRes, modelsRes, statusDescRes] = await Promise.all([
-        fetch('/api/machines', {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
-        }),
-        fetch(`/api/production-records?startDate=${formattedRange.startDate}&endDate=${formattedRange.endDate}&limit=1000`, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
+      // 설비 목록은 NotificationContext와 공유되는 캐시를 통해 조회한다 (중복 호출 제거)
+      const [machinesData, modelsRes, statusDescRes] = await Promise.all([
+        fetchMachines({ force: options?.force }).catch((error: unknown) => {
+          console.error('Machines API failed:', error);
+          return [] as Machine[];
         }),
         fetch('/api/product-models', {
           cache: 'no-store',
@@ -186,38 +192,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         })
       ]);
 
-      let machinesData = [];
-      let productionData = [];
       let modelsData = [];
       let statusDescriptions = [];
 
-      if (machinesRes.ok) {
-        try {
-          const data = await machinesRes.json();
-          machinesData = Array.isArray(data) ? data : (data.machines || []);
-          console.log('Machines data loaded:', machinesData.length);
-        } catch (error) {
-          console.error('Error parsing machines response:', error);
-          machinesData = [];
-        }
-      } else {
-        console.error('Machines API failed:', machinesRes.status);
-        machinesData = [];
-      }
-
-      if (productionRes.ok) {
-        try {
-          const data = await productionRes.json();
-          productionData = Array.isArray(data) ? data : (data.records || []);
-          console.log('Production data loaded:', productionData.length);
-        } catch (error) {
-          console.error('Error parsing production response:', error);
-          productionData = [];
-        }
-      } else {
-        console.error('Production API failed:', productionRes.status);
-        productionData = [];
-      }
+      console.log('Machines data loaded:', machinesData.length);
 
       if (modelsRes.ok) {
         try {
@@ -247,72 +225,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         statusDescriptions = [];
       }
 
-      // OEE 계산 (실제 데이터 기반)
-      const calculatedOeeMetrics: Record<string, OEEMetrics> = {};
-      // 생산 기록이 실제로 존재하는 설비 목록 (전체 OEE 평균 계산 시 데이터 없는 설비 제외용)
-      const machinesWithData: string[] = [];
-
-      console.log('Processing OEE calculations for machines:', machinesData.length);
-
-      machinesData.forEach((machine: Machine) => {
-        // 해당 설비의 생산 기록 찾기
-        interface ProductionData {
-          machine_id: string;
-          output_qty?: number;
-          defect_qty?: number;
-          actual_runtime?: number;
-          planned_runtime?: number;
-          ideal_runtime?: number;
-          oee?: number;
-          availability?: number;
-          performance?: number;
-          quality?: number;
-        }
-        const machineProduction = productionData.filter((p: unknown) => (p as ProductionData).machine_id === machine.id) as ProductionData[];
-
-        if (machineProduction.length > 0) {
-          machinesWithData.push(machine.id);
-          // ✅ 실제 Supabase 데이터 사용 (hardcoded 값 제거)
-          const totalOutput = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.output_qty || 0), 0);
-          const totalDefects = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.defect_qty || 0), 0);
-          const totalActualRuntime = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.actual_runtime || 0), 0);
-          const totalPlannedRuntime = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.planned_runtime || 0), 0);
-          const totalIdealRuntime = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.ideal_runtime || 0), 0);
-
-          // production_records 테이블의 실제 OEE 값들을 평균내서 사용
-          const avgOee = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.oee || 0), 0) / machineProduction.length;
-          const avgAvailability = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.availability || 0), 0) / machineProduction.length;
-          const avgPerformance = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.performance || 0), 0) / machineProduction.length;
-          const avgQuality = machineProduction.reduce((sum: number, p: ProductionData) => sum + (p.quality || 0), 0) / machineProduction.length;
-
-          calculatedOeeMetrics[machine.id] = {
-            // ✅ Supabase에서 가져온 실제 값들 사용 (DB에는 0~1 범위로 저장됨)
-            availability: avgAvailability,
-            performance: avgPerformance,
-            quality: avgQuality,
-            oee: avgOee,
-            actual_runtime: totalActualRuntime,
-            planned_runtime: totalPlannedRuntime,
-            ideal_runtime: totalIdealRuntime,
-            output_qty: totalOutput,
-            defect_qty: totalDefects
-          };
-        } else {
-          // 생산 기록이 없는 경우 0으로 설정 (mock 데이터 제거)
-          calculatedOeeMetrics[machine.id] = {
-            availability: 0,
-            performance: 0,
-            quality: 0,
-            oee: 0,
-            actual_runtime: 0,
-            planned_runtime: 0,
-            ideal_runtime: 0,
-            output_qty: 0,
-            defect_qty: 0
-          };
-        }
-      });
-
       // 데이터가 하나도 없으면 에러 처리, 그렇지 않으면 저장
       if (machinesData.length === 0) {
         throw new Error('설비 데이터를 불러올 수 없습니다. API 응답을 확인해주세요.');
@@ -320,15 +232,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
       setDashboardData({
         machines: machinesData,
-        production: productionData,
-        models: modelsData,
-        oeeMetrics: calculatedOeeMetrics,
-        machinesWithData
+        models: modelsData
       });
 
       // 상태 설명 데이터 저장
       setStatusDescriptions(statusDescriptions);
-      
+
       // 데이터 저장 확인 로깅
       console.log('✅ DashboardData 저장 완료:', {
         machinesCount: machinesData.length,
@@ -339,11 +248,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       if (process.env.NODE_ENV === 'development') {
         console.log('Dashboard data fetched successfully:', {
           machines: machinesData.length,
-          production: productionData.length,
-          models: modelsData.length,
-          oeeMetrics: Object.keys(calculatedOeeMetrics).length
+          models: modelsData.length
         });
-        
+
         // 설비 상태별 카운트 로깅
         const statusCounts = {
           normal: machinesData.filter((m: Machine) => m.current_state === 'NORMAL_OPERATION').length,
@@ -382,6 +289,83 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
   // 에러 핸들링 (mockRealtimeData는 에러가 없으므로 제거)
 
+  // 설비별 OEE 계산 (실시간 훅이 조회한 "선택된 기간"의 생산 기록 기반)
+  // 이전에는 /api/production-records를 중복 호출해 계산했으나, 이제 훅의 records가 단일 소스다.
+  const machineOeeData = React.useMemo(() => {
+    const oeeMetrics: Record<string, OEEMetrics> = {};
+    // 생산 기록이 실제로 존재하는 설비 목록 (전체 OEE 평균 계산 시 데이터 없는 설비 제외용)
+    const machinesWithData: string[] = [];
+    const machines = dashboardData?.machines ?? [];
+
+    // 설비별 생산 기록 그룹핑 (설비 수 × 기록 수 이중 순회 방지)
+    const recordsByMachine = new Map<string, typeof productionRecords>();
+    productionRecords.forEach(record => {
+      const existing = recordsByMachine.get(record.machine_id);
+      if (existing) {
+        existing.push(record);
+      } else {
+        recordsByMachine.set(record.machine_id, [record]);
+      }
+    });
+
+    machines.forEach((machine: Machine) => {
+      const machineProduction = recordsByMachine.get(machine.id) ?? [];
+
+      if (machineProduction.length === 0) {
+        // 생산 기록이 없는 경우 0으로 설정 (mock 데이터 제거)
+        oeeMetrics[machine.id] = {
+          availability: 0,
+          performance: 0,
+          quality: 0,
+          oee: 0,
+          actual_runtime: 0,
+          planned_runtime: 0,
+          ideal_runtime: 0,
+          output_qty: 0,
+          defect_qty: 0
+        };
+        return;
+      }
+
+      machinesWithData.push(machine.id);
+
+      const count = machineProduction.length;
+      const totals = machineProduction.reduce(
+        (acc, record) => {
+          acc.output += record.output_qty || 0;
+          acc.defects += record.defect_qty || 0;
+          acc.actualRuntime += record.actual_runtime || 0;
+          acc.plannedRuntime += record.planned_runtime || 0;
+          acc.idealRuntime += record.ideal_runtime || 0;
+          acc.oee += record.oee || 0;
+          acc.availability += record.availability || 0;
+          acc.performance += record.performance || 0;
+          acc.quality += record.quality || 0;
+          return acc;
+        },
+        {
+          output: 0, defects: 0, actualRuntime: 0, plannedRuntime: 0, idealRuntime: 0,
+          oee: 0, availability: 0, performance: 0, quality: 0
+        }
+      );
+
+      oeeMetrics[machine.id] = {
+        // ✅ Supabase에 저장된 실제 값 사용 (DB에는 0~1 범위로 저장됨)
+        availability: totals.availability / count,
+        performance: totals.performance / count,
+        quality: totals.quality / count,
+        oee: totals.oee / count,
+        actual_runtime: totals.actualRuntime,
+        planned_runtime: totals.plannedRuntime,
+        ideal_runtime: totals.idealRuntime,
+        output_qty: totals.output,
+        defect_qty: totals.defects
+      };
+    });
+
+    return { oeeMetrics, machinesWithData };
+  }, [dashboardData, productionRecords]);
+
   // 데이터 처리 및 계산
   const processedData = React.useMemo(() => {
     try {
@@ -411,7 +395,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       // 대시보드 데이터가 있으면 우선 사용 (강제 조건 확인)
       if (dashboardData && dashboardData.machines && Array.isArray(dashboardData.machines) && dashboardData.machines.length > 0) {
         console.log('✅ 실제 데이터베이스 데이터 처리 시작 - 설비 수:', dashboardData.machines.length);
-        const { machines: dbMachines, oeeMetrics: dbOeeMetrics, machinesWithData: dbMachinesWithData } = dashboardData;
+        const { machines: dbMachines } = dashboardData;
+        const { oeeMetrics: dbOeeMetrics, machinesWithData: dbMachinesWithData } = machineOeeData;
 
         // 생산 기록이 있는 설비만 전체 OEE 평균 계산에 포함 (데이터 없는 설비의 0%가 평균을 희석시키지 않도록)
         const metricsWithData: OEEMetrics[] = (dbMachinesWithData || [])
@@ -695,7 +680,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         machinesWithDataCount: 0
       };
     }
-  }, [productionRecords, aggregatedData, dashboardData, dashboardData?.machines?.length]);
+  }, [productionRecords, aggregatedData, dashboardData, machineOeeData]);
 
   // 설비 상태별 통계 (실제 데이터베이스 기반)
   const machineStats = React.useMemo(() => {
@@ -855,7 +840,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           <Button
             icon={<ReloadOutlined />}
             onClick={() => {
-              fetchDashboardData(); // 대시보드 데이터 새로고침
+              fetchDashboardData({ force: true }); // 설비/모델 데이터 강제 새로고침 (캐시 우회)
               if (refreshRecords) refreshRecords(); // 실시간 생산 기록 새로고침
             }}
             loading={dashboardLoading || recordsLoading}
@@ -890,7 +875,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           style={{ marginBottom: 24 }}
           action={
             <Button size="small" onClick={() => {
-              fetchDashboardData();
+              fetchDashboardData({ force: true });
               if (refreshRecords) refreshRecords();
             }}>
               {t('common.retry')}

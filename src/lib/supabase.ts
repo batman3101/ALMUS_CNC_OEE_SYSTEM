@@ -39,9 +39,11 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     }
 
     // 간단한 쿼리로 연결 상태 확인 (production_records 테이블 사용)
+    // count: 'exact'는 전체 테이블을 스캔하는 COUNT를 유발하므로(대용량 테이블에서 초 단위 지연 발생)
+    // count 옵션 없이 head 요청 + LIMIT 1 만으로 연결 여부만 가볍게 확인한다.
     const { error } = await supabase
       .from('production_records')
-      .select('count', { count: 'exact', head: true })
+      .select('record_id', { head: true })
       .limit(1);
     
     isConnected = !error;

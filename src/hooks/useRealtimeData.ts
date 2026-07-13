@@ -73,43 +73,47 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
       console.info('📊 실제 Supabase 데이터 로드 시작');
 
       // 사용자 프로필 로드 (운영자의 배정된 설비 확인용)
-      let userProfile = null;
-      if (userId) {
+      const fetchUserProfile = async () => {
+        if (!userId) return null;
         const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('user_id', userId)
           .single();
 
-        if (!profileError) {
-          userProfile = profile;
-        }
-      }
+        return profileError ? null : profile;
+      };
 
-      // 설비 데이터 로드
-      const { data: machines, error: machinesError } = await supabase
-        .from('machines')
-        .select('*')
-        .eq('is_active', true);
+      // 설비 / 설비 로그 / 생산 실적 쿼리는 서로 의존성이 없으므로 병렬로 조회한다.
+      // (기존에는 4개 쿼리를 순차적으로 await 하여 첫 화면 렌더링까지 불필요하게 오래 걸렸음)
+      const [userProfile, machinesResult, machineLogsResult, productionRecordsResult] = await Promise.all([
+        fetchUserProfile(),
+        supabase
+          .from('machines')
+          .select('*')
+          .eq('is_active', true),
+        supabase
+          .from('machine_logs')
+          .select('*')
+          .order('start_time', { ascending: false })
+          .limit(100),
+        supabase
+          .from('production_records')
+          .select('*')
+          .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+          .order('date', { ascending: false })
+      ]);
 
+      // 설비 데이터
+      const { data: machines, error: machinesError } = machinesResult;
       if (machinesError) throw machinesError;
 
-      // 최근 설비 로그 로드
-      const { data: machineLogs, error: logsError } = await supabase
-        .from('machine_logs')
-        .select('*')
-        .order('start_time', { ascending: false })
-        .limit(100);
-
+      // 최근 설비 로그
+      const { data: machineLogs, error: logsError } = machineLogsResult;
       if (logsError) throw logsError;
 
-      // 최근 생산 실적 로드
-      const { data: productionRecords, error: productionError } = await supabase
-        .from('production_records')
-        .select('*')
-        .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-        .order('date', { ascending: false });
-
+      // 최근 생산 실적
+      const { data: productionRecords, error: productionError } = productionRecordsResult;
       if (productionError) throw productionError;
 
       // OEE 지표 계산 (개선된 로직)
@@ -408,6 +412,11 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
   // 실시간 구독 설정
   useEffect(() => {
+    // 이펙트가 재실행되는 경우(StrictMode 재마운트 등)에도 마운트 상태를 다시 true로
+    // 설정해야 한다. 그렇지 않으면 cleanup에서 false로 내려간 뒤 영원히 복구되지 않아
+    // 이후의 모든 setState가 isMountedRef 가드에 막혀 버린다.
+    isMountedRef.current = true;
+
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
       loadInitialData();
@@ -417,6 +426,8 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     // 정리 함수
     return () => {
       isMountedRef.current = false;
+      // 다음 마운트에서 초기화 로직(데이터 로드 + 구독 설정)이 다시 실행되도록 리셋
+      isInitializedRef.current = false;
       cleanupChannels();
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
+import { fetchJsonDeduped } from '@/lib/requestCache';
 
 interface OEEChartData {
   date: string;
@@ -96,10 +97,11 @@ export const useOEEChartData = (
         customDateRange 
       });
 
-      const response = await fetch(`/api/productivity-analysis?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch OEE chart data');
-
-      const data: ProductivityAnalysisResponse = await response.json();
+      // 동일 요청 중복 제거: EngineerDashboard 의 useEngineerData 가 같은 URL 을 조회하므로
+      // 캐시를 공유해 요청이 두 번 나가지 않게 한다.
+      const data = await fetchJsonDeduped<ProductivityAnalysisResponse>(
+        `/api/productivity-analysis?${params}`
+      );
       
       // API 응답을 차트용 데이터로 변환
       const trendData: OEEChartData[] = data.trends.daily.map(item => ({

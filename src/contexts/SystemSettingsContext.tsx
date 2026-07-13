@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { systemSettingsService } from '@/lib/systemSettings';
 import { supabase } from '@/lib/supabase';
 import type {
@@ -258,7 +258,11 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
     }
   }, [error]);
 
-  const contextValue: SystemSettingsContextType = {
+  // getSetting/getSettingsByCategory는 settings에, updateSetting/updateMultipleSettings는 []에,
+  // resetCategory/resetAllSettings/refreshSettings는 loadSettings([])에 의존하는 고정 identity의
+  // useCallback이므로, 이 value는 settings/isLoading/error/lastUpdated가 실제로 바뀔 때만
+  // 새 identity를 얻는다 (LanguageProvider 등 하위 모든 useSystemSettings() 소비자의 연쇄 재렌더링 방지)
+  const contextValue: SystemSettingsContextType = useMemo(() => ({
     settings,
     isLoading,
     error,
@@ -270,7 +274,19 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
     resetAllSettings,
     refreshSettings,
     lastUpdated
-  };
+  }), [
+    settings,
+    isLoading,
+    error,
+    getSetting,
+    getSettingsByCategory,
+    updateSetting,
+    updateMultipleSettings,
+    resetCategory,
+    resetAllSettings,
+    refreshSettings,
+    lastUpdated
+  ]);
 
   return (
     <SystemSettingsContext.Provider value={contextValue}>

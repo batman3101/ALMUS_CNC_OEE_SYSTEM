@@ -1,12 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, Button, Space, App } from 'antd';
 import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
-import { ReportExportModal } from './ReportExportModal';
-import { ReportTemplates } from './ReportTemplates';
 import { useReportsTranslation } from '@/hooks/useTranslation';
 import { OEEMetrics, Machine, ProductionRecord } from '@/types';
+
+// jsPDF/xlsx/html2canvas are only needed once the user opens the export
+// modal or clicks an export button, so both are code-split out of the
+// initial bundle instead of being pulled in eagerly by this component.
+const ReportExportModal = dynamic(
+  () => import('./ReportExportModal').then((mod) => mod.ReportExportModal),
+  { ssr: false }
+);
 
 interface ReportGeneratorProps {
   machines?: Machine[];
@@ -35,6 +42,10 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
   const handleQuickExport = async (type: 'pdf' | 'excel') => {
     setLoading(true);
     try {
+      // jsPDF/xlsx/html2canvas는 실제로 내보내기 버튼을 클릭한 시점에만 필요하므로
+      // 초기 번들에 포함되지 않도록 클릭 시점에 동적으로 로드한다.
+      const { ReportTemplates } = await import('./ReportTemplates');
+
       // 차트 요소들 수집 시도
       const chartElements: { [key: string]: HTMLCanvasElement | HTMLElement } = {};
       

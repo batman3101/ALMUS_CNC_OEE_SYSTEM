@@ -392,10 +392,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     }
   }, [error, onError]);
 
-  // 기간 변경시 엔지니어 데이터 새로고침
-  useEffect(() => {
-    refreshEngineerData();
-  }, [selectedPeriod, refreshEngineerData]);
+  // 기간/설비/날짜범위/교대 필터 변경시 데이터 재조회는 useEngineerData 훅이 단독으로 담당한다
+  // (이 컴포넌트에서 별도로 refreshEngineerData를 호출하면 훅의 자체 effect와 중복 호출된다)
 
   // OEE 등급별 데이터 필터링
   const filteredOEEData = React.useMemo(() => {

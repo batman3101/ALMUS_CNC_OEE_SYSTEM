@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo } from 'react';
 import {
   Notification,
   NotificationContextType,
@@ -10,6 +10,7 @@ import type { Machine } from '@/types';
 import { useAuth } from './AuthContext';
 import { showToast } from '@/components/notifications';
 import { useLanguage } from './LanguageContext';
+import { fetchMachines } from '@/lib/machinesCache';
 
 // 알림 상태 관리를 위한 리듀서
 interface NotificationState {
@@ -112,13 +113,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   // 실제 데이터베이스 기반 알림 생성 (중복 방지)
   const generateRealNotifications = useCallback(async (): Promise<Notification[]> => {
     try {
-      console.log('🏭 설비 데이터 API 호출 시작');
-      // 실제 설비 데이터 가져오기
-      const machinesResponse = await fetch('/api/machines');
-      console.log('📡 API 응답 상태:', machinesResponse.status);
-
-      const machinesData = await machinesResponse.json();
-      const machines = Array.isArray(machinesData) ? machinesData : (machinesData.machines || []);
+      console.log('🏭 설비 데이터 조회 시작');
+      // 실제 설비 데이터 가져오기 (공용 캐시: 페이지의 다른 호출과 중복 요청을 합친다)
+      const machines = await fetchMachines();
       console.log('🔧 로딩된 설비 수:', machines.length);
 
       // 이미 확인된 알림 조회
@@ -391,7 +388,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   }, [state.notifications, saveAcknowledgedNotification, t]);
 
   // 읽지 않은 알림 수 계산
-  const unreadCount = state.notifications.filter(n => n.status === 'active').length;
+  const unreadCount = useMemo(
+    () => state.notifications.filter(n => n.status === 'active').length,
+    [state.notifications]
+  );
 
   // 초기 데이터 로드 - 사용자 로그인 시 실제 알림 로딩
   useEffect(() => {
@@ -407,7 +407,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }
   }, [user?.id, refreshNotifications]);
 
-  const contextValue: NotificationContextType = {
+  // context value를 메모이제이션한다.
+  // 매 렌더마다 새 객체를 만들면 useNotifications()를 쓰는 모든 소비자가 불필요하게 리렌더된다.
+  const contextValue: NotificationContextType = useMemo(() => ({
     notifications: state.notifications,
     unreadCount,
     addNotification,
@@ -416,7 +418,16 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     clearNotification,
     clearAllNotifications,
     refreshNotifications,
-  };
+  }), [
+    state.notifications,
+    unreadCount,
+    addNotification,
+    acknowledgeNotification,
+    resolveNotification,
+    clearNotification,
+    clearAllNotifications,
+    refreshNotifications,
+  ]);
 
   return (
     <NotificationContext.Provider value={contextValue}>

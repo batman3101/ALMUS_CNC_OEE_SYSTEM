@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Button, Alert } from 'antd';
-import { AdminDashboard } from './AdminDashboard';
-import { OperatorDashboard } from './OperatorDashboard';
-import { EngineerDashboard } from './EngineerDashboard';
 import { User } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +10,37 @@ import { useAuth } from '@/contexts/AuthContext';
 interface DashboardRouterProps {
   user: User | null;
 }
+
+// 사용자 역할에 따라 셋 중 하나만 렌더링되므로, 세 대시보드를 모두 정적으로
+// 불러오면 사용하지 않는 두 대시보드의 코드까지 초기 번들에 포함된다.
+// next/dynamic으로 분리해 실제로 필요한 대시보드만 다운로드하도록 한다.
+const DASHBOARD_LOADING = (
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '400px',
+      fontSize: 16,
+      color: '#666'
+    }}
+  >
+    대시보드를 로딩 중입니다...
+  </div>
+);
+
+const AdminDashboard = dynamic(
+  () => import('./AdminDashboard').then((mod) => mod.AdminDashboard),
+  { ssr: false, loading: () => DASHBOARD_LOADING }
+);
+const OperatorDashboard = dynamic(
+  () => import('./OperatorDashboard').then((mod) => mod.OperatorDashboard),
+  { ssr: false, loading: () => DASHBOARD_LOADING }
+);
+const EngineerDashboard = dynamic(
+  () => import('./EngineerDashboard').then((mod) => mod.EngineerDashboard),
+  { ssr: false, loading: () => DASHBOARD_LOADING }
+);
 
 export const DashboardRouter: React.FC<DashboardRouterProps> = ({ user }) => {
   const isClient = useClientOnly();

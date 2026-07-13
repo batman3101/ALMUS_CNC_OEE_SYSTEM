@@ -60,6 +60,10 @@ export const useRealtimeMachines = ({
   // 이후 필터가 바뀌어 구독 effect가 재실행될 때는 항상 새로 조회해야 한다.
   const isInitialMountRef = useRef(true);
 
+  // setupRealtime은 비동기 함수라 await(refreshMachines) 도중 컴포넌트가 언마운트되거나
+  // 이펙트가 재실행될 수 있다. 이 경우를 감지해 orphan Realtime 채널 생성을 막기 위한 ref.
+  const isMountedRef = useRef(true);
+
   // 설비 데이터 새로고침
   const refreshMachines = useCallback(async () => {
     try {
@@ -122,6 +126,9 @@ export const useRealtimeMachines = ({
   useEffect(() => {
     console.log('Setting up realtime subscription for machines');
 
+    // 이펙트가 재실행되는 경우(필터 변경 등)에도 마운트 상태를 다시 true로 설정
+    isMountedRef.current = true;
+
     let subscription: ReturnType<typeof supabase.channel> | null = null;
 
     // 목록 조회와 동일한 필터 조건을 realtime 이벤트에도 동일하게 적용
@@ -156,6 +163,13 @@ export const useRealtimeMachines = ({
           await refreshMachines();
         }
         isInitialMountRef.current = false;
+
+        // await 도중 컴포넌트가 언마운트되었거나 이펙트가 재실행되어 정리되었다면
+        // 채널을 생성하지 않는다. 그렇지 않으면 cleanup은 이미 null이었던 subscription을
+        // 정리한 뒤이므로, 여기서 만드는 채널은 아무도 구독 해제하지 않는 orphan이 된다.
+        if (!isMountedRef.current) {
+          return;
+        }
 
         // Realtime 구독 설정
         subscription = supabase
@@ -278,6 +292,7 @@ export const useRealtimeMachines = ({
     // 클린업
     return () => {
       console.log('Cleaning up realtime subscription');
+      isMountedRef.current = false;
       if (subscription) {
         subscription.unsubscribe();
       }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button, Typography, Space, Alert, Divider } from 'antd';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import { Machine } from '@/types';
@@ -35,6 +35,10 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
   const [pendingMachines, setPendingMachines] = useState<Machine[]>([]);
   const [estimatedOutputs, setEstimatedOutputs] = useState<Record<string, number>>({});
+
+  // "나중에 입력" 클릭 시 예약되는 10분 타이머의 핸들. 언마운트 시 정리하고,
+  // 반복 클릭 시 이전 타이머를 취소해 독립적인 타이머가 중첩되지 않도록 한다.
+  const postponeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { createProductionRecord, calculateEstimatedOutput } = useProductionRecords();
   const { getShiftTimes } = useSystemSettings();
@@ -145,13 +149,30 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
   // 나중에 입력하기
   const handlePostpone = () => {
     setShowNotification(false);
+
+    // 반복 postpone 시 이전 타이머가 남아있다면 정리 (독립 타이머 중첩 방지)
+    if (postponeTimeoutRef.current) {
+      clearTimeout(postponeTimeoutRef.current);
+    }
+
     // 10분 후 다시 알림
-    setTimeout(() => {
+    postponeTimeoutRef.current = setTimeout(() => {
+      postponeTimeoutRef.current = null;
       if (pendingMachines.length > 0) {
         setShowNotification(true);
       }
     }, 10 * 60 * 1000);
   };
+
+  // 언마운트 시 예약된 postpone 타이머 정리 (언마운트된 컴포넌트에 setState 방지)
+  useEffect(() => {
+    return () => {
+      if (postponeTimeoutRef.current) {
+        clearTimeout(postponeTimeoutRef.current);
+        postponeTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // 모든 설비 입력 완료 시 알림 닫기
   useEffect(() => {

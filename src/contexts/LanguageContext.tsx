@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageContextType } from '@/types';
 import { getStoredLanguage, setStoredLanguage } from '@/utils/localStorage';
@@ -81,10 +81,13 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
   }, [systemSettingsLoading, isInitialized, getSetting, updateSetting, i18n]);
 
   // SystemSettings 변경 감지 및 동기화
+  // 함수 호출을 deps 배열에 직접 넣으면 매 렌더마다 재평가되어 정적 분석이 불가능하므로 변수로 추출한다
+  const systemLanguageSetting = getSetting('general', 'language');
+
   useEffect(() => {
     if (!isInitialized || systemSettingsLoading) return;
 
-    const systemLanguage = getSetting('general', 'language');
+    const systemLanguage = systemLanguageSetting;
     if (systemLanguage && systemLanguage !== language) {
       const newLanguage = systemLanguage as 'ko' | 'vi';
       console.log('SystemSettings에서 언어 변경 감지:', newLanguage);
@@ -92,7 +95,7 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
       i18n.changeLanguage(newLanguage);
       setStoredLanguage(newLanguage);
     }
-  }, [getSetting('general', 'language'), language, isInitialized, systemSettingsLoading, i18n]);
+  }, [systemLanguageSetting, language, isInitialized, systemSettingsLoading, i18n]);
 
   const changeLanguage = useCallback(async (lang: 'ko' | 'vi') => {
     if (language === lang) return;
@@ -130,11 +133,14 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     }
   }, [language, i18n, updateSetting]);
 
-  const value: LanguageContextType = {
+  // changeLanguage는 [language, i18n, updateSetting]에 의존하는 고정 identity의 useCallback이고
+  // updateSetting(SystemSettingsContext)도 고정 identity이므로, 이 value는 language/t가 실제로
+  // 바뀔 때만 새 identity를 얻는다 (하위 모든 useLanguage() 소비자의 불필요한 재렌더링 방지)
+  const value: LanguageContextType = useMemo(() => ({
     language,
     changeLanguage,
     t,
-  };
+  }), [language, changeLanguage, t]);
 
   return (
     <LanguageContext.Provider value={value}>
