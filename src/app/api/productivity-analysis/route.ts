@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import {
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+  buildPaginationMeta,
+  parseIntParam,
+  type PaginationMeta,
+} from '@/lib/pagination';
 import { unwrapJoin } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -212,9 +219,29 @@ export async function GET(request: NextRequest) {
     const topPerformers = machineAnalysis.slice(0, topCount);
     const bottomPerformers = machineAnalysis.slice(machineAnalysis.length - bottomCount).reverse();
 
-    // 상세 레코드는 요청이 있을 때만 원본 행을 조회한다 (집계 경로에서는 원본을 가져오지 않는다)
+    // 상세 레코드는 요청이 있을 때만 원본 행을 조회한다 (집계 경로에서는 원본을 가져오지 않는다).
+    //
+    // 원본 행이므로 페이지네이션이 필수다. 넓은 기간을 요청하면 매칭 행이
+    // PostgREST max-rows(=100,000)를 넘어 응답이 조용히 잘린다.
+    // count: 'exact' 로 전체 매칭 건수를 함께 받아 절삭 여부를 응답에 노출한다.
+    // (여기서는 건수만 필요하므로 별도 집계 RPC 없이 count 로 충분하다.
+    //  평균까지 필요한 /api/oee-data 는 analytics_oee_records_summary RPC 를 쓴다.)
     let detailedRecords: Array<Record<string, unknown>> | undefined;
+    let detailedRecordsPagination: PaginationMeta | undefined;
     if (analysisType === 'detail') {
+      const detailLimit = parseIntParam(
+        searchParams.get('limit'),
+        DEFAULT_PAGE_LIMIT,
+        1,
+        MAX_PAGE_LIMIT
+      );
+      const detailOffset = parseIntParam(
+        searchParams.get('offset'),
+        0,
+        0,
+        Number.MAX_SAFE_INTEGER
+      );
+
       let detailQuery = supabaseAdmin
         .from('production_records')
         .select(`
@@ -229,10 +256,13 @@ export async function GET(request: NextRequest) {
           output_qty,
           defect_qty,
           machines!inner(name)
-        `)
+        `, { count: 'exact' })
         .gte('date', fromDateStr)
         .lte('date', toDateStr)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        // date 만으로는 정렬이 불안정해 페이지 간 행이 중복/누락될 수 있다.
+        .order('record_id', { ascending: false })
+        .range(detailOffset, detailOffset + detailLimit - 1);
 
       if (machineIds.length > 1) {
         detailQuery = detailQuery.in('machine_id', machineIds);
@@ -246,7 +276,7 @@ export async function GET(request: NextRequest) {
         detailQuery = detailQuery.eq('shift', shifts[0]);
       }
 
-      const { data: detailRows, error: detailError } = await detailQuery;
+      const { data: detailRows, error: detailError, count: detailCount } = await detailQuery;
 
       if (detailError) {
         console.error('생산 기록 상세 조회 오류:', detailError);
@@ -255,6 +285,13 @@ export async function GET(request: NextRequest) {
           { status: 500 }
         );
       }
+
+      detailedRecordsPagination = buildPaginationMeta(
+        detailLimit,
+        detailOffset,
+        (detailRows || []).length,
+        detailCount ?? 0
+      );
 
       detailedRecords = (detailRows || []).map(record => ({
         record_id: record.record_id,
@@ -323,6 +360,9 @@ export async function GET(request: NextRequest) {
         }))
       },
       detailed_records: detailedRecords,
+      // analysis_type=detail 일 때만 존재한다. detailed_records 가 전체인지
+      // 잘린 페이지인지 호출자가 알 수 있게 total/has_more 를 함께 싣는다.
+      detailed_records_pagination: detailedRecordsPagination,
       metadata: {
         query_time: new Date().toISOString(),
         filters: {

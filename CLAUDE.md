@@ -165,7 +165,9 @@ Routes are organized by feature and follow RESTful conventions:
 - **production-records/**: Production data CRUD
   - `daily/` - Daily production summaries
 - **oee-data/**: OEE metrics queries
-  - `aggregated/` - Aggregated OEE data
+  - Returns raw `production_records` rows, so it is **paginated**: `limit` (default 1000, max 5000) + `offset`, with a `pagination` block (`total`, `returned`, `has_more`) in the response.
+  - `statistics` is computed in SQL over the **entire** filtered set (`analytics_oee_records_summary` RPC), not over the returned page. Never average the returned rows — a yearly query matches ~325k rows and you will only ever hold a page of them.
+  - `aggregated/` - Aggregated OEE data (rolled up server-side; use this when you want trends, not rows)
 - **system-settings/**: Settings CRUD by category
   - `[category]/` - Category-specific settings
   - `service-role/` - Service role key verification
@@ -178,6 +180,13 @@ API Route Patterns:
 - **Server-side**: Import Service Role client from `src/lib/supabase-admin.ts` for admin operations
 - **Authentication**: Middleware checks for valid session on protected routes (see `src/middleware.ts`)
 - **RLS Bypass**: Service Role Key bypasses RLS for admin operations in API routes
+
+#### ⚠️ PostgREST silently truncates large queries
+PostgREST enforces a `max-rows` cap (**100,000** on this project). A `select()` without `.limit()` that matches more rows returns exactly 100,000 of them **with a 200 status and no warning** — the response looks complete. `production_records` holds ~325k rows, so any unbounded query over it is silently wrong.
+
+Two rules follow:
+1. **Never aggregate in Node over an unbounded query.** To average 325k rows you must first transfer them, which re-triggers the cap — so the average is computed on a slice and reported as if it covered everything. Aggregate in SQL instead (see the `analytics_*` RPCs in `supabase/migrations/`), which returns the statistic without transferring the rows.
+2. **If you return raw rows, paginate explicitly** and expose `total` / `has_more` so callers can *see* the boundary. An invisible cap is a correctness bug; a visible one is just a page.
 
 ### Error Handling & Logging
 - **Type-safe Errors**: Use `ErrorCodes` enum from `types/index.ts` for consistent error classification
