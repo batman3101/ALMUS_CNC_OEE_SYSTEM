@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
+  ChartData,
 } from 'chart.js';
 import { Typography, Row, Col, Statistic } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
@@ -65,6 +66,10 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
     });
   }, [data]);
 
+  // 추세를 신뢰성 있게 계산하기 위한 최소 데이터 포인트 수
+  // (앞 3개/뒤 3개 구간이 겹치지 않도록 최소 6개 필요)
+  const MIN_POINTS_FOR_TREND = 6;
+
   // 통계 계산
   const stats = React.useMemo(() => {
     if (chartData.length === 0) {
@@ -72,7 +77,8 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
         avgQualityRate: 0,
         totalGoodQty: 0,
         totalDefectQty: 0,
-        qualityTrend: 0
+        qualityTrend: 0,
+        hasEnoughDataForTrend: false
       };
     }
 
@@ -80,16 +86,21 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
     const totalGoodQty = chartData.reduce((sum, item) => sum + item.goodQty, 0);
     const totalDefectQty = chartData.reduce((sum, item) => sum + item.defectQty, 0);
 
-    // 품질률 추세 계산 (최근 데이터와 초기 데이터 비교)
-    const recentAvg = chartData.slice(-3).reduce((sum, item) => sum + item.qualityRate, 0) / Math.min(3, chartData.length);
-    const initialAvg = chartData.slice(0, 3).reduce((sum, item) => sum + item.qualityRate, 0) / Math.min(3, chartData.length);
-    const qualityTrend = recentAvg - initialAvg;
+    // 품질률 추세 계산 (최근 3개 데이터와 초기 3개 데이터 비교, 두 구간이 겹치지 않는 경우에만)
+    const hasEnoughDataForTrend = chartData.length >= MIN_POINTS_FOR_TREND;
+    let qualityTrend = 0;
+    if (hasEnoughDataForTrend) {
+      const recentAvg = chartData.slice(-3).reduce((sum, item) => sum + item.qualityRate, 0) / 3;
+      const initialAvg = chartData.slice(0, 3).reduce((sum, item) => sum + item.qualityRate, 0) / 3;
+      qualityTrend = recentAvg - initialAvg;
+    }
 
     return {
       avgQualityRate,
       totalGoodQty,
       totalDefectQty,
-      qualityTrend
+      qualityTrend,
+      hasEnoughDataForTrend
     };
   }, [chartData]);
 
@@ -211,7 +222,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
     <div>
       {/* 차트 */}
       <div style={{ height, marginBottom: 24 }}>
-        <Line data={lineChartData} options={options} />
+        <Line data={lineChartData as ChartData<'line', number[], string>} options={options} />
       </div>
 
       {/* 통계 요약 */}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
     const oeeData = (productionData || []).map(record => ({
       id: record.record_id,
       machine_id: record.machine_id,
-      machine_name: record.machines?.name || 'Unknown',
+      machine_name: unwrapJoin(record.machines)?.name || 'Unknown',
       date: record.date,
       shift: record.shift,
       availability: Number(record.availability || 0),

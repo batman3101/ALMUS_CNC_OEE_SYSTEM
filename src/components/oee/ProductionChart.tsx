@@ -13,11 +13,13 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
+  ChartData,
 } from 'chart.js';
 import { Card, Typography, Select, Row, Col, Statistic } from 'antd';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useTranslation } from '@/hooks/useTranslation';
+import { ProductionData } from '@/types';
 
 ChartJS.register(
   CategoryScale,
@@ -31,16 +33,6 @@ ChartJS.register(
 );
 
 const { Title: AntTitle } = Typography;
-
-interface ProductionData {
-  date: string;
-  output_qty: number;
-  defect_qty: number;
-  good_qty: number;
-  defect_rate: number;
-  target_qty?: number;
-  shift?: 'A' | 'B';
-}
 
 interface ProductionChartProps {
   data: ProductionData[];
@@ -68,7 +60,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
     }),
     datasets: [
       {
-        type: chartType as const,
+        type: chartType,
         label: t('dashboard:chart.goodQuantity'),
         data: data.map(item => item.good_qty),
         backgroundColor: 'rgba(82, 196, 26, 0.8)',
@@ -77,7 +69,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
         yAxisID: 'y',
       },
       {
-        type: chartType as const,
+        type: chartType,
         label: t('dashboard:chart.defectQuantity'),
         data: data.map(item => item.defect_qty),
         backgroundColor: 'rgba(255, 77, 79, 0.8)',
@@ -249,9 +241,9 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
       {/* 차트 */}
       <div style={{ height, marginBottom: 24 }}>
         {chartType === 'bar' ? (
-          <Bar data={chartData} options={options} />
+          <Bar data={chartData as ChartData<'bar', number[], string>} options={options} />
         ) : (
-          <Line data={chartData} options={options} />
+          <Line data={chartData as ChartData<'line', number[], string>} options={options as ChartOptions<'line'>} />
         )}
       </div>
 

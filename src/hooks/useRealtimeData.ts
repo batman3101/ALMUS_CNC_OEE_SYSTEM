@@ -34,74 +34,86 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
   const channelsRef = useRef<RealtimeChannel[]>([]);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   // 연결 상태 업데이트 함수
   const updateConnectionStatus = useCallback((status: 'connecting' | 'connected' | 'disconnected' | 'error') => {
+    if (!isMountedRef.current) return;
     setState(prev => ({ ...prev, connectionStatus: status }));
   }, []);
 
-  // 자동 재연결 함수
+  // 자동 재연결 함수 (재구독 포함)
   const scheduleReconnect = useCallback(() => {
+    // 언마운트된 컴포넌트에는 재연결 타이머를 재장전하지 않음
+    if (!isMountedRef.current) return;
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
-    
+
     reconnectTimeoutRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return;
       console.log('🔄 실시간 연결 재시도...');
       updateConnectionStatus('connecting');
       loadInitialData();
+      setupRealtimeSubscriptions();
     }, 5000); // 5초 후 재연결 시도
   }, []);
 
   // 초기 데이터 로드 (성능 최적화)
   const loadInitialData = useCallback(async () => {
+    if (!isMountedRef.current) return;
     try {
-      setState(prev => ({ 
-        ...prev, 
-        loading: true, 
+      setState(prev => ({
+        ...prev,
+        loading: true,
         error: null,
         connectionStatus: 'connecting'
       }));
       console.info('📊 실제 Supabase 데이터 로드 시작');
 
       // 사용자 프로필 로드 (운영자의 배정된 설비 확인용)
-      let userProfile = null;
-      if (userId) {
+      const fetchUserProfile = async () => {
+        if (!userId) return null;
         const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('user_id', userId)
           .single();
-        
-        if (!profileError) {
-          userProfile = profile;
-        }
-      }
 
-      // 설비 데이터 로드
-      const { data: machines, error: machinesError } = await supabase
-        .from('machines')
-        .select('*')
-        .eq('is_active', true);
+        return profileError ? null : profile;
+      };
 
+      // 설비 / 설비 로그 / 생산 실적 쿼리는 서로 의존성이 없으므로 병렬로 조회한다.
+      // (기존에는 4개 쿼리를 순차적으로 await 하여 첫 화면 렌더링까지 불필요하게 오래 걸렸음)
+      const [userProfile, machinesResult, machineLogsResult, productionRecordsResult] = await Promise.all([
+        fetchUserProfile(),
+        supabase
+          .from('machines')
+          .select('*')
+          .eq('is_active', true),
+        supabase
+          .from('machine_logs')
+          .select('*')
+          .order('start_time', { ascending: false })
+          .limit(100),
+        supabase
+          .from('production_records')
+          .select('*')
+          .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+          .order('date', { ascending: false })
+      ]);
+
+      // 설비 데이터
+      const { data: machines, error: machinesError } = machinesResult;
       if (machinesError) throw machinesError;
 
-      // 최근 설비 로그 로드
-      const { data: machineLogs, error: logsError } = await supabase
-        .from('machine_logs')
-        .select('*')
-        .order('start_time', { ascending: false })
-        .limit(100);
-
+      // 최근 설비 로그
+      const { data: machineLogs, error: logsError } = machineLogsResult;
       if (logsError) throw logsError;
 
-      // 최근 생산 실적 로드
-      const { data: productionRecords, error: productionError } = await supabase
-        .from('production_records')
-        .select('*')
-        .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-        .order('date', { ascending: false });
-
+      // 최근 생산 실적
+      const { data: productionRecords, error: productionError } = productionRecordsResult;
       if (productionError) throw productionError;
 
       // OEE 지표 계산 (개선된 로직)
@@ -169,6 +181,8 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         });
       }
 
+      if (!isMountedRef.current) return;
+
       setState(prev => ({
         ...prev,
         machines: machines || [],
@@ -191,13 +205,16 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
     } catch (error) {
       console.error('❌ 초기 데이터 로드 실패:', error);
+
+      if (!isMountedRef.current) return;
+
       setState(prev => ({
         ...prev,
         loading: false,
         error: error instanceof Error ? error.message : '데이터 로드에 실패했습니다.',
         connectionStatus: 'error'
       }));
-      
+
       // 에러 발생시 자동 재연결 스케줄
       scheduleReconnect();
     }
@@ -225,18 +242,13 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     }
 
     console.log('🔗 실시간 구독 설정 시작...');
-    
+
     // 기존 채널 정리
     cleanupChannels();
 
     // 설비 로그 실시간 구독 (최적화)
     const machineLogsChannel = supabase
-      .channel('machine_logs_changes', {
-        config: {
-          heartbeat_interval: 30000, // 30초마다 heartbeat
-          self_healing: true
-        }
-      })
+      .channel('machine_logs_changes')
       .on(
         'postgres_changes',
         {
@@ -245,11 +257,13 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           table: 'machine_logs'
         },
         (payload) => {
-          console.log('📊 Machine log 변경:', payload.eventType, payload.new?.log_id);
-          
+          console.log('📊 Machine log 변경:', payload.eventType, (payload.new as Partial<MachineLog>).log_id);
+
+          if (!isMountedRef.current) return;
+
           setState(prev => {
             let newLogs = [...prev.machineLogs];
-            
+
             if (payload.eventType === 'INSERT') {
               newLogs = [payload.new as MachineLog, ...newLogs.slice(0, 99)];
             } else if (payload.eventType === 'UPDATE') {
@@ -260,9 +274,9 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
             } else if (payload.eventType === 'DELETE') {
               newLogs = newLogs.filter(log => log.log_id !== payload.old.log_id);
             }
-            
-            return { 
-              ...prev, 
+
+            return {
+              ...prev,
               machineLogs: newLogs,
               lastUpdated: Date.now()
             };
@@ -296,14 +310,16 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         },
         (payload) => {
           console.log('Production record change:', payload);
-          
+
+          if (!isMountedRef.current) return;
+
           setState(prev => {
             let newRecords = [...prev.productionRecords];
             const newOeeMetrics = { ...prev.oeeMetrics };
-            
+
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const record = payload.new as ProductionRecord;
-              
+
               if (payload.eventType === 'INSERT') {
                 newRecords = [record, ...newRecords];
               } else {
@@ -312,7 +328,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
                   newRecords[index] = record;
                 }
               }
-              
+
               // OEE 지표 업데이트
               newOeeMetrics[record.machine_id] = {
                 availability: record.availability || 0,
@@ -326,16 +342,24 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
                 defect_qty: record.defect_qty || 0
               };
             }
-            
-            return { 
-              ...prev, 
+
+            return {
+              ...prev,
               productionRecords: newRecords,
               oeeMetrics: newOeeMetrics
             };
           });
         }
       )
-      .subscribe();
+      .subscribe((status, error) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Production records 구독 오류:', error);
+          scheduleReconnect();
+        } else if (status === 'CLOSED') {
+          console.warn('⚠️ Production records 구독 연결 종료');
+          scheduleReconnect();
+        }
+      });
 
     // 설비 정보 실시간 구독
     const machinesChannel = supabase
@@ -349,10 +373,12 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         },
         (payload) => {
           console.log('Machine change:', payload);
-          
+
+          if (!isMountedRef.current) return;
+
           setState(prev => {
             let newMachines = [...prev.machines];
-            
+
             if (payload.eventType === 'INSERT') {
               newMachines = [...newMachines, payload.new as Machine];
             } else if (payload.eventType === 'UPDATE') {
@@ -363,21 +389,34 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
             } else if (payload.eventType === 'DELETE') {
               newMachines = newMachines.filter(m => m.id !== payload.old.id);
             }
-            
+
             return { ...prev, machines: newMachines };
           });
         }
       )
-      .subscribe();
+      .subscribe((status, error) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Machines 구독 오류:', error);
+          scheduleReconnect();
+        } else if (status === 'CLOSED') {
+          console.warn('⚠️ Machines 구독 연결 종료');
+          scheduleReconnect();
+        }
+      });
 
     // 채널 참조 저장
     channelsRef.current = [machineLogsChannel, productionChannel, machinesChannel];
-    
+
     console.log('🔗 실시간 구독 설정 완료');
   }, [cleanupChannels, updateConnectionStatus, scheduleReconnect]);
 
   // 실시간 구독 설정
   useEffect(() => {
+    // 이펙트가 재실행되는 경우(StrictMode 재마운트 등)에도 마운트 상태를 다시 true로
+    // 설정해야 한다. 그렇지 않으면 cleanup에서 false로 내려간 뒤 영원히 복구되지 않아
+    // 이후의 모든 setState가 isMountedRef 가드에 막혀 버린다.
+    isMountedRef.current = true;
+
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
       loadInitialData();
@@ -386,9 +425,13 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
     // 정리 함수
     return () => {
+      isMountedRef.current = false;
+      // 다음 마운트에서 초기화 로직(데이터 로드 + 구독 설정)이 다시 실행되도록 리셋
+      isInitializedRef.current = false;
       cleanupChannels();
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
     };
   }, [loadInitialData, setupRealtimeSubscriptions, cleanupChannels]);
@@ -411,7 +454,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
     if (userRole === 'operator') {
       // 운영자는 담당 설비만 접근
       const assignedMachineIds = state.userProfile?.assigned_machines || [];
-      
+
       if (assignedMachineIds.length === 0) {
         return {
           ...state,
@@ -421,15 +464,15 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         };
       }
 
-      const filteredMachines = state.machines.filter(machine => 
+      const filteredMachines = state.machines.filter(machine =>
         assignedMachineIds.includes(machine.id)
       );
-      
-      const filteredLogs = state.machineLogs.filter(log => 
+
+      const filteredLogs = state.machineLogs.filter(log =>
         assignedMachineIds.includes(log.machine_id)
       );
-      
-      const filteredRecords = state.productionRecords.filter(record => 
+
+      const filteredRecords = state.productionRecords.filter(record =>
         assignedMachineIds.includes(record.machine_id)
       );
 

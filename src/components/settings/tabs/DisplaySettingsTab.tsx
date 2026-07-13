@@ -61,10 +61,9 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
       setLoading(true);
       
       // 색상 값 처리
-      type ColorValue = string | { toHexString?: () => string };
       const getColorString = (val: unknown, defaultColor: string): string => {
         if (typeof val === 'string') return val;
-        const colorVal = val as ColorValue | undefined;
+        const colorVal = val as { toHexString?: () => string } | undefined;
         return colorVal?.toHexString?.() || defaultColor;
       };
 
@@ -317,7 +316,6 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
               <Alert
                 message={t('settings.display.interfaceHint')}
                 type="info"
-                size="small"
               />
             </Card>
           </Col>

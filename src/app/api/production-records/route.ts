@@ -1,5 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
+
+const DEFAULT_TACT_SECONDS = 120;
+const DEFAULT_CAVITY = 1;
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(Math.max(value, min), max);
+
+// 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량
+function validateQuantities(outputQty: unknown, defectQty: unknown): string | null {
+  if (!Number.isInteger(outputQty) || (outputQty as number) < 0) {
+    return '생산 수량(output_qty)은 0 이상의 정수여야 합니다';
+  }
+  if (!Number.isInteger(defectQty) || (defectQty as number) < 0) {
+    return '불량 수량(defect_qty)은 0 이상의 정수여야 합니다';
+  }
+  if ((defectQty as number) > (outputQty as number)) {
+    return '불량 수량(defect_qty)은 생산 수량(output_qty)보다 클 수 없습니다';
+  }
+  return null;
+}
+
+// OEE 지표 계산 (서버가 단일 진실 공급원)
+// 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
+function calculateOEEMetrics(params: {
+  operatingMinutes: number;
+  breakMinutes: number;
+  actualRuntime: number;
+  outputQty: number;
+  defectQty: number;
+  tactSeconds: number;
+  cavity: number;
+}) {
+  const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
+  const actualRuntime = clamp(params.actualRuntime, 0, plannedRuntime);
+  const idealRuntime = (params.outputQty / Math.max(1, params.cavity)) * params.tactSeconds / 60;
+
+  const availability = plannedRuntime > 0 ? clamp(actualRuntime / plannedRuntime, 0, 1) : 0;
+  const performance = actualRuntime > 0 ? clamp(idealRuntime / actualRuntime, 0, 1) : 0;
+  const quality =
+    params.outputQty > 0
+      ? clamp((params.outputQty - params.defectQty) / params.outputQty, 0, 1)
+      : 0;
+  const oee = availability * performance * quality;
+
+  return { plannedRuntime, actualRuntime, idealRuntime, availability, performance, quality, oee };
+}
 
 // GET /api/production-records - 생산 기록 목록 조회
 export async function GET(request: NextRequest) {
@@ -24,7 +71,9 @@ export async function GET(request: NextRequest) {
           location
         )
       `, { count: 'exact' })
-      .order('date', { ascending: false });
+      .order('date', { ascending: false })
+      // (machine_id, date, shift)가 유니크하므로 date만으로는 정렬이 불안정함 → record_id로 tiebreak
+      .order('record_id', { ascending: false });
 
     // 필터 적용
     if (machineId) {
@@ -70,14 +119,15 @@ export async function GET(request: NextRequest) {
     }
 
     // 데이터가 없으면 빈 배열 반환 (Mock 데이터 생성 금지)
+    // ✅ 필터 조건에 해당하는 전체 건수(count)는 그대로 반환 (페이지가 비어도 total 유지)
     if (!records || records.length === 0) {
       return NextResponse.json({
         records: [],
         pagination: {
           page,
           limit,
-          total: 0,
-          pages: 0
+          total: count || 0,
+          pages: Math.ceil((count || 0) / limit)
         }
       });
     }
@@ -131,8 +181,7 @@ export async function POST(request: NextRequest) {
       output_qty,
       defect_qty,
       actual_runtime,
-      planned_runtime,
-      tact_time
+      planned_runtime
     } = body;
 
     // 필수 필드 검증
@@ -141,6 +190,14 @@ export async function POST(request: NextRequest) {
         { error: 'Machine ID, date, and shift are required' },
         { status: 400 }
       );
+    }
+
+    // 수량 검증 (정수 & 0 이상 & 불량 <= 생산)
+    const outputQtyValue = output_qty ?? 0;
+    const defectQtyValue = defect_qty ?? 0;
+    const validationError = validateQuantities(outputQtyValue, defectQtyValue);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
     // 설비 존재 확인
@@ -157,25 +214,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // OEE 계산
-    const plannedRuntimeValue = planned_runtime || 480; // 기본 8시간
-    const actualRuntimeValue = actual_runtime || 0;
-    const outputQtyValue = output_qty || 0;
-    const defectQtyValue = defect_qty || 0;
-    const tactTimeValue = tact_time || 120; // 기본 2분
+    // 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
+    const { data: productionInfo } = await supabaseAdmin
+      .from('machines_with_production_info')
+      .select('current_tact_time, current_cavity_count')
+      .eq('id', machine_id)
+      .maybeSingle();
 
-    // Availability = (Actual Runtime / Planned Runtime)
-    const availability = plannedRuntimeValue > 0 ? actualRuntimeValue / plannedRuntimeValue : 0;
-    
-    // Performance = (Output Qty * Tact Time) / Actual Runtime
-    const idealRuntime = outputQtyValue * tactTimeValue / 60; // 분 단위 변환
-    const performance = actualRuntimeValue > 0 ? idealRuntime / actualRuntimeValue : 0;
-    
-    // Quality = (Output Qty - Defect Qty) / Output Qty
-    const quality = outputQtyValue > 0 ? (outputQtyValue - defectQtyValue) / outputQtyValue : 0;
-    
-    // OEE = Availability × Performance × Quality
-    const oee = availability * performance * quality;
+    const tactSeconds =
+      productionInfo?.current_tact_time && productionInfo.current_tact_time > 0
+        ? productionInfo.current_tact_time
+        : DEFAULT_TACT_SECONDS;
+    const cavity =
+      productionInfo?.current_cavity_count && productionInfo.current_cavity_count > 0
+        ? productionInfo.current_cavity_count
+        : DEFAULT_CAVITY;
+
+    // OEE 계산 (계획 가동시간 = 가동시간 - 휴식시간, Cavity 반영, 0~1 클램프)
+    // 요청의 planned_runtime 은 교대 가동시간(분)으로 해석하며, 미전송 시 12시간(720분)을 사용한다.
+    const breakMinutes = await getBreakTimeMinutes();
+    const metrics = calculateOEEMetrics({
+      operatingMinutes: Number(planned_runtime),
+      breakMinutes,
+      actualRuntime: actual_runtime || 0,
+      outputQty: outputQtyValue,
+      defectQty: defectQtyValue,
+      tactSeconds,
+      cavity
+    });
 
     // production_records 테이블에 실제 데이터 삽입
     const { data: newRecord, error: insertError } = await supabaseAdmin
@@ -184,15 +250,15 @@ export async function POST(request: NextRequest) {
         machine_id,
         date,
         shift,
-        planned_runtime: plannedRuntimeValue,
-        actual_runtime: actualRuntimeValue,
-        ideal_runtime: Math.round(idealRuntime),
+        planned_runtime: Math.round(metrics.plannedRuntime),
+        actual_runtime: Math.round(metrics.actualRuntime),
+        ideal_runtime: Math.round(metrics.idealRuntime),
         output_qty: outputQtyValue,
         defect_qty: defectQtyValue,
-        availability: Math.round(availability * 10000) / 10000, // 소수점 4자리
-        performance: Math.round(performance * 10000) / 10000,
-        quality: Math.round(quality * 10000) / 10000,
-        oee: Math.round(oee * 10000) / 10000
+        availability: Math.round(metrics.availability * 10000) / 10000, // 소수점 4자리
+        performance: Math.round(metrics.performance * 10000) / 10000,
+        quality: Math.round(metrics.quality * 10000) / 10000,
+        oee: Math.round(metrics.oee * 10000) / 10000
       })
       .select()
       .single();

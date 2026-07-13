@@ -35,10 +35,10 @@ const AntdConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     return {
       token: {
-        colorPrimary: displaySettings.theme.primary,
-        colorSuccess: displaySettings.theme.success,
-        colorWarning: displaySettings.theme.warning,
-        colorError: displaySettings.theme.error,
+        colorPrimary: String(displaySettings.theme.primary),
+        colorSuccess: String(displaySettings.theme.success),
+        colorWarning: String(displaySettings.theme.warning),
+        colorError: String(displaySettings.theme.error),
         borderRadius: 6,
         wireframe: false,
       },

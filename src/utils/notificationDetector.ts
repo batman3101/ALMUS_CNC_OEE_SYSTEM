@@ -108,7 +108,7 @@ export const detectDowntimeExceeded = (
   }
 
   const stateMessages = {
-    'MAINTENANCE': '점검',
+    'INSPECTION': '점검',
     'MODEL_CHANGE': '모델 교체',
     'PLANNED_STOP': '계획 정지',
     'PROGRAM_CHANGE': '프로그램 교체',
@@ -205,7 +205,7 @@ export const detectMachineStopped = (
     case 'TEMPORARY_STOP':
       severity = 'critical'; // 예상치 못한 정지
       break;
-    case 'MAINTENANCE':
+    case 'INSPECTION':
       severity = 'medium'; // 계획된 점검
       break;
     case 'PLANNED_STOP':
@@ -216,7 +216,7 @@ export const detectMachineStopped = (
   }
 
   const stateMessages = {
-    'MAINTENANCE': '점검 모드로 전환되었습니다',
+    'INSPECTION': '점검 모드로 전환되었습니다',
     'MODEL_CHANGE': '모델 교체가 시작되었습니다',
     'PLANNED_STOP': '계획 정지되었습니다',
     'PROGRAM_CHANGE': '프로그램 교체가 시작되었습니다',

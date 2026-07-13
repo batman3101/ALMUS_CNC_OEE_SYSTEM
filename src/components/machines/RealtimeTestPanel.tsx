@@ -66,11 +66,11 @@ export const RealtimeTestPanel: React.FC = () => {
     }
   };
 
-  const getStatusBadge = (status: MachineState) => {
+  const getStatusBadge = (status: MachineState | undefined) => {
     const statusInfo = machineStates.find(s => s.value === status);
     return statusInfo ? (
-      <Badge 
-        color={statusInfo.color} 
+      <Badge
+        color={statusInfo.color}
         text={
           <Space>
             {statusInfo.icon}
@@ -78,7 +78,7 @@ export const RealtimeTestPanel: React.FC = () => {
           </Space>
         }
       />
-    ) : status;
+    ) : (status ?? '-');
   };
 
   if (error) {

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, PieLabelRenderProps, PieLabel } from 'recharts';
 import { List, Tag } from 'antd';
 
 interface DefectTypeAnalysisChartProps {
@@ -67,20 +67,25 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
     return null;
   };
 
-  const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: { cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; percent: number }) => {
-    if (percent < 0.05) return null; // 5% 미만은 레이블 숨김
-    
+  const CustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: PieLabelRenderProps) => {
+    if (typeof percent !== 'number' || percent < 0.05) return null; // 5% 미만은 레이블 숨김
+
     const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const numCx = Number(cx);
+    const numCy = Number(cy);
+    const numInnerRadius = Number(innerRadius);
+    const numOuterRadius = Number(outerRadius);
+    const numMidAngle = Number(midAngle);
+    const radius = numInnerRadius + (numOuterRadius - numInnerRadius) * 0.5;
+    const x = numCx + radius * Math.cos(-numMidAngle * RADIAN);
+    const y = numCy + radius * Math.sin(-numMidAngle * RADIAN);
 
     return (
-      <text 
-        x={x} 
-        y={y} 
-        fill="black" 
-        textAnchor={x > cx ? 'start' : 'end'} 
+      <text
+        x={x}
+        y={y}
+        fill="black"
+        textAnchor={x > numCx ? 'start' : 'end'}
         dominantBaseline="central"
         fontSize="12"
         fontWeight="bold"
@@ -102,7 +107,7 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={CustomLabel}
+                label={CustomLabel as unknown as PieLabel}
                 outerRadius={80}
                 innerRadius={30}
                 fill="#8884d8"
@@ -158,9 +163,8 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
                         />
                         <span style={{ fontSize: '12px' }}>{item.name}</span>
                       </div>
-                      <Tag 
-                        color={item.color} 
-                        size="small"
+                      <Tag
+                        color={item.color}
                         style={{ color: 'black', fontWeight: 'bold' }}
                       >
                         {percentage}%

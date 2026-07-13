@@ -6,6 +6,10 @@
   "activeMachines": "Đang hoạt động",
   "maintenanceMachines": "Đang bảo trì",
   "stoppedMachines": "Dừng",
+  "oeeCutover": {
+    "notice": "Từ ngày 13/07/2026, công thức tính thời gian vận hành kế hoạch đã thay đổi (trừ thời gian nghỉ). Không nên so sánh trực tiếp tỷ lệ khả dụng và OEE giữa giai đoạn trước và sau ngày này.",
+    "markerLabel": "Thay đổi công thức"
+  },
   "oee": {
     "title": "Chỉ số OEE",
     "availability": "Tỷ lệ khả dụng",
@@ -147,7 +151,8 @@
     "runningMachines": "Hoạt động bình thường",
     "maintenanceStop": "Bảo trì/Dừng",
     "overallOee": "OEE tổng thể",
-    "unit": ""
+    "unit": "",
+    "machinesWithDataCount": "{{count}}/{{total}} máy có dữ liệu"
   },
   "status": {
     "normal": "Bình thường",

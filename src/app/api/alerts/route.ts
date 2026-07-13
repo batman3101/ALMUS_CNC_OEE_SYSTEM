@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/types';
 
 // 알림 임계값 설정
 const ALERT_THRESHOLDS = {
@@ -150,7 +151,7 @@ export async function GET(request: NextRequest) {
 
     (performanceData || []).forEach(record => {
       const machineId = record.machine_id;
-      const machineName = record.machines?.name || 'Unknown';
+      const machineName = unwrapJoin(record.machines)?.name || 'Unknown';
 
       if (!machinePerformance[machineId]) {
         machinePerformance[machineId] = {
@@ -283,7 +284,7 @@ export async function GET(request: NextRequest) {
     // 2. 다운타임 기반 알림 생성
     (downtimeData || []).forEach(log => {
       const duration = log.duration || 0;
-      const machineName = log.machines?.name || 'Unknown';
+      const machineName = unwrapJoin(log.machines)?.name || 'Unknown';
 
       if (duration >= ALERT_THRESHOLDS.downtime.critical) {
         alerts.push({
@@ -324,10 +325,14 @@ export async function GET(request: NextRequest) {
         let severity: 'critical' | 'warning' | 'info' = 'info';
         let title = '설비 상태 변경';
 
-        if (machine.current_state === 'BREAKDOWN_REPAIR' || machine.current_state === 'EMERGENCY_STOP') {
+        if (machine.current_state === 'BREAKDOWN_REPAIR') {
           severity = 'critical';
           title = '설비 긴급 상황';
-        } else if (machine.current_state === 'MAINTENANCE' || machine.current_state === 'MODEL_CHANGE') {
+        } else if (
+          machine.current_state === 'INSPECTION' ||
+          machine.current_state === 'PM_MAINTENANCE' ||
+          machine.current_state === 'MODEL_CHANGE'
+        ) {
           severity = 'warning';
           title = '설비 작업 중';
         }

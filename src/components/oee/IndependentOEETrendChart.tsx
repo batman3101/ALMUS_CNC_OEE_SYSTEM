@@ -14,9 +14,11 @@ import {
   ChartOptions,
   Filler,
 } from 'chart.js';
-import { Card, Typography, Row, Col, Spin } from 'antd';
+import { Card, Typography, Row, Col, Spin, Alert } from 'antd';
 import { useOEEChartData } from '@/hooks/useOEEChartData';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { isCutoverInRange } from '@/lib/oeeCutover';
+import { oeeCutoverMarkerPlugin } from './oeeCutoverPlugin';
 
 ChartJS.register(
   CategoryScale,
@@ -90,6 +92,10 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
     }
   }, [externalPeriod, period, internalHandlePeriodChange]);
 
+  // 계산식 변경일(OEE_CALC_CHANGE_DATE) 표시 여부 - 표시 중인 날짜 범위가 변경일을 포함할 때만 true
+  const chartDates = React.useMemo(() => chartData.map(item => item.date), [chartData]);
+  const showCutoverNotice = React.useMemo(() => isCutoverInRange(chartDates), [chartDates]);
+
   // 차트 데이터 구성
   const chartDataConfig = {
     labels: chartData.map(item => {
@@ -141,6 +147,11 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      // 계산식 변경일 세로 마커 (플러그인이 draw 시점에 최신 dates 를 읽는다)
+      oeeCutoverMarker: {
+        dates: chartDates,
+        label: t('oeeCutover.markerLabel'),
+      },
       legend: {
         position: 'top' as const,
         labels: {
@@ -223,20 +234,30 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
         </AntTitle>
       </div>
 
+      {/* 계산식 변경일 안내 - 표시 범위가 변경일을 포함할 때만 노출 */}
+      {showCutoverNotice && (
+        <Alert
+          message={t('oeeCutover.notice')}
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       {/* 차트 */}
       <div style={{ height, position: 'relative' }}>
         {loading && (
-          <div style={{ 
-            position: 'absolute', 
-            top: '50%', 
-            left: '50%', 
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
             transform: 'translate(-50%, -50%)',
-            zIndex: 10 
+            zIndex: 10
           }}>
             <Spin size="large" />
           </div>
         )}
-        <Line data={chartDataConfig} options={options} />
+        <Line data={chartDataConfig} options={options} plugins={[oeeCutoverMarkerPlugin]} />
       </div>
 
       {/* 통계 요약 */}

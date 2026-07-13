@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { MACHINE_STATES, isMachineState } from '@/types';
 
 // 입력값 검증 및 보안 함수들
 const VALID_LOCATIONS = ['라인1', '라인2', '라인3', '라인4', 'A동', 'B동', 'C동', '조립라인', '검사라인', '포장라인'];
-const VALID_STATES = ['NORMAL_OPERATION', 'MAINTENANCE', 'ERROR', 'IDLE', 'SETUP'];
 const MAX_STRING_LENGTH = 100;
 
 function validateStringInput(input: string | null, fieldName: string): string | null {
@@ -39,11 +39,11 @@ function validateLocation(location: string | null): string | null {
 
 function validateCurrentState(state: string | null): string | null {
   if (!state) return null;
-  
-  if (!VALID_STATES.includes(state)) {
-    throw new Error(`유효하지 않은 상태입니다. 허용된 상태: ${VALID_STATES.join(', ')}`);
+
+  if (!isMachineState(state)) {
+    throw new Error(`유효하지 않은 상태입니다. 허용된 상태: ${MACHINE_STATES.join(', ')}`);
   }
-  
+
   return state;
 }
 

@@ -17,10 +17,37 @@ import {
 } from 'antd';
 import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { ReportTemplates } from './ReportTemplates';
-import { OEEMetrics, Machine, ProductionRecord } from '@/types';
+import { Machine, ProductionRecord } from '@/types';
+import { OEEMetrics } from '@/types/reports';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
+
+// 설비/기간 선택으로 실제 보고서 데이터(OEE + 생산실적)를 필터링
+// oeeData와 productionData는 항상 동일 인덱스로 1:1 매핑되어 전달되므로
+// 생산실적을 기준으로 필터링하고 동일 인덱스의 OEE 항목을 함께 선택한다.
+const filterByMachineAndDate = (
+  productionData: ProductionRecord[],
+  oeeData: OEEMetrics[],
+  machineIds: string[],
+  range: [string, string]
+): { productionData: ProductionRecord[]; oeeData: OEEMetrics[] } => {
+  const filteredProductionData: ProductionRecord[] = [];
+  const filteredOeeData: OEEMetrics[] = [];
+
+  productionData.forEach((record, index) => {
+    const matchesMachine = machineIds.length === 0 || machineIds.includes(record.machine_id);
+    const matchesDate = record.date >= range[0] && record.date <= range[1];
+    if (matchesMachine && matchesDate) {
+      filteredProductionData.push(record);
+      if (oeeData[index]) {
+        filteredOeeData.push(oeeData[index]);
+      }
+    }
+  });
+
+  return { productionData: filteredProductionData, oeeData: filteredOeeData };
+};
 
 interface ReportExportModalProps {
   visible: boolean;
@@ -69,10 +96,17 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
         groupBy: values.groupBy || 'machine'
       };
 
+      const { productionData: filteredProductionData, oeeData: filteredOeeData } = filterByMachineAndDate(
+        productionData,
+        oeeData,
+        reportConfig.selectedMachines,
+        reportConfig.dateRange
+      );
+
       const reportData = {
         machines: machines.filter(m => reportConfig.selectedMachines.includes(m.id)),
-        oeeData,
-        productionData,
+        oeeData: filteredOeeData,
+        productionData: filteredProductionData,
         ...reportConfig
       };
 

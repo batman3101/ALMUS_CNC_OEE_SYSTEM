@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageContextType } from '@/types';
 import { getStoredLanguage, setStoredLanguage } from '@/utils/localStorage';
@@ -38,11 +38,11 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     const initializeLanguage = async () => {
       try {
         // 1. 먼저 SystemSettings에서 언어 설정 확인
-        const systemLanguage = getSetting<{value: string}>('ui', 'language');
+        const systemLanguage = getSetting('general', 'language');
         let targetLanguage: 'ko' | 'vi' = 'ko';
 
-        if (systemLanguage?.value) {
-          targetLanguage = systemLanguage.value as 'ko' | 'vi';
+        if (systemLanguage) {
+          targetLanguage = systemLanguage as 'ko' | 'vi';
           console.log('언어 설정을 SystemSettings에서 로드:', targetLanguage);
         } else {
           // 2. SystemSettings에 없다면 localStorage에서 확인
@@ -50,12 +50,12 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
           if (localLanguage) {
             targetLanguage = localLanguage;
             console.log('언어 설정을 localStorage에서 로드:', targetLanguage);
-            
-            // SystemSettings에 저장
+
+            // SystemSettings에 저장 (DB 의 canonical key 는 default_language)
             await updateSetting({
-              category: 'ui',
-              setting_key: 'language',
-              setting_value: { value: targetLanguage }
+              category: 'general',
+              setting_key: 'default_language',
+              setting_value: targetLanguage
             });
           }
         }
@@ -81,18 +81,21 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
   }, [systemSettingsLoading, isInitialized, getSetting, updateSetting, i18n]);
 
   // SystemSettings 변경 감지 및 동기화
+  // 함수 호출을 deps 배열에 직접 넣으면 매 렌더마다 재평가되어 정적 분석이 불가능하므로 변수로 추출한다
+  const systemLanguageSetting = getSetting('general', 'language');
+
   useEffect(() => {
     if (!isInitialized || systemSettingsLoading) return;
 
-    const systemLanguage = getSetting<{value: string}>('ui', 'language');
-    if (systemLanguage?.value && systemLanguage.value !== language) {
-      const newLanguage = systemLanguage.value as 'ko' | 'vi';
+    const systemLanguage = systemLanguageSetting;
+    if (systemLanguage && systemLanguage !== language) {
+      const newLanguage = systemLanguage as 'ko' | 'vi';
       console.log('SystemSettings에서 언어 변경 감지:', newLanguage);
       setLanguage(newLanguage);
       i18n.changeLanguage(newLanguage);
       setStoredLanguage(newLanguage);
     }
-  }, [getSetting('ui', 'language'), language, isInitialized, systemSettingsLoading, i18n]);
+  }, [systemLanguageSetting, language, isInitialized, systemSettingsLoading, i18n]);
 
   const changeLanguage = useCallback(async (lang: 'ko' | 'vi') => {
     if (language === lang) return;
@@ -109,11 +112,11 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
       // 3. localStorage 업데이트
       setStoredLanguage(lang);
       
-      // 4. SystemSettings 업데이트
+      // 4. SystemSettings 업데이트 (DB 의 canonical key 는 default_language)
       const success = await updateSetting({
-        category: 'ui',
-        setting_key: 'language',
-        setting_value: { value: lang }
+        category: 'general',
+        setting_key: 'default_language',
+        setting_value: lang
       });
 
       if (success) {
@@ -130,11 +133,14 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     }
   }, [language, i18n, updateSetting]);
 
-  const value: LanguageContextType = {
+  // changeLanguage는 [language, i18n, updateSetting]에 의존하는 고정 identity의 useCallback이고
+  // updateSetting(SystemSettingsContext)도 고정 identity이므로, 이 value는 language/t가 실제로
+  // 바뀔 때만 새 identity를 얻는다 (하위 모든 useLanguage() 소비자의 불필요한 재렌더링 방지)
+  const value: LanguageContextType = useMemo(() => ({
     language,
     changeLanguage,
     t,
-  };
+  }), [language, changeLanguage, t]);
 
   return (
     <LanguageContext.Provider value={value}>

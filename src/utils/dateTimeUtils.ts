@@ -69,8 +69,10 @@ export class DateTimeFormatter {
 
   /**
    * Date 객체를 dayjs 객체로 변환 (타임존 적용)
+   * 이 파일 하단의 모듈 레벨 함수(calculateShiftTime, calculateWorkingHours)에서도
+   * getDateTimeFormatter()로 얻은 인스턴스를 통해 사용하므로 public이어야 한다.
    */
-  private toDayjs(date: Date | string | Dayjs): Dayjs {
+  toDayjs(date: Date | string | Dayjs): Dayjs {
     return dayjs(date).tz(this.timezone);
   }
 

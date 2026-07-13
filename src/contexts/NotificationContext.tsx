@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo } from 'react';
 import {
   Notification,
   NotificationContextType,
@@ -10,6 +10,7 @@ import type { Machine } from '@/types';
 import { useAuth } from './AuthContext';
 import { showToast } from '@/components/notifications';
 import { useLanguage } from './LanguageContext';
+import { fetchMachines } from '@/lib/machinesCache';
 
 // 알림 상태 관리를 위한 리듀서
 interface NotificationState {
@@ -112,13 +113,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   // 실제 데이터베이스 기반 알림 생성 (중복 방지)
   const generateRealNotifications = useCallback(async (): Promise<Notification[]> => {
     try {
-      console.log('🏭 설비 데이터 API 호출 시작');
-      // 실제 설비 데이터 가져오기
-      const machinesResponse = await fetch('/api/machines');
-      console.log('📡 API 응답 상태:', machinesResponse.status);
-
-      const machinesData = await machinesResponse.json();
-      const machines = Array.isArray(machinesData) ? machinesData : (machinesData.machines || []);
+      console.log('🏭 설비 데이터 조회 시작');
+      // 실제 설비 데이터 가져오기 (공용 캐시: 페이지의 다른 호출과 중복 요청을 합친다)
+      const machines = await fetchMachines();
       console.log('🔧 로딩된 설비 수:', machines.length);
 
       // 이미 확인된 알림 조회
@@ -145,48 +142,48 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
           console.log(`🚨 새 알림 생성: ${machine.name} - ${machine.current_state}`);
           let message = '';
-          let severity: NotificationSeverity = 'warning';
+          let severity: NotificationSeverity = 'high';
 
           switch (machine.current_state) {
             case 'TEMPORARY_STOP':
               message = `${machine.name}이(가) 일시정지 상태입니다.`;
-              severity = 'warning';
+              severity = 'high';
               break;
-            case 'MAINTENANCE':
             case 'PM_MAINTENANCE':
             case 'INSPECTION':
               message = `${machine.name}이(가) 점검 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'BREAKDOWN_REPAIR':
               message = `${machine.name}에서 고장이 발생했습니다.`;
-              severity = 'error';
+              severity = 'critical';
               break;
             case 'MODEL_CHANGE':
               message = `${machine.name}에서 모델 교체 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'PROGRAM_CHANGE':
               message = `${machine.name}에서 프로그램 교체 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'TOOL_CHANGE':
               message = `${machine.name}에서 공구 교환 중입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             case 'PLANNED_STOP':
               message = `${machine.name}이(가) 계획 정지 상태입니다.`;
-              severity = 'info';
+              severity = 'low';
               break;
             default:
               message = `${machine.name}의 상태를 확인해주세요.`;
-              severity = 'warning';
+              severity = 'high';
           }
 
           notifications.push({
             id: notificationKey, // 고유한 키로 ID 설정
-            type: machine.current_state === 'BREAKDOWN_REPAIR' ? 'EQUIPMENT_ERROR' :
-                  machine.current_state === 'TEMPORARY_STOP' ? 'OEE_LOW' : 'MAINTENANCE',
+            type: machine.current_state === 'BREAKDOWN_REPAIR' ||
+                  machine.current_state === 'TEMPORARY_STOP'
+                  ? 'MACHINE_STOPPED' : 'MAINTENANCE_DUE',
             severity,
             title: `설비 상태 알림`,
             message,
@@ -198,8 +195,6 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             acknowledged: false,
             status: 'active'
           });
-
-          notificationId++;
         }
       });
 
@@ -274,10 +269,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       // 현재 알림에서 machine_id와 state 추출
       const notification = state.notifications.find(n => n.id === id);
       if (notification) {
-        // ID가 "machineId_state" 형식으로 되어 있음
-        const [machineId, machineState] = id.split('_');
-        if (machineId && machineState) {
-          saveAcknowledgedNotification(machineId, machineState);
+        // ID가 "machineId_state" 형식으로 되어 있음 (state 자체에 '_'가 포함될 수 있으므로 첫 '_'만 기준으로 분리)
+        const separatorIndex = id.indexOf('_');
+        if (separatorIndex > 0) {
+          const machineId = id.slice(0, separatorIndex);
+          const machineState = id.slice(separatorIndex + 1);
+          if (machineId && machineState) {
+            saveAcknowledgedNotification(machineId, machineState);
+          }
         }
       }
 
@@ -357,9 +356,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
       // 현재 모든 활성 알림을 확인됨으로 표시하고 로컬스토리지에 저장
       state.notifications.forEach(notification => {
-        const [machineId, machineState] = notification.id.split('_');
-        if (machineId && machineState) {
-          saveAcknowledgedNotification(machineId, machineState);
+        // state 자체에 '_'가 포함될 수 있으므로 첫 '_'만 기준으로 분리
+        const separatorIndex = notification.id.indexOf('_');
+        if (separatorIndex > 0) {
+          const machineId = notification.id.slice(0, separatorIndex);
+          const machineState = notification.id.slice(separatorIndex + 1);
+          if (machineId && machineState) {
+            saveAcknowledgedNotification(machineId, machineState);
+          }
         }
       });
 
@@ -384,7 +388,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   }, [state.notifications, saveAcknowledgedNotification, t]);
 
   // 읽지 않은 알림 수 계산
-  const unreadCount = state.notifications.filter(n => n.status === 'active').length;
+  const unreadCount = useMemo(
+    () => state.notifications.filter(n => n.status === 'active').length,
+    [state.notifications]
+  );
 
   // 초기 데이터 로드 - 사용자 로그인 시 실제 알림 로딩
   useEffect(() => {
@@ -400,7 +407,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }
   }, [user?.id, refreshNotifications]);
 
-  const contextValue: NotificationContextType = {
+  // context value를 메모이제이션한다.
+  // 매 렌더마다 새 객체를 만들면 useNotifications()를 쓰는 모든 소비자가 불필요하게 리렌더된다.
+  const contextValue: NotificationContextType = useMemo(() => ({
     notifications: state.notifications,
     unreadCount,
     addNotification,
@@ -409,7 +418,16 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     clearNotification,
     clearAllNotifications,
     refreshNotifications,
-  };
+  }), [
+    state.notifications,
+    unreadCount,
+    addNotification,
+    acknowledgeNotification,
+    resolveNotification,
+    clearNotification,
+    clearAllNotifications,
+    refreshNotifications,
+  ]);
 
   return (
     <NotificationContext.Provider value={contextValue}>

@@ -1,5 +1,137 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import {
+  DEFAULT_OPERATING_MINUTES,
+  getBreakTimeMinutes,
+  resolvePlannedRuntime
+} from '@/lib/plannedRuntime';
+
+const DEFAULT_TACT_SECONDS = 120;
+const DEFAULT_CAVITY = 1;
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(Math.max(value, min), max);
+
+// 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량
+function validateQuantities(outputQty: unknown, defectQty: unknown): string | null {
+  if (!Number.isInteger(outputQty) || (outputQty as number) < 0) {
+    return '생산 수량(output_qty)은 0 이상의 정수여야 합니다';
+  }
+  if (!Number.isInteger(defectQty) || (defectQty as number) < 0) {
+    return '불량 수량(defect_qty)은 0 이상의 정수여야 합니다';
+  }
+  if ((defectQty as number) > (outputQty as number)) {
+    return '불량 수량(defect_qty)은 생산 수량(output_qty)보다 클 수 없습니다';
+  }
+  return null;
+}
+
+interface ExistingRecord {
+  record_id: string;
+  machine_id: string;
+  date: string;
+  shift: string | null;
+  planned_runtime: number | null;
+  actual_runtime: number | null;
+  output_qty: number;
+  defect_qty: number;
+}
+
+// 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
+async function getMachineTactInfo(machineId: string) {
+  const { data } = await supabaseAdmin
+    .from('machines_with_production_info')
+    .select('current_tact_time, current_cavity_count')
+    .eq('id', machineId)
+    .maybeSingle();
+
+  return {
+    tactSeconds:
+      data?.current_tact_time && data.current_tact_time > 0
+        ? data.current_tact_time
+        : DEFAULT_TACT_SECONDS,
+    cavity:
+      data?.current_cavity_count && data.current_cavity_count > 0
+        ? data.current_cavity_count
+        : DEFAULT_CAVITY
+  };
+}
+
+/**
+ * 수정 요청으로부터 저장할 데이터 구성.
+ * 수량/가동시간이 변경되면 파생 지표(ideal_runtime, availability, performance, quality, oee)를
+ * 서버에서 항상 재계산한다. (클라이언트가 보낸 지표 값은 무시)
+ */
+async function buildUpdateData(
+  body: Record<string, unknown>,
+  existing: ExistingRecord
+): Promise<{ updateData?: Record<string, number>; error?: string }> {
+  const baseFields = ['output_qty', 'defect_qty', 'actual_runtime', 'planned_runtime'] as const;
+  const hasBaseField = baseFields.some(field => body[field] !== undefined);
+
+  if (!hasBaseField) {
+    return { error: 'No valid fields to update' };
+  }
+
+  const outputQty = body.output_qty !== undefined ? body.output_qty : existing.output_qty;
+  const defectQty = body.defect_qty !== undefined ? body.defect_qty : existing.defect_qty;
+
+  const validationError = validateQuantities(outputQty, defectQty);
+  if (validationError) {
+    return { error: validationError };
+  }
+
+  // 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
+  // - body.planned_runtime 이 오면 교대 가동시간(분)으로 해석하여 휴식시간을 차감한다.
+  // - 오지 않으면 이미 저장된 planned_runtime(차감이 끝난 값)을 그대로 유지한다. (중복 차감 방지)
+  // - 저장된 값도 없으면 기본 가동시간(720분)에서 휴식시간을 차감한 값을 사용한다.
+  const breakMinutes = await getBreakTimeMinutes();
+
+  const storedPlannedRuntime = existing.planned_runtime ?? 0;
+  const plannedRuntime =
+    body.planned_runtime !== undefined
+      ? resolvePlannedRuntime(Number(body.planned_runtime), breakMinutes)
+      : storedPlannedRuntime > 0
+        ? storedPlannedRuntime
+        : resolvePlannedRuntime(DEFAULT_OPERATING_MINUTES, breakMinutes);
+
+  const actualRuntimeInput =
+    body.actual_runtime !== undefined
+      ? Number(body.actual_runtime)
+      : existing.actual_runtime ?? 0;
+
+  const actualRuntime = clamp(
+    Number.isFinite(actualRuntimeInput) ? actualRuntimeInput : 0,
+    0,
+    plannedRuntime
+  );
+
+  const { tactSeconds, cavity } = await getMachineTactInfo(existing.machine_id);
+
+  const outputQtyValue = outputQty as number;
+  const defectQtyValue = defectQty as number;
+
+  const idealRuntime = (outputQtyValue / Math.max(1, cavity)) * tactSeconds / 60;
+  const availability = plannedRuntime > 0 ? clamp(actualRuntime / plannedRuntime, 0, 1) : 0;
+  const performance = actualRuntime > 0 ? clamp(idealRuntime / actualRuntime, 0, 1) : 0;
+  const quality =
+    outputQtyValue > 0 ? clamp((outputQtyValue - defectQtyValue) / outputQtyValue, 0, 1) : 0;
+  const oee = availability * performance * quality;
+
+  return {
+    updateData: {
+      output_qty: outputQtyValue,
+      defect_qty: defectQtyValue,
+      planned_runtime: Math.round(plannedRuntime),
+      actual_runtime: Math.round(actualRuntime),
+      ideal_runtime: Math.round(idealRuntime),
+      availability: Math.round(availability * 10000) / 10000, // 소수점 4자리
+      performance: Math.round(performance * 10000) / 10000,
+      quality: Math.round(quality * 10000) / 10000,
+      oee: Math.round(oee * 10000) / 10000
+    }
+  };
+}
 
 // GET /api/production-records/[recordId] - 특정 생산 기록 조회
 export async function GET(
@@ -80,21 +212,10 @@ export async function PUT(
     const body = await request.json();
     console.log('PUT request body:', JSON.stringify(body, null, 2));
 
-    const {
-      output_qty,
-      defect_qty,
-      actual_runtime,
-      planned_runtime,
-      availability,
-      performance,
-      quality,
-      oee
-    } = body;
-
     // 생산 기록 존재 확인
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
-      .select('record_id, machine_id, date, shift')
+      .select('record_id, machine_id, date, shift, planned_runtime, actual_runtime, output_qty, defect_qty')
       .eq('record_id', params.recordId)
       .single();
 
@@ -105,20 +226,12 @@ export async function PUT(
       );
     }
 
-    // 업데이트할 데이터 구성
-    const updateData: Record<string, number | undefined> = {};
-    if (output_qty !== undefined) updateData.output_qty = output_qty;
-    if (defect_qty !== undefined) updateData.defect_qty = defect_qty;
-    if (actual_runtime !== undefined) updateData.actual_runtime = actual_runtime;
-    if (planned_runtime !== undefined) updateData.planned_runtime = planned_runtime;
-    if (availability !== undefined) updateData.availability = availability;
-    if (performance !== undefined) updateData.performance = performance;
-    if (quality !== undefined) updateData.quality = quality;
-    if (oee !== undefined) updateData.oee = oee;
+    // 업데이트할 데이터 구성 (파생 지표는 서버에서 재계산)
+    const { updateData, error: buildError } = await buildUpdateData(body, existingRecord);
 
-    if (Object.keys(updateData).length === 0) {
+    if (buildError || !updateData) {
       return NextResponse.json(
-        { success: false, error: 'No valid fields to update' },
+        { success: false, error: buildError },
         { status: 400 }
       );
     }
@@ -236,7 +349,7 @@ export async function PATCH(
     // 생산 기록 존재 확인
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
-      .select('record_id, machine_id, date, shift')
+      .select('record_id, machine_id, date, shift, planned_runtime, actual_runtime, output_qty, defect_qty')
       .eq('record_id', params.recordId)
       .single();
 
@@ -247,22 +360,12 @@ export async function PATCH(
       );
     }
 
-    // 업데이트할 데이터 구성 (모든 필드 허용)
-    const updateData: Record<string, number | undefined> = {};
-    const allowedFields = [
-      'output_qty', 'defect_qty', 'actual_runtime', 'planned_runtime',
-      'availability', 'performance', 'quality', 'oee'
-    ];
+    // 업데이트할 데이터 구성 (파생 지표는 서버에서 재계산)
+    const { updateData, error: buildError } = await buildUpdateData(body, existingRecord);
 
-    allowedFields.forEach(field => {
-      if (body[field] !== undefined) {
-        updateData[field] = body[field];
-      }
-    });
-
-    if (Object.keys(updateData).length === 0) {
+    if (buildError || !updateData) {
       return NextResponse.json(
-        { success: false, error: 'No valid fields to update' },
+        { success: false, error: buildError },
         { status: 400 }
       );
     }

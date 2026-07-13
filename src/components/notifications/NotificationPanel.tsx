@@ -179,11 +179,6 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       key: 'low',
       label: t('notifications.severity.low'),
       onClick: () => setSeverityFilter('low')
-    },
-    {
-      key: 'info',
-      label: t('notifications.severity.info'),
-      onClick: () => setSeverityFilter('info')
     }
   ];
 
@@ -316,13 +311,11 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                     <Space size={4} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
                       <Tag
                         color={getSeverityColor(notification.severity)}
-                        size="small"
                       >
                         {t(`notifications.severity.${notification.severity}`)}
                       </Tag>
                       <Tag
                         color={getStatusColor(notification.status)}
-                        size="small"
                       >
                         {t(`notifications.status.${notification.status}`)}
                       </Tag>

@@ -17,7 +17,7 @@ import { UploadOutlined, SaveOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useGeneralSettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
-import type { UploadFile } from 'antd/es/upload/interface';
+import type { UploadFile, UploadChangeParam } from 'antd/es/upload/interface';
 
 const { Title, Text } = Typography;
 
@@ -73,14 +73,14 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
       const newLanguage = values.language;
       const languageChanged = currentLanguage !== newLanguage;
 
-      // SettingUpdate 형태로 변환 (category 포함)
+      // updateMultipleSettings 가 기대하는 { key, value, reason } 형태로 변환
+      // (DB 의 canonical key 는 default_language 이므로 폼 필드명 language 를 매핑해준다)
       const updates = Object.entries(values)
         .filter(([, value]) => value !== undefined && value !== null) // null/undefined 값 제외
         .map(([key, value]) => ({
-          category: 'general' as const,
-          setting_key: key,
-          setting_value: value,
-          change_reason: `일반 설정 업데이트: ${key}`
+          key: key === 'language' ? 'default_language' : key,
+          value,
+          reason: `일반 설정 업데이트: ${key}`
         }));
 
       if (updates.length === 0) {
@@ -178,7 +178,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
   };
 
   // 업로드 상태 변경 처리
-  const handleUploadChange = (info: { fileList: Array<{ uid: string; name: string; status?: string; url?: string }> }) => {
+  const handleUploadChange = (info: UploadChangeParam<UploadFile>) => {
     let fileList = [...info.fileList];
     fileList = fileList.slice(-1); // 파일 개수 제한 (1개만)
     setLogoFileList(fileList);

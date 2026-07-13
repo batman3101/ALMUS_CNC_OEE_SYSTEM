@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Descriptions, Tag, Statistic, Row, Col, Button, Space } from 'antd';
 import { FileTextOutlined, BarChartOutlined, PrinterOutlined } from '@ant-design/icons';
-import { ReportTemplates } from './ReportTemplates';
+import type { ReportTemplates } from './ReportTemplates';
 import { OEEMetrics, Machine, ProductionRecord } from '@/types';
 
 interface ReportPreviewProps {
@@ -27,29 +27,24 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
   reportData,
   onGenerate
 }) => {
-  const [previewData, setPreviewData] = useState<{
-    summary: {
-      period: string;
-      totalMachines: number;
-      avgOEE: number;
-      avgAvailability: number;
-      avgPerformance: number;
-      avgQuality: number;
-    };
-    machines: Array<{
-      id: string;
-      name: string;
-      location?: string;
-      avgOEE?: number;
-      availability?: number;
-      performance?: number;
-      quality?: number;
-    }>;
-  } | null>(null);
+  const [previewData, setPreviewData] = useState<ReturnType<typeof ReportTemplates.generatePreviewData> | null>(null);
 
   useEffect(() => {
-    const preview = ReportTemplates.generatePreviewData(reportData);
-    setPreviewData(preview);
+    let cancelled = false;
+
+    // jsPDF/xlsx/html2canvas는 실제 미리보기 데이터를 계산하는 시점에만 필요하므로
+    // 초기 번들에 포함되지 않도록 렌더 시점에 동적으로 로드한다.
+    (async () => {
+      const { ReportTemplates } = await import('./ReportTemplates');
+      const preview = ReportTemplates.generatePreviewData(reportData);
+      if (!cancelled) {
+        setPreviewData(preview);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [reportData]);
 
   if (!previewData) {
@@ -90,7 +85,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({
       <Row gutter={[16, 16]}>
         {/* 보고서 기본 정보 */}
         <Col span={24}>
-          <Descriptions title="보고서 정보" variant="outlined" size="small">
+          <Descriptions title="보고서 정보" size="small">
             <Descriptions.Item label="보고서 유형">
               <Tag color="blue">{reportTypeLabels[reportData.reportType]}</Tag>
             </Descriptions.Item>

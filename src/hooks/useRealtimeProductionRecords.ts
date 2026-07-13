@@ -1,7 +1,33 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { format, subDays } from 'date-fns';
 import { supabase, checkSupabaseConnection } from '@/lib/supabase';
+
+// production_records는 설비 800대 × 2교대 ≈ 1,600행/일로 증가한다.
+// 필터가 없으면 전체 테이블(32만행 이상)을 내려받아 statement timeout(57014)에 걸리므로
+// 호출부가 아무것도 넘기지 않아도 항상 "기간 + 행수" 상한이 걸리도록 한다.
+const DEFAULT_WINDOW_DAYS = 7;       // useRealtimeData와 동일한 기본 조회 기간
+const DEFAULT_RECORD_LIMIT = 15000;  // 7일 × 약 1,600행/일 ≈ 11,200행 + 여유분
+const MAX_RECORD_LIMIT = 50000;      // 호출부가 지정할 수 있는 상한 (30일 프리셋 ≈ 48,000행 커버)
+
+// 목록 조회와 실시간 INSERT 재조회가 항상 동일한 컬럼 집합을 사용하도록 한 곳에서 정의한다.
+const PRODUCTION_RECORD_COLUMNS = `
+  record_id,
+  machine_id,
+  date,
+  shift,
+  planned_runtime,
+  actual_runtime,
+  ideal_runtime,
+  output_qty,
+  defect_qty,
+  availability,
+  performance,
+  quality,
+  oee,
+  created_at
+`;
 
 interface ProductionRecord {
   record_id: string;
@@ -30,16 +56,27 @@ interface UseRealtimeProductionRecordsProps {
     };
     shift?: 'A' | 'B' | 'ALL';
   };
+  /** 조회 행수 상한 (기본 15,000행, 최대 50,000행) */
+  limit?: number;
 }
 
-export const useRealtimeProductionRecords = ({ 
-  initialData = [], 
-  filters = {} 
+export const useRealtimeProductionRecords = ({
+  initialData = [],
+  filters = {},
+  limit
 }: UseRealtimeProductionRecordsProps = {}) => {
   const [records, setRecords] = useState<ProductionRecord[]>(initialData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // 기본 조회 조건 (호출부가 기간을 넘기지 않아도 최근 7일로 제한)
+  const today = new Date();
+  const startDate = filters.dateRange?.start ?? format(subDays(today, DEFAULT_WINDOW_DAYS - 1), 'yyyy-MM-dd');
+  const endDate = filters.dateRange?.end ?? format(today, 'yyyy-MM-dd');
+  const machineId = filters.machineId;
+  const shift = filters.shift;
+  const effectiveLimit = Math.min(Math.max(1, limit ?? DEFAULT_RECORD_LIMIT), MAX_RECORD_LIMIT);
 
   // 실시간 구독 설정
   useEffect(() => {
@@ -61,47 +98,25 @@ export const useRealtimeProductionRecords = ({
         }
         console.log('✅ Supabase connection verified');
 
+        // 조인(machines)은 어떤 호출부도 사용하지 않으면서 행마다 설비 객체를 중복 생성하므로 제거한다.
         let query = supabase
           .from('production_records')
-          .select(`
-            record_id,
-            machine_id,
-            date,
-            shift,
-            planned_runtime,
-            actual_runtime,
-            ideal_runtime,
-            output_qty,
-            defect_qty,
-            availability,
-            performance,
-            quality,
-            oee,
-            created_at,
-            machines:machine_id (
-              id,
-              name,
-              location,
-              equipment_type
-            )
-          `)
+          .select(PRODUCTION_RECORD_COLUMNS)
+          // 기간 필터는 항상 적용된다 (필터 미지정 시 기본 7일)
+          .gte('date', startDate)
+          .lte('date', endDate)
           .order('date', { ascending: false })
           .order('machine_id', { ascending: true })
-          .order('shift', { ascending: true });
+          .order('shift', { ascending: true })
+          .limit(effectiveLimit);
 
-        // 필터 적용
-        if (filters.machineId) {
-          query = query.eq('machine_id', filters.machineId);
+        // 선택 필터 적용
+        if (machineId) {
+          query = query.eq('machine_id', machineId);
         }
-        
-        if (filters.dateRange) {
-          query = query
-            .gte('date', filters.dateRange.start)
-            .lte('date', filters.dateRange.end);
-        }
-        
-        if (filters.shift && filters.shift !== 'ALL') {
-          query = query.eq('shift', filters.shift);
+
+        if (shift && shift !== 'ALL') {
+          query = query.eq('shift', shift);
         }
 
         const { data, error } = await query;
@@ -113,6 +128,8 @@ export const useRealtimeProductionRecords = ({
 
         console.log('✅ Supabase query successful:', {
           recordCount: data?.length || 0,
+          dateRange: { start: startDate, end: endDate },
+          limit: effectiveLimit,
           sampleRecord: data?.[0] ? {
             record_id: data[0].record_id,
             machine_id: data[0].machine_id,
@@ -120,6 +137,12 @@ export const useRealtimeProductionRecords = ({
             oee: data[0].oee
           } : null
         });
+
+        if (data && data.length >= effectiveLimit) {
+          console.warn(
+            `⚠️ 생산 기록이 상한(${effectiveLimit}행)까지 조회되었습니다. 선택한 기간의 일부만 표시될 수 있습니다.`
+          );
+        }
 
         setRecords(data || []);
         console.log(`📊 Loaded ${data?.length || 0} production records`);
@@ -149,43 +172,67 @@ export const useRealtimeProductionRecords = ({
               schema: 'public',
               table: 'production_records'
             },
-            (payload) => {
+            async (payload) => {
               console.log('Production records realtime event received:', payload);
-              
+
               const { eventType, new: newRecord, old: oldRecord } = payload;
-              
+
+              if (eventType === 'INSERT') {
+                if (!newRecord) return;
+
+                // 목록 조회에 적용된 필터를 신규 행에도 동일하게 적용
+                const matchesMachine = !machineId || newRecord.machine_id === machineId;
+                const matchesShift = !shift || shift === 'ALL' || newRecord.shift === shift;
+                const matchesDateRange = newRecord.date >= startDate && newRecord.date <= endDate;
+
+                if (!matchesMachine || !matchesShift || !matchesDateRange) {
+                  return;
+                }
+
+                // 목록의 다른 행과 동일한 컬럼 집합으로 다시 조회
+                const { data: insertedRecord, error: fetchError } = await supabase
+                  .from('production_records')
+                  .select(PRODUCTION_RECORD_COLUMNS)
+                  .eq('record_id', newRecord.record_id)
+                  .single();
+
+                if (fetchError || !insertedRecord) {
+                  console.error('Failed to load production record for realtime insert:', fetchError);
+                  return;
+                }
+
+                setRecords(prevRecords => {
+                  if (prevRecords.find(r => r.record_id === insertedRecord.record_id)) {
+                    return prevRecords;
+                  }
+                  // 조회 상한과 동일하게 배열 길이를 제한한다 (무한 증가 방지)
+                  return [
+                    insertedRecord as unknown as ProductionRecord,
+                    ...prevRecords.slice(0, effectiveLimit - 1)
+                  ];
+                });
+                console.log('Production record added:', newRecord.record_id);
+                return;
+              }
+
               setRecords(prevRecords => {
                 let updatedRecords = [...prevRecords];
-                
-                switch (eventType) {
-                  case 'INSERT':
-                    // 새 생산 기록 추가
-                    if (newRecord && !updatedRecords.find(r => r.record_id === newRecord.record_id)) {
-                      updatedRecords.unshift(newRecord as ProductionRecord);
-                      console.log('Production record added:', newRecord.record_id);
+
+                if (eventType === 'UPDATE') {
+                  if (newRecord) {
+                    const index = updatedRecords.findIndex(r => r.record_id === newRecord.record_id);
+                    if (index !== -1) {
+                      updatedRecords[index] = { ...updatedRecords[index], ...newRecord };
+                      console.log('Production record updated:', newRecord.record_id);
                     }
-                    break;
-                    
-                  case 'UPDATE':
-                    // 생산 기록 정보 업데이트
-                    if (newRecord) {
-                      const index = updatedRecords.findIndex(r => r.record_id === newRecord.record_id);
-                      if (index !== -1) {
-                        updatedRecords[index] = { ...updatedRecords[index], ...newRecord };
-                        console.log('Production record updated:', newRecord.record_id);
-                      }
-                    }
-                    break;
-                    
-                  case 'DELETE':
-                    // 생산 기록 삭제
-                    if (oldRecord) {
-                      updatedRecords = updatedRecords.filter(r => r.record_id !== oldRecord.record_id);
-                      console.log('Production record deleted:', oldRecord.record_id);
-                    }
-                    break;
+                  }
+                } else if (eventType === 'DELETE') {
+                  if (oldRecord) {
+                    updatedRecords = updatedRecords.filter(r => r.record_id !== oldRecord.record_id);
+                    console.log('Production record deleted:', oldRecord.record_id);
+                  }
                 }
-                
+
                 return updatedRecords;
               });
             }
@@ -219,7 +266,7 @@ export const useRealtimeProductionRecords = ({
         subscription.unsubscribe();
       }
     };
-  }, [filters.machineId, filters.dateRange?.start, filters.dateRange?.end, filters.shift, initialData.length, refreshTrigger]);
+  }, [machineId, startDate, endDate, shift, effectiveLimit, initialData.length, refreshTrigger]);
 
   // 생산 기록 업데이트 함수
   const updateProductionRecord = useCallback(async (
@@ -285,26 +332,38 @@ export const useRealtimeProductionRecords = ({
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
-  // 집계 데이터 계산
-  const aggregatedData = useCallback(() => {
-    const totalProduction = records.reduce((sum, record) => sum + record.output_qty, 0);
-    const totalDefects = records.reduce((sum, record) => sum + record.defect_qty, 0);
-    const avgOEE = records.length > 0 ? records.reduce((sum, record) => sum + record.oee, 0) / records.length : 0;
-    const avgAvailability = records.length > 0 ? records.reduce((sum, record) => sum + record.availability, 0) / records.length : 0;
-    const avgPerformance = records.length > 0 ? records.reduce((sum, record) => sum + record.performance, 0) / records.length : 0;
-    const avgQuality = records.length > 0 ? records.reduce((sum, record) => sum + record.quality, 0) / records.length : 0;
-    
+  // 집계 데이터 계산 (records가 바뀔 때만 1회 순회)
+  const aggregatedResult = useMemo(() => {
+    const totals = records.reduce(
+      (acc, record) => {
+        acc.output += record.output_qty;
+        acc.defects += record.defect_qty;
+        acc.oee += record.oee;
+        acc.availability += record.availability;
+        acc.performance += record.performance;
+        acc.quality += record.quality;
+        return acc;
+      },
+      { output: 0, defects: 0, oee: 0, availability: 0, performance: 0, quality: 0 }
+    );
+
+    const count = records.length;
+    const average = (sum: number) => (count > 0 ? sum / count : 0);
+
     return {
-      totalProduction,
-      totalDefects,
-      totalGoodQuantity: totalProduction - totalDefects,
-      avgOEE: Math.round(avgOEE * 1000) / 10, // 소수점 1자리 %
-      avgAvailability: Math.round(avgAvailability * 1000) / 10,
-      avgPerformance: Math.round(avgPerformance * 1000) / 10,
-      avgQuality: Math.round(avgQuality * 1000) / 10,
-      recordCount: records.length
+      totalProduction: totals.output,
+      totalDefects: totals.defects,
+      totalGoodQuantity: totals.output - totals.defects,
+      avgOEE: Math.round(average(totals.oee) * 1000) / 10, // 소수점 1자리 %
+      avgAvailability: Math.round(average(totals.availability) * 1000) / 10,
+      avgPerformance: Math.round(average(totals.performance) * 1000) / 10,
+      avgQuality: Math.round(average(totals.quality) * 1000) / 10,
+      recordCount: count
     };
   }, [records]);
+
+  // 호출부 시그니처 유지: aggregatedData()는 메모된 결과를 그대로 반환한다.
+  const aggregatedData = useCallback(() => aggregatedResult, [aggregatedResult]);
 
   return {
     records,

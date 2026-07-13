@@ -1,14 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Modal, Button, Typography, Space, Alert, Divider } from 'antd';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import { Machine } from '@/types';
 import ProductionRecordInput from './ProductionRecordInput';
 import { useProductionRecords } from '@/hooks/useProductionRecords';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { format, isAfter, isBefore, setHours, setMinutes, setSeconds } from 'date-fns';
 
 const { Title, Text } = Typography;
+
+// 12시간 교대 시스템의 전체 교대 시간 (분)
+const SHIFT_DURATION_MINUTES = 12 * 60;
 
 interface ShiftEndNotificationProps {
   machines: Machine[]; // 사용자가 담당하는 설비 목록
@@ -32,7 +36,12 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
   const [pendingMachines, setPendingMachines] = useState<Machine[]>([]);
   const [estimatedOutputs, setEstimatedOutputs] = useState<Record<string, number>>({});
 
+  // "나중에 입력" 클릭 시 예약되는 10분 타이머의 핸들. 언마운트 시 정리하고,
+  // 반복 클릭 시 이전 타이머를 취소해 독립적인 타이머가 중첩되지 않도록 한다.
+  const postponeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { createProductionRecord, calculateEstimatedOutput } = useProductionRecords();
+  const { getShiftTimes } = useSystemSettings();
 
   // 현재 교대 정보 계산
   const getCurrentShift = useCallback((): ShiftInfo | null => {
@@ -79,19 +88,23 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
       setCurrentShift(shift);
       setPendingMachines(machines);
       
-      // 각 설비별 추정 생산량 계산
+      // 각 설비별 추정 생산량 계산 (12시간 교대에서 휴식 시간을 제외한 실가동 시간 기준)
       const estimates: Record<string, number> = {};
+      const shiftTimes = getShiftTimes();
+      const estimatedRuntime = Math.max(0, SHIFT_DURATION_MINUTES - Number(shiftTimes.breakTime)); // 분
       machines.forEach(machine => {
-        // 임시로 8시간(480분) 가동 시간으로 가정하여 추정 생산량 계산
-        const estimatedRuntime = 480; // 분
         const cavityCount = machine.current_cavity_count || 1;
-        estimates[machine.id] = calculateEstimatedOutput(machine.default_tact_time, estimatedRuntime, cavityCount);
+        // machines 테이블에는 tact time 컬럼이 없다.
+        // Tact Time은 machines_with_production_info 뷰의 current_tact_time
+        // 또는 조인된 current_process.tact_time_seconds에서 읽어야 한다.
+        const tactTime = machine.current_tact_time ?? machine.current_process?.tact_time_seconds ?? 0;
+        estimates[machine.id] = calculateEstimatedOutput(tactTime, estimatedRuntime, cavityCount);
       });
       setEstimatedOutputs(estimates);
-      
+
       setShowNotification(true);
     }
-  }, [machines, getCurrentShift, calculateEstimatedOutput]);
+  }, [machines, getCurrentShift, calculateEstimatedOutput, getShiftTimes]);
 
   // 주기적으로 교대 종료 시간 체크 (1분마다)
   useEffect(() => {
@@ -107,26 +120,24 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
   const handleProductionRecordSubmit = async (data: { output_qty: number; defect_qty: number }) => {
     if (!selectedMachine || !currentShift) return;
 
-    try {
-      await createProductionRecord({
-        machine_id: selectedMachine.id,
-        output_qty: data.output_qty,
-        defect_qty: data.defect_qty,
-        shift: currentShift.shift,
-        date: format(new Date(), 'yyyy-MM-dd')
-      });
+    // 실패 시 예외가 그대로 전파되어야 ProductionRecordInput이 성공 토스트를
+    // 띄우지 않고 모달을 열어둔 채 오류를 표시한다 (여기서 삼키면 안 됨)
+    await createProductionRecord({
+      machine_id: selectedMachine.id,
+      output_qty: data.output_qty,
+      defect_qty: data.defect_qty,
+      shift: currentShift.shift,
+      date: format(new Date(), 'yyyy-MM-dd')
+    });
 
-      // 완료된 설비를 대기 목록에서 제거
-      setPendingMachines(prev => prev.filter(m => m.id !== selectedMachine.id));
-      
-      // 부모 컴포넌트에 알림
-      onProductionRecordSubmit?.(selectedMachine.id, data);
-      
-      setShowProductionInput(false);
-      setSelectedMachine(null);
-    } catch (error) {
-      console.error('생산 실적 입력 오류:', error);
-    }
+    // 완료된 설비를 대기 목록에서 제거
+    setPendingMachines(prev => prev.filter(m => m.id !== selectedMachine.id));
+
+    // 부모 컴포넌트에 알림
+    onProductionRecordSubmit?.(selectedMachine.id, data);
+
+    setShowProductionInput(false);
+    setSelectedMachine(null);
   };
 
   // 설비 선택하여 생산 실적 입력
@@ -138,13 +149,30 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
   // 나중에 입력하기
   const handlePostpone = () => {
     setShowNotification(false);
+
+    // 반복 postpone 시 이전 타이머가 남아있다면 정리 (독립 타이머 중첩 방지)
+    if (postponeTimeoutRef.current) {
+      clearTimeout(postponeTimeoutRef.current);
+    }
+
     // 10분 후 다시 알림
-    setTimeout(() => {
+    postponeTimeoutRef.current = setTimeout(() => {
+      postponeTimeoutRef.current = null;
       if (pendingMachines.length > 0) {
         setShowNotification(true);
       }
     }, 10 * 60 * 1000);
   };
+
+  // 언마운트 시 예약된 postpone 타이머 정리 (언마운트된 컴포넌트에 setState 방지)
+  useEffect(() => {
+    return () => {
+      if (postponeTimeoutRef.current) {
+        clearTimeout(postponeTimeoutRef.current);
+        postponeTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // 모든 설비 입력 완료 시 알림 닫기
   useEffect(() => {

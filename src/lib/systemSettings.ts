@@ -9,8 +9,48 @@ import type {
   SettingsResponse,
   SettingUpdateResponse,
   SettingsAuditResponse,
-  AllSystemSettings
+  AllSystemSettings,
+  SettingDefinition,
+  SettingValueType
 } from '@/types/systemSettings';
+
+/**
+ * getDefaultSettings() 에서 select 옵션 메타데이터(라벨/값 목록)를 함께 표현하기 위한 로컬 확장 타입.
+ * `SettingDefinition` (공유 타입, 읽기 전용) 에는 options 필드가 없으므로 여기서만 확장한다.
+ */
+type SettingDefinitionWithOptions = SettingDefinition & {
+  options?: Array<{ label: string; value: string }>;
+};
+
+/**
+ * DB 에 저장된 canonical setting_key 와 코드 타입 계약(AllSystemSettings)의 필드명이
+ * 다른 경우를 위한 별칭 매핑. 현재는 general.default_language (DB) <-> general.language
+ * (AllSystemSettings 타입 계약) 하나뿐이다.
+ */
+const DB_KEY_ALIASES: Partial<Record<SettingCategory, Record<string, string>>> = {
+  general: { default_language: 'language' }
+};
+
+function mapDbKeyToCodeKey(category: SettingCategory, dbKey: string): string {
+  return DB_KEY_ALIASES[category]?.[dbKey] ?? dbKey;
+}
+
+/** SettingDefinition.value_type -> SystemSetting.data_type 변환 (DB jsonb 컬럼의 논리적 분류가 다르다) */
+function mapValueTypeToDataType(valueType: SettingValueType): SystemSetting['data_type'] {
+  switch (valueType) {
+    case 'number':
+      return 'number';
+    case 'boolean':
+      return 'boolean';
+    case 'json':
+      return 'object';
+    case 'string':
+    case 'color':
+    case 'time':
+    default:
+      return 'string';
+  }
+}
 
 /**
  * 시스템 설정 서비스 클래스
@@ -70,9 +110,10 @@ export class SystemSettingsService {
         }
         
         // 정말로 데이터가 없는 경우에만 기본값 반환
-        log.info('No system settings found in database, using default values', { 
+        // (이 지점에 도달했다는 것은 위의 error 체크를 통과했다는 뜻이므로 error 는 항상 null)
+        log.info('No system settings found in database, using default values', {
           dataLength: data?.length,
-          errorDetails: error ? error.message : 'No error',
+          errorDetails: 'No error',
           supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20) + '...'
         }, LogCategories.SETTINGS);
         
@@ -419,21 +460,21 @@ export class SystemSettingsService {
         return {};
       }
 
-      const structured: Partial<AllSystemSettings> = {};
+      const structured: Record<string, Record<string, unknown>> = {};
 
       response.data.forEach((setting: SystemSetting) => {
         if (!structured[setting.category]) {
           structured[setting.category] = {};
         }
-        
+
         // Extract value from the database structure
         let value = setting.setting_value;
-        
+
         // Handle the database structure {value: actual_value}
         if (value && typeof value === 'object' && 'value' in value) {
           value = value.value;
         }
-        
+
         // Additional JSON parsing if needed
         if (typeof value === 'string') {
           try {
@@ -446,10 +487,12 @@ export class SystemSettingsService {
           }
         }
 
-        structured[setting.category][setting.setting_key] = value;
+        // DB 의 canonical key 를 코드 타입 계약(AllSystemSettings)의 key 로 매핑
+        const codeKey = mapDbKeyToCodeKey(setting.category, setting.setting_key);
+        structured[setting.category][codeKey] = value;
       });
 
-      return structured;
+      return structured as Partial<AllSystemSettings>;
     } catch (error) {
       console.error('Error in getStructuredSettings:', error);
       return {};
@@ -458,12 +501,39 @@ export class SystemSettingsService {
 
   /**
    * 기본 설정값으로 초기화
+   * (감사 추적이 남는 update_system_setting RPC를 통해 기본값을 다시 기록한다)
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async resetToDefaults(_category?: SettingCategory): Promise<SettingUpdateResponse> {
+  async resetToDefaults(category?: SettingCategory): Promise<SettingUpdateResponse> {
     try {
-      // 간단한 구현
-      return { success: true, message: 'Reset functionality not implemented yet' };
+      const definitions = this.getDefaultSettings().filter(
+        def => !category || def.category === category
+      );
+
+      if (definitions.length === 0) {
+        return {
+          success: false,
+          error: `No default settings found${category ? ` for category ${category}` : ''}`
+        };
+      }
+
+      const results = await Promise.all(
+        definitions.map(def => this.updateSetting({
+          category: def.category,
+          setting_key: def.key,
+          setting_value: def.default_value,
+          change_reason: 'Reset to default value'
+        }))
+      );
+
+      const failedResets = results.filter(result => !result.success);
+      if (failedResets.length > 0) {
+        return {
+          success: false,
+          error: `Failed to reset ${failedResets.length} of ${definitions.length} settings to defaults`
+        };
+      }
+
+      return { success: true, message: 'Settings reset to defaults successfully' };
     } catch (error) {
       console.error('Error in resetToDefaults:', error);
       return { success: false, error: 'Failed to reset settings to defaults' };
@@ -570,7 +640,7 @@ export class SystemSettingsService {
   /**
    * 설정 정의 조회
    */
-  private getSettingDefinition(category: SettingCategory, key: string): SettingDefinition | null {
+  private getSettingDefinition(category: SettingCategory, key: string): SettingDefinitionWithOptions | null {
     const definitions = this.getDefaultSettings();
     return definitions.find(def => def.category === category && def.key === key) || null;
   }
@@ -580,12 +650,13 @@ export class SystemSettingsService {
    */
   private getDefaultSettingsResponse(): SettingsResponse {
     const defaultSettings = this.getDefaultSettings();
-    const defaultData = defaultSettings.map((setting, index) => ({
+    const defaultData: SystemSetting[] = defaultSettings.map((setting, index) => ({
       id: `default-${index}`,
       category: setting.category,
       setting_key: setting.key,
       setting_value: setting.default_value,
-      value_type: setting.value_type,
+      default_value: setting.default_value,
+      data_type: mapValueTypeToDataType(setting.value_type),
       description: setting.description,
       is_system: setting.is_system,
       is_active: true,
@@ -602,7 +673,7 @@ export class SystemSettingsService {
   /**
    * 기본 설정 정의
    */
-  private getDefaultSettings(): SettingDefinition[] {
+  private getDefaultSettings(): SettingDefinitionWithOptions[] {
     return [
       // 일반 설정
       {
@@ -664,7 +735,9 @@ export class SystemSettingsService {
         ]
       },
       {
-        key: 'language',
+        // DB canonical key. 코드 타입 계약(AllSystemSettings.general.language) 과는
+        // mapDbKeyToCodeKey() 를 통해 별칭 처리된다 (S4: DB 의 실제 row 는 default_language 키를 사용).
+        key: 'default_language',
         category: 'general',
         value_type: 'string',
         default_value: 'ko',

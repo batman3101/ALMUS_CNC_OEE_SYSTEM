@@ -6,6 +6,18 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// DB enum `machine_status` (MAINTENANCE 는 존재하지 않는다)
+export type MachineStatus =
+  | 'NORMAL_OPERATION'
+  | 'INSPECTION'
+  | 'BREAKDOWN_REPAIR'
+  | 'PM_MAINTENANCE'
+  | 'MODEL_CHANGE'
+  | 'PLANNED_STOP'
+  | 'PROGRAM_CHANGE'
+  | 'TOOL_CHANGE'
+  | 'TEMPORARY_STOP'
+
 export interface Database {
   public: {
     Tables: {
@@ -41,42 +53,45 @@ export interface Database {
           updated_at?: string
         }
       }
+      // ⚠️ 실제 `machines` 테이블 컬럼과 일치시킨 정의.
+      // 과거 이 타입에는 model_type / default_tact_time / processing_step 이 있었으나
+      // DB 에 존재하지 않는 컬럼이었다. (2026-07 라이브 스키마 기준으로 정정)
       machines: {
         Row: {
           id: string
           name: string
           location: string | null
-          model_type: string | null
-          default_tact_time: number
+          equipment_type: string | null
           is_active: boolean
-          current_state: string | null
-          processing_step: string
-          created_at: string
-          updated_at: string
+          current_state: MachineStatus
+          production_model_id: string | null
+          current_process_id: string | null
+          created_at: string | null
+          updated_at: string | null
         }
         Insert: {
           id?: string
           name: string
           location?: string | null
-          model_type?: string | null
-          default_tact_time: number
+          equipment_type?: string | null
           is_active?: boolean
-          current_state?: string | null
-          processing_step: string
-          created_at?: string
-          updated_at?: string
+          current_state?: MachineStatus
+          production_model_id?: string | null
+          current_process_id?: string | null
+          created_at?: string | null
+          updated_at?: string | null
         }
         Update: {
           id?: string
           name?: string
           location?: string | null
-          model_type?: string | null
-          default_tact_time?: number
+          equipment_type?: string | null
           is_active?: boolean
-          current_state?: string | null
-          processing_step?: string
-          created_at?: string
-          updated_at?: string
+          current_state?: MachineStatus
+          production_model_id?: string | null
+          current_process_id?: string | null
+          created_at?: string | null
+          updated_at?: string | null
         }
       }
       machine_logs: {
@@ -308,6 +323,7 @@ export interface Database {
           process_name: string
           process_order: number
           tact_time_seconds: number
+          cavity_count: number
           created_at: string | null
           updated_at: string | null
         }
@@ -317,6 +333,7 @@ export interface Database {
           process_name: string
           process_order: number
           tact_time_seconds?: number
+          cavity_count?: number
           created_at?: string | null
           updated_at?: string | null
         }
@@ -326,6 +343,7 @@ export interface Database {
           process_name?: string
           process_order?: number
           tact_time_seconds?: number
+          cavity_count?: number
           created_at?: string | null
           updated_at?: string | null
         }

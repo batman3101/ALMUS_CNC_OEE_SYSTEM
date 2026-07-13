@@ -116,10 +116,60 @@ export async function PUT(
 
     // 상태가 변경되는 경우 이력 저장
     if (existingMachine.current_state !== current_state) {
-      // 이전 상태의 지속 시간 계산 (분 단위)
-      const previousUpdatedAt = new Date(existingMachine.updated_at);
       const currentTime = new Date();
-      const durationMinutes = Math.floor((currentTime.getTime() - previousUpdatedAt.getTime()) / (1000 * 60));
+
+      // 진행 중인 상태의 machine_logs 행 조회 (다운타임 산정 기준을 updated_at이 아닌 로그 시작 시각으로 통일)
+      const { data: openLog, error: openLogFetchError } = await supabaseAdmin
+        .from('machine_logs')
+        .select('start_time')
+        .eq('machine_id', params.machineId)
+        .eq('state', existingMachine.current_state)
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (openLogFetchError) {
+        console.error('Failed to fetch open machine_logs row:', openLogFetchError);
+      }
+
+      // 이전 상태의 지속 시간 계산 (분 단위): updated_at은 상태와 무관한 수정으로도 갱신되므로
+      // 진행 중인 로그의 시작 시각을 기준으로 계산한다 (로그가 없으면 updated_at으로 폴백)
+      const previousStateStartedAt = openLog?.start_time ? new Date(openLog.start_time) : new Date(existingMachine.updated_at);
+      const durationMinutes = Math.floor((currentTime.getTime() - previousStateStartedAt.getTime()) / (1000 * 60));
+
+      // 이전 상태 종료를 위한 machine_logs 업데이트 (PATCH와 동일하게 로그를 상태와 동기화)
+      const { error: logUpdateError } = await supabaseAdmin
+        .from('machine_logs')
+        .update({
+          end_time: currentTime.toISOString(),
+          duration: durationMinutes
+        })
+        .eq('machine_id', params.machineId)
+        .eq('state', existingMachine.current_state)
+        .is('end_time', null);
+
+      if (logUpdateError) {
+        console.error('Failed to update machine_logs:', logUpdateError);
+      }
+
+      // 새로운 상태 시작을 위한 machine_logs 삽입
+      const { error: logInsertError } = await supabaseAdmin
+        .from('machine_logs')
+        .insert({
+          machine_id: params.machineId,
+          state: current_state,
+          start_time: currentTime.toISOString(),
+          end_time: null,
+          duration: null,
+          created_at: currentTime.toISOString()
+        });
+
+      if (logInsertError) {
+        console.error('Failed to insert machine_logs:', logInsertError);
+      } else {
+        console.log(`Machine log inserted: ${current_state} started at ${currentTime.toISOString()}`);
+      }
 
       // 상태 변경 이력 저장
       const { error: historyError } = await supabaseAdmin
@@ -240,10 +290,27 @@ export async function PATCH(
 
     // 상태가 변경되는 경우 이력 저장
     if (current_state && existingMachine.current_state !== current_state) {
-      // 이전 상태의 지속 시간 계산 (분 단위)
-      const previousUpdatedAt = new Date(existingMachine.updated_at);
       const currentTime = new Date();
-      const durationMinutes = Math.floor((currentTime.getTime() - previousUpdatedAt.getTime()) / (1000 * 60));
+
+      // 진행 중인 상태의 machine_logs 행 조회 (다운타임 산정 기준을 updated_at이 아닌 로그 시작 시각으로 통일)
+      const { data: openLog, error: openLogFetchError } = await supabaseAdmin
+        .from('machine_logs')
+        .select('start_time')
+        .eq('machine_id', params.machineId)
+        .eq('state', existingMachine.current_state)
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (openLogFetchError) {
+        console.error('Failed to fetch open machine_logs row:', openLogFetchError);
+      }
+
+      // 이전 상태의 지속 시간 계산 (분 단위): updated_at은 모델 변경 등 상태와 무관한 PATCH로도
+      // 갱신되므로, 진행 중인 로그의 시작 시각을 기준으로 계산한다 (로그가 없으면 updated_at으로 폴백)
+      const previousStateStartedAt = openLog?.start_time ? new Date(openLog.start_time) : new Date(existingMachine.updated_at);
+      const durationMinutes = Math.floor((currentTime.getTime() - previousStateStartedAt.getTime()) / (1000 * 60));
 
       // 이전 상태 종료를 위한 machine_logs 업데이트
       const { error: logUpdateError } = await supabaseAdmin

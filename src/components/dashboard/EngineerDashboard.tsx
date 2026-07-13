@@ -15,7 +15,7 @@ import {
 import dayjs from 'dayjs';
 import { OEEGauge, IndependentOEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
 import { DefectRateTrendChart, QualityPerformanceChart, MachineComparisonChart } from '@/components/quality';
-import { OEEMetrics } from '@/types';
+import { OEEMetrics, DowntimeData } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useEngineerData } from '@/hooks/useEngineerData';
@@ -25,6 +25,9 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
+
+// 설비/위치 필터 교집합이 비어 있을 때, API가 '전체'로 오인하지 않도록 전달하는 존재하지 않는 설비 ID
+const NO_MATCHING_MACHINE_ID = '00000000-0000-0000-0000-000000000000';
 
 
 interface EngineerDashboardProps {
@@ -100,12 +103,18 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     // 실제 설비 데이터에서 위치 추출
     const locations = [...new Set(machines.map(m => m.location).filter(Boolean))];
     
-    // OEE 등급별 설비 분류 (실제 데이터 기반)
+    // OEE 등급별 설비 분류 (실제 데이터 기반 - useRealtimeData가 계산한 oeeMetrics 사용.
+    // machines 테이블에는 oee_efficiency 컬럼이 없으므로 machine_logs/production_records 기반
+    // 실시간 집계값(oeeMetrics)에서 설비별 OEE를 조회한다.)
+    const machineOeeValues = machines
+      .map(m => oeeMetrics[m.id]?.oee)
+      .filter((oee): oee is number => typeof oee === 'number');
+
     const oeeGrades = {
-      excellent: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'excellent').length,
-      good: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'good').length,
-      fair: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'fair').length,
-      poor: machines.filter(m => m.oee_efficiency && getOEEGrade(m.oee_efficiency) === 'poor').length
+      excellent: machineOeeValues.filter(oee => getOEEGrade(oee) === 'excellent').length,
+      good: machineOeeValues.filter(oee => getOEEGrade(oee) === 'good').length,
+      fair: machineOeeValues.filter(oee => getOEEGrade(oee) === 'fair').length,
+      poor: machineOeeValues.filter(oee => getOEEGrade(oee) === 'poor').length
     };
     
     return {
@@ -130,7 +139,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         { value: 'poor', label: oeeGradeLabels.poor, count: oeeGrades.poor }
       ]
     };
-  }, [machines]);
+  }, [machines, oeeMetrics]);
 
   // 활성 필터 개수 계산
   const activeFilterCount = React.useMemo(() => {
@@ -296,6 +305,34 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     </div>
   );
 
+  // 위치 필터에 해당하는 설비 ID 목록 (전체 선택 시 null = 위치 필터 없음)
+  const locationMachineIds = React.useMemo(() => {
+    if (selectedLocations.length === 0 || selectedLocations.includes('all')) {
+      return null;
+    }
+    return machines
+      .filter(machine => machine.location && selectedLocations.includes(machine.location))
+      .map(machine => machine.id);
+  }, [machines, selectedLocations]);
+
+  // 설비 선택과 위치 필터를 교집합으로 결합 (null = 필터 없음 = 전체)
+  const effectiveMachineIds = React.useMemo(() => {
+    const machineFilter = selectedMachines.length === 0 || selectedMachines.includes('all')
+      ? null
+      : selectedMachines;
+
+    if (!machineFilter) return locationMachineIds;
+    if (!locationMachineIds) return machineFilter;
+    return machineFilter.filter(id => locationMachineIds.includes(id));
+  }, [selectedMachines, locationMachineIds]);
+
+  // 다중 설비 선택을 콤마 구분 목록으로 변환 (API 계약: machine_id는 단일 또는 콤마 구분 목록을 허용)
+  const selectedMachineIds = React.useMemo(() => {
+    if (!effectiveMachineIds) return undefined;
+    if (effectiveMachineIds.length === 0) return NO_MATCHING_MACHINE_ID;
+    return effectiveMachineIds.join(',');
+  }, [effectiveMachineIds]);
+
   // 엔지니어 분석 데이터 훅 사용
   const {
     oeeData,
@@ -304,7 +341,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     loading: engineerDataLoading,
     error: engineerDataError,
     refreshData: refreshEngineerData
-  } = useEngineerData(selectedPeriod, selectedMachines[0] !== 'all' ? selectedMachines[0] : undefined, customDateRange, selectedShifts);
+  } = useEngineerData(selectedPeriod, selectedMachineIds, customDateRange, selectedShifts);
 
   // 데이터 변경 추적을 위한 로깅
   React.useEffect(() => {
@@ -355,10 +392,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     }
   }, [error, onError]);
 
-  // 기간 변경시 엔지니어 데이터 새로고침
-  useEffect(() => {
-    refreshEngineerData();
-  }, [selectedPeriod, refreshEngineerData]);
+  // 기간/설비/날짜범위/교대 필터 변경시 데이터 재조회는 useEngineerData 훅이 단독으로 담당한다
+  // (이 컴포넌트에서 별도로 refreshEngineerData를 호출하면 훅의 자체 effect와 중복 호출된다)
 
   // OEE 등급별 데이터 필터링
   const filteredOEEData = React.useMemo(() => {
@@ -376,11 +411,17 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const processedData = React.useMemo(() => {
     try {
       // OEE 등급 필터링된 데이터 사용
-      const dataToUse = filteredOEEData.length > 0 ? filteredOEEData : oeeData;
-      
+      const dataToUse = filteredOEEData;
+
+      // 등급 필터 결과가 0건이면 '조건에 맞는 데이터 없음'이므로 빈 데이터로 표시한다.
+      // (전체 데이터로 폴백하면 필터가 적용되지 않은 평균이 표시되는 문제가 있었음)
+      if (!selectedOEEGrades.includes('all') && dataToUse.length === 0) {
+        return getEmptyData();
+      }
+
       // 기간별 API 데이터가 있을 때는 API 데이터를 우선 사용
       let overallMetrics: OEEMetrics;
-      
+
       if (dataToUse.length > 0) {
         // 필터링된 데이터로 전체 OEE 계산
         const totalRecords = dataToUse.length;
@@ -473,7 +514,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           });
         }
         return acc;
-      }, [] as Array<{ state: string; duration: number; count: number; percentage: number }>);
+      }, [] as DowntimeData[]);
 
     const totalDowntime = downtimeAnalysis.reduce((sum, item) => sum + item.duration, 0);
     downtimeAnalysis.forEach(item => {
@@ -494,17 +535,17 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       }
       return getEmptyData();
     }
-  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, onError, filteredOEEData]);
+  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, onError, filteredOEEData, selectedOEEGrades]);
 
-  // 설비 필터링된 분석 데이터
+  // 설비/위치 필터링된 분석 데이터
   const filteredAnalysisData = React.useMemo(() => {
-    if (selectedMachines.includes('all') || selectedMachines.length === 0) {
+    if (!effectiveMachineIds) {
       return processedData.analysisData;
     }
-    return processedData.analysisData.filter(item => 
-      selectedMachines.includes(item.key)
+    return processedData.analysisData.filter(item =>
+      effectiveMachineIds.includes(item.key)
     );
-  }, [processedData.analysisData, selectedMachines]);
+  }, [processedData.analysisData, effectiveMachineIds]);
 
   // 실제 설비 목록 옵션 생성 (Supabase 데이터만 사용)
   const machineOptions = React.useMemo(() => {
@@ -792,7 +833,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                     externalPeriod={selectedPeriod}
                     onPeriodChange={setSelectedPeriod}
                     customDateRange={customDateRange}
-                    machineId={selectedMachines[0] !== 'all' ? selectedMachines[0] : undefined}
+                    machineId={selectedMachineIds}
                     selectedShifts={selectedShifts}
                   />
                 </Col>

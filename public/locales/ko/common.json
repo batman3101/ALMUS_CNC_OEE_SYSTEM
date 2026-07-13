@@ -96,7 +96,9 @@
     "pleaseWait": "잠시만 기다려주세요",
     "accessDenied": "접근 권한 없음",
     "noPermission": "이 페이지에 접근할 권한이 없습니다.",
-    "goBack": "뒤로 가기"
+    "goBack": "뒤로 가기",
+    "loginSubtitle": "ALMUS TECH 모니터링 시스템에 로그인하세요",
+    "systemInfo": "신규 사용자 가입은 운영자에게 문의"
   },
   "roles": {
     "admin": "관리자",
@@ -416,7 +418,7 @@
     },
     "types": {
       "daily": "일일 보고서",
-      "weekly": "주간 보고서", 
+      "weekly": "주간 보고서",
       "monthly": "월간 보고서"
     },
     "buttons": {

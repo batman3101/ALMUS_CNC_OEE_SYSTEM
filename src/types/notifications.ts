@@ -12,6 +12,10 @@ export type NotificationSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type NotificationStatus = 'active' | 'acknowledged' | 'resolved';
 
 // 알림 데이터 인터페이스
+//
+// ⚠️ `notifications` DB 테이블은 존재하지 않는다.
+//    알림은 NotificationContext 가 설비 상태/OEE 로부터 클라이언트에서 생성한다.
+//    따라서 아래 필드는 모두 클라이언트 전용이다.
 export interface Notification {
   id: string;
   type: NotificationType;
@@ -24,6 +28,14 @@ export interface Notification {
   threshold_value?: number;
   current_value?: number;
   created_at: string;
+
+  // 알림을 생성한 사용자 (NotificationContext 에서 항상 설정)
+  user_id?: string;
+  // 읽음 여부 (클라이언트 로컬 상태)
+  read?: boolean;
+  // 확인 여부 (클라이언트 로컬 상태) — acknowledged_at 은 확인 시각
+  acknowledged?: boolean;
+
   acknowledged_at?: string;
   acknowledged_by?: string;
   resolved_at?: string;

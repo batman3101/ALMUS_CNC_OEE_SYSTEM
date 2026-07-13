@@ -1,13 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import type { DailyProductionData } from '@/types/dataInput';
+import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
+
+const DEFAULT_TACT_SECONDS = 120;
+const DEFAULT_CAVITY = 1;
+
+// 교대별 입력 데이터 (클라이언트 폼에서 전송)
+interface ShiftInputData {
+  actual_production: number;
+  defect_quantity: number;
+  operating_minutes: number;
+  total_downtime_minutes: number;
+}
+
+interface DailyProductionRequest {
+  machine_id: string;
+  date: string;
+  day_shift_off?: boolean;
+  night_shift_off?: boolean;
+  day_shift?: ShiftInputData;
+  night_shift?: ShiftInputData;
+}
+
+interface SavedRecord {
+  record_id: string;
+  [key: string]: unknown;
+}
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(Math.max(value, min), max);
+
+const toNumber = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0;
+
+// 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량
+function validateQuantities(
+  shiftName: string,
+  outputQty: unknown,
+  defectQty: unknown
+): string | null {
+  if (!Number.isInteger(outputQty) || (outputQty as number) < 0) {
+    return `${shiftName} 생산 수량은 0 이상의 정수여야 합니다`;
+  }
+  if (!Number.isInteger(defectQty) || (defectQty as number) < 0) {
+    return `${shiftName} 불량 수량은 0 이상의 정수여야 합니다`;
+  }
+  if ((defectQty as number) > (outputQty as number)) {
+    return `${shiftName} 불량 수량은 생산 수량보다 클 수 없습니다`;
+  }
+  return null;
+}
+
+// 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시)
+// 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
+function calculateShiftMetrics(params: {
+  operatingMinutes: number;
+  breakMinutes: number;
+  downtimeMinutes: number;
+  outputQty: number;
+  defectQty: number;
+  tactSeconds: number;
+  cavity: number;
+}) {
+  const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
+  const downtime = clamp(params.downtimeMinutes, 0, plannedRuntime);
+  const actualRuntime = Math.max(0, plannedRuntime - downtime);
+  const idealRuntime =
+    (params.outputQty / Math.max(1, params.cavity)) * params.tactSeconds / 60;
+
+  const availability = plannedRuntime > 0 ? clamp(actualRuntime / plannedRuntime, 0, 1) : 0;
+  const performance = actualRuntime > 0 ? clamp(idealRuntime / actualRuntime, 0, 1) : 0;
+  const quality =
+    params.outputQty > 0
+      ? clamp((params.outputQty - params.defectQty) / params.outputQty, 0, 1)
+      : 0;
+  const oee = availability * performance * quality;
+
+  return { plannedRuntime, actualRuntime, idealRuntime, availability, performance, quality, oee };
+}
 
 // POST /api/production-records/daily - 일일 생산 데이터 저장
 export async function POST(request: NextRequest) {
   try {
     console.log('POST /api/production-records/daily called');
 
-    const body: DailyProductionData = await request.json();
+    const body: DailyProductionRequest = await request.json();
     console.log('Received daily production data:', body);
 
     const {
@@ -16,25 +93,33 @@ export async function POST(request: NextRequest) {
       day_shift,
       day_shift_off,
       night_shift,
-      night_shift_off,
-      total_production,
-      total_defects,
-      total_good_quantity,
-      availability,
-      performance,
-      quality,
-      oee
+      night_shift_off
     } = body;
 
     // 필수 필드 검증
     if (!machine_id || !date) {
       return NextResponse.json(
-        { 
+        {
           success: false,
-          error: 'Machine ID and date are required' 
+          error: 'Machine ID and date are required'
         },
         { status: 400 }
       );
+    }
+
+    // 수량 검증 (휴무가 아닌 교대만)
+    if (day_shift && !day_shift_off) {
+      const error = validateQuantities('주간조', day_shift.actual_production, day_shift.defect_quantity);
+      if (error) {
+        return NextResponse.json({ success: false, error }, { status: 400 });
+      }
+    }
+
+    if (night_shift && !night_shift_off) {
+      const error = validateQuantities('야간조', night_shift.actual_production, night_shift.defect_quantity);
+      if (error) {
+        return NextResponse.json({ success: false, error }, { status: 400 });
+      }
     }
 
     // 설비 존재 확인
@@ -47,100 +132,99 @@ export async function POST(request: NextRequest) {
     if (machineError || !machine) {
       console.error('Machine not found:', machineError);
       return NextResponse.json(
-        { 
+        {
           success: false,
-          error: 'Machine not found' 
+          error: 'Machine not found'
         },
         { status: 404 }
       );
     }
 
-    // 실제 데이터베이스에 저장하는 로직
-    const savedRecords = [];
+    // 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
+    const { data: productionInfo } = await supabaseAdmin
+      .from('machines_with_production_info')
+      .select('current_tact_time, current_cavity_count')
+      .eq('id', machine_id)
+      .maybeSingle();
 
-    // 주간 교대 데이터 저장 (휴무가 아닌 경우 - 생산량 0이어도 저장 가능)
-    if (day_shift && !day_shift_off) {
-      const dayShiftRecord = {
-        machine_id,
-        date,
-        shift: 'A', // 주간 교대
-        planned_runtime: Math.max(0, (day_shift.end_time && day_shift.start_time ? 
-          (new Date(`${date} ${day_shift.end_time}`).getTime() - new Date(`${date} ${day_shift.start_time}`).getTime()) / (1000 * 60) :
-          720)), // 기본 12시간 = 720분
-        actual_runtime: Math.max(0, 720 - (day_shift.total_downtime_minutes || 0)),
-        ideal_runtime: 720, // 이상적인 가동시간 (12시간)
-        output_qty: day_shift.actual_production,
-        defect_qty: day_shift.defect_quantity,
-        availability: availability || 0,
-        performance: performance || 0,
-        quality: quality || 0,
-        oee: oee || 0
+    const tactSeconds =
+      productionInfo?.current_tact_time && productionInfo.current_tact_time > 0
+        ? productionInfo.current_tact_time
+        : DEFAULT_TACT_SECONDS;
+    const cavity =
+      productionInfo?.current_cavity_count && productionInfo.current_cavity_count > 0
+        ? productionInfo.current_cavity_count
+        : DEFAULT_CAVITY;
+
+    // 휴식 시간(system_settings)은 하루 단위로 한 번만 조회하여 두 교대에 동일하게 적용
+    const breakMinutes = await getBreakTimeMinutes();
+
+    // 교대별 저장 레코드 구성 (서버에서 지표 재계산)
+    const buildShiftRecord = (shiftData: ShiftInputData) => {
+      const outputQty = shiftData.actual_production;
+      const defectQty = shiftData.defect_quantity;
+
+      const metrics = calculateShiftMetrics({
+        operatingMinutes: toNumber(shiftData.operating_minutes),
+        breakMinutes,
+        downtimeMinutes: toNumber(shiftData.total_downtime_minutes),
+        outputQty,
+        defectQty,
+        tactSeconds,
+        cavity
+      });
+
+      return {
+        planned_runtime: Math.round(metrics.plannedRuntime),
+        actual_runtime: Math.round(metrics.actualRuntime),
+        ideal_runtime: Math.round(metrics.idealRuntime),
+        output_qty: outputQty,
+        defect_qty: defectQty,
+        availability: Math.round(metrics.availability * 10000) / 10000, // 소수점 4자리
+        performance: Math.round(metrics.performance * 10000) / 10000,
+        quality: Math.round(metrics.quality * 10000) / 10000,
+        oee: Math.round(metrics.oee * 10000) / 10000
       };
+    };
 
-      const { data: dayRecord, error: dayError } = await supabaseAdmin
-        .from('production_records')
-        .upsert(dayShiftRecord, { 
-          onConflict: 'machine_id,date,shift',
-          ignoreDuplicates: false 
-        })
-        .select()
-        .single();
+    // 주간(A)/야간(B) 교대의 삭제·저장을 하나의 트랜잭션에서 처리한다.
+    // (기존에는 교대별 delete/upsert 를 개별 왕복으로 실행해, 중간 실패 시 하루치가
+    //  반쪽만 적용된 채로 남는 문제가 있었다)
+    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('save_daily_production', {
+      p_machine_id: machine_id,
+      p_date: date,
+      p_day_shift_off: Boolean(day_shift_off),
+      p_night_shift_off: Boolean(night_shift_off),
+      p_day_record: !day_shift_off && day_shift ? buildShiftRecord(day_shift) : null,
+      p_night_record: !night_shift_off && night_shift ? buildShiftRecord(night_shift) : null
+    });
 
-      if (dayError) {
-        console.error('Error saving day shift data:', dayError);
-        throw new Error(`주간 교대 데이터 저장 실패: ${dayError.message}`);
-      }
-      
-      savedRecords.push(dayRecord);
-      console.log('Day shift record saved:', dayRecord.record_id);
+    if (rpcError) {
+      console.error('Error saving daily production records:', rpcError);
+      throw new Error(`일일 생산 데이터 저장 실패: ${rpcError.message}`);
     }
 
-    // 야간 교대 데이터 저장 (휴무가 아닌 경우 - 생산량 0이어도 저장 가능)
-    if (night_shift && !night_shift_off) {
-      const nightShiftRecord = {
-        machine_id,
-        date,
-        shift: 'B', // 야간 교대
-        planned_runtime: Math.max(0, (night_shift.end_time && night_shift.start_time ?
-          (new Date(`${date} ${night_shift.end_time}`).getTime() - new Date(`${date} ${night_shift.start_time}`).getTime()) / (1000 * 60) :
-          720)), // 기본 12시간 = 720분
-        actual_runtime: Math.max(0, 720 - (night_shift.total_downtime_minutes || 0)),
-        ideal_runtime: 720, // 이상적인 가동시간 (12시간)
-        output_qty: night_shift.actual_production,
-        defect_qty: night_shift.defect_quantity,
-        availability: availability || 0,
-        performance: performance || 0,
-        quality: quality || 0,
-        oee: oee || 0
-      };
+    const rpcData = (rpcResult ?? {}) as {
+      saved_records?: SavedRecord[];
+      deleted_shifts?: ('A' | 'B')[];
+    };
+    const savedRecords: SavedRecord[] = rpcData.saved_records ?? [];
+    const deletedShifts: ('A' | 'B')[] = rpcData.deleted_shifts ?? [];
 
-      const { data: nightRecord, error: nightError } = await supabaseAdmin
-        .from('production_records')
-        .upsert(nightShiftRecord, { 
-          onConflict: 'machine_id,date,shift',
-          ignoreDuplicates: false 
-        })
-        .select()
-        .single();
-
-      if (nightError) {
-        console.error('Error saving night shift data:', nightError);
-        throw new Error(`야간 교대 데이터 저장 실패: ${nightError.message}`);
-      }
-      
-      savedRecords.push(nightRecord);
-      console.log('Night shift record saved:', nightRecord.record_id);
-    }
-    
-    console.log(`Successfully saved ${savedRecords.length} production records for machine ${machine.name} on ${date}`);
+    console.log(
+      `Saved ${savedRecords.length} / deleted ${deletedShifts.length} production records for machine ${machine.name} on ${date}`
+    );
 
     // 양쪽 교대조 모두 휴무인 경우
-    if (day_shift_off && night_shift_off) {
+    const isHoliday = Boolean(day_shift_off && night_shift_off);
+
+    if (isHoliday) {
       return NextResponse.json({
         success: true,
         message: `${date} - 주간조/야간조 모두 휴무로 설정되어 생산 기록이 저장되지 않았습니다.`,
         records_saved: 0,
         record_ids: [],
+        deleted_shifts: deletedShifts,
         machine_name: machine.name,
         date: date,
         is_holiday: true
@@ -153,14 +237,10 @@ export async function POST(request: NextRequest) {
       message: `일일 생산 데이터가 성공적으로 저장되었습니다 (${savedRecords.length}개 레코드)`,
       records_saved: savedRecords.length,
       record_ids: savedRecords.map(r => r.record_id),
+      deleted_shifts: deletedShifts,
       machine_name: machine.name,
       date: date,
-      summary: {
-        total_production,
-        total_defects,
-        total_good_quantity,
-        oee: Math.round(oee * 1000) / 10 // 소수점 1자리로 표시 (%)
-      },
+      is_holiday: false,
       saved_records: savedRecords
     });
 

@@ -59,11 +59,10 @@ const MachineList: React.FC<MachineListProps> = ({
     description_ko: string;
     description_vi: string;
     color_code?: string;
-    is_active?: boolean;
     display_order?: number;
   }
-  const [, setStatusDescriptions] = useState<StatusDescription[]>([]);
-  const [, setStatusLoading] = useState(false);
+  const [statusDescriptions, setStatusDescriptions] = useState<StatusDescription[]>([]);
+  const [statusLoading, setStatusLoading] = useState(false);
   
   // 페이지네이션 상태
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,7 +104,7 @@ const MachineList: React.FC<MachineListProps> = ({
         const matchesSearch =
           (machine.name || '').toLowerCase().includes(searchLower) ||
           (machine.location || '').toLowerCase().includes(searchLower) ||
-          (machine.model_type || '').toLowerCase().includes(searchLower);
+          (machine.production_model?.model_name || '').toLowerCase().includes(searchLower);
 
         if (!matchesSearch) return false;
       }
@@ -161,33 +160,20 @@ const MachineList: React.FC<MachineListProps> = ({
     return [...new Set(models)].sort();
   }, [machines]);
 
-  // 번역 파일 기반 상태별 옵션
+  // DB의 machine_status_descriptions 테이블(display_order 순)을 기반으로 한 상태별 옵션
   const statusOptions = useMemo(() => {
-    const options = [{ value: 'all', label: t('filterOptions.all') }];
-    
-    // MachineState 타입의 모든 상태값들
-    const machineStates: MachineState[] = [
-      'NORMAL_OPERATION',
-      'INSPECTION', 
-      'BREAKDOWN_REPAIR',
-      'PM_MAINTENANCE',
-      'MODEL_CHANGE',
-      'PLANNED_STOP',
-      'PROGRAM_CHANGE',
-      'TOOL_CHANGE',
-      'TEMPORARY_STOP'
-    ];
-    
-    machineStates.forEach(state => {
+    const options: { value: string; label: string }[] = [{ value: 'all', label: t('filterOptions.all') }];
+
+    statusDescriptions.forEach(status => {
+      const label = (language === 'vi' ? status.description_vi : status.description_ko) || status.status;
       options.push({
-        value: state,
-        label: t(`status.${state}`)
+        value: status.status,
+        label
       });
     });
-    
+
     return options;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t]);
+  }, [t, language, statusDescriptions]);
 
   const handleFilterChange = (key: keyof FilterOptions, value: string | MachineState | 'all') => {
     setFilters(prev => ({
@@ -254,6 +240,7 @@ const MachineList: React.FC<MachineListProps> = ({
                   onChange={(value) => handleFilterChange('statusFilter', value)}
                   style={{ width: '100%' }}
                   suffixIcon={<FilterOutlined />}
+                  loading={statusLoading}
                 >
                   {statusOptions.map(option => (
                     <Option key={option.value} value={option.value}>

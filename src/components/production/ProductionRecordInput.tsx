@@ -102,7 +102,7 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
     `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ','), []);
 
   const numberParser = useCallback((value: string | undefined) =>
-    value!.replace(/\$\s?|(,*)/g, ''), []);
+    Number(value!.replace(/\$\s?|(,*)/g, '')), []);
 
   const handleSubmit = useCallback(async () => {
     try {
@@ -125,7 +125,7 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
       if (error instanceof z.ZodError) {
         // 검증 오류 처리
         const errors: Record<string, string> = {};
-        error.errors.forEach((err) => {
+        error.issues.forEach((err) => {
           if (err.path.length > 0) {
             errors[err.path[0] as string] = err.message;
           }

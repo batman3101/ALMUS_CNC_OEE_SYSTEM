@@ -143,7 +143,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
                 ]}
               >
                 <div>
-                  <InputNumber
+                  <InputNumber<number>
                     min={0}
                     max={1}
                     step={0.01}
@@ -173,7 +173,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
                 ]}
               >
                 <div>
-                  <InputNumber
+                  <InputNumber<number>
                     min={0}
                     max={1}
                     step={0.01}
@@ -203,7 +203,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
                 ]}
               >
                 <div>
-                  <InputNumber
+                  <InputNumber<number>
                     min={0}
                     max={2}
                     step={0.01}
@@ -233,7 +233,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
                 ]}
               >
                 <div>
-                  <InputNumber
+                  <InputNumber<number>
                     min={0}
                     max={1}
                     step={0.01}
@@ -267,7 +267,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
                 ]}
               >
                 <div>
-                  <InputNumber
+                  <InputNumber<number>
                     min={0}
                     max={1}
                     step={0.01}
@@ -297,7 +297,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
                 ]}
               >
                 <div>
-                  <InputNumber
+                  <InputNumber<number>
                     min={0}
                     max={1}
                     step={0.01}

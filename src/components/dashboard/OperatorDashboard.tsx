@@ -12,14 +12,17 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { MachineStatusInput } from '@/components/machines';
 import { OEEGauge } from '@/components/oee';
 import { ProductionRecordInput } from '@/components/production';
 import { MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { useProductionRecords } from '@/hooks/useProductionRecords';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { getCurrentShiftInfo } from '@/utils/shiftUtils';
 
 // Removed deprecated TabPane import
 
@@ -28,7 +31,7 @@ const getStateIcon = (state: MachineState) => {
   switch (state) {
     case 'NORMAL_OPERATION':
       return <PlayCircleOutlined style={{ color: '#52c41a' }} />;
-    case 'MAINTENANCE':
+    case 'INSPECTION':
       return <ToolOutlined style={{ color: '#faad14' }} />;
     case 'TEMPORARY_STOP':
     case 'PLANNED_STOP':
@@ -41,7 +44,8 @@ const getStateIcon = (state: MachineState) => {
 const getStateText = (state: MachineState, machinesT: (key: string) => string) => {
   const stateMap = {
     'NORMAL_OPERATION': machinesT('states.NORMAL_OPERATION'),
-    'MAINTENANCE': machinesT('states.MAINTENANCE'),
+    'INSPECTION': machinesT('states.INSPECTION'),
+    'BREAKDOWN_REPAIR': machinesT('states.BREAKDOWN_REPAIR'),
     'PM_MAINTENANCE': machinesT('states.PM_MAINTENANCE'),
     'MODEL_CHANGE': machinesT('states.MODEL_CHANGE'),
     'PLANNED_STOP': machinesT('states.PLANNED_STOP'),
@@ -68,7 +72,7 @@ interface OperatorDashboardProps {
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
   useClientOnly();
   const { user } = useAuth();
-  const { t: machinesT } = useMachinesTranslation();
+  const { t: machinesT, language } = useMachinesTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
   const [showProductionInput, setShowProductionInput] = useState(false);
@@ -83,9 +87,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     oeeMetrics, 
     loading, 
     error, 
-    refresh, 
-    isConnected 
+    refresh,
+    isConnected
   } = useRealtimeData(user?.id, user?.role);
+
+  const { createProductionRecord } = useProductionRecords();
 
 
   // 에러 핸들링
@@ -125,6 +131,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
 
           return {
             ...machine,
+            // 담당 설비는 항상 실제 상태값을 가지고 있다는 것이 이 화면의 전제(카드뷰에서도 machine.current_state! 로 취급)
+            current_state: machine.current_state as MachineState,
             oee: oeeMetrics[machine.id]?.oee || 0,
             currentDuration
           };
@@ -197,6 +205,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   // 교대 종료 알림 체크
   const currentHour = new Date().getHours();
   const isShiftEnd = currentHour === 8 || currentHour === 20;
+
+  // 생산 실적 입력에 사용할 업무일자: 로컬(UTC 아님) 기준이며, 자정을 넘어 진행 중인 B조는
+  // 교대 시작일(전날)을 업무일자로 사용한다 (ShiftDataInputForm과 동일하게 야간 교대는 시작일 기준)
+  const currentShiftInfo = getCurrentShiftInfo();
+  const productionBusinessDate = dayjs(currentShiftInfo.startTime).format('YYYY-MM-DD');
 
   // 페이지네이션된 설비 목록
   const paginatedMachines = useMemo(() => {
@@ -444,13 +457,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                 label: machinesT('operator.recentWork'),
                 children: (
                   <Card size="small">
-                    <Timeline 
-                      size="small"
+                    <Timeline
                       items={processedData.recentLogs.slice(0, 8).map(log => ({
                         key: log.log_id,
                         dot: getStateIcon(log.state),
-                        color: log.state === 'NORMAL_OPERATION' ? 'green' : 
-                               log.state === 'MAINTENANCE' ? 'orange' : 'red',
+                        color: log.state === 'NORMAL_OPERATION' ? 'green' :
+                               log.state === 'INSPECTION' ? 'orange' : 'red',
                         children: (
                           <div style={{ fontSize: 12 }}>
                             <div style={{ fontWeight: 'bold' }}>
@@ -540,7 +552,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           visible={showStatusInput}
           onClose={() => setShowStatusInput(false)}
           onStatusChange={handleStatusChange}
-          language={(machinesT.i18n?.language as 'ko' | 'vi') || 'ko'}
+          language={language}
         />
       )}
 
@@ -548,13 +560,19 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       {showProductionInput && selectedMachine && (
         <ProductionRecordInput
           machine={processedData.assignedMachines.find(m => m.id === selectedMachine) || null}
-          shift="A"
-          date={new Date().toISOString().split('T')[0]}
+          shift={currentShiftInfo.shift}
+          date={productionBusinessDate}
           visible={showProductionInput}
           onClose={() => setShowProductionInput(false)}
           onSubmit={async (data) => {
-            console.log('생산 실적 입력:', data);
-            setShowProductionInput(false);
+            await createProductionRecord({
+              machine_id: selectedMachine,
+              output_qty: data.output_qty,
+              defect_qty: data.defect_qty,
+              shift: currentShiftInfo.shift,
+              date: productionBusinessDate
+            });
+            refresh();
           }}
         />
       )}

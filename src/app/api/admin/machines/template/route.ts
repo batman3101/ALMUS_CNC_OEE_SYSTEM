@@ -6,6 +6,8 @@ export async function GET() {
   try {
     // Excel 템플릿 생성
     const excelBuffer = createMachineTemplate();
+    // Node Buffer로 변환 (Uint8Array<ArrayBufferLike>는 BodyInit과 타입 호환되지 않음)
+    const responseBody = Buffer.from(excelBuffer);
 
     // 파일명 생성 (현재 날짜 포함)
     const currentDate = new Date().toISOString().split('T')[0];
@@ -15,9 +17,9 @@ export async function GET() {
     const headers_response = new Headers();
     headers_response.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     headers_response.set('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-    headers_response.set('Content-Length', excelBuffer.length.toString());
+    headers_response.set('Content-Length', responseBody.length.toString());
 
-    return new NextResponse(excelBuffer, {
+    return new NextResponse(responseBody, {
       status: 200,
       headers: headers_response
     });

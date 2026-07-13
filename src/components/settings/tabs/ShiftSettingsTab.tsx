@@ -289,7 +289,6 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
                 message={t('settings.shift.bufferTimeHint')}
                 type="info"
                 showIcon
-                size="small"
               />
             </Card>
           </Col>

@@ -287,7 +287,7 @@ const SettingsAuditTab: React.FC = () => {
 
           <RangePicker
             value={filters.dateRange}
-            onChange={(dates) => setFilters(prev => ({ ...prev, dateRange: dates }))}
+            onChange={(dates) => setFilters(prev => ({ ...prev, dateRange: dates as [dayjs.Dayjs, dayjs.Dayjs] | null }))}
             format="YYYY-MM-DD"
             placeholder={[t('common.startDate'), t('common.endDate')]}
           />

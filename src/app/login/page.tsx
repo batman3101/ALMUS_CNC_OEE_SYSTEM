@@ -38,7 +38,7 @@ const LoginPage: React.FC = () => {
       <div className={styles.loginWrapper}>
         {/* 좌측 브랜딩 영역 */}
         <div className={styles.brandingSection}>
-          <Card className={styles.brandingCard} variant="filled">
+          <Card className={styles.brandingCard} variant="borderless">
             <div className={styles.brandingContent}>
               <div className={styles.logoSection}>
                 <div className={styles.logo}>

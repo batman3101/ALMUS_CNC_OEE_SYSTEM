@@ -17,7 +17,7 @@ const LoginLoading: React.FC = () => {
       <div className={styles.loginWrapper}>
         {/* 브랜딩 섹션 - 로딩 중에도 표시 */}
         <div className={styles.brandingSection}>
-          <Card className={styles.brandingCard} variant="filled">
+          <Card className={styles.brandingCard} variant="borderless">
             <div className={styles.brandingContent}>
               <div className={styles.logoSection}>
                 <div className={styles.logo}>

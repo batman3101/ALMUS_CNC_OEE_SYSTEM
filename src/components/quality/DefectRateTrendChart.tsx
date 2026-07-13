@@ -3,17 +3,10 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTranslation } from '@/hooks/useTranslation';
+import { ProductionData } from '@/types';
 
 interface DefectRateTrendChartProps {
-  data: Array<{
-    date: string;
-    output_qty: number;
-    defect_qty: number;
-    good_qty: number;
-    defect_rate: number;
-    target_qty: number;
-    shift: 'A' | 'B' | 'C' | 'D';
-  }>;
+  data: ProductionData[];
   height?: number;
   period?: 'week' | 'month' | 'quarter';
 }
@@ -99,7 +92,7 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
               y={targetDefectRate}
               stroke="#ff4d4f"
               strokeDasharray="5 5"
-              label={{ value: t('dashboard:qualityChart.targetDefectRate'), position: "topRight" }}
+              label={{ value: t('dashboard:qualityChart.targetDefectRate'), position: "insideTopRight" }}
             />
             
             <Line
@@ -128,21 +121,21 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
         <div>
           <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.avgDefectRate')}:</span>{' '}
           <span style={{
-            color: chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length > targetDefectRate ? '#ff4d4f' : '#52c41a'
+            color: chartData.length > 0 && (chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length) > targetDefectRate ? '#ff4d4f' : '#52c41a'
           }}>
-            {(chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length).toFixed(2)}%
+            {chartData.length > 0 ? (chartData.reduce((sum, item) => sum + item.defectRate, 0) / chartData.length).toFixed(2) : '0.00'}%
           </span>
         </div>
         <div>
           <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.maxDefectRate')}:</span>{' '}
           <span style={{ color: '#ff4d4f' }}>
-            {Math.max(...chartData.map(item => item.defectRate)).toFixed(2)}%
+            {chartData.length > 0 ? Math.max(...chartData.map(item => item.defectRate)).toFixed(2) : '0.00'}%
           </span>
         </div>
         <div>
           <span style={{ fontWeight: 'bold' }}>{t('dashboard:qualityChart.minDefectRate')}:</span>{' '}
           <span style={{ color: '#52c41a' }}>
-            {Math.min(...chartData.map(item => item.defectRate)).toFixed(2)}%
+            {chartData.length > 0 ? Math.min(...chartData.map(item => item.defectRate)).toFixed(2) : '0.00'}%
           </span>
         </div>
       </div>

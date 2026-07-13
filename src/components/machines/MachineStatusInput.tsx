@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Modal, 
   Select, 
@@ -27,6 +27,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
+import { supabase } from '@/lib/supabase';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -75,6 +76,45 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
   } = useMachineStatusTranslations(currentLanguage);
   const [selectedState, setSelectedState] = useState<MachineState | undefined>();
   const [loading, setLoading] = useState(false);
+  const [stateStartTime, setStateStartTime] = useState<Date | null>(null);
+
+  // 현재 상태의 시작 시각을 진행 중인 machine_logs 행에서 조회한다.
+  // machine.updated_at은 모델/공정 등 상태와 무관한 변경으로도 갱신되므로 사용하지 않는다.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchStateStartTime = async () => {
+      if (!visible || !machine?.id || !machine?.current_state) {
+        setStateStartTime(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('machine_logs')
+        .select('start_time')
+        .eq('machine_id', machine.id)
+        .eq('state', machine.current_state)
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error || !data?.start_time) {
+        setStateStartTime(null);
+        return;
+      }
+
+      setStateStartTime(new Date(data.start_time));
+    };
+
+    fetchStateStartTime();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, machine?.id, machine?.current_state]);
 
   // 현재 상태 설정 정보 생성
   const getCurrentStateConfig = () => {
@@ -96,13 +136,10 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
 
   const currentStateConfig = getCurrentStateConfig();
 
-  // 현재 상태 지속 시간 (실제 데이터 기반)
+  // 현재 상태 지속 시간 (진행 중인 machine_logs 행 기준, 없으면 표시하지 않음)
   const getCurrentStateDuration = () => {
-    if (!machine?.current_state || !machine?.updated_at) return null;
-    
-    // machine.updated_at을 현재 상태 시작 시간으로 사용
-    const stateStartTime = new Date(machine.updated_at);
-    
+    if (!stateStartTime) return null;
+
     return formatDistanceToNow(stateStartTime, {
       addSuffix: true,
       locale: currentLanguage === 'ko' ? ko : vi
@@ -227,7 +264,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
             <Space>
               <Text type="secondary">{machine?.location || t('statusChange.noLocationInfo')}</Text>
               <Divider type="vertical" />
-              <Text type="secondary">{machine?.model_type || t('statusChange.noModelInfo')}</Text>
+              <Text type="secondary">{machine?.production_model?.model_name || t('statusChange.noModelInfo')}</Text>
             </Space>
           </div>
 

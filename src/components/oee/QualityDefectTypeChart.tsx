@@ -8,7 +8,9 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipProps,
+  TooltipContentProps,
+  PieLabelRenderProps,
+  PieLabel,
 } from 'recharts';
 import { Card, Typography, Row, Col, Empty, Spin, Table } from 'antd';
 // import { useDashboardTranslation } from '@/hooks/useTranslation';
@@ -45,7 +47,7 @@ const COLORS = [
 ];
 
 // 커스텀 툴팁 컴포넌트
-const CustomTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload }) => {
+const CustomTooltip: React.FC<TooltipContentProps<number, string>> = ({ active, payload }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload as QualityDefectTypeData;
     return (
@@ -66,8 +68,9 @@ const CustomTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload
 };
 
 // 파이 차트 레이블 렌더링 함수
-const renderLabel = (entry: QualityDefectTypeData) => {
-  return `${entry.percentage.toFixed(1)}%`;
+const renderLabel = (props: PieLabelRenderProps) => {
+  const percentage = Number(props.percentage);
+  return `${percentage.toFixed(1)}%`;
 };
 
 // 커스텀 범례 컴포넌트
@@ -226,7 +229,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={renderLabel}
+                    label={renderLabel as unknown as PieLabel}
                     outerRadius={Math.min(height * 0.3, 120)}
                     innerRadius={Math.min(height * 0.15, 60)}
                     paddingAngle={2}
@@ -241,7 +244,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
                       />
                     ))}
                   </Pie>
-                  <Tooltip content={<CustomTooltip />} />
+                  <Tooltip content={CustomTooltip} />
                   <Legend content={<CustomLegend />} />
                 </PieChart>
               </ResponsiveContainer>

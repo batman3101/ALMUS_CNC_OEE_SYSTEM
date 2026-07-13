@@ -2,43 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-
-export interface Machine {
-  id: string;
-  name: string;
-  location: string;
-  equipment_type: string;
-  is_active: boolean;
-  current_state: string;
-  production_model_id: string | null;
-  current_process_id: string | null;
-  created_at?: string;
-  updated_at?: string;
-  // 조인된 데이터
-  production_model?: {
-    id: string;
-    model_name: string;
-    description: string;
-  } | null;
-  current_process?: {
-    id: string;
-    process_name: string;
-    process_order: number;
-    tact_time_seconds: number;
-  } | null;
-  // Supabase join 결과 처리
-  product_models?: {
-    id: string;
-    model_name: string;
-    description: string;
-  } | null;
-  model_processes?: {
-    id: string;
-    process_name: string;
-    process_order: number;
-    tact_time_seconds: number;
-  } | null;
-}
+import { Machine, unwrapJoin } from '@/types';
 
 export interface UseMachinesOptions {
   enableAutoRefresh?: boolean;
@@ -63,6 +27,8 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isComponentMountedRef = useRef(true);
+  // 훅 인스턴스별 고유 Realtime 채널 이름 (동시 마운트 시 채널 충돌 방지)
+  const channelNameRef = useRef(`machines-changes-${Math.random().toString(36).slice(2)}`);
 
   const fetchMachines = useCallback(async (isBackgroundRefresh: boolean = false) => {
     try {
@@ -94,11 +60,11 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
 
       console.log(`Successfully loaded ${result.count} machines ${isBackgroundRefresh ? '(background)' : ''}`);
       
-      // Supabase join 결과를 표준 형태로 변환
-      const processedMachines = (result.machines || []).map((machine: Machine & { product_models?: unknown; model_processes?: unknown }) => ({
+      // Supabase join 결과(객체 또는 배열)를 표준 형태로 변환
+      const processedMachines = (result.machines || []).map((machine: Machine) => ({
         ...machine,
-        production_model: machine.product_models,
-        current_process: machine.model_processes
+        production_model: unwrapJoin(machine.product_models) ?? null,
+        current_process: unwrapJoin(machine.model_processes) ?? null
       }));
       
       // 컴포넌트가 마운트된 경우에만 상태 업데이트
@@ -182,9 +148,9 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
         supabase.removeChannel(realtimeChannelRef.current);
       }
 
-      // 새 채널 생성
+      // 새 채널 생성 (인스턴스별 고유 이름 사용)
       const channel = supabase
-        .channel('machines-changes')
+        .channel(channelNameRef.current)
         .on(
           'postgres_changes',
           {
@@ -231,8 +197,11 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
 
   // 초기 데이터 로드 및 실시간 연결 설정
   useEffect(() => {
+    // 이펙트가 재실행되는 경우(StrictMode, refreshInterval 변경 등)를 대비해 마운트 상태를 재설정
+    isComponentMountedRef.current = true;
+
     fetchMachines();
-    
+
     // 폴링 방식 자동 새로고침 설정
     if (enableAutoRefresh) {
       startAutoRefresh();
