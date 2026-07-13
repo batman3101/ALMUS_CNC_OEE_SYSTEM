@@ -3,6 +3,14 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
+// DB의 production_records.quality는 0-1 비율로 저장되지만, 이 API의 응답(품질 임계값,
+// 품질 분포 구간, 클라이언트 차트)은 모두 0-100 퍼센트 기준이다.
+// 따라서 DB 값을 읽는 즉시 퍼센트로 변환해 모든 계산/응답을 퍼센트 스케일로 통일한다.
+const toQualityPercent = (quality: number | null | undefined): number => (quality || 0) * 100;
+
+// 품질 트렌드 판정 임계값 (퍼센트 포인트). 품질이 99% 내외로 밀집되어 있어 1%p는 과도하게 크다.
+const QUALITY_TREND_THRESHOLD_PP = 0.5;
+
 // GET /api/quality-analysis - 품질 분석 데이터 조회
 export async function GET(request: NextRequest) {
   try {
@@ -83,7 +91,7 @@ export async function GET(request: NextRequest) {
       const outputQty = record.output_qty || 0;
       const defectQty = record.defect_qty || 0;
       const goodQty = outputQty - defectQty;
-      const quality = record.quality || 0;
+      const quality = toQualityPercent(record.quality);
 
       totalOutputQty += outputQty;
       totalDefectQty += defectQty;
@@ -162,11 +170,11 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       // 품질 준수율 계산
-      const compliantRecords = machineRecords.filter(r => (r.quality || 0) >= qualityThreshold);
+      const compliantRecords = machineRecords.filter(r => toQualityPercent(r.quality) >= qualityThreshold);
       machine.compliance_rate = machineRecords.length > 0 ? (compliantRecords.length / machineRecords.length) * 100 : 0;
 
-      // 품질 변동성 (표준편차) 계산
-      const qualities = machineRecords.map(r => r.quality || 0);
+      // 품질 변동성 (표준편차) 계산 - 퍼센트 포인트 단위
+      const qualities = machineRecords.map(r => toQualityPercent(r.quality));
       const avgQuality = qualities.reduce((sum, q) => sum + q, 0) / qualities.length;
       const variance = qualities.reduce((sum, q) => sum + Math.pow(q - avgQuality, 2), 0) / qualities.length;
       machine.quality_variance = Math.sqrt(variance);
@@ -183,13 +191,13 @@ export async function GET(request: NextRequest) {
           const firstHalf = machineRecords.slice(0, midPoint);
           const secondHalf = machineRecords.slice(midPoint);
           
-          const firstAvg = firstHalf.reduce((sum, r) => sum + (r.quality || 0), 0) / firstHalf.length;
-          const secondAvg = secondHalf.reduce((sum, r) => sum + (r.quality || 0), 0) / secondHalf.length;
-          
+          const firstAvg = firstHalf.reduce((sum, r) => sum + toQualityPercent(r.quality), 0) / firstHalf.length;
+          const secondAvg = secondHalf.reduce((sum, r) => sum + toQualityPercent(r.quality), 0) / secondHalf.length;
+
           const difference = secondAvg - firstAvg;
-          if (difference > 1) {
+          if (difference > QUALITY_TREND_THRESHOLD_PP) {
             machine.quality_trend = 'improving';
-          } else if (difference < -1) {
+          } else if (difference < -QUALITY_TREND_THRESHOLD_PP) {
             machine.quality_trend = 'declining';
           } else {
             machine.quality_trend = 'stable';
@@ -231,7 +239,7 @@ export async function GET(request: NextRequest) {
       shiftData.records_count++;
       shiftData.total_output += record.output_qty || 0;
       shiftData.total_defects += record.defect_qty || 0;
-      shiftData.avg_quality += record.quality || 0;
+      shiftData.avg_quality += toQualityPercent(record.quality);
     });
 
     const shiftAnalysis = Object.values(shiftQuality).map(shift => {
@@ -240,7 +248,7 @@ export async function GET(request: NextRequest) {
       
       // 교대별 품질 준수율
       const shiftRecords = (qualityRecords || []).filter(r => r.shift === shift.shift);
-      const compliantRecords = shiftRecords.filter(r => (r.quality || 0) >= qualityThreshold);
+      const compliantRecords = shiftRecords.filter(r => toQualityPercent(r.quality) >= qualityThreshold);
       shift.compliance_rate = shiftRecords.length > 0 ? (compliantRecords.length / shiftRecords.length) * 100 : 0;
       
       // 해당 교대의 고유 설비 수
@@ -281,7 +289,7 @@ export async function GET(request: NextRequest) {
       day.records_count++;
       day.total_output += record.output_qty || 0;
       day.total_defects += record.defect_qty || 0;
-      day.avg_quality += record.quality || 0;
+      day.avg_quality += toQualityPercent(record.quality);
     });
 
     const sortedDailyQuality = Object.values(dailyQuality).map(day => {
@@ -290,7 +298,7 @@ export async function GET(request: NextRequest) {
       
       // 일별 품질 준수율
       const dayRecords = (qualityRecords || []).filter(r => r.date === day.date);
-      const compliantRecords = dayRecords.filter(r => (r.quality || 0) >= qualityThreshold);
+      const compliantRecords = dayRecords.filter(r => toQualityPercent(r.quality) >= qualityThreshold);
       day.compliance_rate = dayRecords.length > 0 ? (compliantRecords.length / dayRecords.length) * 100 : 0;
       
       // 일별 활성 설비 수
@@ -381,12 +389,12 @@ export async function GET(request: NextRequest) {
         machine_name: record.machines?.name || 'Unknown',
         date: record.date,
         shift: record.shift,
-        quality: record.quality,
+        quality: Math.round(toQualityPercent(record.quality) * 100) / 100,
         output_qty: record.output_qty,
         defect_qty: record.defect_qty,
         good_qty: (record.output_qty || 0) - (record.defect_qty || 0),
         defect_rate: record.output_qty > 0 ? Math.round(((record.defect_qty / record.output_qty) * 100) * 100) / 100 : 0,
-        meets_threshold: (record.quality || 0) >= qualityThreshold
+        meets_threshold: toQualityPercent(record.quality) >= qualityThreshold
       })) : undefined,
       metadata: {
         query_time: new Date().toISOString(),

@@ -26,6 +26,9 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
 
+// 설비/위치 필터 교집합이 비어 있을 때, API가 '전체'로 오인하지 않도록 전달하는 존재하지 않는 설비 ID
+const NO_MATCHING_MACHINE_ID = '00000000-0000-0000-0000-000000000000';
+
 
 interface EngineerDashboardProps {
   onError?: (error: Error) => void;
@@ -296,13 +299,33 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     </div>
   );
 
+  // 위치 필터에 해당하는 설비 ID 목록 (전체 선택 시 null = 위치 필터 없음)
+  const locationMachineIds = React.useMemo(() => {
+    if (selectedLocations.length === 0 || selectedLocations.includes('all')) {
+      return null;
+    }
+    return machines
+      .filter(machine => machine.location && selectedLocations.includes(machine.location))
+      .map(machine => machine.id);
+  }, [machines, selectedLocations]);
+
+  // 설비 선택과 위치 필터를 교집합으로 결합 (null = 필터 없음 = 전체)
+  const effectiveMachineIds = React.useMemo(() => {
+    const machineFilter = selectedMachines.length === 0 || selectedMachines.includes('all')
+      ? null
+      : selectedMachines;
+
+    if (!machineFilter) return locationMachineIds;
+    if (!locationMachineIds) return machineFilter;
+    return machineFilter.filter(id => locationMachineIds.includes(id));
+  }, [selectedMachines, locationMachineIds]);
+
   // 다중 설비 선택을 콤마 구분 목록으로 변환 (API 계약: machine_id는 단일 또는 콤마 구분 목록을 허용)
   const selectedMachineIds = React.useMemo(() => {
-    if (selectedMachines.length === 0 || selectedMachines.includes('all')) {
-      return undefined;
-    }
-    return selectedMachines.join(',');
-  }, [selectedMachines]);
+    if (!effectiveMachineIds) return undefined;
+    if (effectiveMachineIds.length === 0) return NO_MATCHING_MACHINE_ID;
+    return effectiveMachineIds.join(',');
+  }, [effectiveMachineIds]);
 
   // 엔지니어 분석 데이터 훅 사용
   const {
@@ -384,11 +407,17 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const processedData = React.useMemo(() => {
     try {
       // OEE 등급 필터링된 데이터 사용
-      const dataToUse = filteredOEEData.length > 0 ? filteredOEEData : oeeData;
-      
+      const dataToUse = filteredOEEData;
+
+      // 등급 필터 결과가 0건이면 '조건에 맞는 데이터 없음'이므로 빈 데이터로 표시한다.
+      // (전체 데이터로 폴백하면 필터가 적용되지 않은 평균이 표시되는 문제가 있었음)
+      if (!selectedOEEGrades.includes('all') && dataToUse.length === 0) {
+        return getEmptyData();
+      }
+
       // 기간별 API 데이터가 있을 때는 API 데이터를 우선 사용
       let overallMetrics: OEEMetrics;
-      
+
       if (dataToUse.length > 0) {
         // 필터링된 데이터로 전체 OEE 계산
         const totalRecords = dataToUse.length;
@@ -502,17 +531,17 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       }
       return getEmptyData();
     }
-  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, onError, filteredOEEData]);
+  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, onError, filteredOEEData, selectedOEEGrades]);
 
-  // 설비 필터링된 분석 데이터
+  // 설비/위치 필터링된 분석 데이터
   const filteredAnalysisData = React.useMemo(() => {
-    if (selectedMachines.includes('all') || selectedMachines.length === 0) {
+    if (!effectiveMachineIds) {
       return processedData.analysisData;
     }
-    return processedData.analysisData.filter(item => 
-      selectedMachines.includes(item.key)
+    return processedData.analysisData.filter(item =>
+      effectiveMachineIds.includes(item.key)
     );
-  }, [processedData.analysisData, selectedMachines]);
+  }, [processedData.analysisData, effectiveMachineIds]);
 
   // 실제 설비 목록 옵션 생성 (Supabase 데이터만 사용)
   const machineOptions = React.useMemo(() => {
@@ -800,7 +829,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                     externalPeriod={selectedPeriod}
                     onPeriodChange={setSelectedPeriod}
                     customDateRange={customDateRange}
-                    machineId={selectedMachines[0] !== 'all' ? selectedMachines[0] : undefined}
+                    machineId={selectedMachineIds}
                     selectedShifts={selectedShifts}
                   />
                 </Col>
