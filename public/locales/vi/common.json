@@ -57,7 +57,9 @@
     "pleaseWait": "Vui lòng đợi",
     "accessDenied": "Không có quyền truy cập",
     "noPermission": "Bạn không có quyền truy cập trang này.",
-    "goBack": "Quay lại"
+    "goBack": "Quay lại",
+    "loginSubtitle": "Đăng nhập vào hệ thống giám sát ALMUS TECH",
+    "systemInfo": "Liên hệ quản trị viên để đăng ký tài khoản mới"
   },
   "roles": {
     "admin": "Quản trị viên",
@@ -151,61 +153,6 @@
       "resolve": "Giải quyết",
       "delete": "Xóa",
       "clearAll": "Xóa tất cả"
-    }
-  },
-  "settings": {
-    "title": "Cài đặt hệ thống",
-    "systemSettings": "Cài đặt hệ thống",
-    "lastUpdated": "Cập nhật lần cuối",
-    "refreshSuccess": "Cài đặt đã được làm mới",
-    "refreshError": "Không thể làm mới cài đặt",
-    "saveSuccess": "Cài đặt đã được lưu",
-    "saveError": "Không thể lưu cài đặt",
-    "loadError": "Không thể tải cài đặt",
-    "resetAll": "Khôi phục tất cả cài đặt",
-    "resetAllTitle": "Khôi phục tất cả cài đặt?",
-    "resetAllContent": "Hành động này không thể hoàn tác. Tất cả cài đặt sẽ được khôi phục về giá trị mặc định.",
-    "resetAllSuccess": "Tất cả cài đặt đã được khôi phục",
-    "resetAllError": "Không thể khôi phục cài đặt",
-    "unsavedChanges": "Có thay đổi chưa được lưu",
-    "unsavedChangesDesc": "Lưu thay đổi trước khi chuyển sang tab khác.",
-    "unsavedChangesTitle": "Thay đổi chưa được lưu",
-    "unsavedChangesContent": "Bạn có thay đổi chưa được lưu. Tiếp tục?",
-    "accessDenied": "Truy cập bị từ chối",
-    "adminRequired": "Chỉ quản trị viên mới có thể truy cập cài đặt hệ thống",
-    "tabs": {
-      "general": "Chung",
-      "oee": "OEE",
-      "shift": "Ca làm việc",
-      "notification": "Thông báo",
-      "display": "Hiển thị",
-      "audit": "Lịch sử thay đổi"
-    },
-    "general": {
-      "title": "Cài đặt chung",
-      "companyInfo": "Thông tin công ty",
-      "localization": "Bản địa hóa",
-      "companyName": "Tên công ty",
-      "companyNameRequired": "Nhập tên công ty",
-      "companyNameMinLength": "Tên công ty phải có ít nhất 2 ký tự",
-      "companyNamePlaceholder": "Nhập tên công ty",
-      "companyLogo": "Logo công ty",
-      "uploadLogo": "Tải lên logo",
-      "logoImageOnly": "Chỉ có thể tải lên file hình ảnh",
-      "logoSizeLimit": "Kích thước file phải nhỏ hơn 2MB",
-      "logoHint": "Kích thước đề xuất: 200x60px, tối đa 2MB",
-      "timezone": "Múi giờ",
-      "timezoneRequired": "Chọn múi giờ",
-      "timezoneSelect": "Chọn múi giờ",
-      "language": "Ngôn ngữ",
-      "languageRequired": "Chọn ngôn ngữ",
-      "languageSelect": "Chọn ngôn ngữ",
-      "dateFormat": "Định dạng ngày",
-      "dateFormatSelect": "Chọn định dạng ngày",
-      "timeFormat": "Định dạng thời gian",
-      "timeFormatSelect": "Chọn định dạng thời gian",
-      "logoUploadSuccess": "Tải lên logo thành công",
-      "logoUploadError": "Tải lên logo thất bại"
     }
   },
   "settings": {
@@ -477,7 +424,7 @@
     "buttons": {
       "preview": "Xem trước",
       "pdfExport": "Xuất PDF",
-      "excelExport": "Xuất Excel", 
+      "excelExport": "Xuất Excel",
       "pdfCustom": "Tùy chỉnh PDF",
       "excelCustom": "Tùy chỉnh Excel"
     },
