@@ -8,8 +8,9 @@ export interface SystemSetting {
   id: string;
   category: SettingCategory;
   setting_key: string;
-  setting_value: string | number | boolean | object | unknown[];
-  default_value: string | number | boolean | object | unknown[];
+  // DB 상 jsonb 이므로 임의의 JSON 값이 올 수 있다. 사용처에서 좁혀 쓸 것.
+  setting_value: unknown;
+  default_value: unknown;
   description?: string;
   data_type: 'string' | 'number' | 'boolean' | 'object' | 'array';
   validation_rules?: Record<string, unknown>;
@@ -21,6 +22,7 @@ export interface SystemSetting {
   updated_by?: string | null;
 }
 
+// `recent_settings_changes` 뷰의 행 (systemSettings.getSettingsAudit 가 이 뷰를 조회한다)
 export interface SystemSettingAudit {
   id: string;
   setting_id: string;
@@ -28,9 +30,15 @@ export interface SystemSettingAudit {
   setting_key: string;
   old_value?: unknown;
   new_value: unknown;
+  action?: string;               // INSERT / UPDATE / DELETE
   changed_by?: string;
   changed_at: string;
   change_reason?: string;
+  // 아래 필드는 뷰가 user_profiles 를 조인해 제공한다
+  changed_by_name?: string | null;
+  changed_by_email?: string | null;
+  description?: string | null;
+  data_type?: string | null;
 }
 
 export interface SettingUpdate {
@@ -102,6 +110,40 @@ export interface AllSystemSettings {
   notification: NotificationSettings;
   display: DisplaySettings;
 }
+
+// ---------------------------------------------------------------------------
+// 타입 안전한 설정 접근자
+//
+// 기존 시그니처 `getSetting<T = unknown>(category, key): T | null` 은 타입 인자를
+// 생략하고 호출하면 T 가 `unknown` 으로 고정되고, `getSetting(...) ?? 60` 처럼
+// nullish 병합을 하면 TS 가 `unknown` 에서 null/undefined 를 제거해 `{}` 로 좁힌다.
+// 그 결과 `breakTime` 등이 `{}` 가 되어 산술/문자열 연산에서 전부 터졌다.
+//
+// 아래처럼 category 와 key 로부터 값 타입을 **추론**하게 하면 타입 인자를 명시하지
+// 않아도 정확한 타입이 나온다:
+//   getSetting('shift', 'break_time_minutes')  // number | null
+//   getSetting('display', 'theme_mode')        // 'light' | 'dark' | null
+// ---------------------------------------------------------------------------
+
+/** 해당 카테고리에서 사용할 수 있는 설정 키 */
+export type SettingKey<C extends SettingCategory> = Extract<keyof AllSystemSettings[C], string>;
+
+/** category + key 조합의 값 타입 */
+export type SettingValueOf<
+  C extends SettingCategory,
+  K extends SettingKey<C>
+> = AllSystemSettings[C][K];
+
+/** SystemSettingsContext.getSetting 의 시그니처 */
+export type GetSetting = <C extends SettingCategory, K extends SettingKey<C>>(
+  category: C,
+  key: K
+) => SettingValueOf<C, K> | null;
+
+/** SystemSettingsContext.getSettingsByCategory 의 시그니처 */
+export type GetSettingsByCategory = <C extends SettingCategory>(
+  category: C
+) => Partial<AllSystemSettings[C]>;
 
 // 설정 검증 규칙
 export interface SettingValidationRule {
