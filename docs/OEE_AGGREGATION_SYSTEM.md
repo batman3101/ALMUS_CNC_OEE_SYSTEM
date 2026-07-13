@@ -38,7 +38,7 @@
   - **휴식시간**: `system_settings` 테이블의 `shift` 카테고리 `break_time_minutes` 설정값 (관리자가 설정 화면에서 변경 가능, 설정이 없으면 60분)
   - 예: 가동시간 720분, 휴식시간 110분 → 계획 가동시간 = 610분
   - 서버 측 단일 구현: `src/lib/plannedRuntime.ts` (`getBreakTimeMinutes`, `resolvePlannedRuntime`). 모든 생산 기록 저장 경로가 이 값을 사용한다.
-  - 참고: 2026-07 이전에 저장된 기록은 휴식시간을 차감하지 않은 `planned_runtime = 720`으로 기록되어 있어, 이후 데이터와 직접 비교할 수 없다.
+  - **과거 데이터 미백필 안내**: `2026-07-13` (계산식 변경 기준일, `src/lib/oeeCutover.ts`의 `OEE_CALC_CHANGE_DATE`) 이전에 저장된 기록(약 325,197건)은 **재계산(백필)하지 않았다**. 해당 기록은 휴식시간을 차감하지 않은 구 계산식으로 `planned_runtime = 720`이 저장되어 있다. 그중 B교대 기록(약 162,738건)은 별도 버그로 인해 `planned_runtime = 0`으로 저장되어 있었다. 이 때문에 기준일을 넘나드는 가동률·OEE 추이 비교는 유효하지 않으며, 관련 UI(`IndependentOEETrendChart`, `OEETrendChart` 등 날짜축 OEE 추이 차트)는 기준일이 표시 범위에 포함될 때 점선 마커와 안내 문구로 이를 시각적으로 구분한다.
 
 ### 2. 성능 (Performance)
 ```

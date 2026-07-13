@@ -14,8 +14,10 @@ import {
   ChartOptions,
   Filler,
 } from 'chart.js';
-import { Card, Typography, Select, DatePicker, Row, Col } from 'antd';
+import { Card, Typography, Select, DatePicker, Row, Col, Alert } from 'antd';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { isCutoverInRange } from '@/lib/oeeCutover';
+import { oeeCutoverMarkerPlugin } from './oeeCutoverPlugin';
 
 ChartJS.register(
   CategoryScale,
@@ -72,6 +74,10 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
       console.warn('⚠️ OEETrendChart: 데이터가 비어있습니다!');
     }
   }, [data, title]);
+  // 계산식 변경일(OEE_CALC_CHANGE_DATE) 표시 여부 - 표시 중인 날짜 범위가 변경일을 포함할 때만 true
+  const rawDates = React.useMemo(() => data.map(item => item.date), [data]);
+  const showCutoverNotice = React.useMemo(() => isCutoverInRange(rawDates), [rawDates]);
+
   // 차트 데이터 구성 (하이드레이션 오류 방지를 위해 간단한 포맷 사용)
   const chartData = {
     labels: data.map(item => {
@@ -159,6 +165,11 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      // 계산식 변경일 세로 마커 (플러그인이 draw 시점에 최신 dates 를 읽는다)
+      oeeCutoverMarker: {
+        dates: rawDates,
+        label: t('oeeCutover.markerLabel'),
+      },
       legend: {
         position: 'top' as const,
         labels: {
@@ -268,6 +279,16 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         </Row>
       </div>
 
+      {/* 계산식 변경일 안내 - 표시 범위가 변경일을 포함할 때만 노출 */}
+      {showCutoverNotice && (
+        <Alert
+          message={t('oeeCutover.notice')}
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       {/* 차트 */}
       <div style={{ height }}>
         {data.length === 0 ? (
@@ -282,7 +303,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
             선택된 기간에 데이터가 없습니다
           </div>
         ) : (
-          <Line data={chartData} options={options} />
+          <Line data={chartData} options={options} plugins={[oeeCutoverMarkerPlugin]} />
         )}
       </div>
 

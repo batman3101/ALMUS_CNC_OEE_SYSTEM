@@ -6,6 +6,10 @@
   "activeMachines": "가동 중",
   "maintenanceMachines": "점검 중",
   "stoppedMachines": "정지",
+  "oeeCutover": {
+    "notice": "2026-07-13부터 계획가동시간 계산식이 변경되었습니다 (휴식시간 차감). 이전 구간과 가동률·OEE를 직접 비교하지 마세요.",
+    "markerLabel": "계산식 변경"
+  },
   "oee": {
     "title": "OEE 지표",
     "availability": "가동률",
