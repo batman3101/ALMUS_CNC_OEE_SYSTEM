@@ -399,6 +399,31 @@ export const useRealtimeProductionRecords = ({
     const reportedAvailabilitySum = reported.reduce((sum, record) => sum + record.availability, 0);
     const reportedAverage = (sum: number) => (reportedCount > 0 ? sum / reportedCount : 0);
 
+    // 물리적으로 불가능한 레거시 기록.
+    //
+    //   품질 = 양품 / 생산  이므로 생산이 0이면 품질은 0이고,
+    //   OEE = 가동률 x 성능 x 품질  이므로 OEE 도 반드시 0이다.
+    //   이론 생산시간도 생산량에서 나오므로 0이어야 한다.
+    //
+    // 그런데 옛 쓰기 경로가 남긴 기록 중에는 생산 수량이 0인데 OEE 가 0.43, 품질이 1.0 으로
+    // 저장된 것들이 있다(적용 시점 기준 전체 47,748건, 그중 OEE 가 양수인 것 36,078건).
+    // 이 행들은 평균 OEE·품질을 실제보다 높게 만든다.
+    //
+    // 과거 데이터는 복구하지 않기로 했으므로(계산식 변경 전 구간과 동일한 방침), 대신 화면이
+    // 이 사실을 숨기지 않도록 개수와 "제외했을 때의 평균"을 함께 계산해 호출부에 넘긴다.
+    // 판별 명제는 Edge Function(daily-oee-aggregation)의 isInconsistentEmptyShift 와 동일하다.
+    const isImpossibleRecord = (record: ProductionRecord): boolean =>
+      (record.output_qty ?? 0) <= 0 &&
+      ((record.oee ?? 0) !== 0 ||
+        (record.quality ?? 0) !== 0 ||
+        (record.ideal_runtime ?? 0) !== 0);
+
+    const valid = records.filter(record => !isImpossibleRecord(record));
+    const validCount = valid.length;
+    const validAverage = (sum: number) => (validCount > 0 ? sum / validCount : 0);
+    const validOeeSum = valid.reduce((sum, record) => sum + record.oee, 0);
+    const validQualitySum = valid.reduce((sum, record) => sum + record.quality, 0);
+
     return {
       totalProduction: totals.output,
       totalDefects: totals.defects,
@@ -413,7 +438,12 @@ export const useRealtimeProductionRecords = ({
       unreportedCount: count - reportedCount,
       reportedCount,
       avgOEEReported: Math.round(reportedAverage(reportedOeeSum) * 1000) / 10,
-      avgAvailabilityReported: Math.round(reportedAverage(reportedAvailabilitySum) * 1000) / 10
+      avgAvailabilityReported: Math.round(reportedAverage(reportedAvailabilitySum) * 1000) / 10,
+
+      // 물리적으로 불가능한 레거시 기록 규모 및 "그 행들을 제외한" 지표
+      impossibleCount: count - validCount,
+      avgOEEExcludingImpossible: Math.round(validAverage(validOeeSum) * 1000) / 10,
+      avgQualityExcludingImpossible: Math.round(validAverage(validQualitySum) * 1000) / 10
     };
   }, [records]);
 

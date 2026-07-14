@@ -968,6 +968,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         );
       })()}
 
+      {/* 물리적으로 불가능한 레거시 기록 경고.
+          품질 = 양품/생산 이므로 생산이 0이면 OEE 도 0이어야 하는데, 옛 저장 경로가 남긴 기록 중에는
+          생산 0 인데 OEE 가 양수인 행이 있다. 이 행들이 평균 OEE·품질을 실제보다 높게 만든다.
+          과거 데이터는 복구하지 않기로 했으므로(계산식 변경 전 구간과 동일 방침), 화면이 이 사실을
+          숨기지 않도록 규모와 "제외했을 때의 평균"을 함께 표시한다.
+          위의 비가동 미입력 경고와는 다른 문제이므로 별도로 구분해 표시한다. */}
+      {(() => {
+        const aggregated = aggregatedData();
+        if (!aggregated || aggregated.recordCount === 0 || aggregated.impossibleCount === 0) {
+          return null;
+        }
+
+        const ratio = Math.round((aggregated.impossibleCount / aggregated.recordCount) * 100);
+
+        return (
+          <Alert
+            type="error"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={t('legacyDataWarning.title', {
+              count: aggregated.impossibleCount,
+              ratio
+            })}
+            description={t('legacyDataWarning.description', {
+              validOee: aggregated.avgOEEExcludingImpossible.toFixed(1),
+              validQuality: aggregated.avgQualityExcludingImpossible.toFixed(1)
+            })}
+          />
+        );
+      })()}
+
       {/* 메인 콘텐츠 */}
       <Row gutter={[16, 16]}>
         {/* 전체 OEE 게이지 */}
