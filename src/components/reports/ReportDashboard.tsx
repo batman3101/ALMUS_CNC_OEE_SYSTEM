@@ -159,7 +159,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         machines: selectedMachines.length > 0
           ? machines.filter(m => selectedMachines.includes(m.id))
           : machines,
-        stats: calculateStats(),
+        // 통계는 표/내보내기와 동일한 범위(필터된 데이터)에서 계산한다
+        stats: calculateStats(filtered, templateRange),
         oeeData: filtered.oeeData,
         productionData: filtered.productionData
       };
@@ -226,10 +227,22 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     }
   };
 
-  // 통계 계산 - 실시간 데이터 우선 사용
-  const calculateStats = () => {
-    // 실시간 집계 데이터가 있으면 우선 사용
-    if (aggregatedData) {
+  // 서버 집계(aggregatedData)는 "전체 설비 × 페이지 조회 기간" 기준으로만 계산된 값이다.
+  // 설비를 고르거나 다른 기간(빠른 보고서 템플릿)을 보는 순간 범위가 어긋나므로 그대로 쓰면 안 된다.
+  const matchesAggregatedScope = (range: [string, string] | null): boolean => {
+    if (selectedMachines.length > 0) return false;
+    if (range === null && dateRange === null) return true;
+    if (range === null || dateRange === null) return false;
+    return range[0] === dateRange[0] && range[1] === dateRange[1];
+  };
+
+  // 통계 계산 - 요약 카드/미리보기/내보내기가 항상 같은 범위를 말하도록 대상 데이터를 인자로 받는다.
+  const calculateStats = (
+    data: { oeeData: OEEMetrics[]; productionData: ProductionRecord[] },
+    range: [string, string] | null
+  ): PreviewStats => {
+    // 범위가 서버 집계와 정확히 일치할 때만 집계 데이터를 사용한다 (%를 소수로 변환)
+    if (aggregatedData && matchesAggregatedScope(range)) {
       return {
         avgOEE: aggregatedData.avgOEE / 100, // 훅에서는 %로, 여기서는 소수로 변환
         avgAvailability: aggregatedData.avgAvailability / 100,
@@ -240,8 +253,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
       };
     }
 
-    // 실시간 데이터가 없으면 기존 계산 로직 사용
-    if (reportData.oeeData.length === 0) {
+    // 그 외에는 필터된 행에서 직접 계산한다 (행의 oee/availability 등은 0..1 비율)
+    if (data.oeeData.length === 0) {
       return {
         avgOEE: 0,
         avgAvailability: 0,
@@ -252,12 +265,12 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
       };
     }
 
-    const avgOEE = reportData.oeeData.reduce((sum, oee) => sum + oee.oee, 0) / reportData.oeeData.length;
-    const avgAvailability = reportData.oeeData.reduce((sum, oee) => sum + oee.availability, 0) / reportData.oeeData.length;
-    const avgPerformance = reportData.oeeData.reduce((sum, oee) => sum + oee.performance, 0) / reportData.oeeData.length;
-    const avgQuality = reportData.oeeData.reduce((sum, oee) => sum + oee.quality, 0) / reportData.oeeData.length;
-    const totalOutput = reportData.productionData.reduce((sum, prod) => sum + prod.output_qty, 0);
-    const totalDefects = reportData.productionData.reduce((sum, prod) => sum + prod.defect_qty, 0);
+    const avgOEE = data.oeeData.reduce((sum, oee) => sum + oee.oee, 0) / data.oeeData.length;
+    const avgAvailability = data.oeeData.reduce((sum, oee) => sum + oee.availability, 0) / data.oeeData.length;
+    const avgPerformance = data.oeeData.reduce((sum, oee) => sum + oee.performance, 0) / data.oeeData.length;
+    const avgQuality = data.oeeData.reduce((sum, oee) => sum + oee.quality, 0) / data.oeeData.length;
+    const totalOutput = data.productionData.reduce((sum, prod) => sum + prod.output_qty, 0);
+    const totalDefects = data.productionData.reduce((sum, prod) => sum + prod.defect_qty, 0);
 
     return {
       avgOEE,
@@ -269,11 +282,12 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     };
   };
 
-  const stats = calculateStats();
-  // 상단 통계 카드의 불량률: 생산량이 0이면 NaN이 아닌 0을 표시
-  const defectRate = stats.totalOutput > 0 ? (stats.totalDefects / stats.totalOutput) * 100 : 0;
   // 사용자 정의 보고서(ReportGenerator)에 전달할 데이터: 선택된 설비 + 선택된 기간으로 필터링
   const filteredReportData = filterReportData(reportData, selectedMachines, dateRange);
+  // 상단 통계 카드도 아래 표/보고서와 동일한 범위(선택된 설비 + 선택된 기간)를 요약한다
+  const stats = calculateStats(filteredReportData, dateRange);
+  // 상단 통계 카드의 불량률: 생산량이 0이면 NaN이 아닌 0을 표시
+  const defectRate = stats.totalOutput > 0 ? (stats.totalDefects / stats.totalOutput) * 100 : 0;
 
   const quickReportButtons = [
     { key: 'daily', label: t('types.daily'), template: 'daily' as const },

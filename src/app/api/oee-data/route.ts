@@ -26,6 +26,18 @@ interface OeeRecordsSummary {
   avg_performance: number;
   avg_quality: number;
   avg_oee: number;
+  /**
+   * 비가동 신뢰도 지표.
+   *
+   * 비가동은 작업자가 직접 입력한다. 입력하지 않으면 actual_runtime = planned_runtime 이 되어
+   * 가동률이 100% 로 집계되고 OEE 가 부풀려진다. downtime_minutes IS NULL 인 기록이 그 경우다.
+   * 평균값만 내려주면 이 왜곡이 보이지 않으므로, 미확인 규모와
+   * "비가동이 확인된 기록만의 지표"를 함께 내려보내 호출부가 신뢰도를 표시할 수 있게 한다.
+   */
+  unreported_records: number;
+  reported_records: number;
+  avg_availability_reported: number;
+  avg_oee_reported: number;
 }
 
 /** 기본 조회 창(일). start_date/end_date 가 없을 때만 사용한다. */
@@ -128,6 +140,10 @@ export async function GET(request: NextRequest) {
       avg_performance: 0,
       avg_quality: 0,
       avg_oee: 0,
+      unreported_records: 0,
+      reported_records: 0,
+      avg_availability_reported: 0,
+      avg_oee_reported: 0,
     };
     const totalRecords = Number(summary.total_records) || 0;
 
@@ -207,6 +223,22 @@ export async function GET(request: NextRequest) {
         avg_availability: Math.round(summary.avg_availability * 1000) / 1000,
         avg_performance: Math.round(summary.avg_performance * 1000) / 1000,
         avg_quality: Math.round(summary.avg_quality * 1000) / 1000,
+
+        // 위 평균을 얼마나 믿을 수 있는지 나타내는 지표.
+        // 비가동이 확인되지 않은 기록은 가동률이 100% 로 잡혀 OEE 를 끌어올린다.
+        // 호출부는 unreported_records 비율이 높으면 평균을 그대로 신뢰하지 말고
+        // *_reported 값(비가동이 확인된 기록만의 지표)을 함께 보여줘야 한다.
+        downtime_reporting: {
+          unreported_records: Number(summary.unreported_records) || 0,
+          reported_records: Number(summary.reported_records) || 0,
+          unreported_ratio:
+            totalRecords > 0
+              ? Math.round(((Number(summary.unreported_records) || 0) / totalRecords) * 1000) / 1000
+              : 0,
+          avg_availability_reported:
+            Math.round(summary.avg_availability_reported * 1000) / 1000,
+          avg_oee_reported: Math.round(summary.avg_oee_reported * 1000) / 1000,
+        },
       },
       pagination: buildPaginationMeta(limit, offset, oeeData.length, totalRecords),
       filters: {

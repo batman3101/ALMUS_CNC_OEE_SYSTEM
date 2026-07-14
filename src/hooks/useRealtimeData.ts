@@ -5,6 +5,53 @@ import { supabase } from '@/lib/supabase';
 import { Machine, MachineLog, ProductionRecord, OEEMetrics, User } from '@/types';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
+// 생산 실적 조회 기간 (초기 조회와 실시간 반영이 동일한 윈도우를 사용해야 배열이 무한히 커지지 않는다)
+const PRODUCTION_WINDOW_DAYS = 7;
+
+// 조회 윈도우의 시작 날짜 (yyyy-MM-dd)
+const getProductionWindowStart = (): string =>
+  new Date(Date.now() - PRODUCTION_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+// 같은 날짜에서는 B(야간, 20:00~08:00)조가 A(주간)조보다 나중이다.
+// 초기 조회 정렬(date desc, shift desc)과 동일한 기준으로 "최신" 실적을 정의한다.
+const isNewerRecord = (candidate: ProductionRecord, current: ProductionRecord): boolean => {
+  if (candidate.date !== current.date) return candidate.date > current.date;
+  return candidate.shift > current.shift;
+};
+
+// 설비의 실적 목록에서 가장 최신 실적을 고른다 (없으면 null)
+const findLatestRecord = (records: ProductionRecord[]): ProductionRecord | null =>
+  records.reduce<ProductionRecord | null>(
+    (latest, record) => (latest === null || isNewerRecord(record, latest) ? record : latest),
+    null
+  );
+
+// 생산 실적 1건을 OEE 지표로 변환
+const toOeeMetrics = (record: ProductionRecord): OEEMetrics => ({
+  availability: record.availability || 0,
+  performance: record.performance || 0,
+  quality: record.quality || 0,
+  oee: record.oee || 0,
+  actual_runtime: record.actual_runtime || 0,
+  planned_runtime: record.planned_runtime || 480,
+  ideal_runtime: record.ideal_runtime || 0,
+  output_qty: record.output_qty || 0,
+  defect_qty: record.defect_qty || 0
+});
+
+// 생산 실적이 하나도 남지 않은 설비의 기본 지표
+const createEmptyOeeMetrics = (): OEEMetrics => ({
+  availability: 0,
+  performance: 0,
+  quality: 0,
+  oee: 0,
+  actual_runtime: 0,
+  planned_runtime: 480,
+  ideal_runtime: 0,
+  output_qty: 0,
+  defect_qty: 0
+});
+
 interface RealtimeDataState {
   machines: Machine[];
   machineLogs: MachineLog[];
@@ -100,8 +147,11 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         supabase
           .from('production_records')
           .select('*')
-          .gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+          .gte('date', getProductionWindowStart())
+          // date만으로 정렬하면 같은 날짜에 A/B 교대 행이 함께 있을 때 첫 행이 비결정적이다.
+          // shift 내림차순을 2차 정렬로 추가해 B(야간)조가 A(주간)조보다 앞(=최신)에 오게 한다.
           .order('date', { ascending: false })
+          .order('shift', { ascending: false })
       ]);
 
       // 설비 데이터
@@ -123,20 +173,11 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           // 생산 실적 기반 OEE 데이터 찾기
           const machineRecords = productionRecords?.filter(r => r.machine_id === machine.id) || [];
 
-          if (machineRecords.length > 0) {
-            // 생산 실적이 있는 경우: 최신 데이터 사용
-            const latestRecord = machineRecords[0];
-            oeeMetrics[machine.id] = {
-              availability: latestRecord.availability || 0,
-              performance: latestRecord.performance || 0,
-              quality: latestRecord.quality || 0,
-              oee: latestRecord.oee || 0,
-              actual_runtime: latestRecord.actual_runtime || 0,
-              planned_runtime: latestRecord.planned_runtime || 480,
-              ideal_runtime: latestRecord.ideal_runtime || 0,
-              output_qty: latestRecord.output_qty || 0,
-              defect_qty: latestRecord.defect_qty || 0
-            };
+          const latestRecord = findLatestRecord(machineRecords);
+
+          if (latestRecord) {
+            // 생산 실적이 있는 경우: 최신 데이터 사용 (date, shift 기준 최신)
+            oeeMetrics[machine.id] = toOeeMetrics(latestRecord);
           } else {
             // 생산 실적이 없는 경우: 기본값 또는 실시간 계산
             // machine_logs 기반으로 가용성만이라도 계산
@@ -316,37 +357,52 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           setState(prev => {
             let newRecords = [...prev.productionRecords];
             const newOeeMetrics = { ...prev.oeeMetrics };
+            const windowStart = getProductionWindowStart();
+
+            // 변경이 영향을 준 설비. 이 설비의 OEE 지표만 남은 실적으로 다시 계산한다.
+            let affectedMachineId: string | null = null;
 
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const record = payload.new as ProductionRecord;
+              affectedMachineId = record.machine_id;
 
-              if (payload.eventType === 'INSERT') {
-                newRecords = [record, ...newRecords];
+              const index = newRecords.findIndex(r => r.record_id === record.record_id);
+              if (index !== -1) {
+                newRecords[index] = record;
               } else {
-                const index = newRecords.findIndex(r => r.record_id === record.record_id);
-                if (index !== -1) {
-                  newRecords[index] = record;
-                }
+                newRecords = [record, ...newRecords];
               }
+            } else if (payload.eventType === 'DELETE') {
+              // DELETE payload(old)에는 보통 PK만 담기므로 설비 ID는 현재 목록에서 찾는다
+              const deletedId = (payload.old as Partial<ProductionRecord>).record_id;
+              const deletedRecord = deletedId
+                ? newRecords.find(r => r.record_id === deletedId)
+                : undefined;
 
-              // OEE 지표 업데이트
-              newOeeMetrics[record.machine_id] = {
-                availability: record.availability || 0,
-                performance: record.performance || 0,
-                quality: record.quality || 0,
-                oee: record.oee || 0,
-                actual_runtime: record.actual_runtime || 0,
-                planned_runtime: record.planned_runtime || 480,
-                ideal_runtime: record.ideal_runtime || 0,
-                output_qty: record.output_qty || 0,
-                defect_qty: record.defect_qty || 0
-              };
+              if (!deletedRecord) return prev; // 목록에 없던 행이면 변경 없음
+
+              affectedMachineId = deletedRecord.machine_id;
+              newRecords = newRecords.filter(r => r.record_id !== deletedId);
             }
+
+            if (affectedMachineId === null) return prev;
+
+            // 초기 조회와 동일한 7일 윈도우로 배열을 제한한다 (INSERT가 누적되며 무한히 커지는 것 방지)
+            newRecords = newRecords.filter(r => r.date >= windowStart);
+
+            // 오래된 날짜/교대의 실적이 도착해도 최신 지표를 덮어쓰지 않도록,
+            // 남은 실적 중 가장 최신(date, shift) 건으로 지표를 다시 계산한다.
+            const machineRecords = newRecords.filter(r => r.machine_id === affectedMachineId);
+            const latestRecord = findLatestRecord(machineRecords);
+            newOeeMetrics[affectedMachineId] = latestRecord
+              ? toOeeMetrics(latestRecord)
+              : createEmptyOeeMetrics();
 
             return {
               ...prev,
               productionRecords: newRecords,
-              oeeMetrics: newOeeMetrics
+              oeeMetrics: newOeeMetrics,
+              lastUpdated: Date.now()
             };
           });
         }
@@ -379,12 +435,20 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           setState(prev => {
             let newMachines = [...prev.machines];
 
-            if (payload.eventType === 'INSERT') {
-              newMachines = [...newMachines, payload.new as Machine];
-            } else if (payload.eventType === 'UPDATE') {
-              const index = newMachines.findIndex(m => m.id === payload.new.id);
-              if (index !== -1) {
-                newMachines[index] = payload.new as Machine;
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              // 초기 조회가 is_active=true만 가져오므로, 실시간 반영도 is_active를 목록 포함 조건으로 삼는다.
+              // (비활성화된 설비는 목록에서 제거하고, 다시 활성화되면 목록에 추가한다)
+              const machine = payload.new as Machine;
+              const index = newMachines.findIndex(m => m.id === machine.id);
+
+              if (machine.is_active) {
+                if (index !== -1) {
+                  newMachines[index] = machine;
+                } else {
+                  newMachines = [...newMachines, machine];
+                }
+              } else if (index !== -1) {
+                newMachines = newMachines.filter(m => m.id !== machine.id);
               }
             } else if (payload.eventType === 'DELETE') {
               newMachines = newMachines.filter(m => m.id !== payload.old.id);

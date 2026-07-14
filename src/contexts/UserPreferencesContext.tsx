@@ -18,8 +18,10 @@ import { getStoredLanguage, setStoredLanguage } from '@/utils/localStorage';
  *   "한국어로 바꿔도 몇 초 뒤 베트남어로 돌아간다"의 진짜 원인이 이것이다.
  *
  * ■ 규칙
- *   1. 값의 출처 우선순위 (최초 1회만 확정):
- *        내 프로필 설정 > localStorage(직전 선택 캐시) > 시스템 기본값 > 하드코딩 기본
+ *   1. 값의 출처 우선순위 (사용자 신원이 바뀔 때마다 한 번 확정):
+ *        로그인 상태  : 내 프로필 설정 > 시스템 기본값 > 하드코딩 기본
+ *        비로그인 상태: localStorage(직전 선택 캐시) > 시스템 기본값 > 하드코딩 기본
+ *      (localStorage 는 브라우저 전역이라 로그인 사용자에게는 앞 사용자의 값이 될 수 있으므로 쓰지 않는다)
  *   2. 한 번 확정된 뒤에는 "사용자의 선택"만이 값을 바꾼다.
  *      시스템 설정이 나중에 바뀌어도 사용 중인 사용자를 덮어쓰지 않는다.
  *      (시스템 설정은 "앱을 처음 열었을 때의 기본값"이지, 사용 중 강제되는 값이 아니다)
@@ -96,29 +98,41 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredTheme() ?? 'light');
   const [isResolved, setIsResolved] = useState(false);
 
-  // 초기값은 세션당 딱 한 번만 확정한다.
-  // 이 가드가 없으면 시스템 설정이 바뀔 때마다 사용자의 선택을 덮어쓰게 된다(예전 버그).
-  const resolvedRef = useRef(false);
+  // 초기값은 "사용자 신원당 한 번"만 확정한다.
+  //   undefined = 아직 확정 전, null = 비로그인 상태로 확정됨, string = 해당 사용자로 확정됨
+  // 예전처럼 boolean 으로 잠그면, 로그인 화면(비로그인)에서 이미 확정돼 버려서
+  // 로그인(SPA 전환, 리마운트 없음) 후 프로필이 도착해도 다시 확정하지 못했다.
+  // → 매 로그인마다 DB 프로필의 언어/테마가 무시되고, 같은 PC에서 앞 사용자의 값이 그대로 남았다.
+  // 신원을 기록해두면 (null -> id, id -> 다른 id) 전환 시에만 다시 확정하므로,
+  // "시스템 설정 변경이 사용 중인 사용자를 덮어쓰지 않는다"는 기존 보호 성질은 그대로 유지된다.
+  const resolvedUserIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    if (resolvedRef.current) return;
     // 프로필과 시스템 기본값이 모두 준비되기 전에 확정하면 잘못된 값으로 굳는다.
     if (authLoading || settingsLoading) return;
+
+    const currentUserId = user?.id ?? null;
+    if (resolvedUserIdRef.current === currentUserId) return;
 
     const systemLanguage = getSetting('general', 'language') as LanguageCode | null;
     const systemTheme = getSetting('display', 'theme_mode') as ThemeMode | null;
 
-    const initialLanguage: LanguageCode =
-      user?.language ?? getStoredLanguage() ?? systemLanguage ?? 'ko';
-    const initialTheme: ThemeMode =
-      user?.theme_mode ?? getStoredTheme() ?? systemTheme ?? 'light';
+    // localStorage 는 브라우저 전역(사용자별이 아님)이라 이전 사용자의 값이 남아있을 수 있다.
+    // 그래서 로그인 상태에서는 내 프로필 > 시스템 기본값 순으로만 확정하고, localStorage 는 보지 않는다.
+    // 비로그인 방문자만 직전 선택 캐시(localStorage)를 사용한다.
+    const initialLanguage: LanguageCode = user
+      ? (user.language ?? systemLanguage ?? 'ko')
+      : (getStoredLanguage() ?? systemLanguage ?? 'ko');
+    const initialTheme: ThemeMode = user
+      ? (user.theme_mode ?? systemTheme ?? 'light')
+      : (getStoredTheme() ?? systemTheme ?? 'light');
 
     setLanguageState(initialLanguage);
     setThemeModeState(initialTheme);
     setStoredLanguage(initialLanguage);
     setStoredTheme(initialTheme);
 
-    resolvedRef.current = true;
+    resolvedUserIdRef.current = currentUserId;
     setIsResolved(true);
   }, [authLoading, settingsLoading, user, getSetting]);
 

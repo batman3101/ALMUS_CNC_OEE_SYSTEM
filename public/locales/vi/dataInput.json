@@ -81,6 +81,10 @@
     "delete": "Xóa",
     "noDowntimeRecords": "Không có thời gian ngừng hoạt động nào được đăng ký",
     "modalTitle": "Thêm thời gian ngừng hoạt động",
+    "confirmZeroTitle": "Thời gian dừng máy là 0 phút",
+    "confirmZeroContent": "Chưa nhập thời gian dừng máy cho {{shifts}}. Nếu lưu mà không xác nhận, tỷ lệ vận hành sẽ được ghi là 100% và OEE sẽ cao hơn thực tế.",
+    "confirmZeroOk": "Đúng, máy chạy liên tục",
+    "confirmZeroCancel": "Nhập thời gian dừng",
     "startTimeLabel": "Thời gian bắt đầu",
     "endTimeLabel": "Thời gian kết thúc",
     "reasons": {

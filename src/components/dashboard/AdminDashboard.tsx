@@ -935,6 +935,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         </Col>
       </Row>
 
+      {/* 비가동 미입력 경고.
+          비가동은 작업자가 직접 입력한다. 입력하지 않은 교대는 actual_runtime = planned_runtime 이
+          되어 가동률이 100%로 계산되고, 아래 OEE 게이지·통계가 실제보다 높게 나온다.
+          평균만 보여주면 이 왜곡이 드러나지 않으므로 미입력 규모를 함께 표시한다. */}
+      {(() => {
+        const aggregated = aggregatedData();
+        if (!aggregated || aggregated.recordCount === 0 || aggregated.unreportedCount === 0) {
+          return null;
+        }
+
+        const ratio = Math.round((aggregated.unreportedCount / aggregated.recordCount) * 100);
+
+        return (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={t('downtimeReporting.title', {
+              count: aggregated.unreportedCount,
+              ratio
+            })}
+            description={
+              aggregated.reportedCount > 0
+                ? t('downtimeReporting.description', {
+                    reportedCount: aggregated.reportedCount,
+                    reportedOee: aggregated.avgOEEReported.toFixed(1)
+                  })
+                : t('downtimeReporting.descriptionNone')
+            }
+          />
+        );
+      })()}
+
       {/* 메인 콘텐츠 */}
       <Row gutter={[16, 16]}>
         {/* 전체 OEE 게이지 */}

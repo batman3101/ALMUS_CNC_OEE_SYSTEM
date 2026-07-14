@@ -71,8 +71,9 @@ export const useEngineerData = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 진행 중인 새로고침이 있을 때 중복 호출을 막기 위한 가드
-  const isFetchingRef = useRef(false);
+  // 요청 순번 가드: 요청을 버리지 않고 모두 진행시키되, 최신 요청이 아닌 응답은 무시한다.
+  // (진행 중이라고 새 요청을 건너뛰면 필터 변경이 영영 반영되지 않는 문제가 있었음)
+  const requestIdRef = useRef(0);
 
   // 기간별 날짜 계산 (커스텀 날짜 범위 우선 사용)
   const getDateRange = useCallback((period: 'week' | 'month' | 'quarter') => {
@@ -108,8 +109,8 @@ export const useEngineerData = (
     };
   }, [customDateRange]);
 
-  // OEE 추이 데이터 API 호출
-  const fetchOEETrendData = useCallback(async (period: 'week' | 'month' | 'quarter') => {
+  // OEE 추이 데이터 API 호출 (requestId가 최신이 아니면 결과를 버린다)
+  const fetchOEETrendData = useCallback(async (period: 'week' | 'month' | 'quarter', requestId: number) => {
     try {
       const { start_date, end_date } = getDateRange(period);
       const params = new URLSearchParams({
@@ -139,15 +140,17 @@ export const useEngineerData = (
 
       console.log('OEE 트렌드 데이터:', { sampleData: trendData.slice(0, 3), totalCount: trendData.length });
 
+      if (requestId !== requestIdRef.current) return; // 오래된 응답은 반영하지 않음
       setOeeData(trendData);
     } catch (error) {
       console.error('Error fetching OEE trend data:', error);
+      if (requestId !== requestIdRef.current) return;
       setError(error instanceof Error ? error.message : 'Unknown error');
     }
   }, [getDateRange, machineId, selectedShifts]);
 
-  // 다운타임 분석 데이터 API 호출
-  const fetchDowntimeData = useCallback(async (period: 'week' | 'month' | 'quarter') => {
+  // 다운타임 분석 데이터 API 호출 (requestId가 최신이 아니면 결과를 버린다)
+  const fetchDowntimeData = useCallback(async (period: 'week' | 'month' | 'quarter', requestId: number) => {
     try {
       const { start_date, end_date } = getDateRange(period);
       const params = new URLSearchParams({
@@ -179,15 +182,17 @@ export const useEngineerData = (
 
       console.log('다운타임 분석 데이터:', { sampleData: downtimeAnalysis.slice(0, 3), totalCount: downtimeAnalysis.length });
 
+      if (requestId !== requestIdRef.current) return; // 오래된 응답은 반영하지 않음
       setDowntimeData(downtimeAnalysis);
     } catch (error) {
       console.error('Error fetching downtime data:', error);
+      if (requestId !== requestIdRef.current) return;
       setError(error instanceof Error ? error.message : 'Unknown error');
     }
   }, [getDateRange, machineId, selectedShifts]);
 
-  // 생산성 데이터 API 호출
-  const fetchProductionData = useCallback(async (period: 'week' | 'month' | 'quarter') => {
+  // 생산성 데이터 API 호출 (requestId가 최신이 아니면 결과를 버린다)
+  const fetchProductionData = useCallback(async (period: 'week' | 'month' | 'quarter', requestId: number) => {
     try {
       const { start_date, end_date } = getDateRange(period);
       const params = new URLSearchParams({
@@ -216,21 +221,20 @@ export const useEngineerData = (
         shift: 'A' as const // 기본값
       }));
 
+      if (requestId !== requestIdRef.current) return; // 오래된 응답은 반영하지 않음
       setProductionData(productionAnalysis);
     } catch (error) {
       console.error('Error fetching production data:', error);
+      if (requestId !== requestIdRef.current) return;
       setError(error instanceof Error ? error.message : 'Unknown error');
     }
   }, [getDateRange, machineId, selectedShifts]);
 
   // 모든 데이터 새로고침
+  // 요청을 건너뛰지 않는다. 새 요청은 순번(requestId)을 받아 그대로 진행하고,
+  // 뒤늦게 도착한 이전 요청의 응답과 loading 해제는 무시된다.
   const refreshData = useCallback(async () => {
-    // 이미 진행 중인 새로고침이 있으면 중복 호출을 건너뜀 (겹쳐 호출되는 요청 방지)
-    if (isFetchingRef.current) {
-      console.log('⏭️ 엔지니어 데이터 새로고침이 이미 진행 중이라 건너뜀');
-      return;
-    }
-    isFetchingRef.current = true;
+    const requestId = ++requestIdRef.current;
 
     const dateRangeInfo = customDateRange ? `커스텀: ${customDateRange[0]} ~ ${customDateRange[1]}` : `기간: ${selectedPeriod}`;
     const shiftInfo = selectedShifts && !selectedShifts.includes('all') ? selectedShifts.join(',') : 'all';
@@ -240,17 +244,25 @@ export const useEngineerData = (
 
     try {
       await Promise.all([
-        fetchOEETrendData(selectedPeriod),
-        fetchDowntimeData(selectedPeriod),
-        fetchProductionData(selectedPeriod)
+        fetchOEETrendData(selectedPeriod, requestId),
+        fetchDowntimeData(selectedPeriod, requestId),
+        fetchProductionData(selectedPeriod, requestId)
       ]);
+      if (requestId !== requestIdRef.current) {
+        console.log('⏭️ 이전 요청의 응답이라 무시함');
+        return;
+      }
       console.log('✅ 엔지니어 데이터 새로고침 완료');
     } catch (error) {
       console.error('❌ 엔지니어 데이터 새로고침 오류:', error);
+      if (requestId !== requestIdRef.current) return;
       setError(error instanceof Error ? error.message : 'Failed to refresh data');
     } finally {
-      setLoading(false);
-      isFetchingRef.current = false;
+      // 최신 요청만 로딩 상태를 해제한다 (오래된 요청이 로딩을 먼저 끄면
+      // 이전 필터의 데이터가 "로드 완료"처럼 보이게 됨)
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [selectedPeriod, machineId, customDateRange, selectedShifts, fetchOEETrendData, fetchDowntimeData, fetchProductionData]);
 

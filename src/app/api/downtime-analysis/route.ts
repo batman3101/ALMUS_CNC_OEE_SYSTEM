@@ -95,6 +95,11 @@ export async function GET(request: NextRequest) {
       ? dayjs.tz(endDate, businessConfig.timezone).endOf('day')
       : dayjs().tz(businessConfig.timezone).endOf('day');
 
+    // 조회 구간과 "겹치는" 로그를 모두 가져온다.
+    //   - start_time 만으로 필터하면 구간 시작 전에 발생해 구간 안까지 이어진 장애가 통째로 누락된다.
+    //   - 진행 중인 로그는 duration=null 로 저장되므로(machines/[machineId] PATCH),
+    //     duration NOT NULL 조건을 걸면 장기 진행 중 장애가 영원히 집계되지 않는다.
+    // 길이는 아래에서 조회 구간으로 잘라서(clip) 다시 계산하므로 여기서는 필터하지 않는다.
     let baseQuery = supabaseAdmin
       .from('machine_logs')
       .select(`
@@ -108,11 +113,9 @@ export async function GET(request: NextRequest) {
         created_at,
         machines!inner(name, equipment_type, location)
       `)
-      .gte('start_time', fromDate.toISOString())
       .lte('start_time', toDate.toISOString())
+      .or(`end_time.is.null,end_time.gte.${fromDate.toISOString()}`)
       .neq('state', 'NORMAL_OPERATION')
-      .not('duration', 'is', null)
-      .gt('duration', 0)
       .order('start_time', { ascending: false });
 
     // 설비 필터링 (단일 ID 또는 콤마로 구분된 다중 ID 지원)
@@ -221,33 +224,91 @@ export async function GET(request: NextRequest) {
     const mapReasonToState = (reason: string | null | undefined): string =>
       (reason && REASON_TO_STATE_MAP[reason]) || 'TEMPORARY_STOP';
 
-    // 중복 집계 방지: machine_logs의 상태 구간(예: PM_MAINTENANCE로 장기간 표시된 구간)은
-    // 같은 설비에 대해 downtime_entries가 더 세부적으로 이미 기록한 경우가 대부분임(시간 구간이 서로 겹침).
-    // 같은 machine_id에서 시간 구간이 겹치는 downtime_entries가 하나라도 있으면 해당 machine_logs 행은
-    // 제외하여, 운영자가 입력한 세부 기록을 우선하고 동일 비가동을 두 번 합산하지 않도록 한다.
-    // (겹침 판정은 교대 필터 적용 전 전체 조회 범위의 downtime_entries를 기준으로 함)
+    // 중복 집계 방지: 같은 비가동을 운영자가 downtime_entries 로 세부 입력하고, machine_logs 에도
+    // 상태 구간으로 남아 있는 경우가 많다. 두 번 합산하지 않으려면 machine_logs 구간에서 수동 기록
+    // 구간을 빼야 한다.
+    //
+    // 겹치면 machine_logs 행을 통째로 버리던 이전 방식은, 8시간짜리 장애 로그에 10분짜리 수동 기록이
+    // 하나만 걸쳐도 8시간 전체를 0으로 만들었다. 여기서는 겹치는 부분만 빼고 나머지를 남긴다.
+    //
+    // 윈도우는 반드시 "실제로 합산에 쓰이는" 교대 필터 적용 후 목록(downtimeEntries)으로 만든다.
+    // 필터 전 원본으로 만들면, B교대 조회 시 A교대 수동 기록이 machine_logs 를 깎아내지만 그 수동
+    // 기록 자체는 응답에 없어 해당 다운타임이 통째로 증발한다.
     const entryWindowsByMachine: Record<string, Array<{ start: number; end: number }>> = {};
-    (rawDowntimeEntries || []).forEach(entry => {
+    downtimeEntries.forEach(entry => {
       if (!entry.start_time) return;
       const start = new Date(entry.start_time).getTime();
       const end = entry.end_time ? new Date(entry.end_time).getTime() : start;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
       if (!entryWindowsByMachine[entry.machine_id]) {
         entryWindowsByMachine[entry.machine_id] = [];
       }
       entryWindowsByMachine[entry.machine_id].push({ start, end });
     });
 
-    const isCoveredByManualEntry = (
+    // [start, end) 에서 windows 들의 합집합을 뺀 나머지 길이(ms)를 구한다.
+    const subtractWindows = (
+      start: number,
+      end: number,
+      windows: Array<{ start: number; end: number }>
+    ): number => {
+      if (!(end > start)) return 0;
+
+      // 대상 구간과 겹치는 부분만 잘라내어 시작 시각 순으로 정렬
+      const clipped = windows
+        .map(w => ({ start: Math.max(w.start, start), end: Math.min(w.end, end) }))
+        .filter(w => w.end > w.start)
+        .sort((a, b) => a.start - b.start);
+
+      if (clipped.length === 0) return end - start;
+
+      // 겹치는 윈도우들을 병합하여 실제로 덮인 길이를 계산 (이중 차감 방지)
+      let covered = 0;
+      let curStart = clipped[0].start;
+      let curEnd = clipped[0].end;
+      for (let i = 1; i < clipped.length; i++) {
+        const w = clipped[i];
+        if (w.start > curEnd) {
+          covered += curEnd - curStart;
+          curStart = w.start;
+          curEnd = w.end;
+        } else {
+          curEnd = Math.max(curEnd, w.end);
+        }
+      }
+      covered += curEnd - curStart;
+
+      return Math.max(0, end - start - covered);
+    };
+
+    // 조회 구간 경계. 진행 중(end_time=null)인 로그는 "지금"까지 이어진 것으로 보되 구간 끝을 넘지 않는다.
+    const rangeStartMs = fromDate.valueOf();
+    const rangeEndMs = toDate.valueOf();
+    const nowMs = Date.now();
+
+    // machine_log 한 건이 조회 구간 안에서 실제로 차지하는 비가동 시간(분).
+    // 구간 밖으로 삐져나온 부분은 잘라내고, 수동 기록과 겹치는 부분은 빼고 남은 길이를 반환한다.
+    const effectiveLogMinutes = (
       machineIdValue: string,
       startTime: string,
-      endTime: string | null,
-      durationMinutes: number
-    ): boolean => {
-      const windows = entryWindowsByMachine[machineIdValue];
-      if (!windows || windows.length === 0) return false;
+      endTime: string | null
+    ): number => {
       const logStart = new Date(startTime).getTime();
-      const logEnd = endTime ? new Date(endTime).getTime() : logStart + durationMinutes * 60 * 1000;
-      return windows.some(w => w.start < logEnd && w.end > logStart);
+      if (!Number.isFinite(logStart)) return 0;
+
+      const logEnd = endTime ? new Date(endTime).getTime() : Math.min(nowMs, rangeEndMs);
+      if (!Number.isFinite(logEnd)) return 0;
+
+      const clipStart = Math.max(logStart, rangeStartMs);
+      const clipEnd = Math.min(logEnd, rangeEndMs);
+
+      const residualMs = subtractWindows(
+        clipStart,
+        clipEnd,
+        entryWindowsByMachine[machineIdValue] || []
+      );
+
+      return Math.round((residualMs / 60000) * 100) / 100;
     };
 
     // machine_logs + downtime_entries를 하나의 형태로 정규화하여 이후 집계 로직을 공통화한다.
@@ -267,24 +328,36 @@ export async function GET(request: NextRequest) {
     }
 
     let overlapExcludedCount = 0;
+    let ongoingEventCount = 0;
     const machineLogRows: UnifiedDowntimeRow[] = downtimeLogs
-      .filter(log => {
-        const covered = isCoveredByManualEntry(log.machine_id, log.start_time, log.end_time, log.duration || 0);
-        if (covered) overlapExcludedCount++;
-        return !covered;
-      })
       .map(log => ({
-        log_id: log.log_id,
-        machine_id: log.machine_id,
-        machine_name: unwrapJoin(log.machines)?.name || 'Unknown',
-        state: log.state,
-        start_time: log.start_time,
-        end_time: log.end_time,
-        duration: log.duration || 0,
-        operator_id: log.operator_id,
-        created_at: log.created_at,
-        source: 'machine_log' as const
-      }));
+        log,
+        duration: effectiveLogMinutes(log.machine_id, log.start_time, log.end_time)
+      }))
+      .filter(({ log, duration }) => {
+        if (duration > 0) return true;
+        // 남은 시간이 0 이면 수동 기록이 이 구간을 완전히 덮은 경우다 (조회 구간과 겹치지 않는
+        // 로그는 애초에 쿼리에서 걸러진다). 완전히 덮인 건수만 중복 제외로 집계한다.
+        if ((entryWindowsByMachine[log.machine_id] || []).length > 0) {
+          overlapExcludedCount++;
+        }
+        return false;
+      })
+      .map(({ log, duration }) => {
+        if (!log.end_time) ongoingEventCount++;
+        return {
+          log_id: log.log_id,
+          machine_id: log.machine_id,
+          machine_name: unwrapJoin(log.machines)?.name || 'Unknown',
+          state: log.state,
+          start_time: log.start_time,
+          end_time: log.end_time,
+          duration,
+          operator_id: log.operator_id,
+          created_at: log.created_at,
+          source: 'machine_log' as const
+        };
+      });
 
     const manualEntryRows: UnifiedDowntimeRow[] = downtimeEntries.map(entry => ({
       log_id: entry.id,
@@ -492,7 +565,10 @@ export async function GET(request: NextRequest) {
           machine_log: {
             events: machineLogRows.length,
             total_duration_minutes: machineLogRows.reduce((sum, row) => sum + row.duration, 0),
-            excluded_due_to_overlap: overlapExcludedCount
+            excluded_due_to_overlap: overlapExcludedCount,
+            // 아직 종료되지 않은(end_time=null) 로그 건수. 조회 시점까지의 시간만 집계된다.
+            // 이 값이 비정상적으로 크면 설비 상태 변경이 중간에 실패해 열린 채 방치된 로그가 있다는 뜻이다.
+            ongoing_events: ongoingEventCount
           },
           manual: {
             events: manualEntryRows.length,
