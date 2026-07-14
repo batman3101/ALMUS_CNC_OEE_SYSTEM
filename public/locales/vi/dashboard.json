@@ -409,5 +409,10 @@
     "topPerformance": "Hiệu suất cao nhất",
     "needsImprovement": "Cần cải thiện",
     "performanceSpread": "Độ lệch hiệu suất"
+  },
+  "downtimeReporting": {
+    "title": "{{count}} bản ghi sản xuất ({{ratio}}%) chưa nhập thời gian dừng máy",
+    "description": "Ca chưa nhập thời gian dừng máy được tính tỷ lệ vận hành 100%, nên OEE bên dưới cao hơn thực tế. Chỉ tính {{reportedCount}} bản ghi đã xác nhận, OEE trung bình là {{reportedOee}}%.",
+    "descriptionNone": "Ca chưa nhập thời gian dừng máy được tính tỷ lệ vận hành 100%, nên OEE bên dưới cao hơn thực tế. Trong kỳ này không có bản ghi nào đã xác nhận nên không thể tin cậy OEE."
   }
 }

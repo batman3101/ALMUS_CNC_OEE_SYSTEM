@@ -128,6 +128,16 @@ export interface ProductionRecord {
   performance?: number;
   quality?: number;
   oee?: number;
+  /**
+   * 비가동 시간(분). 비가동은 작업자가 직접 입력하므로 "입력하지 않은 것"과
+   * "0분이라고 확인한 것"을 반드시 구분해야 한다.
+   *
+   *   null  : 미입력 -> actual_runtime = planned_runtime 이 되어 가동률이 100% 로 잡힌다.
+   *           이 기록의 availability / oee 는 신뢰할 수 없다.
+   *   0     : 무중단으로 확인됨
+   *   > 0   : 비가동 있음
+   */
+  downtime_minutes?: number | null;
   created_at: string;
 }
 

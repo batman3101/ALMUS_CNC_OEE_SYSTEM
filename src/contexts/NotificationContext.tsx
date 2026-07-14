@@ -109,22 +109,28 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }
   }, [user?.id]);
 
-  // 로컬스토리지에 확인된 알림 저장
-  const saveAcknowledgedNotification = useCallback((machineId: string, state: string) => {
+  // 로컬스토리지에 확인된 알림 키 집합 기록 (저장/삭제 공통 경로)
+  const writeAcknowledgedNotifications = useCallback((keys: Set<string>) => {
     if (typeof window === 'undefined') return;
     try {
-      const acknowledgedSet = getAcknowledgedNotifications();
-      const notificationKey = `${machineId}_${state}`;
-      acknowledgedSet.add(notificationKey);
       localStorage.setItem(
         `notifications_acknowledged_${user?.id}`,
-        JSON.stringify(Array.from(acknowledgedSet))
+        JSON.stringify(Array.from(keys))
       );
-      console.log('💾 알림 확인 상태 저장:', notificationKey);
     } catch (error) {
       console.error('❌ 알림 확인 상태 저장 실패:', error);
     }
-  }, [user?.id, getAcknowledgedNotifications]);
+  }, [user?.id]);
+
+  // 로컬스토리지에 확인된 알림 저장
+  const saveAcknowledgedNotification = useCallback((machineId: string, state: string) => {
+    if (typeof window === 'undefined') return;
+    const acknowledgedSet = getAcknowledgedNotifications();
+    const notificationKey = `${machineId}_${state}`;
+    acknowledgedSet.add(notificationKey);
+    writeAcknowledgedNotifications(acknowledgedSet);
+    console.log('💾 알림 확인 상태 저장:', notificationKey);
+  }, [getAcknowledgedNotifications, writeAcknowledgedNotifications]);
 
   // 실제 데이터베이스 기반 알림 생성 (중복 방지)
   const generateRealNotifications = useCallback(async (): Promise<Notification[]> => {
@@ -137,6 +143,25 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       // 이미 확인된 알림 조회
       const acknowledgedNotifications = getAcknowledgedNotifications();
       console.log('✅ 이미 확인된 알림 수:', acknowledgedNotifications.size);
+
+      // 정상 운전으로 복귀한 설비의 확인 이력은 지운다.
+      // 확인 키는 (설비, 상태) 쌍이라 지우지 않으면 "한 번 확인한 고장은 그 설비에서 영원히 다시 알리지 않음"이 된다.
+      // 정상 복귀 = 그 고장 발생 건의 종료이므로, 여기서 지워야 다음 고장이 새 알림으로 뜬다.
+      let acknowledgedChanged = false;
+      machines.forEach((machine: Machine) => {
+        if (machine.current_state !== 'NORMAL_OPERATION') return;
+        const machinePrefix = `${machine.id}_`;
+        acknowledgedNotifications.forEach(key => {
+          if (key.startsWith(machinePrefix)) {
+            acknowledgedNotifications.delete(key);
+            acknowledgedChanged = true;
+          }
+        });
+      });
+      if (acknowledgedChanged) {
+        writeAcknowledgedNotifications(acknowledgedNotifications);
+        console.log('🔄 정상 복귀 설비의 알림 확인 이력 초기화, 남은 확인 알림 수:', acknowledgedNotifications.size);
+      }
 
       const notifications: Notification[] = [];
 
@@ -195,7 +220,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.error('❌ generateRealNotifications 오류:', error);
       return [];
     }
-  }, [user?.id, getAcknowledgedNotifications]);
+  }, [user?.id, getAcknowledgedNotifications, writeAcknowledgedNotifications]);
 
   // 알림 목록 새로고침
   const refreshNotifications = useCallback(async () => {

@@ -11,6 +11,10 @@ interface ShiftInputData {
   defect_quantity: number;
   operating_minutes: number;
   total_downtime_minutes: number;
+  // 비가동이 0분일 때, 작업자가 "무중단"임을 명시적으로 확인했는지 여부.
+  // 비가동·수량을 사람이 직접 입력하는 시스템이므로 "입력하지 않은 것"과
+  // "0이라고 입력한 것"을 반드시 구분해야 한다 (구분하지 않으면 가동률이 100%로 부풀려진다).
+  downtime_confirmed?: boolean;
 }
 
 interface DailyProductionRequest {
@@ -76,7 +80,24 @@ function calculateShiftMetrics(params: {
       : 0;
   const oee = availability * performance * quality;
 
-  return { plannedRuntime, actualRuntime, idealRuntime, availability, performance, quality, oee };
+  return { plannedRuntime, actualRuntime, idealRuntime, downtime, availability, performance, quality, oee };
+}
+
+/**
+ * 저장할 downtime_minutes 를 결정한다.
+ *
+ *   NULL : 미입력 (가동률을 신뢰할 수 없음)
+ *   0    : 무중단으로 확인됨
+ *   > 0  : 비가동 있음
+ *
+ * 비가동이 0보다 크면 그 자체가 입력의 증거이므로 그대로 저장한다.
+ * 0 인 경우에만 애매하므로, 작업자가 명시적으로 확인한 경우에만 0으로 저장하고
+ * 그렇지 않으면 NULL(미입력)로 남긴다. 폼을 거치지 않는 호출이 0을
+ * "확인된 무중단"으로 위장시키지 못하게 하기 위함이다.
+ */
+function resolveDowntimeMinutes(downtime: number, confirmed: boolean | undefined): number | null {
+  if (downtime > 0) return Math.round(downtime);
+  return confirmed === true ? 0 : null;
 }
 
 // POST /api/production-records/daily - 일일 생산 데이터 저장
@@ -183,7 +204,9 @@ export async function POST(request: NextRequest) {
         availability: Math.round(metrics.availability * 10000) / 10000, // 소수점 4자리
         performance: Math.round(metrics.performance * 10000) / 10000,
         quality: Math.round(metrics.quality * 10000) / 10000,
-        oee: Math.round(metrics.oee * 10000) / 10000
+        oee: Math.round(metrics.oee * 10000) / 10000,
+        // NULL 이면 "비가동 미입력" = 이 기록의 가동률은 신뢰할 수 없다는 표시
+        downtime_minutes: resolveDowntimeMinutes(metrics.downtime, shiftData.downtime_confirmed)
       };
     };
 

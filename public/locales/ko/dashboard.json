@@ -409,5 +409,10 @@
     "topPerformance": "최고 성과",
     "needsImprovement": "개선 필요",
     "performanceSpread": "성과 편차"
+  },
+  "downtimeReporting": {
+    "title": "생산기록 {{count}}건({{ratio}}%)에 비가동 시간이 입력되지 않았습니다",
+    "description": "비가동을 입력하지 않은 교대는 가동률이 100%로 계산되어 아래 OEE가 실제보다 높게 나옵니다. 비가동이 확인된 {{reportedCount}}건만 보면 평균 OEE는 {{reportedOee}}%입니다.",
+    "descriptionNone": "비가동을 입력하지 않은 교대는 가동률이 100%로 계산되어 아래 OEE가 실제보다 높게 나옵니다. 이 기간에는 비가동이 확인된 기록이 없어 OEE를 신뢰할 수 없습니다."
   }
 }

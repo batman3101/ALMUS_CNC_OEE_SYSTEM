@@ -43,6 +43,11 @@ const { Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
 
+// 교대 1회 기본 가동시간 (12시간 = 720분).
+// 서버의 @/lib/plannedRuntime 에 같은 값이 있으나, 그 모듈은 supabase-admin(서비스 롤 키)을
+// import 하므로 클라이언트 번들로 끌어올 수 없다. 값을 바꿀 때는 양쪽을 함께 수정할 것.
+const DEFAULT_OPERATING_MINUTES = 720;
+
 // 기존 생산 기록 타입 정의
 interface ExistingProductionRecord {
   record_id: string;
@@ -66,15 +71,22 @@ interface ShiftSavePayload {
   defect_quantity: number;
   operating_minutes: number;
   total_downtime_minutes: number;
+  // 비가동 0분이 "작업자가 확인한 무중단"인지 "그냥 입력하지 않은 것"인지 서버에 알린다.
+  // 확인되지 않은 0분은 downtime_minutes=NULL(미입력)로 저장되어 가동률이 신뢰할 수 없음으로 표시된다.
+  downtime_confirmed: boolean;
 }
 
+// day_shift / night_shift 를 생략하면(undefined) 서버는 그 교대를 저장하지도, 삭제하지도 않는다.
+// (daily/route.ts -> save_daily_production RPC 의 "ELSIF v_record IS NOT NULL" 분기)
+// 입력하지 않은 교대를 0으로 채워 보내면 output_qty=0 / oee=0 인 유령 레코드가 생기므로,
+// "입력되지 않은 교대"는 반드시 생략해야 한다.
 interface DailyProductionSavePayload {
   machine_id: string;
   date: string;
   day_shift_off: boolean;
   night_shift_off: boolean;
-  day_shift: ShiftSavePayload;
-  night_shift: ShiftSavePayload;
+  day_shift?: ShiftSavePayload;
+  night_shift?: ShiftSavePayload;
 }
 
 // AbortController에 의한 취소 여부 확인
@@ -98,6 +110,18 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const shiftSettings = getShiftTimes();
   const breakTimeMinutes: number = Number(shiftSettings.breakTime) || 60; // 기본값 60분
 
+  // 저장된 planned_runtime 으로부터 원래 입력 가동시간을 역산한다.
+  // 서버는 planned_runtime = operating_minutes - break_time_minutes 로만 저장하고
+  // operating_minutes 자체는 보존하지 않으므로, 재저장 시 원래 값을 복원하려면 역산이 필요하다.
+  // (역산하지 않으면 단축 가동일 기록을 다시 저장할 때 기본값 720분으로 되돌아간다)
+  // planned_runtime 이 비어 있는 레거시 레코드는 역산이 불가능하므로 기본값을 사용한다.
+  const recoverOperatingMinutes = (plannedRuntime: number | undefined): number => {
+    if (typeof plannedRuntime !== 'number' || !Number.isFinite(plannedRuntime) || plannedRuntime <= 0) {
+      return DEFAULT_OPERATING_MINUTES;
+    }
+    return plannedRuntime + breakTimeMinutes;
+  };
+
   // 폼 상태
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(initialDate);
@@ -111,8 +135,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const [loadingExistingRecords, setLoadingExistingRecords] = useState(false);
   
   // 교대조별 기본 가동시간 (분 단위)
-  const [dayShiftOperatingMinutes, setDayShiftOperatingMinutes] = useState<number>(720); // 기본 12시간 = 720분
-  const [nightShiftOperatingMinutes, setNightShiftOperatingMinutes] = useState<number>(720); // 기본 12시간 = 720분
+  const [dayShiftOperatingMinutes, setDayShiftOperatingMinutes] = useState<number>(DEFAULT_OPERATING_MINUTES);
+  const [nightShiftOperatingMinutes, setNightShiftOperatingMinutes] = useState<number>(DEFAULT_OPERATING_MINUTES);
   
   // 교대조별 휴무 상태
   const [dayShiftOff, setDayShiftOff] = useState<boolean>(false);
@@ -166,6 +190,11 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   // 설비/날짜 변경 시 오래된(stale) 응답이 최신 상태를 덮어쓰지 않도록 하는 요청 순번 가드
   const loadRequestIdRef = useRef(0);
 
+  // 저장 진행 중 재진입 방지.
+  // 비가동 0분 확인 모달을 기다리는 동안에는 loading 상태가 아직 false 라서 저장 버튼이 계속
+  // 눌리고, 클릭할 때마다 확인 모달이 새로 쌓인다.
+  const savingRef = useRef(false);
+
   // 비가동 사유 목록 (번역 키 사용)
   const downtimeReasons = DOWNTIME_REASON_KEYS;
 
@@ -218,6 +247,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
             defect_quantity: dayRecord.defect_qty || 0,
             good_quantity: Math.max(0, (dayRecord.output_qty || 0) - (dayRecord.defect_qty || 0))
           }));
+          setDayShiftOperatingMinutes(recoverOperatingMinutes(dayRecord.planned_runtime));
         } else {
           setDayShiftData(prev => ({
             ...prev,
@@ -234,6 +264,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
             defect_quantity: nightRecord.defect_qty || 0,
             good_quantity: Math.max(0, (nightRecord.output_qty || 0) - (nightRecord.defect_qty || 0))
           }));
+          setNightShiftOperatingMinutes(recoverOperatingMinutes(nightRecord.planned_runtime));
         } else {
           setNightShiftData(prev => ({
             ...prev,
@@ -341,8 +372,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     // 설비/날짜가 바뀌면 이전 설비의 휴무 여부, 가동시간, 비가동 목록이 남아있지 않도록 즉시 초기화 (F1)
     setDayShiftOff(false);
     setNightShiftOff(false);
-    setDayShiftOperatingMinutes(720);
-    setNightShiftOperatingMinutes(720);
+    setDayShiftOperatingMinutes(DEFAULT_OPERATING_MINUTES);
+    setNightShiftOperatingMinutes(DEFAULT_OPERATING_MINUTES);
     setDayShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
     setNightShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
 
@@ -776,8 +807,62 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const isDayQuantityInvalid = !dayShiftOff && dayShiftData.defect_quantity > dayShiftData.actual_production;
   const isNightQuantityInvalid = !nightShiftOff && nightShiftData.defect_quantity > nightShiftData.actual_production;
 
+  /**
+   * 이 교대를 서버로 전송할지 판정한다.
+   *
+   * false 를 반환하면 페이로드에서 해당 교대가 생략되고, 서버는 그 교대를 건드리지 않는다
+   * (신규 저장도, 기존 기록 삭제도 하지 않음).
+   *
+   * 이 판정이 필요한 이유: 폼은 항상 주간/야간 두 교대의 state 를 들고 있으므로, 사용자가
+   * 주간만 입력해도 야간이 0 으로 함께 전송되어 output_qty=0 / oee=0 인 유령 레코드가 생긴다.
+   * (실제로 2026-07-13 하루에만 야간조 314건이 이렇게 생성되어 그날 평균 OEE 를 0 으로 끌어내렸다)
+   *
+   * @param shiftData     해당 교대의 폼 입력값
+   * @param isOff         해당 교대가 '휴무'로 체크되었는지 (휴무는 별도 처리되므로 여기서 판정 불필요)
+   * @param existingRecord 이미 저장되어 있는 기록 (없으면 null)
+   */
+  const shouldSubmitShift = (
+    shiftData: ShiftProductionData,
+    isOff: boolean,
+    existingRecord: ExistingProductionRecord | null
+  ): boolean => {
+    // 휴무는 서버가 기존 기록을 삭제해야 하므로 반드시 전송한다.
+    if (isOff) return true;
+
+    // 이미 저장된 기록이 있으면 사용자가 수정 중이므로 항상 전송한다.
+    // (0으로 정정하는 경우도 정당한 수정이다)
+    if (existingRecord) return true;
+
+    // 신규 입력인데 아무 값도 건드리지 않았으면 전송하지 않는다.
+    // 비가동이나 불량을 입력했다면 그 교대는 실제로 가동된 것으로 본다.
+    return (
+      shiftData.actual_production > 0 ||
+      shiftData.defect_quantity > 0 ||
+      shiftData.total_downtime_minutes > 0
+    );
+  };
+
+  // 비가동 0분 확인 모달. 저장 흐름을 막기 위해 Promise 로 감싼다.
+  const confirmNoDowntime = (shiftLabels: string): Promise<boolean> =>
+    new Promise(resolve => {
+      modal.confirm({
+        title: t('downtime.confirmZeroTitle'),
+        content: t('downtime.confirmZeroContent', { shifts: shiftLabels }),
+        okText: t('downtime.confirmZeroOk'),
+        cancelText: t('downtime.confirmZeroCancel'),
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false)
+      });
+    });
+
   // 데이터 저장
   const handleSave = async () => {
+    // 확인 모달을 기다리는 동안에는 loading 이 아직 false 라 저장 버튼이 계속 눌린다.
+    // 그대로 두면 클릭할 때마다 확인 모달이 새로 쌓이고, 각각이 저장을 시도한다.
+    if (savingRef.current) {
+      return;
+    }
+
     if (!selectedMachineId) {
       message.error(t('messages.selectMachine'));
       return;
@@ -787,6 +872,34 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     if (isDayQuantityInvalid || isNightQuantityInvalid) {
       message.error(t('recordList.editModal.defectExceedsOutput'));
       return;
+    }
+
+    // 비가동을 사람이 직접 입력하는 시스템이므로, 비가동 0분은 "무중단"인지 "아직 입력하지
+    // 않은 것"인지 구분할 수 없다. 확인 없이 저장하면 가동률이 100%로 기록되어 OEE가 부풀려진다.
+    // (실측: 비가동이 기록된 교대의 평균 가동률은 65.8%, 미입력 교대는 95.6%로 잡힌다)
+    // 그래서 제출되는 교대 중 비가동이 0분인 것이 있으면 명시적으로 확인받는다.
+    const submittedShifts: Array<{ label: string; data: ShiftProductionData }> = [];
+    if (!dayShiftOff && shouldSubmitShift(dayShiftData, dayShiftOff, existingDayRecord)) {
+      submittedShifts.push({ label: t('shift.dayShift'), data: dayShiftData });
+    }
+    if (!nightShiftOff && shouldSubmitShift(nightShiftData, nightShiftOff, existingNightRecord)) {
+      submittedShifts.push({ label: t('shift.nightShift'), data: nightShiftData });
+    }
+
+    const zeroDowntimeShifts = submittedShifts.filter(s => s.data.total_downtime_minutes <= 0);
+
+    savingRef.current = true;
+
+    let downtimeConfirmed = false;
+    if (zeroDowntimeShifts.length > 0) {
+      downtimeConfirmed = await confirmNoDowntime(
+        zeroDowntimeShifts.map(s => s.label).join(', ')
+      );
+      // 확인하지 않으면 저장하지 않고 비가동을 입력하도록 되돌린다
+      if (!downtimeConfirmed) {
+        savingRef.current = false;
+        return;
+      }
     }
 
     try {
@@ -799,18 +912,25 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         date: selectedDate,
         day_shift_off: dayShiftOff,
         night_shift_off: nightShiftOff,
-        day_shift: {
-          actual_production: dayShiftData.actual_production,
-          defect_quantity: dayShiftData.defect_quantity,
-          operating_minutes: dayShiftOperatingMinutes,
-          total_downtime_minutes: dayShiftData.total_downtime_minutes
-        },
-        night_shift: {
-          actual_production: nightShiftData.actual_production,
-          defect_quantity: nightShiftData.defect_quantity,
-          operating_minutes: nightShiftOperatingMinutes,
-          total_downtime_minutes: nightShiftData.total_downtime_minutes
-        }
+        // 입력되지 않은 교대는 아예 생략한다 (0으로 채워 보내면 유령 레코드가 생김)
+        ...(shouldSubmitShift(dayShiftData, dayShiftOff, existingDayRecord) && {
+          day_shift: {
+            actual_production: dayShiftData.actual_production,
+            defect_quantity: dayShiftData.defect_quantity,
+            operating_minutes: dayShiftOperatingMinutes,
+            total_downtime_minutes: dayShiftData.total_downtime_minutes,
+            downtime_confirmed: downtimeConfirmed
+          }
+        }),
+        ...(shouldSubmitShift(nightShiftData, nightShiftOff, existingNightRecord) && {
+          night_shift: {
+            actual_production: nightShiftData.actual_production,
+            defect_quantity: nightShiftData.defect_quantity,
+            operating_minutes: nightShiftOperatingMinutes,
+            total_downtime_minutes: nightShiftData.total_downtime_minutes,
+            downtime_confirmed: downtimeConfirmed
+          }
+        })
       };
 
       console.log('Saving daily production data:', payload);
@@ -879,6 +999,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       console.error('Error saving data:', error);
       message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
     } finally {
+      savingRef.current = false;
       setLoading(false);
     }
   };

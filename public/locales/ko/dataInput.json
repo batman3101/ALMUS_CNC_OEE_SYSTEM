@@ -83,6 +83,10 @@
     "modalTitle": "비가동 시간 추가",
     "startTimeLabel": "시작 시간",
     "endTimeLabel": "종료 시간",
+    "confirmZeroTitle": "비가동 시간이 0분입니다",
+    "confirmZeroContent": "{{shifts}}의 비가동 시간이 입력되지 않았습니다. 확인하지 않고 저장하면 가동률이 100%로 기록되어 OEE가 실제보다 높게 나옵니다.",
+    "confirmZeroOk": "무중단이 맞습니다",
+    "confirmZeroCancel": "비가동 입력하기",
     "reasons": {
       "equipmentFailure": "설비 고장",
       "endmillChange": "ENDMILL 교체",
