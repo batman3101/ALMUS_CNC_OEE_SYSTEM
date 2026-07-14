@@ -467,28 +467,41 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     runRefresh();
 
-    // (a) 설비 상태 변경 실시간 구독
-    const channel: RealtimeChannel = supabase
-      .channel('notification-machine-changes')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'machines' },
-        () => {
-          // 대량 상태 변경이 연달아 들어와도 한 번만 재조회한다
-          if (debounceTimer) clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(runRefresh, REALTIME_DEBOUNCE_MS);
-        }
-      )
-      .subscribe();
+    // (a) 설비 상태 변경 실시간 구독.
+    //
+    // 이 Provider 는 루트 레이아웃에 있으므로 여기서 예외가 나가면 앱 전체가 하얗게 된다.
+    // Realtime 은 부가 기능이고 아래 폴링이 같은 일을 더 느리게 해내므로, 구독 실패는
+    // 로그만 남기고 조용히 폴링으로 강등한다.
+    let channel: RealtimeChannel | null = null;
+    try {
+      channel = supabase
+        .channel('notification-machine-changes')
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'machines' },
+          () => {
+            // 대량 상태 변경이 연달아 들어와도 한 번만 재조회한다
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(runRefresh, REALTIME_DEBOUNCE_MS);
+          }
+        )
+        .subscribe();
+    } catch (error) {
+      console.error('❌ 알림 실시간 구독 실패 - 폴링으로 대체합니다:', error);
+    }
 
-    // (b) Realtime 이 끊겨도 따라잡기 위한 폴백 폴링
+    // (b) Realtime 이 끊기거나 구독에 실패해도 따라잡기 위한 폴백 폴링
     const pollTimer = setInterval(runRefresh, NOTIFICATION_POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
       if (debounceTimer) clearTimeout(debounceTimer);
       clearInterval(pollTimer);
-      channel.unsubscribe();
+      try {
+        channel?.unsubscribe();
+      } catch (error) {
+        console.error('❌ 알림 실시간 구독 해제 실패:', error);
+      }
     };
   }, [user?.id]);
 
