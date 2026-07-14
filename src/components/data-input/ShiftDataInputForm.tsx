@@ -187,6 +187,21 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const [downtimeSubmitting, setDowntimeSubmitting] = useState(false);
   const [downtimeForm] = Form.useForm();
 
+  // 비가동 조회 실패 여부 (교대별).
+  //
+  // 조회에 실패하면 화면의 비가동 합계가 0분이 된다. 그런데 "0분"은 저장 흐름에서
+  // "무중단 확인" 모달을 거쳐 downtime_confirmed=true 로 전송되고, 서버는 이를
+  // "작업자가 확인한 무중단"으로 받아들여 actual_runtime = planned_runtime, 즉 가동률 100%로
+  // 저장한다. 조회가 실패했을 뿐인데 이미 입력해 둔 비가동이 0으로 덮이는 것이다.
+  // (미입력과 확인된 0분을 구분하려고 넣은 확인 모달이, 조회 실패한 0분을 "확인된 0분"으로
+  //  승격시켜 오히려 안전장치를 무력화했다)
+  //
+  // 따라서 실패는 조용히 넘기지 않고 화면에 드러내고, 그 교대의 저장을 막는다.
+  const [downtimeLoadFailed, setDowntimeLoadFailed] = useState<{ DAY: boolean; NIGHT: boolean }>({
+    DAY: false,
+    NIGHT: false
+  });
+
   // 설비/날짜 변경 시 오래된(stale) 응답이 최신 상태를 덮어쓰지 않도록 하는 요청 순번 가드
   const loadRequestIdRef = useRef(0);
 
@@ -376,6 +391,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     setNightShiftOperatingMinutes(DEFAULT_OPERATING_MINUTES);
     setDayShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
     setNightShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
+    setDowntimeLoadFailed({ DAY: false, NIGHT: false });
 
     // 기존 생산 기록 로드
     loadExistingProductionRecords(selectedMachineId, selectedDate, requestId, controller.signal);
@@ -583,31 +599,42 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
       if (isStale()) return;
 
-      if (result.success && result.data) {
-        const entries: DowntimeEntry[] = result.data;
-        const totalDowntime = entries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0);
-
-        // 해당 교대의 데이터에 반영
-        if (shift === 'DAY') {
-          setDayShiftData(prev => ({
-            ...prev,
-            downtime_entries: entries,
-            total_downtime_minutes: totalDowntime
-          }));
-        } else {
-          setNightShiftData(prev => ({
-            ...prev,
-            downtime_entries: entries,
-            total_downtime_minutes: totalDowntime
-          }));
-        }
-
-        console.log(`Loaded ${entries.length} downtime entries for ${shift} shift`);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load downtime entries');
       }
+
+      const entries: DowntimeEntry[] = result.data || [];
+      const totalDowntime = entries.reduce((sum, entry) => sum + (entry.duration_minutes || 0), 0);
+
+      // 해당 교대의 데이터에 반영
+      if (shift === 'DAY') {
+        setDayShiftData(prev => ({
+          ...prev,
+          downtime_entries: entries,
+          total_downtime_minutes: totalDowntime
+        }));
+      } else {
+        setNightShiftData(prev => ({
+          ...prev,
+          downtime_entries: entries,
+          total_downtime_minutes: totalDowntime
+        }));
+      }
+
+      // 조회에 성공했으므로 이전 실패 표시를 해제한다
+      setDowntimeLoadFailed(prev => (prev[shift] ? { ...prev, [shift]: false } : prev));
+
+      console.log(`Loaded ${entries.length} downtime entries for ${shift} shift`);
     } catch (error) {
       if (isAbortError(error) || isStale()) return;
       console.error('Error loading downtime entries:', error);
-      // 로드 실패 시 빈 배열로 초기화 (에러 메시지는 표시하지 않음)
+
+      // 조회에 실패했으면 합계 0분은 "비가동 없음"이 아니라 "알 수 없음"이다.
+      // 그대로 저장하면 이미 입력된 비가동이 0으로 덮여 가동률이 100%가 된다.
+      // 실패를 표시하고(아래 Alert) 이 교대의 저장을 막는다(handleSave).
+      setDowntimeLoadFailed(prev => ({ ...prev, [shift]: true }));
+      message.error(t('downtime.loadFailed'));
+
       if (shift === 'DAY') {
         setDayShiftData(prev => ({
           ...prev,
@@ -878,12 +905,23 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     // 않은 것"인지 구분할 수 없다. 확인 없이 저장하면 가동률이 100%로 기록되어 OEE가 부풀려진다.
     // (실측: 비가동이 기록된 교대의 평균 가동률은 65.8%, 미입력 교대는 95.6%로 잡힌다)
     // 그래서 제출되는 교대 중 비가동이 0분인 것이 있으면 명시적으로 확인받는다.
-    const submittedShifts: Array<{ label: string; data: ShiftProductionData }> = [];
+    const submittedShifts: Array<{ label: string; data: ShiftProductionData; shift: 'DAY' | 'NIGHT' }> = [];
     if (!dayShiftOff && shouldSubmitShift(dayShiftData, dayShiftOff, existingDayRecord)) {
-      submittedShifts.push({ label: t('shift.dayShift'), data: dayShiftData });
+      submittedShifts.push({ label: t('shift.dayShift'), data: dayShiftData, shift: 'DAY' });
     }
     if (!nightShiftOff && shouldSubmitShift(nightShiftData, nightShiftOff, existingNightRecord)) {
-      submittedShifts.push({ label: t('shift.nightShift'), data: nightShiftData });
+      submittedShifts.push({ label: t('shift.nightShift'), data: nightShiftData, shift: 'NIGHT' });
+    }
+
+    // 비가동 조회가 실패한 교대는 저장하지 않는다.
+    // 화면의 0분은 "비가동 없음"이 아니라 "알 수 없음"이므로, 저장하면 기존 비가동을 0으로
+    // 덮어써 가동률이 100%가 된다. 조회를 다시 성공시킨 뒤에만 저장할 수 있다.
+    const failedShifts = submittedShifts.filter(s => downtimeLoadFailed[s.shift]);
+    if (failedShifts.length > 0) {
+      message.error(
+        t('downtime.loadFailedBlockSave', { shifts: failedShifts.map(s => s.label).join(', ') })
+      );
+      return;
     }
 
     const zeroDowntimeShifts = submittedShifts.filter(s => s.data.total_downtime_minutes <= 0);
@@ -1292,6 +1330,34 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
           type="warning"
           showIcon
           style={{ marginBottom: '16px' }}
+        />
+      )}
+
+      {/* 비가동 조회 실패 경고 (저장 차단) */}
+      {selectedMachineId && (downtimeLoadFailed.DAY || downtimeLoadFailed.NIGHT) && (
+        <Alert
+          message={t('downtime.loadFailedTitle')}
+          description={t('downtime.loadFailedDescription')}
+          type="error"
+          showIcon
+          style={{ marginBottom: '16px' }}
+          action={
+            <Button
+              size="small"
+              danger
+              onClick={() => {
+                const requestId = ++loadRequestIdRef.current;
+                if (downtimeLoadFailed.DAY) {
+                  loadDowntimeEntries(selectedMachineId, selectedDate, 'DAY', requestId);
+                }
+                if (downtimeLoadFailed.NIGHT) {
+                  loadDowntimeEntries(selectedMachineId, selectedDate, 'NIGHT', requestId);
+                }
+              }}
+            >
+              {t('downtime.retryLoad')}
+            </Button>
+          }
         />
       )}
 

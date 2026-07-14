@@ -87,6 +87,11 @@
     "confirmZeroContent": "{{shifts}}의 비가동 시간이 입력되지 않았습니다. 확인하지 않고 저장하면 가동률이 100%로 기록되어 OEE가 실제보다 높게 나옵니다.",
     "confirmZeroOk": "무중단이 맞습니다",
     "confirmZeroCancel": "비가동 입력하기",
+    "loadFailed": "비가동 시간을 불러오지 못했습니다",
+    "loadFailedTitle": "비가동 시간을 불러오지 못했습니다",
+    "loadFailedDescription": "화면에 보이는 비가동 0분은 '비가동 없음'이 아니라 '알 수 없음'입니다. 이대로 저장하면 이미 입력해 둔 비가동이 0으로 덮여 가동률이 100%로 기록됩니다. 다시 불러온 뒤에 저장하세요.",
+    "loadFailedBlockSave": "{{shifts}}의 비가동 시간을 불러오지 못해 저장할 수 없습니다. 다시 불러오기를 눌러 주세요.",
+    "retryLoad": "다시 불러오기",
     "reasons": {
       "equipmentFailure": "설비 고장",
       "endmillChange": "ENDMILL 교체",

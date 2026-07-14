@@ -12,6 +12,22 @@ const PRODUCTION_WINDOW_DAYS = 7;
 const getProductionWindowStart = (): string =>
   new Date(Date.now() - PRODUCTION_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+// 설비 로그 조회 기간.
+//
+// 이전에는 전체 설비에서 `.order(start_time desc).limit(100)` 으로 최근 100건만 가져왔다.
+// 활성 설비가 800대인데 그 100건이 커버하는 설비는 34대뿐이었다(실측). 나머지 766대는
+// 로그가 하나도 없는 것처럼 보여, 운영자 화면의 "현재 상태 지속시간"과 엔지니어 화면의
+// "설비별 비가동 시간"이 0으로 표시됐다.
+//
+// 화면이 실제로 쓰는 것은 (a) 설비별 열린 로그(end_time=null, 현재 상태 지속시간 계산용)와
+// (b) 최근 로그다. 그래서 "열린 로그는 오래됐어도 전부" + "최근 30일" 을 가져온다.
+// (전체 machine_logs 는 5,351건뿐이므로 이 조건으로도 충분히 작다)
+const LOG_WINDOW_DAYS = 30;
+const MAX_LOGS = 5000;
+
+const getLogWindowStart = (): string =>
+  new Date(Date.now() - LOG_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
 // 같은 날짜에서는 B(야간, 20:00~08:00)조가 A(주간)조보다 나중이다.
 // 초기 조회 정렬(date desc, shift desc)과 동일한 기준으로 "최신" 실적을 정의한다.
 const isNewerRecord = (candidate: ProductionRecord, current: ProductionRecord): boolean => {
@@ -142,8 +158,10 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         supabase
           .from('machine_logs')
           .select('*')
+          // 열린 로그(현재 상태)는 오래됐어도 반드시 포함한다. 설비별 지속시간 계산의 근거다.
+          .or(`end_time.is.null,start_time.gte.${getLogWindowStart()}`)
           .order('start_time', { ascending: false })
-          .limit(100),
+          .limit(MAX_LOGS),
         supabase
           .from('production_records')
           .select('*')

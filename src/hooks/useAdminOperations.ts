@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Machine } from '@/types';
+import { authFetch } from '@/lib/authFetch';
 
 interface CreateUserData {
   name: string;
@@ -130,7 +131,7 @@ export const useAdminOperations = () => {
   const createMachine = async (machineData: Omit<Machine, 'id' | 'created_at' | 'updated_at'>) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/machines', {
+      const response = await authFetch('/api/admin/machines', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +156,7 @@ export const useAdminOperations = () => {
   const updateMachine = async (machineId: string, machineData: Partial<Machine>) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/admin/machines/${machineId}`, {
+      const response = await authFetch(`/api/admin/machines/${machineId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -180,7 +181,7 @@ export const useAdminOperations = () => {
   const deleteMachine = async (machineId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/admin/machines/${machineId}`, {
+      const response = await authFetch(`/api/admin/machines/${machineId}`, {
         method: 'DELETE',
       });
 

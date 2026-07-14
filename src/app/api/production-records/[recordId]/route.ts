@@ -33,9 +33,15 @@ interface ExistingRecord {
   shift: string | null;
   planned_runtime: number | null;
   actual_runtime: number | null;
+  ideal_runtime: number | null;
   output_qty: number;
   defect_qty: number;
+  tact_time_seconds: number | null;
+  cavity_count: number | null;
 }
+
+const EXISTING_RECORD_COLUMNS =
+  'record_id, machine_id, date, shift, planned_runtime, actual_runtime, ideal_runtime, output_qty, defect_qty, tact_time_seconds, cavity_count';
 
 // 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
 async function getMachineTactInfo(machineId: string) {
@@ -55,6 +61,39 @@ async function getMachineTactInfo(machineId: string) {
         ? data.current_cavity_count
         : DEFAULT_CAVITY
   };
+}
+
+/**
+ * 이 기록의 "단위당 이론 생산시간(분)"을 정한다.
+ *
+ * 과거 기록을 수정할 때 설비의 **현재** 공정 Tact/Cavity 로 다시 계산하면, 제품이나 공정이
+ * 바뀐 뒤에는 그 교대의 역사가 오늘의 조건으로 덮인다. 수량 한 자리를 고쳤을 뿐인데
+ * ideal_runtime, performance, oee 가 전부 달라지고 원래 값은 복구할 수 없다.
+ *
+ * 그래서 다음 순서로 "그때의 조건"을 우선한다:
+ *   1. 기록에 저장된 tact/cavity 스냅샷 (2026-07-14 이후 저장분)
+ *   2. 스냅샷이 없는 레거시 기록이면, 저장된 ideal_runtime / output_qty 에서 역산한다.
+ *      ideal_runtime = (output / cavity) * tact / 60 이므로 그 몫이 곧 단위당 생산시간이고,
+ *      cavity 를 몰라도 값이 나온다. 수량만 바뀌면 비율은 그대로 유지된다.
+ *   3. 둘 다 불가능하면(생산 0 등 역산 불가) 현재 공정 값으로 계산한다. 이 경우엔 보존할
+ *      역사 자체가 없다.
+ */
+async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number> {
+  const snapshotTact = existing.tact_time_seconds;
+  const snapshotCavity = existing.cavity_count;
+
+  if (snapshotTact && snapshotTact > 0) {
+    const cavity = snapshotCavity && snapshotCavity > 0 ? snapshotCavity : DEFAULT_CAVITY;
+    return snapshotTact / 60 / cavity;
+  }
+
+  const storedIdeal = existing.ideal_runtime ?? 0;
+  if (storedIdeal > 0 && existing.output_qty > 0) {
+    return storedIdeal / existing.output_qty;
+  }
+
+  const { tactSeconds, cavity } = await getMachineTactInfo(existing.machine_id);
+  return tactSeconds / 60 / Math.max(1, cavity);
 }
 
 /**
@@ -106,12 +145,13 @@ async function buildUpdateData(
     plannedRuntime
   );
 
-  const { tactSeconds, cavity } = await getMachineTactInfo(existing.machine_id);
+  // 현재 공정이 아니라 "이 기록이 만들어질 때의 조건"으로 계산한다 (역사 덮어쓰기 방지)
+  const minutesPerUnit = await resolveMinutesPerUnit(existing);
 
   const outputQtyValue = outputQty as number;
   const defectQtyValue = defectQty as number;
 
-  const idealRuntime = (outputQtyValue / Math.max(1, cavity)) * tactSeconds / 60;
+  const idealRuntime = outputQtyValue * minutesPerUnit;
   const availability = plannedRuntime > 0 ? clamp(actualRuntime / plannedRuntime, 0, 1) : 0;
   const performance = actualRuntime > 0 ? clamp(idealRuntime / actualRuntime, 0, 1) : 0;
   const quality =
@@ -215,7 +255,7 @@ export async function PUT(
     // 생산 기록 존재 확인
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
-      .select('record_id, machine_id, date, shift, planned_runtime, actual_runtime, output_qty, defect_qty')
+      .select(EXISTING_RECORD_COLUMNS)
       .eq('record_id', params.recordId)
       .single();
 
@@ -280,44 +320,42 @@ export async function DELETE(
   try {
     console.log('DELETE /api/production-records/[recordId] called with id:', params.recordId);
 
-    // 생산 기록 존재 확인
-    const { data: existingRecord, error: checkError } = await supabaseAdmin
-      .from('production_records')
-      .select('record_id, machine_id, date, shift, output_qty')
-      .eq('record_id', params.recordId)
-      .single();
-
-    if (checkError || !existingRecord) {
-      console.error('Production record not found:', checkError);
-      return NextResponse.json(
-        { success: false, error: 'Production record not found' },
-        { status: 404 }
-      );
-    }
-
-    // 생산 기록 삭제 (하드 삭제)
-    const { error: deleteError } = await supabaseAdmin
-      .from('production_records')
-      .delete()
-      .eq('record_id', params.recordId);
+    // 생산 기록과 그 교대의 비가동 입력을 하나의 트랜잭션에서 함께 삭제한다.
+    //
+    // 이전에는 production_records 만 지웠다. 남은 downtime_entries 는 같은
+    // (machine_id, date, shift) 로 폼에 다시 로드되고, shouldSubmitShift 가 "비가동이 있으니
+    // 가동한 교대"로 판단해 재저장하면서 생산 0짜리 레코드를 되살렸다.
+    // (실측: 고아 비가동 225건, 생산 0 + 비가동>0 레코드 4,840건)
+    const { data: deleted, error: deleteError } = await supabaseAdmin.rpc(
+      'delete_production_record',
+      { p_record_id: params.recordId }
+    );
 
     if (deleteError) {
+      if (deleteError.message?.includes('RECORD_NOT_FOUND')) {
+        return NextResponse.json(
+          { success: false, error: 'Production record not found' },
+          { status: 404 }
+        );
+      }
       console.error('Delete error:', deleteError);
       throw deleteError;
     }
 
-    console.log('Successfully deleted production record:', params.recordId);
+    const deletedRecord = deleted as {
+      record_id: string;
+      deleted_downtime_entries: number;
+    };
+
+    console.log(
+      `Successfully deleted production record: ${params.recordId} ` +
+        `(+${deletedRecord?.deleted_downtime_entries ?? 0} downtime entries)`
+    );
 
     return NextResponse.json({
       success: true,
       message: '생산 기록이 성공적으로 삭제되었습니다',
-      deleted_record: {
-        record_id: existingRecord.record_id,
-        machine_id: existingRecord.machine_id,
-        date: existingRecord.date,
-        shift: existingRecord.shift,
-        output_qty: existingRecord.output_qty
-      }
+      deleted_record: deleted
     });
 
   } catch (error: unknown) {
@@ -349,7 +387,7 @@ export async function PATCH(
     // 생산 기록 존재 확인
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
-      .select('record_id, machine_id, date, shift, planned_runtime, actual_runtime, output_qty, defect_qty')
+      .select(EXISTING_RECORD_COLUMNS)
       .eq('record_id', params.recordId)
       .single();
 

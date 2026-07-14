@@ -27,6 +27,7 @@ import { useReportsTranslation } from '@/hooks/useTranslation';
 import { Machine, ProductionRecord } from '@/types';
 import { OEEMetrics } from '@/types/reports';
 import { ReportUtils } from '@/utils/reportUtils';
+import { getReportTemplateRange } from '@/utils/reportRange';
 
 // 설비/기간 필터를 실제 보고서 데이터(OEE + 생산실적)에 적용
 // oeeData와 productionData는 항상 동일 인덱스로 1:1 매핑되어 생성되므로
@@ -136,23 +137,11 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const handlePreview = async (template: 'daily' | 'weekly' | 'monthly') => {
     setLoading(true);
     try {
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date();
-
-      switch (template) {
-        case 'daily':
-          startDate.setDate(startDate.getDate() - 1);
-          break;
-        case 'weekly':
-          startDate.setDate(startDate.getDate() - 7);
-          break;
-        case 'monthly':
-          startDate.setMonth(startDate.getMonth() - 1);
-          break;
-      }
+      // 현지 달력 날짜 기준, 양끝 포함. (UTC 변환으로 인한 하루 밀림과
+      // "일간=2일 / 주간=8일" 오프바이원을 제거한다 — utils/reportRange.ts 참고)
+      const templateRange = getReportTemplateRange(template);
 
       // 미리보기 데이터 준비 (템플릿 기간 + 선택된 설비로 실제 데이터 필터링)
-      const templateRange: [string, string] = [startDate.toISOString().split('T')[0], endDate];
       const filtered = filterReportData(reportData, selectedMachines, templateRange);
       const previewContent = {
         period: `${templateRange[0]} ~ ${templateRange[1]}`,
@@ -180,22 +169,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const handleQuickReport = async (type: 'pdf' | 'excel', template: 'daily' | 'weekly' | 'monthly') => {
     setLoading(true);
     try {
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date();
-
-      switch (template) {
-        case 'daily':
-          startDate.setDate(startDate.getDate() - 1);
-          break;
-        case 'weekly':
-          startDate.setDate(startDate.getDate() - 7);
-          break;
-        case 'monthly':
-          startDate.setMonth(startDate.getMonth() - 1);
-          break;
-      }
-
-      const templateRange: [string, string] = [startDate.toISOString().split('T')[0], endDate];
+      // 미리보기와 정확히 같은 범위를 쓴다 (미리보기와 내보내기가 다른 기간을 담지 않도록)
+      const templateRange = getReportTemplateRange(template);
       const filtered = filterReportData(reportData, selectedMachines, templateRange);
 
       const reportConfig = {

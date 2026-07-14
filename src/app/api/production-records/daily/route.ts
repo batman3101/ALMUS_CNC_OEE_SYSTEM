@@ -206,7 +206,12 @@ export async function POST(request: NextRequest) {
         quality: Math.round(metrics.quality * 10000) / 10000,
         oee: Math.round(metrics.oee * 10000) / 10000,
         // NULL 이면 "비가동 미입력" = 이 기록의 가동률은 신뢰할 수 없다는 표시
-        downtime_minutes: resolveDowntimeMinutes(metrics.downtime, shiftData.downtime_confirmed)
+        downtime_minutes: resolveDowntimeMinutes(metrics.downtime, shiftData.downtime_confirmed),
+        // 계산에 실제로 쓴 Tact/Cavity 를 함께 남긴다.
+        // 이 값이 없으면 나중에 이 기록을 수정할 때 서버가 "그때"가 아니라 "지금"의 공정
+        // 조건으로 ideal_runtime/performance/oee 를 다시 계산해 역사를 덮어쓴다.
+        tact_time_seconds: tactSeconds,
+        cavity_count: cavity
       };
     };
 
