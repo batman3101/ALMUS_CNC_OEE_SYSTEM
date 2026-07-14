@@ -13,7 +13,8 @@
     "search": "Tìm kiếm",
     "filter": "Lọc",
     "refresh": "Làm mới",
-    "goBack": "Quay lại"
+    "goBack": "Quay lại",
+    "monitoringSystem": "Hệ thống Giám sát"
   },
   "actions": {
     "autoRefresh": "Tự động làm mới",
@@ -59,7 +60,8 @@
     "noPermission": "Bạn không có quyền truy cập trang này.",
     "goBack": "Quay lại",
     "loginSubtitle": "Đăng nhập vào hệ thống giám sát ALMUS TECH",
-    "systemInfo": "Liên hệ quản trị viên để đăng ký tài khoản mới"
+    "systemInfo": "Liên hệ quản trị viên để đăng ký tài khoản mới",
+    "preparingLoginPage": "Đang chuẩn bị trang đăng nhập..."
   },
   "roles": {
     "admin": "Quản trị viên",
@@ -86,7 +88,9 @@
     "seconds": "giây",
     "startDate": "Ngày bắt đầu",
     "endDate": "Ngày kết thúc",
-    "retry": "Thử lại"
+    "actions": "Thao tác",
+    "retry": "Thử lại",
+    "user": "Người dùng"
   },
   "theme": {
     "darkMode": "Chế độ tối",
@@ -153,6 +157,18 @@
       "resolve": "Giải quyết",
       "delete": "Xóa",
       "clearAll": "Xóa tất cả"
+    },
+    "machineState": {
+      "title": "Cảnh báo trạng thái thiết bị",
+      "TEMPORARY_STOP": "{{machineName}} đang ở trạng thái dừng tạm thời.",
+      "INSPECTION": "{{machineName}} đang được kiểm tra.",
+      "PM_MAINTENANCE": "{{machineName}} đang được kiểm tra.",
+      "BREAKDOWN_REPAIR": "{{machineName}} đã xảy ra hỏng hóc.",
+      "MODEL_CHANGE": "{{machineName}} đang thay đổi mô hình.",
+      "PROGRAM_CHANGE": "{{machineName}} đang thay đổi chương trình.",
+      "TOOL_CHANGE": "{{machineName}} đang thay dụng cụ.",
+      "PLANNED_STOP": "{{machineName}} đang dừng theo kế hoạch.",
+      "unknown": "Vui lòng kiểm tra trạng thái của {{machineName}}."
     }
   },
   "settings": {
@@ -194,8 +210,8 @@
       "companyLogo": "Logo công ty",
       "uploadLogo": "Tải lên logo",
       "logoImageOnly": "Chỉ có thể tải lên file hình ảnh",
-      "logoSizeLimit": "Kích thước file phải nhỏ hơn 2MB",
-      "logoHint": "Kích thước đề xuất: 200x60px, tối đa 2MB",
+      "logoSizeLimit": "Kích thước file phải nhỏ hơn 5MB",
+      "logoHint": "Kích thước đề xuất: 200x60px, tối đa 5MB",
       "timezone": "Múi giờ",
       "timezoneRequired": "Chọn múi giờ",
       "timezoneSelect": "Chọn múi giờ",
@@ -207,7 +223,27 @@
       "timeFormat": "Định dạng thời gian",
       "timeFormatSelect": "Chọn định dạng thời gian",
       "logoUploadSuccess": "Tải lên logo thành công",
-      "logoUploadError": "Tải lên logo thất bại"
+      "logoUploadError": "Tải lên logo thất bại",
+      "uploading": "Đang tải lên...",
+      "uploadingHint": "Đang tải lên. Vui lòng đợi trong giây lát...",
+      "logoFileHint": "Chỉ chấp nhận file hình ảnh (JPG, PNG...) - tối đa 5MB",
+      "timezones": {
+        "seoul": "Seoul (Asia/Seoul)",
+        "hoChiMinh": "Hồ Chí Minh (Asia/Ho_Chi_Minh)",
+        "utc": "UTC",
+        "tokyo": "Tokyo (Asia/Tokyo)",
+        "shanghai": "Thượng Hải (Asia/Shanghai)"
+      },
+      "timeFormats": {
+        "h24s": "24 giờ (HH:mm:ss)",
+        "h12s": "12 giờ (hh:mm:ss A)",
+        "h24m": "24 giờ (chỉ HH:mm)",
+        "h12m": "12 giờ (chỉ hh:mm A)"
+      },
+      "noChanges": "Không có thay đổi nào để lưu.",
+      "updateFailed": "Cập nhật cài đặt hệ thống thất bại. Vui lòng kiểm tra kết nối mạng hoặc quyền truy cập.",
+      "uploadFailed": "Tải lên thất bại.",
+      "uploadNoUrl": "Không nhận được URL của file đã tải lên."
     },
     "oee": {
       "title": "Cài đặt OEE",
@@ -261,7 +297,10 @@
       "totalWorkingTime": "Tổng thời gian làm việc",
       "totalBreakTime": "Tổng thời gian nghỉ",
       "efficiency": "Hiệu quả hoạt động",
-      "aShiftTimeError": "Thời gian kết thúc ca A phải sau thời gian bắt đầu"
+      "aShiftTimeError": "Thời gian kết thúc ca A phải sau thời gian bắt đầu",
+      "hoursMinutes": "{{h}} giờ {{m}} phút",
+      "fullDay": "24 giờ",
+      "breakPerShift": "{{total}} phút (mỗi ca {{each}} phút)"
     },
     "notification": {
       "title": "Cài đặt thông báo",
@@ -273,6 +312,7 @@
       "enableBrowser": "Kích hoạt thông báo trình duyệt",
       "enableEmail": "Kích hoạt thông báo email",
       "enableSound": "Kích hoạt thông báo âm thanh",
+      "soundNotifications": "Thông báo âm thanh",
       "permission": "Trạng thái quyền",
       "granted": "Đã cho phép",
       "denied": "Bị từ chối",
@@ -433,5 +473,13 @@
       "weekly": "Xem trước báo cáo hàng tuần",
       "monthly": "Xem trước báo cáo hàng tháng"
     }
+  },
+  "pagination": {
+    "itemsRange": "{{start}}-{{end}} / tổng {{total}} mục",
+    "machinesRange": "{{start}}-{{end}} / tổng {{total}} thiết bị",
+    "totalItems": "Tổng {{total}} mục",
+    "totalMachines": "Tổng {{total}} thiết bị",
+    "totalUsers": "Tổng {{total}} người",
+    "totalErrors": "Tổng {{total}} lỗi"
   }
 }

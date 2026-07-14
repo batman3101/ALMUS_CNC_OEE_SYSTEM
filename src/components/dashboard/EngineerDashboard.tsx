@@ -22,6 +22,7 @@ import { useEngineerData } from '@/hooks/useEngineerData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { formatMachineLocation } from '@/utils/machineLocation';
 
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
@@ -121,8 +122,9 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       locations: [
         { value: 'all', label: t('dashboard:filterMenu.allLocations'), count: machines.length },
         ...locations.map(loc => ({
+          // value 는 DB 원본 값을 유지해야 필터링이 동작한다. 라벨만 번역한다.
           value: loc,
-          label: loc,
+          label: formatMachineLocation(loc, t),
           count: machines.filter(m => m.location === loc).length
         }))
       ],
@@ -286,7 +288,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           <Space wrap size={[4, 4]}>
             {!selectedLocations.includes('all') && (
               <Tag color="blue" closable onClose={() => setSelectedLocations(['all'])}>
-                {t('dashboard:filterMenu.location')}: {selectedLocations.join(', ')}
+                {t('dashboard:filterMenu.location')}: {selectedLocations.map(loc => formatMachineLocation(loc, t)).join(', ')}
               </Tag>
             )}
             {!selectedShifts.includes('all') && (
@@ -596,7 +598,9 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       dataIndex: 'location',
       key: 'location',
       width: 120,
+      // 정렬은 DB 원본 값 기준으로 두고, 표시만 번역한다.
       sorter: (a: { location: string }, b: { location: string }) => a.location.localeCompare(b.location),
+      render: (location: string) => formatMachineLocation(location, t),
     },
     {
       title: t('dashboard:table.oee'),

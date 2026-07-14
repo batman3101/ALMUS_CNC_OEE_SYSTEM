@@ -23,6 +23,7 @@ import { Machine, MachineState } from '@/types';
 import MachineCard from './MachineCard';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { supabase } from '@/lib/supabase';
+import { formatMachineLocation } from '@/utils/machineLocation';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -267,8 +268,9 @@ const MachineList: React.FC<MachineListProps> = ({
                     {t('filterOptions.allLocations')}
                   </Option>
                   {uniqueLocations.map(location => (
+                    // value 는 DB 원본 값이어야 필터가 동작한다. 라벨만 번역한다.
                     <Option key={location} value={location}>
-                      {location}
+                      {formatMachineLocation(location, t)}
                     </Option>
                   ))}
                 </Select>
@@ -368,8 +370,8 @@ const MachineList: React.FC<MachineListProps> = ({
                 onChange={handlePageChange}
                 showSizeChanger={false}
                 showQuickJumper
-                showTotal={(total, range) => 
-                  `${range[0]}-${range[1]} / 총 ${total}개`
+                showTotal={(total, range) =>
+                  t('common:pagination.itemsRange', { start: range[0], end: range[1], total })
                 }
               />
             </div>

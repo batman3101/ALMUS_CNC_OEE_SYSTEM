@@ -306,7 +306,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 title={
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                     <Text strong style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {notification.title}
+                      {t(notification.titleKey)}
                     </Text>
                     <Space size={4} style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
                       <Tag
@@ -325,7 +325,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                 description={
                   <div>
                     <Text style={{ fontSize: 13, color: '#666' }}>
-                      {notification.message}
+                      {t(notification.messageKey, notification.messageParams)}
                     </Text>
                     <div style={{ marginTop: 4 }}>
                       <Text type="secondary" style={{ fontSize: 12 }}>

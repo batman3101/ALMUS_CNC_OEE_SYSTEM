@@ -34,7 +34,8 @@
       "status": "상태",
       "output": "생산량",
       "defects": "불량"
-    }
+    },
+    "machineCountValue": "{{count}}대"
   },
   "previewModal": {
     "daily": "일일 보고서 미리보기",
@@ -64,12 +65,14 @@
   "quickExport": "빠른 내보내기",
   "customReport": "사용자 정의 리포트",
   "units": {
-    "machines": "대",
     "pieces": "개"
   },
   "common": {
     "close": "닫기",
     "running": "가동중",
     "stopped": "정지"
+  },
+  "errors": {
+    "fetchMachinesFailed": "설비 데이터를 불러오는데 실패했습니다"
   }
 }

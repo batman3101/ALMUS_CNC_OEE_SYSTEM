@@ -175,8 +175,8 @@ const UserManagement: React.FC = () => {
           <Popconfirm
             title={t('userManagement.confirmDelete')}
             onConfirm={() => handleDelete(record.id)}
-            okText="확인"
-            cancelText="취소"
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
           >
             <Button
               type="link"

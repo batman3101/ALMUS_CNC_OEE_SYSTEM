@@ -194,10 +194,10 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
               <div style={{ padding: '12px', backgroundColor: token.colorFillAlter, borderRadius: '6px' }}>
                 <Text strong>{t('settings.shift.duration')}: </Text>
-                <Text>{Math.floor(aShiftDuration / 60)}시간 {aShiftDuration % 60}분</Text>
+                <Text>{t('settings.shift.hoursMinutes', { h: Math.floor(aShiftDuration / 60), m: aShiftDuration % 60 })}</Text>
                 <br />
                 <Text strong>{t('settings.shift.workingTime')}: </Text>
-                <Text>{Math.floor(calculateWorkingTime(aShiftDuration, breakTime) / 60)}시간 {calculateWorkingTime(aShiftDuration, breakTime) % 60}분</Text>
+                <Text>{t('settings.shift.hoursMinutes', { h: Math.floor(calculateWorkingTime(aShiftDuration, breakTime) / 60), m: calculateWorkingTime(aShiftDuration, breakTime) % 60 })}</Text>
               </div>
             </Card>
           </Col>
@@ -238,10 +238,10 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
               <div style={{ padding: '12px', backgroundColor: token.colorFillAlter, borderRadius: '6px' }}>
                 <Text strong>{t('settings.shift.duration')}: </Text>
-                <Text>{Math.floor(bShiftDuration / 60)}시간 {bShiftDuration % 60}분</Text>
+                <Text>{t('settings.shift.hoursMinutes', { h: Math.floor(bShiftDuration / 60), m: bShiftDuration % 60 })}</Text>
                 <br />
                 <Text strong>{t('settings.shift.workingTime')}: </Text>
-                <Text>{Math.floor(calculateWorkingTime(bShiftDuration, breakTime) / 60)}시간 {calculateWorkingTime(bShiftDuration, breakTime) % 60}분</Text>
+                <Text>{t('settings.shift.hoursMinutes', { h: Math.floor(calculateWorkingTime(bShiftDuration, breakTime) / 60), m: calculateWorkingTime(bShiftDuration, breakTime) % 60 })}</Text>
               </div>
             </Card>
           </Col>
@@ -298,19 +298,22 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
               <div style={{ padding: '16px', backgroundColor: token.colorFillAlter, borderRadius: '6px' }}>
                 <div style={{ marginBottom: '12px' }}>
                   <Text strong>{t('settings.shift.totalCoverage')}: </Text>
-                  <Text>24시간</Text>
+                  <Text>{t('settings.shift.fullDay')}</Text>
                 </div>
                 
                 <div style={{ marginBottom: '12px' }}>
                   <Text strong>{t('settings.shift.totalWorkingTime')}: </Text>
                   <Text>
-                    {Math.floor((calculateWorkingTime(aShiftDuration, breakTime) + calculateWorkingTime(bShiftDuration, breakTime)) / 60)}시간 {(calculateWorkingTime(aShiftDuration, breakTime) + calculateWorkingTime(bShiftDuration, breakTime)) % 60}분
+                    {t('settings.shift.hoursMinutes', {
+                      h: Math.floor((calculateWorkingTime(aShiftDuration, breakTime) + calculateWorkingTime(bShiftDuration, breakTime)) / 60),
+                      m: (calculateWorkingTime(aShiftDuration, breakTime) + calculateWorkingTime(bShiftDuration, breakTime)) % 60
+                    })}
                   </Text>
                 </div>
 
                 <div style={{ marginBottom: '12px' }}>
                   <Text strong>{t('settings.shift.totalBreakTime')}: </Text>
-                  <Text>{breakTime * 2}분 (교대당 {breakTime}분)</Text>
+                  <Text>{t('settings.shift.breakPerShift', { total: breakTime * 2, each: breakTime })}</Text>
                 </div>
 
                 <div>

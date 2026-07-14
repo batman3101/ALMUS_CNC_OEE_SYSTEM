@@ -32,7 +32,7 @@
     "outputQuantity": "생산 수량",
     "defectQuantity": "불량 수량",
     "units": {
-      "quantity": "개"
+      "quantityValue": "{{n}}개"
     },
     "average": "평균 OEE",
     "highest": "최고 OEE",
@@ -91,7 +91,29 @@
     "productionTrend": "생산량 추이",
     "oeeComparison": "OEE 비교",
     "machineUtilization": "설비 가동률",
-    "qualityTrend": "품질 추이"
+    "qualityTrend": "품질 추이",
+    "noDataInPeriod": "선택된 기간에 데이터가 없습니다",
+    "loadingData": "데이터를 불러오는 중...",
+    "dataLoadErrorMessage": "데이터 로드 중 오류가 발생했습니다",
+    "errorOccurred": "오류가 발생했습니다: {{error}}",
+    "noComparisonData": "비교할 설비 데이터가 없습니다",
+    "quantity": "수량",
+    "ratio": "비율",
+    "defectType": "불량 유형",
+    "defectTypeCount": "불량 유형 수",
+    "defectTypeStatus": "불량 유형별 현황",
+    "topDefectType": "최다 불량 유형",
+    "maxRatio": "최대 비율",
+    "avg": "평균",
+    "max": "최고",
+    "min": "최저",
+    "defectTypes": {
+      "dimensional": "치수 불량",
+      "surface": "표면 불량",
+      "shape": "형상 불량",
+      "material": "재질 불량",
+      "other": "기타"
+    }
   },
   "filters": {
     "dateRange": "기간",
@@ -165,7 +187,18 @@
     "programChange": "프로그램교체",
     "toolChange": "공구교환",
     "temporaryStop": "일시정지",
-    "unknown": "알 수 없음"
+    "unknown": "알 수 없음",
+    "autoRefreshing": "자동 새로고침중",
+    "refresh": "새로고침",
+    "pollingActive": "폴링 활성",
+    "pollingStopped": "폴링 중지",
+    "realtimeConnected": "실시간 연결",
+    "realtimeDisconnected": "실시간 끊김",
+    "lastUpdate": "마지막 업데이트",
+    "hybridMode": "하이브리드 모드 (폴링 + 실시간)",
+    "realtimeMode": "실시간 모드",
+    "pollingMode": "폴링 모드",
+    "manualMode": "수동 모드"
   },
   "table": {
     "machineName": "설비명",
@@ -182,70 +215,9 @@
     "machineStatus": "설비 현황",
     "realtimeUpdate": "실시간 업데이트",
     "machinePerformanceAnalysis": "설비별 성능 분석",
-    "all": "전체"
-  },
-  "chart": {
-    "overallOeeStatus": "전체 OEE 현황",
-    "overallOeeTrend": "전체 OEE 추이",
-    "percentage": "비율 (%)"
-  },
-  "engineerDashboard": {
-    "title": "엔지니어 대시보드",
-    "description": "설비 상황 분석 및 성능지표 심화 분석",
-    "averageOee": "평균 OEE",
-    "averageAvailability": "평균 가동률", 
-    "averagePerformance": "평균 성능",
-    "averageQuality": "평균 품질",
-    "analysis": {
-      "collision": "충돌 분석",
-      "performance": "성과량 분석",
-      "downtime": "다운타임 분석",
-      "productivity": "생산성 분석",
-      "quality": "품질 분석",
-      "comparison": "비교 분석"
-    },
-    "charts": {
-      "overallOeeStatus": "전체 OEE 현황",
-      "oeeTrendAnalysis": "OEE 추이 분석"
-    },
-    "timeFilter": {
-      "recent1Month": "최근 1개월",
-      "filter": "필터"
-    }
-  },
-  "operatorDashboard": {
-    "title": "운영자 대시보드",
-    "description": "할당된 설비 현황 및 실시간 운영 정보",
-    "myAssignedMachines": "담당 설비",
-    "currentShiftProduction": "현재 교대 생산량",
-    "todaysTarget": "금일 목표",
-    "actualProduction": "실제 생산량",
-    "quickActions": "빠른 작업",
-    "reportIssue": "이슈 신고",
-    "updateStatus": "상태 업데이트",
-    "inputProduction": "생산 입력"
-  },
-  "roles": {
-    "admin": "관리자", 
-    "engineer": "엔지니어",
-    "operator": "운영자"
-  },
-  "buttons": {
-    "registerNewMachine": "새로운 설비 등록",
-    "repairMachine": "설비 수리"
-  },
-  "status": {
-    "autoRefreshing": "자동 새로고침중",
-    "refresh": "새로고침",
-    "pollingActive": "폴링 활성",
-    "pollingStopped": "폴링 중지",
-    "realtimeConnected": "실시간 연결",
-    "realtimeDisconnected": "실시간 끊김",
-    "lastUpdate": "마지막 업데이트",
-    "hybridMode": "하이브리드 모드 (폴링 + 실시간)",
-    "realtimeMode": "실시간 모드",
-    "pollingMode": "폴링 모드",
-    "manualMode": "수동 모드"
+    "all": "전체",
+    "itemsRange": "{{start}}-{{end}} / {{total}}개 항목",
+    "machinesRange": "{{start}}-{{end}} / {{total}}대"
   },
   "chart": {
     "overallOeeStatus": "전체 OEE 현황",
@@ -298,24 +270,53 @@
     "unit": "개",
     "pieces": "개"
   },
-  "table": {
-    "machineName": "설비명",
-    "location": "위치",
-    "status": "상태",
-    "oee": "OEE",
-    "availability": "가동률",
-    "performance": "성능",
-    "quality": "품질",
-    "downtime": "다운타임",
-    "downtimeHours": "다운타임(시간)",
-    "defectRate": "불량률",
-    "trend": "추세",
-    "machineStatus": "설비 현황",
-    "realtimeUpdate": "실시간 업데이트",
-    "machinePerformanceAnalysis": "설비별 성능 분석",
-    "all": "전체",
-    "itemsRange": "{{start}}-{{end}} / {{total}}개 항목",
-    "machinesRange": "{{start}}-{{end}} / {{total}}대"
+  "engineerDashboard": {
+    "title": "엔지니어 대시보드",
+    "description": "설비 상황 분석 및 성능지표 심화 분석",
+    "averageOee": "평균 OEE",
+    "averageAvailability": "평균 가동률",
+    "averagePerformance": "평균 성능",
+    "averageQuality": "평균 품질",
+    "analysis": {
+      "collision": "충돌 분석",
+      "performance": "성과량 분석",
+      "downtime": "다운타임 분석",
+      "productivity": "생산성 분석",
+      "quality": "품질 분석",
+      "comparison": "비교 분석"
+    },
+    "charts": {
+      "overallOeeStatus": "전체 OEE 현황",
+      "oeeTrendAnalysis": "OEE 추이 분석"
+    },
+    "timeFilter": {
+      "recent1Month": "최근 1개월",
+      "filter": "필터"
+    }
+  },
+  "operatorDashboard": {
+    "title": "운영자 대시보드",
+    "description": "할당된 설비 현황 및 실시간 운영 정보",
+    "myAssignedMachines": "담당 설비",
+    "currentShiftProduction": "현재 교대 생산량",
+    "todaysTarget": "금일 목표",
+    "actualProduction": "실제 생산량",
+    "quickActions": "빠른 작업",
+    "reportIssue": "이슈 신고",
+    "updateStatus": "상태 업데이트",
+    "inputProduction": "생산 입력"
+  },
+  "roles": {
+    "admin": "관리자",
+    "engineer": "엔지니어",
+    "operator": "운영자"
+  },
+  "buttons": {
+    "registerNewMachine": "새로운 설비 등록",
+    "repairMachine": "설비 수리",
+    "filter": "필터",
+    "export": "내보내기",
+    "reset": "초기화"
   },
   "downtimeReasons": {
     "NORMAL_OPERATION": "정상가동",
@@ -328,11 +329,6 @@
     "PROGRAM_CHANGE": "프로그램교체",
     "TOOL_CHANGE": "공구교환",
     "TEMPORARY_STOP": "일시정지"
-  },
-  "buttons": {
-    "filter": "필터",
-    "export": "내보내기",
-    "reset": "초기화"
   },
   "filterMenu": {
     "title": "필터",

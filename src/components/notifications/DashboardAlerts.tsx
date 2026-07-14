@@ -141,11 +141,11 @@ export const DashboardAlerts: React.FC<DashboardAlertsProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
                       <Text strong style={{ fontSize: 13 }}>
-                        {notification.machine_name}: {notification.title}
+                        {notification.machine_name}: {t(notification.titleKey)}
                       </Text>
                       <div style={{ marginTop: 2 }}>
                         <Text style={{ fontSize: 12, color: '#666' }}>
-                          {notification.message}
+                          {t(notification.messageKey, notification.messageParams)}
                         </Text>
                       </div>
                       <div style={{ marginTop: 2 }}>

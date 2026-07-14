@@ -26,6 +26,7 @@ import {
   ReloadOutlined
 } from '@ant-design/icons';
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface';
+import { useAdminTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -62,6 +63,7 @@ interface UploadResult {
 
 const MachinesBulkUpload: React.FC = () => {
   const { message } = App.useApp();
+  const { t } = useAdminTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -97,18 +99,18 @@ const MachinesBulkUpload: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
-      message.success('템플릿이 다운로드되었습니다.');
+
+      message.success(t('bulkUpload.messages.templateDownloaded'));
     } catch (error) {
       console.error('Template download error:', error);
-      message.error('템플릿 다운로드 중 오류가 발생했습니다.');
+      message.error(t('bulkUpload.messages.templateDownloadError'));
     }
   };
 
   // 미리보기 처리
   const handlePreview = async () => {
     if (fileList.length === 0) {
-      message.error('업로드할 파일을 선택해주세요.');
+      message.error(t('bulkUpload.messages.selectFileFirst'));
       return;
     }
 
@@ -132,17 +134,17 @@ const MachinesBulkUpload: React.FC = () => {
       if (result.success && result.preview_data) {
         setPreviewData(result.preview_data);
         setCurrentStep(1); // 검증/미리보기 단계로 이동
-        message.success('데이터 미리보기가 완료되었습니다.');
+        message.success(t('bulkUpload.messages.previewSuccess'));
       } else {
         if (result.validation_errors) {
           setValidationErrors(result.validation_errors);
           setCurrentStep(1); // 검증 결과 단계로 이동
         }
-        message.error(result.error || '미리보기 중 오류가 발생했습니다.');
+        message.error(result.error || t('bulkUpload.messages.previewError'));
       }
     } catch (error) {
       console.error('Preview error:', error);
-      message.error('파일 미리보기 중 오류가 발생했습니다.');
+      message.error(t('bulkUpload.messages.previewCatchError'));
     } finally {
       setUploading(false);
     }
@@ -151,7 +153,7 @@ const MachinesBulkUpload: React.FC = () => {
   // 파일 업로드 처리 (실제 등록)
   const handleUpload = async () => {
     if (fileList.length === 0) {
-      message.error('업로드할 파일을 선택해주세요.');
+      message.error(t('bulkUpload.messages.selectFileFirst'));
       return;
     }
 
@@ -177,11 +179,11 @@ const MachinesBulkUpload: React.FC = () => {
         if (result.validation_errors) {
           setValidationErrors(result.validation_errors);
         }
-        message.error(result.error || '업로드 중 오류가 발생했습니다.');
+        message.error(result.error || t('bulkUpload.messages.uploadError'));
       }
     } catch (error) {
       console.error('Upload error:', error);
-      message.error('파일 업로드 중 오류가 발생했습니다.');
+      message.error(t('bulkUpload.messages.uploadCatchError'));
     } finally {
       setConfirming(false);
     }
@@ -206,13 +208,13 @@ const MachinesBulkUpload: React.FC = () => {
       ].includes(file.type);
       
       if (!isValidType) {
-        message.error('Excel 파일(.xlsx, .xls)만 업로드 가능합니다.');
+        message.error(t('bulkUpload.messages.invalidFileType'));
         return false;
       }
 
       const isValidSize = file.size / 1024 / 1024 < 10; // 10MB
       if (!isValidSize) {
-        message.error('파일 크기는 10MB를 초과할 수 없습니다.');
+        message.error(t('bulkUpload.messages.fileSizeExceeded'));
         return false;
       }
 
@@ -230,32 +232,32 @@ const MachinesBulkUpload: React.FC = () => {
   // 검증 오류 테이블 컬럼
   const errorColumns = [
     {
-      title: '행 번호',
+      title: t('bulkUpload.columns.row'),
       dataIndex: 'row',
       key: 'row',
       width: 80,
       sorter: (a: ValidationError, b: ValidationError) => a.row - b.row,
     },
     {
-      title: '필드',
+      title: t('bulkUpload.columns.field'),
       dataIndex: 'field',
       key: 'field',
       width: 120,
     },
     {
-      title: '오류 내용',
+      title: t('bulkUpload.columns.message'),
       dataIndex: 'message',
       key: 'message',
       width: 300,
     },
     {
-      title: '입력된 값',
+      title: t('bulkUpload.columns.value'),
       dataIndex: 'value',
       key: 'value',
       width: 150,
       render: (value: unknown) => (
         <Text code style={{ fontSize: '12px' }}>
-          {value === null || value === undefined ? '(비어있음)' : String(value)}
+          {value === null || value === undefined ? t('bulkUpload.columns.emptyValue') : String(value)}
         </Text>
       ),
     },
@@ -264,65 +266,66 @@ const MachinesBulkUpload: React.FC = () => {
   // 미리보기 데이터 테이블 컬럼
   const previewColumns = [
     {
-      title: '설비명',
+      title: t('machineManagement.form.machineName'),
       dataIndex: 'name',
       key: 'name',
       width: 120,
     },
     {
-      title: '위치',
+      title: t('machineManagement.form.location'),
       dataIndex: 'location',
       key: 'location',
       width: 150,
     },
     {
-      title: '설비 타입',
+      title: t('bulkUpload.columns.equipmentType'),
       dataIndex: 'equipment_type',
       key: 'equipment_type',
       width: 120,
     },
     {
-      title: '생산 모델',
+      title: t('machineManagement.form.productionModel'),
       dataIndex: 'production_model_name',
       key: 'production_model_name',
       width: 120,
     },
     {
-      title: '가공 공정',
+      title: t('machineManagement.form.process'),
       dataIndex: 'process_name',
       key: 'process_name',
       width: 100,
     },
     {
-      title: '활성상태',
+      title: t('bulkUpload.columns.activeStatus'),
       dataIndex: 'is_active',
       key: 'is_active',
       width: 100,
       render: (value: boolean) => (
         <Tag color={value ? 'green' : 'red'}>
-          {value ? '활성' : '비활성'}
+          {value ? t('common.active') : t('common.inactive')}
         </Tag>
       ),
     },
     {
-      title: '현재상태',
+      title: t('bulkUpload.columns.currentState'),
       dataIndex: 'current_state',
       key: 'current_state',
       width: 120,
       render: (value: string) => {
-        const stateMap: Record<string, { color: string; text: string }> = {
-          'NORMAL_OPERATION': { color: 'green', text: '정상가동' },
-          'INSPECTION': { color: 'orange', text: '점검중' },
-          'BREAKDOWN_REPAIR': { color: 'red', text: '고장수리중' },
-          'PM_MAINTENANCE': { color: 'orange', text: 'PM중' },
-          'MODEL_CHANGE': { color: 'blue', text: '모델교체' },
-          'PLANNED_STOP': { color: 'purple', text: '계획정지' },
-          'PROGRAM_CHANGE': { color: 'cyan', text: '프로그램교체' },
-          'TOOL_CHANGE': { color: 'magenta', text: '공구교환' },
-          'TEMPORARY_STOP': { color: 'red', text: '일시정지' },
+        const colorMap: Record<string, string> = {
+          'NORMAL_OPERATION': 'green',
+          'INSPECTION': 'orange',
+          'BREAKDOWN_REPAIR': 'red',
+          'PM_MAINTENANCE': 'orange',
+          'MODEL_CHANGE': 'blue',
+          'PLANNED_STOP': 'purple',
+          'PROGRAM_CHANGE': 'cyan',
+          'TOOL_CHANGE': 'magenta',
+          'TEMPORARY_STOP': 'red',
         };
-        const state = stateMap[value] || { color: 'default', text: value };
-        return <Tag color={state.color}>{state.text}</Tag>;
+        const color = colorMap[value] || 'default';
+        const text = t(`machines:states.${value}`, { defaultValue: value });
+        return <Tag color={color}>{text}</Tag>;
       },
     },
   ];
@@ -338,18 +341,18 @@ const MachinesBulkUpload: React.FC = () => {
 
   const steps = [
     {
-      title: '파일 선택',
-      description: 'Excel 파일을 업로드합니다',
+      title: t('bulkUpload.steps.selectFile.title'),
+      description: t('bulkUpload.steps.selectFile.description'),
       icon: <UploadOutlined />,
     },
     {
-      title: '데이터 미리보기',
-      description: '데이터 검증 및 미리보기를 확인합니다',
+      title: t('bulkUpload.steps.preview.title'),
+      description: t('bulkUpload.steps.preview.description'),
       icon: <EyeOutlined />,
     },
     {
-      title: '완료',
-      description: '설비 등록이 완료되었습니다',
+      title: t('bulkUpload.steps.complete.title'),
+      description: t('bulkUpload.steps.complete.description'),
       icon: <CheckCircleOutlined />,
     },
   ];
@@ -360,10 +363,10 @@ const MachinesBulkUpload: React.FC = () => {
         <div style={{ marginBottom: 24 }}>
           <Title level={3}>
             <FileExcelOutlined style={{ marginRight: 8 }} />
-            설비 일괄 등록
+            {t('bulkUpload.title')}
           </Title>
           <Paragraph type="secondary">
-            Excel 파일을 사용하여 여러 설비를 한 번에 등록할 수 있습니다.
+            {t('bulkUpload.description')}
           </Paragraph>
         </div>
 
@@ -374,34 +377,34 @@ const MachinesBulkUpload: React.FC = () => {
           <div>
             <Row gutter={24}>
               <Col xs={24} md={12}>
-                <Card title="1. 템플릿 다운로드" size="small" style={{ marginBottom: 16 }}>
+                <Card title={t('bulkUpload.cards.downloadTemplate')} size="small" style={{ marginBottom: 16 }}>
                   <Paragraph>
-                    먼저 Excel 템플릿을 다운로드하여 설비 정보를 입력하세요.
+                    {t('bulkUpload.instructions.downloadFirst')}
                   </Paragraph>
-                  <Button 
-                    type="primary" 
+                  <Button
+                    type="primary"
                     icon={<DownloadOutlined />}
                     onClick={handleDownloadTemplate}
                   >
-                    템플릿 다운로드
+                    {t('bulkUpload.buttons.downloadTemplate')}
                   </Button>
                 </Card>
               </Col>
-              
+
               <Col xs={24} md={12}>
-                <Card title="2. 파일 업로드" size="small" style={{ marginBottom: 16 }}>
+                <Card title={t('bulkUpload.cards.uploadFile')} size="small" style={{ marginBottom: 16 }}>
                   <Paragraph>
-                    작성한 Excel 파일을 업로드하세요.
+                    {t('bulkUpload.instructions.uploadFile')}
                   </Paragraph>
                   <Upload.Dragger {...uploadProps} style={{ marginBottom: 16 }}>
                     <p className="ant-upload-drag-icon">
                       <UploadOutlined />
                     </p>
                     <p className="ant-upload-text">
-                      클릭하거나 파일을 드래그하여 업로드
+                      {t('bulkUpload.upload.dragText')}
                     </p>
                     <p className="ant-upload-hint">
-                      .xlsx, .xls 파일만 지원 (최대 10MB)
+                      {t('bulkUpload.upload.hint')}
                     </p>
                   </Upload.Dragger>
                 </Card>
@@ -411,14 +414,14 @@ const MachinesBulkUpload: React.FC = () => {
             {fileList.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <Space>
-                  <Button 
-                    type="default" 
+                  <Button
+                    type="default"
                     size="large"
                     loading={uploading}
                     onClick={handlePreview}
                     icon={<EyeOutlined />}
                   >
-                    미리보기
+                    {t('bulkUpload.buttons.preview')}
                   </Button>
                 </Space>
               </div>
@@ -433,8 +436,8 @@ const MachinesBulkUpload: React.FC = () => {
             {uploadResult.success && previewData.length > 0 && (
               <div>
                 <Alert
-                  message="데이터 미리보기"
-                  description={`총 ${uploadResult.total_rows}행의 데이터가 성공적으로 검증되었습니다.`}
+                  message={t('bulkUpload.alerts.previewTitle')}
+                  description={t('bulkUpload.alerts.previewDescription', { count: uploadResult.total_rows })}
                   type="success"
                   showIcon
                   style={{ marginBottom: 16 }}
@@ -442,7 +445,7 @@ const MachinesBulkUpload: React.FC = () => {
 
                 {uploadResult.warnings && uploadResult.warnings.length > 0 && (
                   <Alert
-                    message="경고 사항"
+                    message={t('bulkUpload.alerts.warningTitle')}
                     description={
                       <ul>
                         {uploadResult.warnings.map((warning, index) => (
@@ -456,7 +459,7 @@ const MachinesBulkUpload: React.FC = () => {
                   />
                 )}
 
-                <Card title="등록될 설비 목록" style={{ marginBottom: 16 }}>
+                <Card title={t('bulkUpload.cards.previewList')} style={{ marginBottom: 16 }}>
                   <Table
                     columns={previewColumns}
                     dataSource={previewData}
@@ -465,24 +468,24 @@ const MachinesBulkUpload: React.FC = () => {
                     pagination={{
                       pageSize: 10,
                       showSizeChanger: true,
-                      showTotal: (total) => `총 ${total}개 설비`,
+                      showTotal: (total) => t('common:pagination.totalMachines', { total }),
                     }}
                     scroll={{ x: 1000 }}
                   />
                 </Card>
 
                 <Space>
-                  <Button 
-                    type="primary" 
+                  <Button
+                    type="primary"
                     size="large"
                     loading={confirming}
                     onClick={handleUpload}
                     icon={<SaveOutlined />}
                   >
-                    등록 확정
+                    {t('bulkUpload.buttons.confirmUpload')}
                   </Button>
                   <Button onClick={handleRestart} icon={<ReloadOutlined />}>
-                    다시 시작
+                    {t('bulkUpload.buttons.restart')}
                   </Button>
                 </Space>
               </div>
@@ -492,8 +495,11 @@ const MachinesBulkUpload: React.FC = () => {
             {!uploadResult.success && (
               <div>
                 <Alert
-                  message="데이터 검증 오류"
-                  description={`총 ${uploadResult.total_rows}행 중 ${uploadResult.error_rows}행에서 오류가 발견되었습니다.`}
+                  message={t('bulkUpload.alerts.validationErrorTitle')}
+                  description={t('bulkUpload.alerts.validationErrorDescription', {
+                    totalRows: uploadResult.total_rows,
+                    errorRows: uploadResult.error_rows,
+                  })}
                   type="error"
                   showIcon
                   style={{ marginBottom: 16 }}
@@ -501,10 +507,10 @@ const MachinesBulkUpload: React.FC = () => {
 
                 {uploadResult.duplicate_names && uploadResult.duplicate_names.length > 0 && (
                   <Alert
-                    message="중복된 설비명"
+                    message={t('bulkUpload.alerts.duplicateNamesTitle')}
                     description={
                       <div>
-                        <p>이미 등록된 설비가 있습니다:</p>
+                        <p>{t('bulkUpload.alerts.duplicateNamesDescription')}</p>
                         <div style={{ marginTop: 8 }}>
                           {uploadResult.duplicate_names.map((name: string) => (
                             <Tag key={name} color="red" style={{ margin: '2px' }}>
@@ -521,7 +527,7 @@ const MachinesBulkUpload: React.FC = () => {
                 )}
 
                 {validationErrors.length > 0 && (
-                  <Card title="검증 오류 상세" style={{ marginBottom: 16 }}>
+                  <Card title={t('bulkUpload.cards.errorDetail')} style={{ marginBottom: 16 }}>
                     <Table
                       columns={errorColumns}
                       dataSource={validationErrors}
@@ -530,7 +536,7 @@ const MachinesBulkUpload: React.FC = () => {
                       pagination={{
                         pageSize: 10,
                         showSizeChanger: true,
-                        showTotal: (total) => `총 ${total}개 오류`,
+                        showTotal: (total) => t('common:pagination.totalErrors', { total }),
                       }}
                       scroll={{ x: 700 }}
                     />
@@ -539,7 +545,7 @@ const MachinesBulkUpload: React.FC = () => {
 
                 <Space>
                   <Button onClick={handleRestart} icon={<ReloadOutlined />}>
-                    다시 시작
+                    {t('bulkUpload.buttons.restart')}
                   </Button>
                 </Space>
               </div>
@@ -551,11 +557,11 @@ const MachinesBulkUpload: React.FC = () => {
         {currentStep === 2 && uploadResult && uploadResult.success && (
           <div>
             <Alert
-              message="업로드 완료"
+              message={t('bulkUpload.alerts.completeTitle')}
               description={
                 <div>
                   <p>{uploadResult.message}</p>
-                  <p>등록된 설비 수: <strong>{uploadResult.inserted_count}개</strong></p>
+                  <p>{t('bulkUpload.alerts.insertedCountLabel')}: <strong>{uploadResult.inserted_count}{t('bulkUpload.units.piece')}</strong></p>
                 </div>
               }
               type="success"
@@ -565,7 +571,7 @@ const MachinesBulkUpload: React.FC = () => {
 
             <Space>
               <Button type="primary" onClick={handleRestart} icon={<ReloadOutlined />}>
-                새로 등록하기
+                {t('bulkUpload.buttons.registerNew')}
               </Button>
             </Space>
           </div>
@@ -577,8 +583,8 @@ const MachinesBulkUpload: React.FC = () => {
             <Spin size="large" />
             <div style={{ marginTop: 16 }}>
               <Text>
-                {uploading && '파일을 분석하고 있습니다...'}
-                {confirming && '설비를 등록하고 있습니다...'}
+                {uploading && t('bulkUpload.loading.analyzing')}
+                {confirming && t('bulkUpload.loading.registering')}
               </Text>
             </div>
           </div>

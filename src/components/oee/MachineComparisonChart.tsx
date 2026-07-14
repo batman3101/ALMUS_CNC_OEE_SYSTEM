@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Button, Space, Table, Empty, Spin, Checkbox, Tag, Pagination } from 'antd';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { BarChartOutlined, LineChartOutlined } from '@ant-design/icons';
+import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 interface MachineComparisonData {
   machine_name: string;
@@ -38,17 +39,9 @@ const METRIC_COLORS = {
   quality: '#f5222d'
 };
 
-// 지표 라벨
-const METRIC_LABELS = {
-  oee: 'OEE',
-  availability: '가용성',
-  performance: '성능',
-  quality: '품질'
-};
-
 export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   data = [],
-  title = '설비간 성능 비교',
+  title,
   height = 400,
   chartType = 'bar',
   selectedMetrics = ['oee', 'availability', 'performance', 'quality'],
@@ -57,6 +50,15 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   onChartTypeChange,
   onMetricsChange
 }) => {
+  const { t } = useDashboardTranslation();
+  const displayTitle = title ?? t('chart.machinePerformanceComparison');
+  // 지표 라벨
+  const METRIC_LABELS: Record<'oee' | 'availability' | 'performance' | 'quality', string> = {
+    oee: t('comparisonChart.oee'),
+    availability: t('comparisonChart.availability'),
+    performance: t('comparisonChart.performance'),
+    quality: t('comparisonChart.quality')
+  };
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [localSelectedMetrics, setLocalSelectedMetrics] = useState<('oee' | 'availability' | 'performance' | 'quality')[]>(selectedMetrics);
@@ -166,7 +168,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   // 테이블 컬럼
   const tableColumns = [
     {
-      title: '순위',
+      title: t('chart.rank'),
       dataIndex: 'ranking',
       key: 'ranking',
       width: 60,
@@ -175,13 +177,13 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
       )
     },
     {
-      title: '설비명',
+      title: t('comparisonChart.machineName'),
       dataIndex: 'machine_name',
       key: 'machine_name',
       width: 100
     },
     {
-      title: '위치',
+      title: t('comparisonChart.location'),
       dataIndex: 'location',
       key: 'location',
       width: 80
@@ -199,7 +201,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
       sorter: (a: MachineComparisonData, b: MachineComparisonData) => a.oee - b.oee
     },
     {
-      title: '가용성 (%)',
+      title: `${t('comparisonChart.availability')} (%)`,
       dataIndex: 'availability',
       key: 'availability',
       width: 90,
@@ -207,7 +209,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
       sorter: (a: MachineComparisonData, b: MachineComparisonData) => a.availability - b.availability
     },
     {
-      title: '성능 (%)',
+      title: `${t('comparisonChart.performance')} (%)`,
       dataIndex: 'performance',
       key: 'performance',
       width: 80,
@@ -215,7 +217,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
       sorter: (a: MachineComparisonData, b: MachineComparisonData) => a.performance - b.performance
     },
     {
-      title: '품질 (%)',
+      title: `${t('comparisonChart.quality')} (%)`,
       dataIndex: 'quality',
       key: 'quality',
       width: 80,
@@ -223,7 +225,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
       sorter: (a: MachineComparisonData, b: MachineComparisonData) => a.quality - b.quality
     },
     {
-      title: '생산량',
+      title: t('chart.production'),
       dataIndex: 'output_qty',
       key: 'output_qty',
       width: 80,
@@ -233,9 +235,9 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
 
   if (loading) {
     return (
-      <Card title={title}>
+      <Card title={displayTitle}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: height }}>
-          <Spin size="large" tip="데이터 로딩 중..." />
+          <Spin size="large" tip={t('adminDashboard.dataLoading')} />
         </div>
       </Card>
     );
@@ -243,9 +245,9 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
 
   if (data.length === 0) {
     return (
-      <Card title={title}>
-        <Empty 
-          description="비교할 설비 데이터가 없습니다"
+      <Card title={displayTitle}>
+        <Empty
+          description={t('charts.noComparisonData')}
           style={{ height: height, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
         />
       </Card>
@@ -253,22 +255,22 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   }
 
   return (
-    <Card 
-      title={title}
+    <Card
+      title={displayTitle}
       extra={
         <Space>
           <Button
             icon={chartType === 'bar' ? <BarChartOutlined /> : <LineChartOutlined />}
             onClick={() => onChartTypeChange?.(chartType === 'bar' ? 'line' : 'bar')}
           >
-            {chartType === 'bar' ? '막대' : '선'}
+            {chartType === 'bar' ? t('chartTypes.bar') : t('chartTypes.line')}
           </Button>
         </Space>
       }
     >
       {/* 지표 선택 */}
       <div style={{ marginBottom: 16, padding: '12px', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px' }}>
-        <span style={{ marginRight: 8, fontWeight: 500, color: '#ffffff' }}>표시 지표:</span>
+        <span style={{ marginRight: 8, fontWeight: 500, color: '#ffffff' }}>{t('comparisonChart.displayMetrics')}:</span>
         <Checkbox.Group
           value={localSelectedMetrics}
           onChange={handleMetricsChange}
@@ -299,11 +301,11 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
               <div key={metric}>
                 <span style={{ fontSize: 12, color: '#999' }}>{METRIC_LABELS[metric]}</span>
                 <div style={{ fontSize: 14, color: '#ffffff' }}>
-                  평균: <span style={{ color: METRIC_COLORS[metric] }}>{stats[metric].avg.toFixed(1)}%</span>
+                  {t('charts.avg')}: <span style={{ color: METRIC_COLORS[metric] }}>{stats[metric].avg.toFixed(1)}%</span>
                   {' | '}
-                  최고: <span style={{ color: '#52c41a' }}>{stats[metric].max.toFixed(1)}%</span>
+                  {t('charts.max')}: <span style={{ color: '#52c41a' }}>{stats[metric].max.toFixed(1)}%</span>
                   {' | '}
-                  최저: <span style={{ color: '#ff4d4f' }}>{stats[metric].min.toFixed(1)}%</span>
+                  {t('charts.min')}: <span style={{ color: '#ff4d4f' }}>{stats[metric].min.toFixed(1)}%</span>
                 </div>
               </div>
             ))}
@@ -327,7 +329,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
             pageSize={pageSize}
             showSizeChanger
             showQuickJumper
-            showTotal={(total, range) => `${range[0]}-${range[1]} / 총 ${total}개 설비`}
+            showTotal={(total, range) => t('common:pagination.machinesRange', { start: range[0], end: range[1], total })}
             pageSizeOptions={['5', '10', '20', '50']}
             onChange={(page, size) => {
               setCurrentPage(page);

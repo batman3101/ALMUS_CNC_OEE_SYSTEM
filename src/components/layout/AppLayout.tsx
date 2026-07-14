@@ -125,7 +125,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 icon={<UserOutlined />}
                 size={screens.xs ? 'small' : 'middle'}
               >
-                {!screens.xs && (user?.name || user?.email || '사용자')}
+                {!screens.xs && (user?.name || user?.email || t('common.user'))}
               </Button>
             </Dropdown>
           </div>

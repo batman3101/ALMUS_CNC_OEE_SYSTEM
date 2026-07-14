@@ -140,7 +140,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
         callbacks: {
           label: function(context) {
             if (context.dataset.type === 'bar') {
-              return `${context.dataset.label}: ${context.parsed.y}분`;
+              return `${context.dataset.label}: ${context.parsed.y}${t('dashboard:chart.minutes')}`;
             } else {
               return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}%`;
             }

@@ -107,14 +107,14 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
                 onClick={() => handleQuickExport('pdf')}
                 loading={loading}
               >
-                PDF 보고서
+                {t('buttons.pdfExport')}
               </Button>
               <Button
                 icon={<FileExcelOutlined />}
                 onClick={() => handleQuickExport('excel')}
                 loading={loading}
               >
-                Excel 보고서
+                {t('buttons.excelExport')}
               </Button>
             </Space>
           </div>

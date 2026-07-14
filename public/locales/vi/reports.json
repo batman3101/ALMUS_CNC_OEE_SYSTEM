@@ -34,7 +34,8 @@
       "status": "Trạng thái",
       "output": "Sản lượng",
       "defects": "Lỗi"
-    }
+    },
+    "machineCountValue": "{{count}} máy"
   },
   "previewModal": {
     "daily": "Xem trước báo cáo hàng ngày",
@@ -64,12 +65,14 @@
   "quickExport": "Xuất nhanh",
   "customReport": "Báo cáo tùy chỉnh",
   "units": {
-    "machines": "",
     "pieces": "cái"
   },
   "common": {
     "close": "Đóng",
     "running": "Đang chạy",
     "stopped": "Dừng"
+  },
+  "errors": {
+    "fetchMachinesFailed": "Không thể tải dữ liệu thiết bị"
   }
 }

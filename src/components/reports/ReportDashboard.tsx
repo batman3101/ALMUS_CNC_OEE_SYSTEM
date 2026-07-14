@@ -477,7 +477,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     <strong>{t('preview.period')}:</strong> {previewData.period}
                   </Col>
                   <Col span={12}>
-                    <strong>{t('preview.machineCount')}:</strong> {previewData.machines.length}{t('units.machines')}
+                    {/* 단위 접미사를 코드에서 붙이면 공백/어순을 로케일이 제어할 수 없다 ('800대' vs '800 máy') */}
+                    <strong>{t('preview.machineCount')}:</strong> {t('preview.machineCountValue', { count: previewData.machines.length })}
                   </Col>
                 </Row>
               </Card>

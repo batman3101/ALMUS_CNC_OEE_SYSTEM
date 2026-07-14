@@ -37,6 +37,7 @@ import { useUserProfiles } from '@/hooks/useUserProfiles';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import type { ShiftProductionData, DowntimeEntry, DailyProductionData } from '@/types/dataInput';
 import { DOWNTIME_REASON_KEYS } from '@/types/dataInput';
+import { formatMachineLocation } from '@/utils/machineLocation';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -959,7 +960,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
                   <Option key={machine.id} value={machine.id}>
                     {machine.name}
                     <span style={{ color: '#8c8c8c', fontSize: '12px', marginLeft: '8px' }}>
-                      - {machine.location}
+                      - {formatMachineLocation(machine.location, t)}
                     </span>
                   </Option>
                 ))}

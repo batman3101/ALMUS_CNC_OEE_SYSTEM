@@ -32,13 +32,15 @@ import {
   OEEAggregationResult,
   summarizeAggregationResults
 } from '@/utils/oeeAggregation';
+import { useAdminTranslation } from '@/hooks/useTranslation';
 
 interface OEEAggregationManagerProps {
   className?: string;
 }
 
 const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className }) => {
-  
+  const { t } = useAdminTranslation();
+
   // 상태 관리
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<AggregationLogEntry[]>([]);
@@ -83,7 +85,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
       setLogs(logData);
     } catch (error) {
       console.error('Error loading aggregation logs:', error);
-      message.error('집계 로그를 불러오는데 실패했습니다.');
+      message.error(t('aggregation.messages.loadLogsFailed'));
     }
   };
 
@@ -105,15 +107,15 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
       const result = await OEEAggregationService.triggerDailyAggregation(dateStr);
       
       if (result.success) {
-        message.success(`${dateStr} 날짜의 OEE 집계가 완료되었습니다. (${result.processed_records}개 레코드 처리)`);
+        message.success(t('aggregation.messages.singleDone', { date: dateStr, count: result.processed_records }));
         loadAggregationLogs();
         findMissingAggregations();
       } else {
-        message.error(`집계 실패: ${result.error}`);
+        message.error(t('aggregation.messages.singleFailed', { error: result.error }));
       }
     } catch (error) {
       console.error('Error triggering aggregation:', error);
-      message.error('집계 실행 중 오류가 발생했습니다.');
+      message.error(t('aggregation.messages.executionError'));
     } finally {
       setLoading(false);
     }
@@ -121,7 +123,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
 
   const handleBatchAggregation = async () => {
     if (missingDates.length === 0) {
-      message.info('집계가 필요한 날짜가 없습니다.');
+      message.info(t('aggregation.messages.noMissingDates'));
       return;
     }
 
@@ -148,15 +150,18 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
 
       const summary = summarizeAggregationResults(results);
       message.success(
-        `일괄 집계 완료: ${summary.successfulDates}/${summary.totalDates} 성공, ` +
-        `총 ${summary.totalRecordsProcessed}개 레코드 처리`
+        t('aggregation.messages.batchDone', {
+          successful: summary.successfulDates,
+          total: summary.totalDates,
+          recordsProcessed: summary.totalRecordsProcessed
+        })
       );
 
       loadAggregationLogs();
       findMissingAggregations();
     } catch (error) {
       console.error('Error in batch aggregation:', error);
-      message.error('일괄 집계 중 오류가 발생했습니다.');
+      message.error(t('aggregation.messages.batchError'));
     }
   };
 
@@ -181,9 +186,9 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
     };
     
     const labels = {
-      started: '진행중',
-      completed: '완료',
-      failed: '실패'
+      started: t('aggregation.status.started'),
+      completed: t('aggregation.status.completed'),
+      failed: t('aggregation.status.failed')
     };
 
     return (
@@ -195,57 +200,57 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
 
   const columns: ColumnsType<AggregationLogEntry> = [
     {
-      title: '대상 날짜',
+      title: t('aggregation.columns.targetDate'),
       dataIndex: 'target_date',
       key: 'target_date',
       render: (date: string) => dayjs(date).format('YYYY-MM-DD'),
-      sorter: (a: AggregationLogEntry, b: AggregationLogEntry) => 
+      sorter: (a: AggregationLogEntry, b: AggregationLogEntry) =>
         dayjs(a.target_date).unix() - dayjs(b.target_date).unix(),
     },
     {
-      title: '실행 시간',
+      title: t('aggregation.columns.executedAt'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (datetime: string) => dayjs(datetime).format('MM-DD HH:mm:ss'),
-      sorter: (a: AggregationLogEntry, b: AggregationLogEntry) => 
+      sorter: (a: AggregationLogEntry, b: AggregationLogEntry) =>
         dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
     },
     {
-      title: '상태',
+      title: t('aggregation.columns.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => getStatusTag(status),
       filters: [
-        { text: '진행중', value: 'started' },
-        { text: '완료', value: 'completed' },
-        { text: '실패', value: 'failed' },
+        { text: t('aggregation.status.started'), value: 'started' },
+        { text: t('aggregation.status.completed'), value: 'completed' },
+        { text: t('aggregation.status.failed'), value: 'failed' },
       ],
       onFilter: (value: React.Key | boolean, record: AggregationLogEntry) => record.status === value,
     },
     {
-      title: '처리 레코드',
+      title: t('aggregation.columns.processedRecords'),
       dataIndex: 'processed_records',
       key: 'processed_records',
       render: (count: number) => count.toLocaleString(),
-      sorter: (a: AggregationLogEntry, b: AggregationLogEntry) => 
+      sorter: (a: AggregationLogEntry, b: AggregationLogEntry) =>
         a.processed_records - b.processed_records,
     },
     {
-      title: '실행 시간',
+      title: t('aggregation.columns.executionTime'),
       dataIndex: 'execution_time_ms',
       key: 'execution_time_ms',
-      render: (time: number | null) => 
-        time ? `${(time / 1000).toFixed(1)}초` : '-',
+      render: (time: number | null) =>
+        time ? t('modelInfo:단위.초값', { n: (time / 1000).toFixed(1) }) : '-',
     },
     {
-      title: '오류 메시지',
+      title: t('aggregation.columns.errorMessage'),
       dataIndex: 'error_message',
       key: 'error_message',
-      render: (error: string | null) => 
+      render: (error: string | null) =>
         error ? (
           <Tooltip title={error}>
             <span style={{ color: '#ff4d4f', cursor: 'pointer' }}>
-              오류 확인
+              {t('aggregation.columns.checkError')}
             </span>
           </Tooltip>
         ) : '-',
@@ -256,8 +261,8 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
     return (
       <Card className={className}>
         <Alert
-          message="접근 권한 없음"
-          description="OEE 집계 관리는 관리자만 접근할 수 있습니다."
+          message={t('aggregation.noPermission.title')}
+          description={t('aggregation.noPermission.description')}
           type="warning"
           showIcon
         />
@@ -272,7 +277,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
         <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic
-              title="집계 필요 날짜"
+              title={t('aggregation.stats.missingDates')}
               value={missingDates.length}
               valueStyle={{ color: missingDates.length > 0 ? '#cf1322' : '#3f8600' }}
               prefix={<HistoryOutlined />}
@@ -283,7 +288,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
         <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic
-              title="최근 성공 집계"
+              title={t('aggregation.stats.recentSuccess')}
               value={logs.filter(log => log.status === 'completed').length}
               valueStyle={{ color: '#3f8600' }}
               prefix={<CheckCircleOutlined />}
@@ -294,7 +299,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
         <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic
-              title="최근 실패 집계"
+              title={t('aggregation.stats.recentFailed')}
               value={logs.filter(log => log.status === 'failed').length}
               valueStyle={{ color: '#cf1322' }}
               prefix={<ExclamationCircleOutlined />}
@@ -305,7 +310,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
         <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic
-              title="총 처리 레코드"
+              title={t('aggregation.stats.totalProcessed')}
               value={logs.reduce((sum, log) => sum + log.processed_records, 0)}
               prefix={<PlayCircleOutlined />}
             />
@@ -314,10 +319,10 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
       </Row>
 
       {/* 집계 실행 섹션 */}
-      <Card title="OEE 집계 실행" style={{ marginTop: 16 }}>
+      <Card title={t('aggregation.cards.executionTitle')} style={{ marginTop: 16 }}>
         {missingDates.length > 0 && (
           <Alert
-            message={`집계가 필요한 날짜: ${missingDates.join(', ')}`}
+            message={t('aggregation.alerts.missingDatesMessage', { dates: missingDates.join(', ') })}
             type="warning"
             showIcon
             style={{ marginBottom: 16 }}
@@ -328,7 +333,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
                 onClick={handleBatchAggregation}
                 icon={<PlayCircleOutlined />}
               >
-                일괄 집계
+                {t('aggregation.buttons.batchAggregation')}
               </Button>
             }
           />
@@ -339,10 +344,10 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
             value={selectedDate}
             onChange={setSelectedDate}
             format="YYYY-MM-DD"
-            placeholder="집계할 날짜 선택"
+            placeholder={t('aggregation.placeholders.selectDate')}
             disabledDate={(current) => current && current > dayjs().endOf('day')}
           />
-          
+
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
@@ -350,7 +355,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
             onClick={handleSingleAggregation}
             disabled={!selectedDate}
           >
-            단일 집계 실행
+            {t('aggregation.buttons.singleAggregation')}
           </Button>
 
           <Button
@@ -360,13 +365,13 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
               findMissingAggregations();
             }}
           >
-            새로고침
+            {t('table.refresh')}
           </Button>
         </Space>
       </Card>
 
       {/* 집계 로그 테이블 */}
-      <Card title="집계 실행 로그" style={{ marginTop: 16 }}>
+      <Card title={t('aggregation.cards.logsTitle')} style={{ marginTop: 16 }}>
         <Table
           columns={columns}
           dataSource={logs}
@@ -375,8 +380,8 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
             pageSize: 10,
             showSizeChanger: true,
             showQuickJumper: true,
-            showTotal: (total, range) => 
-              `${range[0]}-${range[1]} / 총 ${total}개`,
+            showTotal: (total, range) =>
+              t('aggregation.table.showTotal', { start: range[0], end: range[1], total }),
           }}
           scroll={{ x: 800 }}
         />
@@ -384,13 +389,13 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
 
       {/* 일괄 집계 진행 모달 */}
       <Modal
-        title="일괄 OEE 집계 진행 상황"
+        title={t('aggregation.modal.batchTitle')}
         open={batchModalVisible}
         onCancel={() => setBatchModalVisible(false)}
         footer={
           batchProgress.current === batchProgress.total ? [
             <Button key="close" onClick={() => setBatchModalVisible(false)}>
-              닫기
+              {t('aggregation.buttons.close')}
             </Button>
           ] : null
         }
@@ -409,25 +414,25 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
             {batchProgress.current < batchProgress.total ? (
               <Spin>
                 <div style={{ padding: 20 }}>
-                  집계 진행 중... ({batchProgress.current}/{batchProgress.total})
+                  {t('aggregation.messages.inProgress', { current: batchProgress.current, total: batchProgress.total })}
                 </div>
               </Spin>
             ) : (
               <div>
                 <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 24 }} />
-                <div style={{ marginTop: 8 }}>일괄 집계가 완료되었습니다!</div>
+                <div style={{ marginTop: 8 }}>{t('aggregation.messages.batchCompleted')}</div>
               </div>
             )}
           </div>
 
           {batchProgress.results.length > 0 && (
             <div style={{ marginTop: 16, textAlign: 'left' }}>
-              <h4>집계 결과:</h4>
+              <h4>{t('aggregation.messages.resultsHeading')}</h4>
               {batchProgress.results.map((result, index) => (
                 <div key={index} style={{ marginBottom: 4 }}>
-                  {result.date}: {result.success ? 
-                    <Tag color="success">성공 ({result.processed_records}개)</Tag> :
-                    <Tag color="error">실패</Tag>
+                  {result.date}: {result.success ?
+                    <Tag color="success">{t('aggregation.messages.successCount', { count: result.processed_records })}</Tag> :
+                    <Tag color="error">{t('aggregation.status.failed')}</Tag>
                   }
                 </div>
               ))}

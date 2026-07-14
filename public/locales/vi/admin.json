@@ -123,10 +123,210 @@
     "updatedAt": "Ngày cập nhật",
     "assignedMachinesCount": " thiết bị"
   },
+  "bulkUpload": {
+    "title": "Đăng ký thiết bị hàng loạt",
+    "description": "Bạn có thể sử dụng file Excel để đăng ký nhiều thiết bị cùng lúc.",
+    "steps": {
+      "selectFile": {
+        "title": "Chọn file",
+        "description": "Tải lên file Excel"
+      },
+      "preview": {
+        "title": "Xem trước dữ liệu",
+        "description": "Kiểm tra xác thực và xem trước dữ liệu"
+      },
+      "complete": {
+        "title": "Hoàn thành",
+        "description": "Đăng ký thiết bị đã hoàn thành"
+      }
+    },
+    "cards": {
+      "downloadTemplate": "1. Tải mẫu Excel",
+      "uploadFile": "2. Tải lên file",
+      "previewList": "Danh sách thiết bị sẽ đăng ký",
+      "errorDetail": "Chi tiết lỗi xác thực"
+    },
+    "instructions": {
+      "downloadFirst": "Trước tiên, hãy tải mẫu Excel xuống và nhập thông tin thiết bị.",
+      "uploadFile": "Tải lên file Excel đã điền thông tin."
+    },
+    "buttons": {
+      "downloadTemplate": "Tải mẫu Excel",
+      "preview": "Xem trước",
+      "confirmUpload": "Xác nhận đăng ký",
+      "restart": "Bắt đầu lại",
+      "registerNew": "Đăng ký mới"
+    },
+    "upload": {
+      "dragText": "Nhấp hoặc kéo thả file để tải lên",
+      "hint": "Chỉ hỗ trợ file .xlsx, .xls (tối đa 10MB)"
+    },
+    "messages": {
+      "templateDownloaded": "Mẫu Excel đã được tải xuống.",
+      "templateDownloadError": "Đã xảy ra lỗi khi tải mẫu Excel.",
+      "selectFileFirst": "Vui lòng chọn file để tải lên.",
+      "previewSuccess": "Xem trước dữ liệu đã hoàn thành.",
+      "previewError": "Đã xảy ra lỗi khi xem trước.",
+      "previewCatchError": "Đã xảy ra lỗi khi xem trước file.",
+      "uploadError": "Đã xảy ra lỗi khi tải lên.",
+      "uploadCatchError": "Đã xảy ra lỗi khi tải lên file.",
+      "invalidFileType": "Chỉ có thể tải lên file Excel (.xlsx, .xls).",
+      "fileSizeExceeded": "Kích thước file không được vượt quá 10MB."
+    },
+    "alerts": {
+      "previewTitle": "Xem trước dữ liệu",
+      "previewDescription": "Đã xác thực thành công {{count}} dòng dữ liệu.",
+      "warningTitle": "Cảnh báo",
+      "validationErrorTitle": "Lỗi xác thực dữ liệu",
+      "validationErrorDescription": "Phát hiện lỗi ở {{errorRows}} trong tổng số {{totalRows}} dòng.",
+      "duplicateNamesTitle": "Tên thiết bị trùng lặp",
+      "duplicateNamesDescription": "Đã tồn tại thiết bị được đăng ký:",
+      "completeTitle": "Tải lên hoàn tất",
+      "insertedCountLabel": "Số thiết bị đã đăng ký"
+    },
+    "loading": {
+      "analyzing": "Đang phân tích file...",
+      "registering": "Đang đăng ký thiết bị..."
+    },
+    "columns": {
+      "row": "Số dòng",
+      "field": "Trường",
+      "message": "Nội dung lỗi",
+      "value": "Giá trị đã nhập",
+      "emptyValue": "(Trống)",
+      "equipmentType": "Loại thiết bị",
+      "activeStatus": "Trạng thái hoạt động",
+      "currentState": "Trạng thái hiện tại"
+    },
+    "units": {
+      "piece": "cái"
+    }
+  },
   "roles": {
     "admin": "Quản trị hệ thống",
     "engineer": "Người quản lý",
     "operator": "Người dùng",
     "user": "Người dùng"
+  },
+  "aggregation": {
+    "noPermission": {
+      "title": "Không có quyền truy cập",
+      "description": "Chỉ quản trị viên mới có thể truy cập quản lý tổng hợp OEE."
+    },
+    "stats": {
+      "missingDates": "Ngày cần tổng hợp",
+      "recentSuccess": "Tổng hợp thành công gần đây",
+      "recentFailed": "Tổng hợp thất bại gần đây",
+      "totalProcessed": "Tổng số bản ghi đã xử lý"
+    },
+    "cards": {
+      "executionTitle": "Thực hiện tổng hợp OEE",
+      "logsTitle": "Nhật ký thực hiện tổng hợp"
+    },
+    "alerts": {
+      "missingDatesMessage": "Ngày cần tổng hợp: {{dates}}"
+    },
+    "buttons": {
+      "batchAggregation": "Tổng hợp hàng loạt",
+      "singleAggregation": "Thực hiện tổng hợp đơn lẻ",
+      "close": "Đóng"
+    },
+    "placeholders": {
+      "selectDate": "Chọn ngày cần tổng hợp"
+    },
+    "columns": {
+      "targetDate": "Ngày mục tiêu",
+      "executedAt": "Thời gian thực hiện",
+      "status": "Trạng thái",
+      "processedRecords": "Bản ghi đã xử lý",
+      "executionTime": "Thời gian thực hiện",
+      "errorMessage": "Thông báo lỗi",
+      "checkError": "Xem lỗi"
+    },
+    "status": {
+      "started": "Đang xử lý",
+      "completed": "Hoàn thành",
+      "failed": "Thất bại"
+    },
+    "table": {
+      "showTotal": "{{start}}-{{end}} / Tổng {{total}} mục"
+    },
+    "modal": {
+      "batchTitle": "Tiến trình tổng hợp OEE hàng loạt"
+    },
+    "messages": {
+      "loadLogsFailed": "Không thể tải nhật ký tổng hợp.",
+      "singleDone": "Đã hoàn tất tổng hợp OEE cho ngày {{date}}. (Đã xử lý {{count}} bản ghi)",
+      "singleFailed": "Tổng hợp thất bại: {{error}}",
+      "executionError": "Đã xảy ra lỗi khi thực hiện tổng hợp.",
+      "noMissingDates": "Không có ngày nào cần tổng hợp.",
+      "batchDone": "Hoàn tất tổng hợp hàng loạt: {{successful}}/{{total}} thành công, đã xử lý tổng {{recordsProcessed}} bản ghi",
+      "batchError": "Đã xảy ra lỗi khi tổng hợp hàng loạt.",
+      "inProgress": "Đang tổng hợp... ({{current}}/{{total}})",
+      "batchCompleted": "Đã hoàn tất tổng hợp hàng loạt!",
+      "resultsHeading": "Kết quả tổng hợp:",
+      "successCount": "Thành công ({{count}} bản ghi)"
+    }
+  },
+  "setupUser": {
+    "page": {
+      "title": "Thiết lập tài khoản người dùng thực tế"
+    },
+    "alerts": {
+      "title": "Đăng ký tài khoản thực tế",
+      "description": "Đăng ký người dùng thực tế đã có trong Supabase Authentication vào bảng user_profiles để có thể truy cập hệ thống."
+    },
+    "cards": {
+      "newUserTitle": "Đăng ký người dùng mới",
+      "userListTitle": "Danh sách người dùng Authentication"
+    },
+    "fields": {
+      "email": "Email",
+      "name": "Tên người dùng",
+      "role": "Vai trò"
+    },
+    "placeholders": {
+      "email": "Địa chỉ email người dùng thực tế",
+      "name": "Tên người dùng thực tế"
+    },
+    "validation": {
+      "emailRequired": "Vui lòng nhập email",
+      "emailInvalid": "Định dạng email không hợp lệ",
+      "nameRequired": "Vui lòng nhập tên người dùng",
+      "roleRequired": "Vui lòng chọn vai trò"
+    },
+    "roleOptions": {
+      "admin": "Quản trị viên (Admin)",
+      "engineer": "Kỹ sư (Engineer)",
+      "operator": "Người vận hành (Operator)"
+    },
+    "buttons": {
+      "register": "Đăng ký người dùng"
+    },
+    "columns": {
+      "createdAt": "Ngày tham gia",
+      "emailVerified": "Xác thực email",
+      "profileStatus": "Trạng thái hồ sơ",
+      "lastLogin": "Lần đăng nhập cuối"
+    },
+    "tags": {
+      "verified": "Đã xác thực",
+      "unverified": "Chưa xác thực",
+      "registered": "Đã đăng ký",
+      "unregistered": "Chưa đăng ký"
+    },
+    "table": {
+      "showTotal": "Tổng {{total}} người dùng"
+    },
+    "tips": {
+      "selectUnregistered": "💡 Mẹo: Nhấp vào người dùng chưa có hồ sơ (chưa đăng ký) để tự động điền email."
+    },
+    "messages": {
+      "usersFound": "Đã tìm thấy {{count}} người dùng",
+      "fetchUsersFailed": "Không thể tải danh sách người dùng",
+      "userRegistered": "Đã đăng ký người dùng thành công!",
+      "userRegisterFailed": "Không thể đăng ký người dùng",
+      "userRegisterError": "Đã xảy ra lỗi khi đăng ký người dùng"
+    }
   }
 }

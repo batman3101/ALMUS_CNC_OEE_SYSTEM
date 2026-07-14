@@ -4,12 +4,14 @@ import React from 'react';
 import { Spin, Card, Typography } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useCommonTranslation } from '@/hooks/useTranslation';
 import styles from './login.module.css';
 
 const { Title, Text } = Typography;
 
 const LoginLoading: React.FC = () => {
   const { getCompanyInfo, isLoading } = useSystemSettings();
+  const { t } = useCommonTranslation();
   const companyInfo = getCompanyInfo();
   
   return (
@@ -27,7 +29,7 @@ const LoginLoading: React.FC = () => {
                   {isLoading ? 'Loading...' : companyInfo.name}
                 </Title>
                 <Text className={styles.subtitle}>
-                  모니터링 시스템
+                  {t('app.monitoringSystem')}
                 </Text>
               </div>
               
@@ -37,7 +39,7 @@ const LoginLoading: React.FC = () => {
                 />
                 <div style={{ marginTop: 16 }}>
                   <Text style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '14px' }}>
-                    로그인 페이지를 준비하는 중...
+                    {t('auth.preparingLoginPage')}
                   </Text>
                 </div>
               </div>
@@ -52,10 +54,10 @@ const LoginLoading: React.FC = () => {
               <Spin size="large" />
             </div>
             <Title level={3} style={{ marginBottom: 16 }}>
-              로딩 중...
+              {t('app.loading')}
             </Title>
             <Text type="secondary">
-              잠시만 기다려주세요
+              {t('auth.pleaseWait')}
             </Text>
           </div>
         </div>

@@ -89,7 +89,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       setProcesses(data || []);
     } catch (error) {
       console.error('공정 조회 오류:', error);
-      message.error('공정 목록을 불러오는데 실패했습니다');
+      message.error(t('에러.공정목록조회실패'));
     }
   };
 
@@ -157,7 +157,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           .eq('id', editingProcess.id);
 
         if (error) throw error;
-        message.success(t('멤시지.공정수정완료'));
+        message.success(t('메시지.공정수정완료'));
       } else {
         // 추가
         if (!selectedModel) {
@@ -176,7 +176,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           });
 
         if (error) throw error;
-        message.success(t('멤시지.공정생성완료'));
+        message.success(t('메시지.공정생성완료'));
       }
 
       setProcessModalVisible(false);
@@ -273,7 +273,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       key: 'process_count',
       render: (_: unknown, record: ProductModel) => {
         const count = processes.filter(p => p.model_id === record.id).length;
-        return <Tag color={count > 0 ? 'blue' : 'default'}>{count}{t('단위.개')}</Tag>;
+        return <Tag color={count > 0 ? 'blue' : 'default'}>{t('단위.개값', { n: count })}</Tag>;
       }
     },
     {
@@ -341,7 +341,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       title: 'Tact Time',
       dataIndex: 'tact_time_seconds',
       key: 'tact_time_seconds',
-      render: (seconds: number) => `${seconds}${t('단위.초')}`
+      render: (seconds: number) => t('단위.초값', { n: seconds })
     },
     {
       title: t('컬럼.캐비티수'),

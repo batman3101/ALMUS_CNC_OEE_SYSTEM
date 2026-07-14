@@ -16,7 +16,7 @@ export default function SettingsPage() {
       <div>
         <div style={{ marginBottom: '24px' }}>
           <Title level={2}>
-            설정
+            {t('nav.settings')}
           </Title>
           <Paragraph type="secondary">
             {t('settings.systemSettings')}

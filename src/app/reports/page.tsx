@@ -54,7 +54,7 @@ export default function ReportsPage() {
         setMachines(data);
       } catch (error) {
         console.error('Error fetching machines:', error);
-        message.error('설비 데이터를 불러오는데 실패했습니다');
+        message.error(t('errors.fetchMachinesFailed'));
       } finally {
         setLoading(false);
       }

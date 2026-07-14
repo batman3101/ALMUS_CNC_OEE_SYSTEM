@@ -36,7 +36,7 @@ const { Title, Text } = Typography;
 const { confirm } = Modal;
 
 const SystemSettings: React.FC = () => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { user } = useAuth();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const {
@@ -231,7 +231,8 @@ const SystemSettings: React.FC = () => {
           </Title>
           {lastUpdated && (
             <Text type="secondary" style={{ fontSize: '12px' }}>
-              {t('settings.lastUpdated')}: {lastUpdated.toLocaleString()}
+              {/* 로케일을 명시하지 않으면 브라우저 기본값(한국어 환경이면 '2026. 7. 14. 오전 8:36')이 나온다 */}
+              {t('settings.lastUpdated')}: {lastUpdated.toLocaleString(language === 'vi' ? 'vi-VN' : 'ko-KR')}
             </Text>
           )}
         </div>

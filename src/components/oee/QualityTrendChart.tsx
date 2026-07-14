@@ -13,7 +13,7 @@ import {
   TooltipContentProps,
 } from 'recharts';
 import { Card, Typography, Empty, Spin } from 'antd';
-// import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 const { Title: AntTitle } = Typography;
 
@@ -34,21 +34,22 @@ interface QualityTrendChartProps {
 
 // 커스텀 툴팁 컴포넌트
 const CustomTooltip: React.FC<TooltipContentProps<number, string>> = ({ active, payload, label }) => {
+  const { t } = useDashboardTranslation();
   if (active && payload && payload.length) {
     const data = payload[0].payload as QualityTrendData;
     return (
       <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-        <p className="font-medium text-gray-800 mb-2">{`날짜: ${label}`}</p>
+        <p className="font-medium text-gray-800 mb-2">{`${t('qualityChart.date')}: ${label}`}</p>
         <div className="space-y-1">
           <p className="text-sm">
             <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: '#ff4d4f' }}></span>
-            불량률: {data.defect_rate.toFixed(2)}%
+            {t('qualityChart.defectRate')}: {data.defect_rate.toFixed(2)}%
           </p>
           <p className="text-sm text-gray-600">
-            총 생산량: {data.total_output.toLocaleString()}개
+            {t('qualityChart.totalOutput')}: {data.total_output.toLocaleString()}{t('chart.unit')}
           </p>
           <p className="text-sm text-gray-600">
-            불량 수량: {data.defect_qty.toLocaleString()}개
+            {t('qualityChart.defectQty')}: {data.defect_qty.toLocaleString()}{t('chart.unit')}
           </p>
         </div>
       </div>
@@ -68,14 +69,14 @@ const formatXAxisLabel = (dateString: string) => {
 
 export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
   data,
-  title = '불량률 추이',
+  title,
   height = 400,
   loading = false,
   error
 }) => {
-  // Translation hook available for future use
-  // const { t } = useDashboardTranslation();
-  
+  const { t } = useDashboardTranslation();
+  const displayTitle = title ?? t('chart.defectRateTrend');
+
   // 데이터 로깅 (디버깅용)
   React.useEffect(() => {
     console.log('QualityTrendChart 받은 데이터:', { 
@@ -117,7 +118,7 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
       <Card>
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <Spin size="large" />
-          <p style={{ marginTop: 16, color: '#666' }}>데이터를 불러오는 중...</p>
+          <p style={{ marginTop: 16, color: '#666' }}>{t('charts.loadingData')}</p>
         </div>
       </Card>
     );
@@ -128,7 +129,7 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
     return (
       <Card>
         <div style={{ textAlign: 'center', padding: '40px' }}>
-          <p style={{ color: '#ff4d4f', marginBottom: 16 }}>데이터 로드 중 오류가 발생했습니다</p>
+          <p style={{ color: '#ff4d4f', marginBottom: 16 }}>{t('charts.dataLoadErrorMessage')}</p>
           <p style={{ color: '#666', fontSize: '14px' }}>{error}</p>
         </div>
       </Card>
@@ -140,7 +141,7 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
       {/* 제목 */}
       <div style={{ marginBottom: 16 }}>
         <AntTitle level={4} style={{ margin: 0 }}>
-          {title}
+          {displayTitle}
         </AntTitle>
       </div>
 
@@ -148,7 +149,7 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
       {data.length === 0 ? (
         <div style={{ height }}>
           <Empty
-            description="표시할 데이터가 없습니다"
+            description={t('charts.noDataInPeriod')}
             style={{ 
               display: 'flex', 
               flexDirection: 'column', 
@@ -205,7 +206,7 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
                   strokeWidth: 2,
                   fill: '#fff',
                 }}
-                name="불량률 (%)"
+                name={t('chart.defectRatePercent')}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -220,35 +221,35 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>
                 {statistics.average.toFixed(2)}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>평균 불량률</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('qualityChart.avgDefectRate')}</div>
             </div>
             
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#ff4d4f' }}>
                 {statistics.highest.toFixed(2)}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>최고 불량률</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('qualityChart.maxDefectRate')}</div>
             </div>
             
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#52c41a' }}>
                 {statistics.lowest.toFixed(2)}%
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>최저 불량률</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('qualityChart.minDefectRate')}</div>
             </div>
             
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#722ed1' }}>
                 {statistics.totalDefects.toLocaleString()}
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>총 불량 수량</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('qualityChart.totalDefectQty')}</div>
             </div>
 
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#faad14' }}>
                 {statistics.totalOutput.toLocaleString()}
               </div>
-              <div style={{ fontSize: 12, color: '#666' }}>총 생산량</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{t('qualityChart.totalOutput')}</div>
             </div>
           </div>
         </div>

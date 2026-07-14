@@ -84,16 +84,17 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         }));
 
       if (updates.length === 0) {
-        showError('저장할 변경사항이 없습니다.');
+        showError(t('settings.general.noChanges'));
         return;
       }
 
       console.log('Updating settings:', updates);
-      
+
       // updateMultipleSettings 호출
       const success = await updateMultipleSettings(updates);
       if (!success) {
-        throw new Error('시스템 설정 업데이트에 실패했습니다. 네트워크 연결이나 권한을 확인해주세요.');
+        // 이 메시지는 아래 catch 에서 error.message 로 토스트에 그대로 표시된다.
+        throw new Error(t('settings.general.updateFailed'));
       }
 
       // 언어가 변경된 경우 LanguageContext 업데이트
@@ -121,13 +122,14 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
       // 파일 검증
       const isImage = file.type?.startsWith('image/');
       if (!isImage) {
-        showError('이미지 파일만 업로드 가능합니다.');
+        showError(t('settings.general.logoImageOnly'));
         return false;
       }
-      
+
+      // 서버(/api/upload/image)의 MAX_FILE_SIZE 와 같은 5MB 여야 한다.
       const isLt5M = file.size / 1024 / 1024 < 5;
       if (!isLt5M) {
-        showError('파일 크기는 5MB 이하만 가능합니다.');
+        showError(t('settings.general.logoSizeLimit'));
         return false;
       }
 
@@ -143,14 +145,14 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: '업로드 실패' }));
-        throw new Error(errorData.error || '업로드에 실패했습니다.');
+        const errorData = await response.json().catch(() => ({ error: '' }));
+        throw new Error(errorData.error || t('settings.general.uploadFailed'));
       }
 
       const result = await response.json();
-      
+
       if (!result.url) {
-        throw new Error('업로드된 파일 URL을 받을 수 없습니다.');
+        throw new Error(t('settings.general.uploadNoUrl'));
       }
 
       // 성공 시 폼 필드 업데이트
@@ -164,12 +166,12 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         url: result.url,
       }]);
 
-      showSuccess('로고가 성공적으로 업로드되었습니다.');
+      showSuccess(t('settings.general.logoUploadSuccess'));
       return false; // 기본 업로드 동작 방지
-      
+
     } catch (error) {
       console.error('로고 업로드 오류:', error);
-      const errorMessage = error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
+      const errorMessage = error instanceof Error ? error.message : t('settings.general.logoUploadError');
       showError(errorMessage);
       return false;
     } finally {
@@ -193,21 +195,23 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
 
   // 시간대 옵션
   const timezoneOptions = [
-    { label: '서울 (Asia/Seoul)', value: 'Asia/Seoul' },
-    { label: '호치민 (Asia/Ho_Chi_Minh)', value: 'Asia/Ho_Chi_Minh' },
-    { label: 'UTC', value: 'UTC' },
-    { label: '도쿄 (Asia/Tokyo)', value: 'Asia/Tokyo' },
-    { label: '상하이 (Asia/Shanghai)', value: 'Asia/Shanghai' },
+    { label: t('settings.general.timezones.seoul'), value: 'Asia/Seoul' },
+    { label: t('settings.general.timezones.hoChiMinh'), value: 'Asia/Ho_Chi_Minh' },
+    { label: t('settings.general.timezones.utc'), value: 'UTC' },
+    { label: t('settings.general.timezones.tokyo'), value: 'Asia/Tokyo' },
+    { label: t('settings.general.timezones.shanghai'), value: 'Asia/Shanghai' },
   ];
 
-  // 언어 옵션
+  // 언어 옵션.
+  // 실제 번역 리소스가 있는 언어만 노출한다 (src/lib/i18n.ts 의 resources 와 일치해야 한다).
+  // 예전에는 'English' 가 있었지만 en 리소스가 없어서, 선택하면 설정만 en 으로 저장되고
+  // 화면은 ko 로 폴백되는 상태가 됐다.
   const languageOptions = [
     { label: '한국어', value: 'ko' },
     { label: 'Tiếng Việt', value: 'vi' },
-    { label: 'English', value: 'en' },
   ];
 
-  // 날짜 형식 옵션
+  // 날짜 형식 옵션 (형식 문자열 자체가 언어 중립적이라 번역하지 않는다)
   const dateFormatOptions = [
     { label: 'YYYY-MM-DD (2024-12-14)', value: 'YYYY-MM-DD' },
     { label: 'DD/MM/YYYY (14/12/2024)', value: 'DD/MM/YYYY' },
@@ -217,10 +221,10 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
 
   // 시간 형식 옵션
   const timeFormatOptions = [
-    { label: '24시간 (HH:mm:ss)', value: 'HH:mm:ss' },
-    { label: '12시간 (hh:mm:ss A)', value: 'hh:mm:ss A' },
-    { label: '24시간 분만 (HH:mm)', value: 'HH:mm' },
-    { label: '12시간 분만 (hh:mm A)', value: 'hh:mm A' },
+    { label: t('settings.general.timeFormats.h24s'), value: 'HH:mm:ss' },
+    { label: t('settings.general.timeFormats.h12s'), value: 'hh:mm:ss A' },
+    { label: t('settings.general.timeFormats.h24m'), value: 'HH:mm' },
+    { label: t('settings.general.timeFormats.h12m'), value: 'hh:mm A' },
   ];
 
   return (
@@ -274,16 +278,16 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
                         loading={uploadingLogo}
                         disabled={uploadingLogo}
                       >
-                        {uploadingLogo ? '업로드 중...' : '로고 업로드'}
+                        {uploadingLogo ? t('settings.general.uploading') : t('settings.general.uploadLogo')}
                       </Button>
                     )}
                   </Upload>
                   <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '8px' }}>
-                    이미지 파일만 가능 (JPG, PNG 등) - 최대 5MB
+                    {t('settings.general.logoFileHint')}
                   </Text>
                   {uploadingLogo && (
                     <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '4px', color: '#1890ff' }}>
-                      업로드 중입니다. 잠시 기다려주세요...
+                      {t('settings.general.uploadingHint')}
                     </Text>
                   )}
                 </div>

@@ -28,6 +28,7 @@ import {
 import dayjs, { Dayjs } from 'dayjs';
 import { useMachines } from '@/hooks/useMachines';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
+import { formatMachineLocation } from '@/utils/machineLocation';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -262,7 +263,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       render: (machine: ProductionRecord['machine']) => (
         <div>
           <div>{machine?.name || '-'}</div>
-          <Text type="secondary" style={{ fontSize: 12 }}>{machine?.location}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{formatMachineLocation(machine?.location, t)}</Text>
         </div>
       )
     },

@@ -13,7 +13,7 @@ import {
   PieLabel,
 } from 'recharts';
 import { Card, Typography, Row, Col, Empty, Spin, Table } from 'antd';
-// import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useDashboardTranslation } from '@/hooks/useTranslation';
 
 const { Title: AntTitle } = Typography;
 
@@ -48,6 +48,7 @@ const COLORS = [
 
 // 커스텀 툴팁 컴포넌트
 const CustomTooltip: React.FC<TooltipContentProps<number, string>> = ({ active, payload }) => {
+  const { t } = useDashboardTranslation();
   if (active && payload && payload.length) {
     const data = payload[0].payload as QualityDefectTypeData;
     return (
@@ -55,10 +56,10 @@ const CustomTooltip: React.FC<TooltipContentProps<number, string>> = ({ active, 
         <p className="font-medium text-gray-800 mb-2">{data.type}</p>
         <div className="space-y-1">
           <p className="text-sm">
-            불량 수량: <span className="font-medium">{data.count.toLocaleString()}개</span>
+            {t('qualityChart.defectQty')}: <span className="font-medium">{data.count.toLocaleString()}{t('chart.unit')}</span>
           </p>
           <p className="text-sm">
-            비율: <span className="font-medium">{data.percentage.toFixed(1)}%</span>
+            {t('charts.ratio')}: <span className="font-medium">{data.percentage.toFixed(1)}%</span>
           </p>
         </div>
       </div>
@@ -94,15 +95,15 @@ const CustomLegend: React.FC<{ payload?: Array<{ color: string; value: string }>
 
 export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
   data,
-  title = '불량 유형별 분석',
+  title,
   height = 400,
   loading = false,
   error,
   showTable = true
 }) => {
-  // Translation hook available for future use
-  // const { t } = useDashboardTranslation();
-  
+  const { t } = useDashboardTranslation();
+  const displayTitle = title ?? t('chart.defectTypeAnalysis');
+
   // 데이터 로깅 (디버깅용)
   React.useEffect(() => {
     console.log('QualityDefectTypeChart 받은 데이터:', { 
@@ -137,7 +138,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
   // 테이블 컬럼 정의
   const tableColumns = [
     {
-      title: '불량 유형',
+      title: t('charts.defectType'),
       dataIndex: 'type',
       key: 'type',
       render: (text: string, record: QualityDefectTypeData, index: number) => (
@@ -151,16 +152,16 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
       ),
     },
     {
-      title: '수량',
+      title: t('charts.quantity'),
       dataIndex: 'count',
       key: 'count',
       render: (value: number) => (
-        <span className="font-medium">{value.toLocaleString()}개</span>
+        <span className="font-medium">{value.toLocaleString()}{t('chart.unit')}</span>
       ),
       sorter: (a: QualityDefectTypeData, b: QualityDefectTypeData) => a.count - b.count,
     },
     {
-      title: '비율',
+      title: t('charts.ratio'),
       dataIndex: 'percentage',
       key: 'percentage',
       render: (value: number) => (
@@ -176,7 +177,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
       <Card>
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <Spin size="large" />
-          <p style={{ marginTop: 16, color: '#666' }}>데이터를 불러오는 중...</p>
+          <p style={{ marginTop: 16, color: '#666' }}>{t('charts.loadingData')}</p>
         </div>
       </Card>
     );
@@ -187,7 +188,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
     return (
       <Card>
         <div style={{ textAlign: 'center', padding: '40px' }}>
-          <p style={{ color: '#ff4d4f', marginBottom: 16 }}>데이터 로드 중 오류가 발생했습니다</p>
+          <p style={{ color: '#ff4d4f', marginBottom: 16 }}>{t('charts.dataLoadErrorMessage')}</p>
           <p style={{ color: '#666', fontSize: '14px' }}>{error}</p>
         </div>
       </Card>
@@ -199,7 +200,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
       {/* 제목 */}
       <div style={{ marginBottom: 16 }}>
         <AntTitle level={4} style={{ margin: 0 }}>
-          {title}
+          {displayTitle}
         </AntTitle>
       </div>
 
@@ -207,7 +208,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
       {data.length === 0 ? (
         <div style={{ height }}>
           <Empty
-            description="표시할 데이터가 없습니다"
+            description={t('charts.noDataInPeriod')}
             style={{ 
               display: 'flex', 
               flexDirection: 'column', 
@@ -278,7 +279,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
                 <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>
                   {statistics.totalCount.toLocaleString()}
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>총 불량 수량</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('qualityChart.totalDefectQty')}</div>
               </div>
             </Col>
             
@@ -287,7 +288,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
                 <div style={{ fontSize: 20, fontWeight: 'bold', color: '#52c41a' }}>
                   {statistics.typeCount}
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>불량 유형 수</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('charts.defectTypeCount')}</div>
               </div>
             </Col>
             
@@ -296,7 +297,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
                 <div style={{ fontSize: 16, fontWeight: 'bold', color: '#ff4d4f' }}>
                   {statistics.topDefectType?.type || 'N/A'}
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>최다 불량 유형</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('charts.topDefectType')}</div>
               </div>
             </Col>
             
@@ -305,7 +306,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
                 <div style={{ fontSize: 20, fontWeight: 'bold', color: '#faad14' }}>
                   {statistics.topDefectType?.percentage.toFixed(1) || 0}%
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>최대 비율</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('charts.maxRatio')}</div>
               </div>
             </Col>
           </Row>

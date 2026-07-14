@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import { systemSettingsService } from '@/lib/systemSettings';
+import { systemSettingsService, mapDbKeyToCodeKey } from '@/lib/systemSettings';
 import { supabase } from '@/lib/supabase';
 import type {
   AllSystemSettings,
@@ -105,10 +105,12 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
       const result = await systemSettingsService.updateSetting(update);
       
       if (result.success) {
-        // 로컬 상태 업데이트
+        // 로컬 상태 업데이트.
+        // setting_key 는 DB 의 canonical key 이므로 코드 키로 매핑한 뒤 저장해야 한다.
+        // 매핑 없이 저장하면 loadSettings() 가 매핑해 둔 키와 갈라져, 읽는 쪽이 옛 값을 계속 본다.
         setSettings(prev => {
           const categorySettings: Record<string, unknown> = { ...prev[update.category] };
-          categorySettings[update.setting_key] = update.setting_value;
+          categorySettings[mapDbKeyToCodeKey(update.category, update.setting_key)] = update.setting_value;
           return {
             ...prev,
             [update.category]: categorySettings
@@ -142,7 +144,7 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
             if (!newSettings[update.category]) {
               newSettings[update.category] = {};
             }
-            newSettings[update.category][update.setting_key] = update.setting_value;
+            newSettings[update.category][mapDbKeyToCodeKey(update.category, update.setting_key)] = update.setting_value;
           });
           return newSettings as Partial<AllSystemSettings>;
         });
@@ -221,10 +223,10 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
           value: unknown;
         };
 
-        // 로컬 상태 업데이트
+        // 브로드캐스트도 DB 의 canonical key 를 실어 나르므로 코드 키로 매핑해서 반영한다.
         setSettings(prev => {
           const categorySettings: Record<string, unknown> = { ...prev[category] };
-          categorySettings[key] = value;
+          categorySettings[mapDbKeyToCodeKey(category, key)] = value;
           return {
             ...prev,
             [category]: categorySettings
