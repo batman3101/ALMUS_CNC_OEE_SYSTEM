@@ -15,10 +15,11 @@ import {
 import dayjs from 'dayjs';
 import { OEEGauge, IndependentOEETrendChart, DowntimeChart, ProductionChart } from '@/components/oee';
 import { DefectRateTrendChart, QualityPerformanceChart, MachineComparisonChart } from '@/components/quality';
-import { OEEMetrics, DowntimeData } from '@/types';
+import { OEEMetrics } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useEngineerData } from '@/hooks/useEngineerData';
+import { useMachineOEEStats } from '@/hooks/useMachineOEEStats';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
@@ -69,16 +70,67 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     poor: t('dashboard:oeeGrades.poor')
   };
 
-  // 실시간 데이터 훅 사용
+  // 실시간 데이터 훅 사용 (설비 목록과 연결 상태용.
+  // 설비별 지표는 아래 useMachineOEEStats 가 기간·교대 필터를 적용해 서버에서 집계한다)
   const {
     machines,
-    machineLogs,
-    oeeMetrics,
     loading: realtimeLoading,
     error: realtimeError,
     refresh,
     isConnected
   } = useRealtimeData(user?.id, user?.role);
+
+  // 위치 필터에 해당하는 설비 ID 목록 (전체 선택 시 null = 위치 필터 없음)
+  const locationMachineIds = React.useMemo(() => {
+    if (selectedLocations.length === 0 || selectedLocations.includes('all')) {
+      return null;
+    }
+    return machines
+      .filter(machine => machine.location && selectedLocations.includes(machine.location))
+      .map(machine => machine.id);
+  }, [machines, selectedLocations]);
+
+  // 설비 선택과 위치 필터를 교집합으로 결합 (null = 필터 없음 = 전체)
+  const effectiveMachineIds = React.useMemo(() => {
+    const machineFilter = selectedMachines.length === 0 || selectedMachines.includes('all')
+      ? null
+      : selectedMachines;
+
+    if (!machineFilter) return locationMachineIds;
+    if (!locationMachineIds) return machineFilter;
+    return machineFilter.filter(id => locationMachineIds.includes(id));
+  }, [selectedMachines, locationMachineIds]);
+
+  // 다중 설비 선택을 콤마 구분 목록으로 변환 (API 계약: machine_id는 단일 또는 콤마 구분 목록을 허용)
+  const selectedMachineIds = React.useMemo(() => {
+    if (!effectiveMachineIds) return undefined;
+    if (effectiveMachineIds.length === 0) return NO_MATCHING_MACHINE_ID;
+    return effectiveMachineIds.join(',');
+  }, [effectiveMachineIds]);
+
+  // 설비별 OEE 집계 (기간 + 교대 필터 적용, 서버 SQL 집계).
+  // 등급 필터는 이 결과에서 계산되므로 여기서는 걸지 않는다 (순환 방지).
+  const { stats: machineStats, loading: machineStatsLoading } = useMachineOEEStats(
+    selectedPeriod,
+    selectedMachineIds,
+    customDateRange,
+    selectedShifts
+  );
+
+  // OEE 등급 필터가 선택되면 해당 등급의 설비만 남긴다.
+  // 데이터가 없는 설비(해당 기간에 실적 없음)는 등급을 매길 수 없으므로 제외한다.
+  const gradeFilteredMachineIds = React.useMemo(() => {
+    if (selectedOEEGrades.includes('all')) {
+      return selectedMachineIds;
+    }
+
+    const matching = Object.values(machineStats)
+      .filter(stat => stat.total_records > 0 && selectedOEEGrades.includes(getOEEGrade(stat.avg_oee)))
+      .map(stat => stat.machine_id);
+
+    if (matching.length === 0) return NO_MATCHING_MACHINE_ID;
+    return matching.join(',');
+  }, [selectedOEEGrades, machineStats, selectedMachineIds]);
 
   // 필터 옵션 데이터
   const filterOptions = React.useMemo(() => {
@@ -104,12 +156,13 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     // 실제 설비 데이터에서 위치 추출
     const locations = [...new Set(machines.map(m => m.location).filter(Boolean))];
     
-    // OEE 등급별 설비 분류 (실제 데이터 기반 - useRealtimeData가 계산한 oeeMetrics 사용.
-    // machines 테이블에는 oee_efficiency 컬럼이 없으므로 machine_logs/production_records 기반
-    // 실시간 집계값(oeeMetrics)에서 설비별 OEE를 조회한다.)
-    const machineOeeValues = machines
-      .map(m => oeeMetrics[m.id]?.oee)
-      .filter((oee): oee is number => typeof oee === 'number');
+    // OEE 등급별 설비 분류.
+    // 개수와 필터가 같은 근거(기간·교대가 적용된 설비별 집계)를 쓰도록 machineStats 를 사용한다.
+    // 이전에는 개수는 "설비별 최신 실적 1건"으로 세고 필터는 날짜별 추세 행에 걸어, 둘이
+    // 서로 다른 것을 세고 있었다.
+    const machineOeeValues = Object.values(machineStats)
+      .filter(stat => stat.total_records > 0)
+      .map(stat => stat.avg_oee);
 
     const oeeGrades = {
       excellent: machineOeeValues.filter(oee => getOEEGrade(oee) === 'excellent').length,
@@ -141,7 +194,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         { value: 'poor', label: oeeGradeLabels.poor, count: oeeGrades.poor }
       ]
     };
-  }, [machines, oeeMetrics]);
+  }, [machines, machineStats, t]);
 
   // 활성 필터 개수 계산
   const activeFilterCount = React.useMemo(() => {
@@ -307,43 +360,21 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     </div>
   );
 
-  // 위치 필터에 해당하는 설비 ID 목록 (전체 선택 시 null = 위치 필터 없음)
-  const locationMachineIds = React.useMemo(() => {
-    if (selectedLocations.length === 0 || selectedLocations.includes('all')) {
-      return null;
-    }
-    return machines
-      .filter(machine => machine.location && selectedLocations.includes(machine.location))
-      .map(machine => machine.id);
-  }, [machines, selectedLocations]);
-
-  // 설비 선택과 위치 필터를 교집합으로 결합 (null = 필터 없음 = 전체)
-  const effectiveMachineIds = React.useMemo(() => {
-    const machineFilter = selectedMachines.length === 0 || selectedMachines.includes('all')
-      ? null
-      : selectedMachines;
-
-    if (!machineFilter) return locationMachineIds;
-    if (!locationMachineIds) return machineFilter;
-    return machineFilter.filter(id => locationMachineIds.includes(id));
-  }, [selectedMachines, locationMachineIds]);
-
-  // 다중 설비 선택을 콤마 구분 목록으로 변환 (API 계약: machine_id는 단일 또는 콤마 구분 목록을 허용)
-  const selectedMachineIds = React.useMemo(() => {
-    if (!effectiveMachineIds) return undefined;
-    if (effectiveMachineIds.length === 0) return NO_MATCHING_MACHINE_ID;
-    return effectiveMachineIds.join(',');
-  }, [effectiveMachineIds]);
-
-  // 엔지니어 분석 데이터 훅 사용
+  // 엔지니어 분석 데이터 훅 사용.
+  //
+  // OEE 등급 필터가 적용되면 "그 등급에 속한 설비들"로 좁혀서 조회한다. 그래야 카드·추세·
+  // 비가동·표가 모두 같은 설비 집합을 말한다.
+  // (이전에는 등급 개수는 설비 기준으로 세면서 필터는 날짜별 추세 행에 걸어, 등급을 고르면
+  //  "우수한 설비"가 아니라 "우수한 날짜"가 걸러졌다)
   const {
     oeeData,
     downtimeData,
     productionData,
+    machineDowntime,
     loading: engineerDataLoading,
     error: engineerDataError,
     refreshData: refreshEngineerData
-  } = useEngineerData(selectedPeriod, selectedMachineIds, customDateRange, selectedShifts);
+  } = useEngineerData(selectedPeriod, gradeFilteredMachineIds, customDateRange, selectedShifts);
 
   // 데이터 변경 추적을 위한 로깅
   React.useEffect(() => {
@@ -365,7 +396,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     }
   }, [selectedPeriod, oeeData, downtimeData, productionData, engineerDataLoading, engineerDataError, selectedMachines]);
 
-  const loading = realtimeLoading || engineerDataLoading;
+  const loading = realtimeLoading || engineerDataLoading || machineStatsLoading;
   const error = realtimeError || engineerDataError;
 
   // 기본 빈 데이터 구조
@@ -397,41 +428,22 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   // 기간/설비/날짜범위/교대 필터 변경시 데이터 재조회는 useEngineerData 훅이 단독으로 담당한다
   // (이 컴포넌트에서 별도로 refreshEngineerData를 호출하면 훅의 자체 effect와 중복 호출된다)
 
-  // OEE 등급별 데이터 필터링
-  const filteredOEEData = React.useMemo(() => {
-    if (selectedOEEGrades.includes('all')) {
-      return oeeData;
-    }
-    
-    return oeeData.filter(item => {
-      const grade = getOEEGrade(item.oee);
-      return selectedOEEGrades.includes(grade);
-    });
-  }, [oeeData, selectedOEEGrades]);
-
   // 데이터 처리 및 분석
+  //
+  // 등급 필터는 더 이상 여기서 추세 행을 거르지 않는다. gradeFilteredMachineIds 로 조회 자체를
+  // 좁히므로, oeeData/downtimeData/productionData 는 이미 "선택된 등급의 설비들"만 담고 있다.
   const processedData = React.useMemo(() => {
     try {
-      // OEE 등급 필터링된 데이터 사용
-      const dataToUse = filteredOEEData;
-
-      // 등급 필터 결과가 0건이면 '조건에 맞는 데이터 없음'이므로 빈 데이터로 표시한다.
-      // (전체 데이터로 폴백하면 필터가 적용되지 않은 평균이 표시되는 문제가 있었음)
-      if (!selectedOEEGrades.includes('all') && dataToUse.length === 0) {
-        return getEmptyData();
-      }
-
       // 기간별 API 데이터가 있을 때는 API 데이터를 우선 사용
       let overallMetrics: OEEMetrics;
 
-      if (dataToUse.length > 0) {
-        // 필터링된 데이터로 전체 OEE 계산
-        const totalRecords = dataToUse.length;
-        const avgOEE = dataToUse.reduce((sum, item) => sum + item.oee, 0) / totalRecords;
-        const avgAvailability = dataToUse.reduce((sum, item) => sum + item.availability, 0) / totalRecords;
-        const avgPerformance = dataToUse.reduce((sum, item) => sum + item.performance, 0) / totalRecords;
-        const avgQuality = dataToUse.reduce((sum, item) => sum + item.quality, 0) / totalRecords;
-        
+      if (oeeData.length > 0) {
+        const totalRecords = oeeData.length;
+        const avgOEE = oeeData.reduce((sum, item) => sum + item.oee, 0) / totalRecords;
+        const avgAvailability = oeeData.reduce((sum, item) => sum + item.availability, 0) / totalRecords;
+        const avgPerformance = oeeData.reduce((sum, item) => sum + item.performance, 0) / totalRecords;
+        const avgQuality = oeeData.reduce((sum, item) => sum + item.quality, 0) / totalRecords;
+
         overallMetrics = {
           availability: avgAvailability,
           performance: avgPerformance,
@@ -443,92 +455,50 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           output_qty: 0,
           defect_qty: 0
         };
-        
-        console.log('📊 기간별 OEE 카드 데이터 사용:', {
-          기간: selectedPeriod,
-          레코드수: totalRecords,
-          평균OEE: (avgOEE * 100).toFixed(1) + '%',
-          가용성: (avgAvailability * 100).toFixed(1) + '%',
-          성능: (avgPerformance * 100).toFixed(1) + '%',
-          품질: (avgQuality * 100).toFixed(1) + '%'
-        });
-      } else if (machines.length === 0) {
-        return getEmptyData();
       } else {
-        // 실시간 데이터로 폴백
-        const totalOEE = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.oee, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
-        const totalAvailability = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.availability, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
-        const totalPerformance = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.performance, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
-        const totalQuality = Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.quality, 0) / Math.max(Object.keys(oeeMetrics).length, 1);
-        
-        overallMetrics = {
-          availability: totalAvailability,
-          performance: totalPerformance,
-          quality: totalQuality,
-          oee: totalOEE,
-          actual_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.actual_runtime, 0),
-          planned_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.planned_runtime, 0),
-          ideal_runtime: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.ideal_runtime, 0),
-          output_qty: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.output_qty, 0),
-          defect_qty: Object.values(oeeMetrics).reduce((sum, metrics) => sum + metrics.defect_qty, 0)
-        };
-        
-        console.log('🔄 실시간 데이터로 OEE 카드 폴백 사용');
+        // 조건에 맞는 데이터가 없으면 빈 값을 보여준다.
+        // (예전에는 여기서 "설비별 최신 실적"으로 폴백해, 필터를 걸었는데도 필터가 적용되지 않은
+        //  평균이 카드에 표시됐다)
+        return getEmptyData();
       }
 
-    // 설비별 분석 데이터
-    const analysisData = machines.map(machine => {
-      const metrics = oeeMetrics[machine.id];
-      const logs = machineLogs.filter(log => log.machine_id === machine.id);
-      const downtimeHours = logs
-        .filter(log => log.state !== 'NORMAL_OPERATION' && log.duration)
-        .reduce((sum, log) => sum + (log.duration || 0), 0) / 60;
+      // 설비별 분석 데이터.
+      //
+      // 근거를 전부 바꿨다:
+      //   OEE/가용성/성능/품질 -> machineStats (기간·교대 필터가 적용된 SQL 집계)
+      //   비가동 시간          -> machineDowntime (downtime-analysis 의 설비별 집계, 같은 필터)
+      // 이전에는 각각 "설비별 최신 실적 1건"과 "전역 최근 로그 100개"였다. 후자는 800대 중
+      // 34대만 커버해서 나머지 766대의 비가동이 항상 0으로 표시됐다.
+      const analysisData = machines
+        .filter(machine => !effectiveMachineIds || effectiveMachineIds.includes(machine.id))
+        .map(machine => {
+          const stat = machineStats[machine.id];
+          const downtime = machineDowntime[machine.id];
+          const hasData = Boolean(stat && stat.total_records > 0);
 
-      return {
-        key: machine.id,
-        machine: machine.name,
-        location: machine.location,
-        avgOEE: metrics?.oee || 0,
-        availability: metrics?.availability || 0,
-        performance: metrics?.performance || 0,
-        quality: metrics?.quality || 0,
-        downtimeHours: Math.round(downtimeHours),
-        defectRate: metrics ? (metrics.defect_qty / Math.max(metrics.output_qty, 1)) : 0,
-        trend: 'neutral' as const,
-        trendValue: 0
-      };
-    });
-
-    // 다운타임 분석
-    const downtimeAnalysis = machineLogs
-      .filter(log => log.state !== 'NORMAL_OPERATION' && log.duration)
-      .reduce((acc, log) => {
-        const existing = acc.find(item => item.state === log.state);
-        if (existing) {
-          existing.duration += log.duration || 0;
-          existing.count += 1;
-        } else {
-          acc.push({
-            state: log.state,
-            duration: log.duration || 0,
-            count: 1,
-            percentage: 0
-          });
-        }
-        return acc;
-      }, [] as DowntimeData[]);
-
-    const totalDowntime = downtimeAnalysis.reduce((sum, item) => sum + item.duration, 0);
-    downtimeAnalysis.forEach(item => {
-      item.percentage = totalDowntime > 0 ? (item.duration / totalDowntime) * 100 : 0;
-    });
+          return {
+            key: machine.id,
+            machine: machine.name,
+            location: machine.location,
+            hasData,
+            recordCount: stat?.total_records ?? 0,
+            avgOEE: stat?.avg_oee ?? 0,
+            availability: stat?.avg_availability ?? 0,
+            performance: stat?.avg_performance ?? 0,
+            quality: stat?.avg_quality ?? 0,
+            downtimeHours: Math.round(((downtime?.totalDowntime ?? 0) / 60) * 10) / 10,
+            defectRate: stat && stat.total_output > 0 ? stat.total_defect / stat.total_output : 0,
+            trend: 'neutral' as const,
+            trendValue: 0
+          };
+        });
 
       return {
         overallMetrics,
         analysisData,
-        trendData: oeeData.length > 0 ? oeeData : [], // 실제 API 데이터만 사용
-        downtimeData: downtimeData.length > 0 ? downtimeData : downtimeAnalysis.slice(0, 5),
-        productionData: productionData.length > 0 ? productionData : [] // 실제 API 데이터만 사용
+        trendData: oeeData,
+        downtimeData,
+        productionData
       };
     } catch (error) {
       console.error('Error processing engineer dashboard data:', error);
@@ -537,17 +507,17 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       }
       return getEmptyData();
     }
-  }, [machines, machineLogs, oeeMetrics, oeeData, downtimeData, productionData, onError, filteredOEEData, selectedOEEGrades]);
+  }, [machines, machineStats, machineDowntime, effectiveMachineIds, oeeData, downtimeData, productionData, onError]);
 
-  // 설비/위치 필터링된 분석 데이터
+  // 등급 필터가 걸리면 그 등급의 설비만 표에 남긴다 (카드·추세와 같은 설비 집합).
   const filteredAnalysisData = React.useMemo(() => {
-    if (!effectiveMachineIds) {
+    if (selectedOEEGrades.includes('all')) {
       return processedData.analysisData;
     }
-    return processedData.analysisData.filter(item =>
-      effectiveMachineIds.includes(item.key)
+    return processedData.analysisData.filter(
+      item => item.hasData && selectedOEEGrades.includes(getOEEGrade(item.avgOEE))
     );
-  }, [processedData.analysisData, effectiveMachineIds]);
+  }, [processedData.analysisData, selectedOEEGrades]);
 
   // 실제 설비 목록 옵션 생성 (Supabase 데이터만 사용)
   const machineOptions = React.useMemo(() => {
@@ -607,14 +577,19 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       dataIndex: 'avgOEE',
       key: 'avgOEE',
       width: 100,
-      render: (value: number) => (
-        <span style={{ 
-          color: value >= 0.85 ? '#52c41a' : value >= 0.65 ? '#faad14' : '#ff4d4f',
-          fontWeight: 'bold'
-        }}>
-          {(value * 100).toFixed(1)}%
-        </span>
-      ),
+      // 선택한 기간에 실적이 없는 설비는 0%가 아니라 "데이터 없음"이다.
+      // 0%로 표시하면 "이 설비는 완전히 멈춰 있었다"로 읽혀 실제와 다르다.
+      render: (value: number, record: { hasData: boolean }) =>
+        record.hasData ? (
+          <span style={{
+            color: value >= 0.85 ? '#52c41a' : value >= 0.65 ? '#faad14' : '#ff4d4f',
+            fontWeight: 'bold'
+          }}>
+            {(value * 100).toFixed(1)}%
+          </span>
+        ) : (
+          <span style={{ color: '#8c8c8c' }}>—</span>
+        ),
       sorter: (a: { avgOEE: number }, b: { avgOEE: number }) => a.avgOEE - b.avgOEE,
     },
     {
@@ -622,7 +597,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       dataIndex: 'availability',
       key: 'availability',
       width: 100,
-      render: (value: number) => `${(value * 100).toFixed(1)}%`,
+      render: (value: number, record: { hasData: boolean }) =>
+        record.hasData ? `${(value * 100).toFixed(1)}%` : '—',
       sorter: (a: { availability: number }, b: { availability: number }) => a.availability - b.availability,
     },
     {
@@ -630,7 +606,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       dataIndex: 'performance',
       key: 'performance',
       width: 100,
-      render: (value: number) => `${(value * 100).toFixed(1)}%`,
+      render: (value: number, record: { hasData: boolean }) =>
+        record.hasData ? `${(value * 100).toFixed(1)}%` : '—',
       sorter: (a: { performance: number }, b: { performance: number }) => a.performance - b.performance,
     },
     {
@@ -638,7 +615,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       dataIndex: 'quality',
       key: 'quality',
       width: 100,
-      render: (value: number) => `${(value * 100).toFixed(1)}%`,
+      render: (value: number, record: { hasData: boolean }) =>
+        record.hasData ? `${(value * 100).toFixed(1)}%` : '—',
       sorter: (a: { quality: number }, b: { quality: number }) => a.quality - b.quality,
     },
     {
@@ -654,7 +632,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       dataIndex: 'defectRate',
       key: 'defectRate',
       width: 100,
-      render: (value: number) => `${(value * 100).toFixed(2)}%`,
+      render: (value: number, record: { hasData: boolean }) =>
+        record.hasData ? `${(value * 100).toFixed(2)}%` : '—',
       sorter: (a: { defectRate: number }, b: { defectRate: number }) => a.defectRate - b.defectRate,
     },
     {

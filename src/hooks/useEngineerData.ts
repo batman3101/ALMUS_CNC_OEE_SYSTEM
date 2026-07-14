@@ -45,7 +45,17 @@ interface DowntimeAnalysisResponse {
     total_duration: number;
     percentage: number;
   }>;
+  // 설비별 비가동 (기간/교대 필터가 이미 적용된 값).
+  // 설비별 표가 "전역 최근 로그 100개"로 자체 계산하던 것을 대체한다.
+  machine_analysis: Array<{
+    machine_id: string;
+    total_downtime: number;
+    downtime_events: number;
+  }>;
 }
+
+/** 설비별 비가동 시간(분). 기간·교대 필터가 적용된 값이다. */
+export type MachineDowntimeMap = Record<string, { totalDowntime: number; events: number }>;
 
 interface QualityAnalysisResponse {
   trends: {
@@ -68,6 +78,7 @@ export const useEngineerData = (
   const [oeeData, setOeeData] = useState<OEETrendData[]>([]);
   const [downtimeData, setDowntimeData] = useState<DowntimeData[]>([]);
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
+  const [machineDowntime, setMachineDowntime] = useState<MachineDowntimeMap>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -180,10 +191,20 @@ export const useEngineerData = (
         });
       }
 
+      // 설비별 비가동 (같은 응답에 이미 기간·교대 필터가 적용되어 들어온다)
+      const downtimeByMachine: MachineDowntimeMap = {};
+      for (const item of data.machine_analysis || []) {
+        downtimeByMachine[item.machine_id] = {
+          totalDowntime: item.total_downtime,
+          events: item.downtime_events
+        };
+      }
+
       console.log('다운타임 분석 데이터:', { sampleData: downtimeAnalysis.slice(0, 3), totalCount: downtimeAnalysis.length });
 
       if (requestId !== requestIdRef.current) return; // 오래된 응답은 반영하지 않음
       setDowntimeData(downtimeAnalysis);
+      setMachineDowntime(downtimeByMachine);
     } catch (error) {
       console.error('Error fetching downtime data:', error);
       if (requestId !== requestIdRef.current) return;
@@ -275,6 +296,7 @@ export const useEngineerData = (
     oeeData,
     downtimeData,
     productionData,
+    machineDowntime,
     loading,
     error,
     refreshData

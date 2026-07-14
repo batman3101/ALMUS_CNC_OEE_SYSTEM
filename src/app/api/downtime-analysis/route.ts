@@ -57,21 +57,9 @@ async function getBusinessTimeConfig(): Promise<BusinessTimeConfig> {
   }
 }
 
-// start_time(UTC)을 영업 시간대로 환산하여 A/B 교대를 판별 (src/utils/shiftUtils.ts 로직과 동일)
-function deriveShiftFromStartTime(startTime: string, tz: string, shiftAStart: string, shiftBStart: string): 'A' | 'B' {
-  const local = dayjs(startTime).tz(tz);
-  const minutesOfDay = local.hour() * 60 + local.minute();
-
-  const [aHour, aMinute] = shiftAStart.split(':').map(Number);
-  const [bHour, bMinute] = shiftBStart.split(':').map(Number);
-  const aStartMinutes = (aHour || 0) * 60 + (aMinute || 0);
-  const bStartMinutes = (bHour || 0) * 60 + (bMinute || 0);
-
-  if (aStartMinutes <= bStartMinutes) {
-    return minutesOfDay >= aStartMinutes && minutesOfDay < bStartMinutes ? 'A' : 'B';
-  }
-  return minutesOfDay >= aStartMinutes || minutesOfDay < bStartMinutes ? 'A' : 'B';
-}
+// 교대 판별은 더 이상 "로그의 시작 시각이 속한 교대" 하나로 하지 않는다.
+// 교대를 시간 구간으로 만들어 로그와 교집합을 내므로(buildShiftWindows), 교대를 넘긴 장애도
+// 각 교대에 실제로 걸친 만큼만 집계된다.
 
 // GET /api/downtime-analysis - 다운타임 분석 데이터 조회
 export async function GET(request: NextRequest) {
@@ -138,18 +126,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 교대 필터링 (machine_logs에는 shift 컬럼이 없어 start_time을 영업 시간대로 환산하여 판별)
-    let downtimeLogs = rawDowntimeLogs || [];
-    if (shift) {
-      const requestedShifts = shift.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-      if (requestedShifts.length > 0) {
-        downtimeLogs = downtimeLogs.filter(log =>
-          requestedShifts.includes(
-            deriveShiftFromStartTime(log.start_time, businessConfig.timezone, businessConfig.shiftAStart, businessConfig.shiftBStart)
-          )
-        );
-      }
-    }
+    // machine_logs 에는 shift 컬럼이 없다.
+    // 예전에는 start_time 이 속한 교대로 로그 **전체**를 분류해 걸러냈다. 그러면 교대를 넘긴
+    // 장애가 시작 교대에 전량 귀속되고 다른 교대에서는 사라진다. 이제는 로그를 버리지 않고,
+    // 아래에서 교대 시간 구간과 교집합을 내어 "실제로 그 교대에 걸친 만큼"만 집계한다.
+    const downtimeLogs = rawDowntimeLogs || [];
 
     // 운영자가 교대 데이터 입력 화면에서 직접 기록한 비가동 시간(downtime_entries).
     // date/shift 컬럼을 직접 보유하고 있어 machine_logs보다 정확하게 필터링할 수 있음.
@@ -246,69 +227,149 @@ export async function GET(request: NextRequest) {
       entryWindowsByMachine[entry.machine_id].push({ start, end });
     });
 
-    // [start, end) 에서 windows 들의 합집합을 뺀 나머지 길이(ms)를 구한다.
-    const subtractWindows = (
-      start: number,
-      end: number,
-      windows: Array<{ start: number; end: number }>
-    ): number => {
-      if (!(end > start)) return 0;
+    type Interval = { start: number; end: number };
 
-      // 대상 구간과 겹치는 부분만 잘라내어 시작 시각 순으로 정렬
-      const clipped = windows
-        .map(w => ({ start: Math.max(w.start, start), end: Math.min(w.end, end) }))
-        .filter(w => w.end > w.start)
-        .sort((a, b) => a.start - b.start);
+    // 겹치는 구간들을 병합 (이중 계산 방지)
+    const mergeIntervals = (intervals: Interval[]): Interval[] => {
+      const sorted = intervals.filter(i => i.end > i.start).sort((a, b) => a.start - b.start);
+      if (sorted.length === 0) return [];
 
-      if (clipped.length === 0) return end - start;
-
-      // 겹치는 윈도우들을 병합하여 실제로 덮인 길이를 계산 (이중 차감 방지)
-      let covered = 0;
-      let curStart = clipped[0].start;
-      let curEnd = clipped[0].end;
-      for (let i = 1; i < clipped.length; i++) {
-        const w = clipped[i];
-        if (w.start > curEnd) {
-          covered += curEnd - curStart;
-          curStart = w.start;
-          curEnd = w.end;
+      const merged: Interval[] = [{ ...sorted[0] }];
+      for (let i = 1; i < sorted.length; i++) {
+        const last = merged[merged.length - 1];
+        if (sorted[i].start > last.end) {
+          merged.push({ ...sorted[i] });
         } else {
-          curEnd = Math.max(curEnd, w.end);
+          last.end = Math.max(last.end, sorted[i].end);
         }
       }
-      covered += curEnd - curStart;
-
-      return Math.max(0, end - start - covered);
+      return merged;
     };
+
+    // A 의 각 구간에서 B(병합된 구간들)를 뺀 나머지 구간들
+    const subtractIntervals = (base: Interval[], cut: Interval[]): Interval[] => {
+      const merged = mergeIntervals(cut);
+      const result: Interval[] = [];
+
+      for (const b of base) {
+        let cursor = b.start;
+        for (const c of merged) {
+          if (c.end <= cursor) continue;
+          if (c.start >= b.end) break;
+          if (c.start > cursor) {
+            result.push({ start: cursor, end: Math.min(c.start, b.end) });
+          }
+          cursor = Math.max(cursor, c.end);
+          if (cursor >= b.end) break;
+        }
+        if (cursor < b.end) {
+          result.push({ start: cursor, end: b.end });
+        }
+      }
+
+      return result.filter(i => i.end > i.start);
+    };
+
+    // 두 구간 집합의 교집합
+    const intersectIntervals = (a: Interval[], b: Interval[]): Interval[] => {
+      const result: Interval[] = [];
+      for (const x of a) {
+        for (const y of b) {
+          const start = Math.max(x.start, y.start);
+          const end = Math.min(x.end, y.end);
+          if (end > start) result.push({ start, end });
+        }
+      }
+      return mergeIntervals(result);
+    };
+
+    const totalMinutes = (intervals: Interval[]): number =>
+      Math.round((intervals.reduce((sum, i) => sum + (i.end - i.start), 0) / 60000) * 100) / 100;
 
     // 조회 구간 경계. 진행 중(end_time=null)인 로그는 "지금"까지 이어진 것으로 보되 구간 끝을 넘지 않는다.
     const rangeStartMs = fromDate.valueOf();
     const rangeEndMs = toDate.valueOf();
     const nowMs = Date.now();
 
-    // machine_log 한 건이 조회 구간 안에서 실제로 차지하는 비가동 시간(분).
-    // 구간 밖으로 삐져나온 부분은 잘라내고, 수동 기록과 겹치는 부분은 빼고 남은 길이를 반환한다.
-    const effectiveLogMinutes = (
+    /**
+     * 교대 필터를 "구간"으로 만든다.
+     *
+     * 기존에는 로그의 start_time 이 속한 교대로 로그 **전체**를 분류했다. 그래서
+     *   - A교대(08:00)에 시작해 B교대까지 이어진 장애는 A 에 전량 귀속되고,
+     *   - B교대 조회에서는 그 장애가 통째로 사라졌다.
+     * (실측: 비가동 로그 461건 중 64건이 교대 경계를 넘는다)
+     *
+     * 교대를 시간 구간으로 만들어 로그와 교집합을 내면, 걸친 장애는 각 교대에
+     * 실제로 걸친 만큼만 들어간다.
+     */
+    const buildShiftWindows = (requestedShifts: string[] | null): Interval[] => {
+      if (!requestedShifts || requestedShifts.length === 0) {
+        return [{ start: rangeStartMs, end: rangeEndMs }];
+      }
+
+      const [aHour, aMinute] = businessConfig.shiftAStart.split(':').map(Number);
+      const [bHour, bMinute] = businessConfig.shiftBStart.split(':').map(Number);
+
+      const windows: Interval[] = [];
+      // 경계에 걸친 교대를 놓치지 않도록 조회 구간 앞뒤로 하루씩 더 훑는다
+      let cursor = fromDate.subtract(1, 'day').startOf('day');
+      const limit = toDate.add(1, 'day').startOf('day');
+
+      while (cursor.valueOf() <= limit.valueOf()) {
+        const aStart = cursor.hour(aHour || 0).minute(aMinute || 0).second(0).millisecond(0);
+        const bStart = cursor.hour(bHour || 0).minute(bMinute || 0).second(0).millisecond(0);
+
+        if (requestedShifts.includes('A')) {
+          // A: shift_a_start ~ shift_b_start (같은 날)
+          windows.push({ start: aStart.valueOf(), end: bStart.valueOf() });
+        }
+        if (requestedShifts.includes('B')) {
+          // B: shift_b_start ~ 다음 날 shift_a_start (자정을 넘는다)
+          windows.push({ start: bStart.valueOf(), end: aStart.add(1, 'day').valueOf() });
+        }
+
+        cursor = cursor.add(1, 'day');
+      }
+
+      return intersectIntervals(mergeIntervals(windows), [
+        { start: rangeStartMs, end: rangeEndMs }
+      ]);
+    };
+
+    const requestedShifts = shift
+      ? shift.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+      : null;
+    const allowedWindows = buildShiftWindows(requestedShifts);
+
+    /**
+     * machine_log 한 건이 조회 구간(+교대 필터) 안에서 실제로 차지하는 비가동 구간들.
+     * 구간 밖은 잘라내고, 수동 기록(downtime_entries)과 겹치는 부분은 뺀다.
+     */
+    const effectiveLogIntervals = (
       machineIdValue: string,
       startTime: string,
       endTime: string | null
-    ): number => {
+    ): Interval[] => {
       const logStart = new Date(startTime).getTime();
-      if (!Number.isFinite(logStart)) return 0;
+      if (!Number.isFinite(logStart)) return [];
 
       const logEnd = endTime ? new Date(endTime).getTime() : Math.min(nowMs, rangeEndMs);
-      if (!Number.isFinite(logEnd)) return 0;
+      if (!Number.isFinite(logEnd) || logEnd <= logStart) return [];
 
-      const clipStart = Math.max(logStart, rangeStartMs);
-      const clipEnd = Math.min(logEnd, rangeEndMs);
+      const clipped = intersectIntervals([{ start: logStart, end: logEnd }], allowedWindows);
+      if (clipped.length === 0) return [];
 
-      const residualMs = subtractWindows(
-        clipStart,
-        clipEnd,
-        entryWindowsByMachine[machineIdValue] || []
-      );
+      return subtractIntervals(clipped, entryWindowsByMachine[machineIdValue] || []);
+    };
 
-      return Math.round((residualMs / 60000) * 100) / 100;
+    // 수동 입력(downtime_entries)은 shift 컬럼으로 이미 필터링됐다. 조회 구간으로만 자른다.
+    const manualEntryIntervals = (startTime: string, endTime: string | null): Interval[] => {
+      const start = new Date(startTime).getTime();
+      if (!Number.isFinite(start)) return [];
+      const end = endTime ? new Date(endTime).getTime() : start;
+      if (!Number.isFinite(end) || end <= start) return [];
+
+      return intersectIntervals([{ start, end }], [{ start: rangeStartMs, end: rangeEndMs }]);
     };
 
     // machine_logs + downtime_entries를 하나의 형태로 정규화하여 이후 집계 로직을 공통화한다.
@@ -319,7 +380,9 @@ export async function GET(request: NextRequest) {
       state: string;
       start_time: string;
       end_time: string | null;
-      duration: number; // 분 단위
+      duration: number; // 분 단위 (조회 구간·교대로 잘라낸 실제 길이)
+      // 그 길이가 "언제" 발생했는지. 일별/시간대별 추세는 이 구간들을 쪼개서 만든다.
+      intervals: Interval[];
       operator_id: string | null;
       created_at: string | null;
       source: 'machine_log' | 'manual';
@@ -332,18 +395,17 @@ export async function GET(request: NextRequest) {
     const machineLogRows: UnifiedDowntimeRow[] = downtimeLogs
       .map(log => ({
         log,
-        duration: effectiveLogMinutes(log.machine_id, log.start_time, log.end_time)
+        intervals: effectiveLogIntervals(log.machine_id, log.start_time, log.end_time)
       }))
-      .filter(({ log, duration }) => {
-        if (duration > 0) return true;
-        // 남은 시간이 0 이면 수동 기록이 이 구간을 완전히 덮은 경우다 (조회 구간과 겹치지 않는
-        // 로그는 애초에 쿼리에서 걸러진다). 완전히 덮인 건수만 중복 제외로 집계한다.
+      .filter(({ log, intervals }) => {
+        if (intervals.length > 0) return true;
+        // 남은 구간이 없으면 수동 기록이 완전히 덮었거나, 요청한 교대에 전혀 걸치지 않은 로그다.
         if ((entryWindowsByMachine[log.machine_id] || []).length > 0) {
           overlapExcludedCount++;
         }
         return false;
       })
-      .map(({ log, duration }) => {
+      .map(({ log, intervals }) => {
         if (!log.end_time) ongoingEventCount++;
         return {
           log_id: log.log_id,
@@ -352,27 +414,33 @@ export async function GET(request: NextRequest) {
           state: log.state,
           start_time: log.start_time,
           end_time: log.end_time,
-          duration,
+          duration: totalMinutes(intervals),
+          intervals,
           operator_id: log.operator_id,
           created_at: log.created_at,
           source: 'machine_log' as const
         };
       });
 
-    const manualEntryRows: UnifiedDowntimeRow[] = downtimeEntries.map(entry => ({
-      log_id: entry.id,
-      machine_id: entry.machine_id,
-      machine_name: unwrapJoin(entry.machines)?.name || 'Unknown',
-      state: mapReasonToState(entry.reason),
-      start_time: entry.start_time,
-      end_time: entry.end_time,
-      duration: entry.duration_minutes || 0,
-      operator_id: entry.operator_id,
-      created_at: entry.created_at,
-      source: 'manual' as const,
-      reason: entry.reason,
-      description: entry.description
-    }));
+    const manualEntryRows: UnifiedDowntimeRow[] = downtimeEntries.map(entry => {
+      const intervals = manualEntryIntervals(entry.start_time, entry.end_time);
+      return {
+        log_id: entry.id,
+        machine_id: entry.machine_id,
+        machine_name: unwrapJoin(entry.machines)?.name || 'Unknown',
+        state: mapReasonToState(entry.reason),
+        start_time: entry.start_time,
+        end_time: entry.end_time,
+        // 작업자가 입력한 duration_minutes 를 그대로 신뢰한다 (합계의 단일 진실 공급원)
+        duration: entry.duration_minutes || 0,
+        intervals,
+        operator_id: entry.operator_id,
+        created_at: entry.created_at,
+        source: 'manual' as const,
+        reason: entry.reason,
+        description: entry.description
+      };
+    });
 
     const unifiedRows: UnifiedDowntimeRow[] = [...machineLogRows, ...manualEntryRows];
 
@@ -476,14 +544,45 @@ export async function GET(request: NextRequest) {
       return machine;
     }).sort((a, b) => b.total_downtime - a.total_downtime);
 
-    // 시간대별 트렌드 분석 (시간당, 영업 시간대 기준)
-    const hourlyTrends: Record<string, number> = {};
-    unifiedRows.forEach(row => {
-      const hour = dayjs(row.start_time).tz(businessConfig.timezone).hour();
-      hourlyTrends[hour] = (hourlyTrends[hour] || 0) + (row.duration || 0);
-    });
+    /**
+     * 한 구간을 "시간(hour) 경계"로 쪼개어 (현지 날짜, 현지 시각, 분) 조각들을 만든다.
+     *
+     * 예전에는 로그의 duration 전체를 start_time 이 속한 날짜/시각 버킷 하나에 몰아넣었다.
+     * 실측상 비가동 로그의 평균 길이는 268시간(11일), 최대 1,967시간(82일)이고 461건 중
+     * 206건이 날짜를 넘는다. 즉 11일치 비가동이 시작한 날 하루에 통째로 쌓여 있었고,
+     * 조회 범위보다 앞선 날짜까지 추세 응답에 나타났다.
+     * 이제 실제로 걸친 시간대에만 그만큼씩 나눠 넣는다.
+     */
+    const splitIntoHourlySegments = (
+      intervals: Interval[]
+    ): Array<{ date: string; hour: number; minutes: number }> => {
+      const segments: Array<{ date: string; hour: number; minutes: number }> = [];
 
-    // 일별 트렌드 분석
+      for (const interval of intervals) {
+        let cursor = dayjs(interval.start).tz(businessConfig.timezone);
+        const end = interval.end;
+
+        while (cursor.valueOf() < end) {
+          const nextHour = cursor.add(1, 'hour').startOf('hour');
+          const segmentEnd = Math.min(nextHour.valueOf(), end);
+          const minutes = (segmentEnd - cursor.valueOf()) / 60000;
+
+          if (minutes > 0) {
+            segments.push({
+              date: cursor.format('YYYY-MM-DD'),
+              hour: cursor.hour(),
+              minutes
+            });
+          }
+
+          cursor = dayjs(segmentEnd).tz(businessConfig.timezone);
+        }
+      }
+
+      return segments;
+    };
+
+    const hourlyTrends: Record<string, number> = {};
     const dailyTrends: Record<string, {
       date: string;
       total_downtime: number;
@@ -492,25 +591,54 @@ export async function GET(request: NextRequest) {
     }> = {};
 
     unifiedRows.forEach(row => {
-      const date = dayjs(row.start_time).tz(businessConfig.timezone).format('YYYY-MM-DD');
-      const duration = row.duration || 0;
-      const state = row.state;
+      const segments = splitIntoHourlySegments(row.intervals);
 
-      if (!dailyTrends[date]) {
-        dailyTrends[date] = {
-          date,
-          total_downtime: 0,
-          events_count: 0,
-          states: {}
-        };
-      }
+      // 수동 입력은 duration_minutes 를 합계의 기준으로 쓰므로, 구간 분해로 나온 총량과
+      // 어긋날 수 있다(작업자가 시각과 별개로 분을 적을 수 있음). 그 경우 비율로 맞춰
+      // 추세 합계가 총합과 일치하도록 보정한다.
+      const segmentTotal = segments.reduce((sum, s) => sum + s.minutes, 0);
+      const scale = segmentTotal > 0 && row.duration > 0 ? row.duration / segmentTotal : 1;
 
-      dailyTrends[date].total_downtime += duration;
-      dailyTrends[date].events_count++;
-      dailyTrends[date].states[state] = (dailyTrends[date].states[state] || 0) + duration;
+      // 이 행이 실제로 등장하는 날짜들 (이벤트 건수는 날짜마다 1회씩만 센다)
+      const datesTouched = new Set<string>();
+
+      segments.forEach(segment => {
+        const minutes = segment.minutes * scale;
+
+        hourlyTrends[segment.hour] = (hourlyTrends[segment.hour] || 0) + minutes;
+
+        if (!dailyTrends[segment.date]) {
+          dailyTrends[segment.date] = {
+            date: segment.date,
+            total_downtime: 0,
+            events_count: 0,
+            states: {}
+          };
+        }
+
+        dailyTrends[segment.date].total_downtime += minutes;
+        dailyTrends[segment.date].states[row.state] =
+          (dailyTrends[segment.date].states[row.state] || 0) + minutes;
+
+        if (!datesTouched.has(segment.date)) {
+          datesTouched.add(segment.date);
+          dailyTrends[segment.date].events_count++;
+        }
+      });
     });
 
-    const sortedDailyTrends = Object.values(dailyTrends).sort((a, b) => 
+    // 소수점 정리
+    Object.keys(hourlyTrends).forEach(hour => {
+      hourlyTrends[hour] = Math.round(hourlyTrends[hour] * 100) / 100;
+    });
+    Object.values(dailyTrends).forEach(day => {
+      day.total_downtime = Math.round(day.total_downtime * 100) / 100;
+      Object.keys(day.states).forEach(state => {
+        day.states[state] = Math.round(day.states[state] * 100) / 100;
+      });
+    });
+
+    const sortedDailyTrends = Object.values(dailyTrends).sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 

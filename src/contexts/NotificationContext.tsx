@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   Notification,
   NotificationContextType,
@@ -10,7 +11,15 @@ import type { Machine, MachineState } from '@/types';
 import { useAuth } from './AuthContext';
 import { showToast } from '@/components/notifications';
 import { useLanguage } from './LanguageContext';
-import { fetchMachines } from '@/lib/machinesCache';
+import { fetchMachines, invalidateMachinesCache } from '@/lib/machinesCache';
+import { supabase } from '@/lib/supabase';
+
+// 설비 상태 변경을 놓치지 않기 위한 폴백 폴링 주기.
+// Realtime 구독이 끊겨도 이 주기로는 반드시 따라잡는다.
+const NOTIFICATION_POLL_INTERVAL_MS = 60_000;
+
+// Realtime 이벤트가 연달아 오면(대량 상태 변경) 매번 재조회하지 않도록 묶는다.
+const REALTIME_DEBOUNCE_MS = 1_000;
 
 /**
  * 비정상 설비 상태별 심각도.
@@ -136,8 +145,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const generateRealNotifications = useCallback(async (): Promise<Notification[]> => {
     try {
       console.log('🏭 설비 데이터 조회 시작');
-      // 실제 설비 데이터 가져오기 (공용 캐시: 페이지의 다른 호출과 중복 요청을 합친다)
-      const machines = await fetchMachines();
+      // 알림은 "지금" 상태를 보는 것이므로 TTL 캐시를 우회한다.
+      // (캐시된 30초 전 목록으로 알림을 만들면 방금 바뀐 상태를 놓친다)
+      const machines = await fetchMachines({ force: true });
       console.log('🔧 로딩된 설비 수:', machines.length);
 
       // 이미 확인된 알림 조회
@@ -211,11 +221,25 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         }
       });
 
-      console.log('📊 최종 생성된 새 알림 수:', notifications.length);
-      const finalNotifications = notifications.slice(0, 10);
-      console.log('📋 반환할 알림 수:', finalNotifications.length);
+      // 상한을 두지 않는다.
+      //
+      // 이전에는 slice(0, 10) 으로 잘랐고, 확인(acknowledge) 후에도 다음 알림을 보충 조회하지
+      // 않았다. 그래서 비정상 설비가 10대를 넘으면 11번째부터는 로그인 세션이 끝날 때까지
+      // 화면에 나타나지 않았다. 설비 800대인 공장에서 비정상 10대는 드물지 않다.
+      //
+      // 심각도 순으로 정렬해 중요한 것이 위로 오게 한다. 목록 자체는 잘라내지 않는다
+      // (확인한 알림은 이미 위에서 걸러져 있다).
+      const severityRank: Record<NotificationSeverity, number> = {
+        critical: 0,
+        high: 1,
+        medium: 2,
+        low: 3
+      };
+      notifications.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
 
-      return finalNotifications; // 최대 10개만 표시
+      console.log('📊 최종 생성된 새 알림 수:', notifications.length);
+
+      return notifications;
     } catch (error) {
       console.error('❌ generateRealNotifications 오류:', error);
       return [];
@@ -406,19 +430,80 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     [state.notifications]
   );
 
-  // 초기 데이터 로드 - 사용자 로그인 시 실제 알림 로딩
+  // 최신 refreshNotifications 를 구독/타이머 콜백에서 참조하기 위한 ref.
+  // (구독 effect 가 refreshNotifications 를 의존성으로 가지면 콜백이 새로 만들어질 때마다
+  //  채널을 다시 구독하게 된다)
+  const refreshRef = useRef(refreshNotifications);
+  refreshRef.current = refreshNotifications;
+
+  // 초기 데이터 로드 + 설비 상태 변경 추적
+  //
+  // 이전에는 이 effect 가 user.id 가 바뀔 때 한 번 도는 것이 전부였고, refreshNotifications 를
+  // 호출하는 다른 곳도 앱 전체에 없었다. 즉 알림은 "로그인 시점의 스냅샷"이었다.
+  // 로그인 후 설비가 고장 나도 새 알림이 생기지 않았고, 정상 복귀해도 확인 이력이 지워지지
+  // 않아 다음 고장이 영영 안 뜨는 상태가 됐다.
+  //
+  // 그래서 (a) machines 테이블 Realtime 구독과 (b) 폴백 폴링을 함께 건다.
   useEffect(() => {
-    if (user?.id) {
-      console.log('🔄 NotificationContext 초기화 - 사용자 ID:', user.id);
-      refreshNotifications();
-    } else {
+    if (!user?.id) {
       console.log('❌ NotificationContext - 사용자 로그아웃됨, 알림 초기화');
-      // 사용자 로그아웃 시 알림 초기화
       dispatch({ type: 'CLEAR_ALL_NOTIFICATIONS' });
       dispatch({ type: 'SET_LOADING', payload: false });
       dispatch({ type: 'SET_ERROR', payload: null });
+      return;
     }
-  }, [user?.id, refreshNotifications]);
+
+    console.log('🔄 NotificationContext 초기화 - 사용자 ID:', user.id);
+
+    let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const runRefresh = () => {
+      if (cancelled) return;
+      // 설비 상태가 바뀌었으므로 캐시된 목록을 버린다
+      invalidateMachinesCache();
+      refreshRef.current();
+    };
+
+    runRefresh();
+
+    // (a) 설비 상태 변경 실시간 구독.
+    //
+    // 이 Provider 는 루트 레이아웃에 있으므로 여기서 예외가 나가면 앱 전체가 하얗게 된다.
+    // Realtime 은 부가 기능이고 아래 폴링이 같은 일을 더 느리게 해내므로, 구독 실패는
+    // 로그만 남기고 조용히 폴링으로 강등한다.
+    let channel: RealtimeChannel | null = null;
+    try {
+      channel = supabase
+        .channel('notification-machine-changes')
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'machines' },
+          () => {
+            // 대량 상태 변경이 연달아 들어와도 한 번만 재조회한다
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(runRefresh, REALTIME_DEBOUNCE_MS);
+          }
+        )
+        .subscribe();
+    } catch (error) {
+      console.error('❌ 알림 실시간 구독 실패 - 폴링으로 대체합니다:', error);
+    }
+
+    // (b) Realtime 이 끊기거나 구독에 실패해도 따라잡기 위한 폴백 폴링
+    const pollTimer = setInterval(runRefresh, NOTIFICATION_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      clearInterval(pollTimer);
+      try {
+        channel?.unsubscribe();
+      } catch (error) {
+        console.error('❌ 알림 실시간 구독 해제 실패:', error);
+      }
+    };
+  }, [user?.id]);
 
   // context value를 메모이제이션한다.
   // 매 렌더마다 새 객체를 만들면 useNotifications()를 쓰는 모든 소비자가 불필요하게 리렌더된다.

@@ -85,6 +85,11 @@
     "confirmZeroContent": "Chưa nhập thời gian dừng máy cho {{shifts}}. Nếu lưu mà không xác nhận, tỷ lệ vận hành sẽ được ghi là 100% và OEE sẽ cao hơn thực tế.",
     "confirmZeroOk": "Đúng, máy chạy liên tục",
     "confirmZeroCancel": "Nhập thời gian dừng",
+    "loadFailed": "Không tải được thời gian dừng máy",
+    "loadFailedTitle": "Không tải được thời gian dừng máy",
+    "loadFailedDescription": "Giá trị 0 phút hiển thị trên màn hình không có nghĩa là 'không có dừng máy', mà là 'không xác định'. Nếu lưu như vậy, thời gian dừng đã nhập trước đó sẽ bị ghi đè thành 0 và tỷ lệ vận hành sẽ được ghi là 100%. Hãy tải lại rồi mới lưu.",
+    "loadFailedBlockSave": "Không thể lưu vì không tải được thời gian dừng máy của {{shifts}}. Vui lòng nhấn Tải lại.",
+    "retryLoad": "Tải lại",
     "startTimeLabel": "Thời gian bắt đầu",
     "endTimeLabel": "Thời gian kết thúc",
     "reasons": {

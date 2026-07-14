@@ -7,12 +7,14 @@ import { ReportDashboard } from '@/components/reports';
 import { useReportsTranslation } from '@/hooks/useTranslation';
 import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecords';
 import { fetchMachines } from '@/lib/machinesCache';
+import { MAX_REPORT_TEMPLATE_DAYS } from '@/utils/reportRange';
 import { Machine } from '@/types';
 
 const { Title } = Typography;
 
-// 빠른 보고서 템플릿 중 가장 긴 기간이 "월간(최근 30일)"이므로 기본 조회 기간을 30일로 맞춘다.
-const DEFAULT_REPORT_WINDOW_DAYS = 30;
+// 조회 기간은 빠른 보고서 템플릿 중 가장 긴 것(월간=30일)과 반드시 같거나 길어야 한다.
+// 상수를 공유해, 템플릿 기간만 늘리고 조회 기간을 안 늘려서 앞쪽 날짜가 조용히 비는 일을 막는다.
+const DEFAULT_REPORT_WINDOW_DAYS = MAX_REPORT_TEMPLATE_DAYS;
 // 설비 800대 × 2교대 × 30일 ≈ 48,000행 → 50,000행 상한이면 기본 기간이 잘리지 않는다.
 const REPORT_RECORD_LIMIT = 50000;
 
