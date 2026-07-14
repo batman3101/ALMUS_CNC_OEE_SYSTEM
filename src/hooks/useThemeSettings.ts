@@ -2,18 +2,24 @@
 
 import { useEffect, useMemo } from 'react';
 import { useSystemSettings } from './useSystemSettings';
+import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { theme } from 'antd';
 
 /**
  * 테마 설정을 실시간으로 적용하는 훅
+ *
+ * 다크/라이트 "모드"는 개인 환경설정이므로 UserPreferences 에서 온다.
+ * 색상 팔레트와 컴팩트 모드는 회사 공통 브랜딩이므로 전역 system_settings 를 그대로 따른다.
+ * (예전에는 모드까지 전역 설정에서 읽어서, 한 사람이 다크로 바꾸면 모두가 다크가 됐다)
  */
 export function useThemeSettings() {
   const { settings } = useSystemSettings();
+  const { themeMode } = useUserPreferences();
 
   // 원시값으로 분해하여 안정적인 메모이제이션 키로 사용
   // (settings.display 객체나 getDisplaySettings 함수의 참조가 매 렌더마다
   //  바뀌더라도, 실제 값이 그대로면 아래 훅들이 재실행되지 않도록 함)
-  const mode = settings.display?.theme_mode ?? 'light';
+  const mode = themeMode;
   const primaryColor = settings.display?.theme_primary_color ?? '#1890ff';
   const successColor = settings.display?.theme_success_color ?? '#52c41a';
   const warningColor = settings.display?.theme_warning_color ?? '#faad14';
@@ -65,8 +71,9 @@ export function useThemeSettings() {
     }
 
     // 로컬스토리지 동기화 (빠른 초기 로딩을 위해)
+    // 'theme-mode' 는 UserPreferencesContext 가 단독으로 소유한다. 여기서 또 쓰면
+    // 같은 키에 쓰기 주체가 둘이 되어, 예전처럼 서로 값을 덮어쓰는 버그의 씨앗이 된다.
     try {
-      localStorage.setItem('theme-mode', mode);
       localStorage.setItem('theme-colors', JSON.stringify({
         primary: primaryColor,
         success: successColor,

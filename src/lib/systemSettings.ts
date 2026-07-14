@@ -345,12 +345,18 @@ export class SystemSettingsService {
    */
   private async updateSettingViaServiceRole(update: SettingUpdate, valueToSave: string): Promise<SettingUpdateResponse> {
     try {
-      // 클라이언트 사이드에서는 API 라우트를 통해 처리
+      // 클라이언트 사이드에서는 API 라우트를 통해 처리.
+      // 이 라우트는 Service Role 로 전역 설정을 쓰므로 관리자 세션을 요구한다.
+      // 세션 토큰을 실어 보내지 않으면 401 이 되고, 관리자여도 설정을 저장할 수 없다.
       if (typeof window !== 'undefined') {
+        const { data: { session } } = await supabase.auth.getSession();
         const response = await fetch('/api/system-settings/update', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(session?.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : {}),
           },
           body: JSON.stringify({
             category: update.category,

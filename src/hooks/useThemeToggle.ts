@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSystemSettings } from './useSystemSettings';
+import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { App } from 'antd';
 
 export interface ThemeToggleState {
@@ -15,18 +16,20 @@ export interface ThemeToggleState {
  * 테마 상태 관리, 토글 기능, 로컬 스토리지 동기화를 담당
  */
 export function useThemeToggle() {
-  const { getDisplaySettings, updateSetting } = useSystemSettings();
+  // 테마 모드는 개인 환경설정이다. 전역 system_settings 를 쓰면 내 변경이 다른 사용자에게 전파된다.
+  const { themeMode, setThemeMode } = useUserPreferences();
+  const { getDisplaySettings } = useSystemSettings();
   const { message } = App.useApp();
-  
+
   const [state, setState] = useState<ThemeToggleState>({
     isDark: false,
     isLoading: false,
     error: null
   });
 
-  // 현재 테마 모드 확인
+  // 색상 팔레트 등은 여전히 회사 공통 설정에서 가져온다.
   const displaySettings = getDisplaySettings();
-  const currentIsDark = displaySettings.mode === 'dark';
+  const currentIsDark = themeMode === 'dark';
 
   // 상태 업데이트 (설정 변경 시 자동 반영)
   useEffect(() => {
@@ -45,40 +48,23 @@ export function useThemeToggle() {
 
     try {
       const newMode = currentIsDark ? 'light' : 'dark';
-      
-      // 시스템 설정 업데이트
-      const success = await updateSetting({
-        category: 'display',
-        setting_key: 'theme_mode',
-        setting_value: newMode,
-        change_reason: '사용자가 테마 토글을 통해 모드를 변경함'
-      });
 
-      if (success) {
-        // 로컬 스토리지에도 저장 (빠른 로딩을 위해)
-        try {
-          localStorage.setItem('theme-mode', newMode);
-        } catch (localStorageError) {
-          console.warn('localStorage theme-mode update failed:', localStorageError);
-        }
+      // 내 개인 설정만 갱신한다 (localStorage 동기화도 UserPreferences 가 담당한다).
+      await setThemeMode(newMode);
 
-        // 성공 메시지 (옵션)
-        if (showMessage) {
-          const modeText = newMode === 'dark' ? '다크 모드' : '라이트 모드';
-          message.success(`${modeText}로 변경되었습니다.`);
-        }
-
-        setState(prev => ({
-          ...prev,
-          isDark: newMode === 'dark',
-          isLoading: false,
-          error: null
-        }));
-
-        return true;
-      } else {
-        throw new Error('테마 설정 업데이트에 실패했습니다.');
+      if (showMessage) {
+        const modeText = newMode === 'dark' ? '다크 모드' : '라이트 모드';
+        message.success(`${modeText}로 변경되었습니다.`);
       }
+
+      setState(prev => ({
+        ...prev,
+        isDark: newMode === 'dark',
+        isLoading: false,
+        error: null
+      }));
+
+      return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '테마 변경 중 오류가 발생했습니다.';
       
@@ -95,7 +81,7 @@ export function useThemeToggle() {
       console.error('Theme toggle error:', error);
       return false;
     }
-  }, [currentIsDark, updateSetting, message]);
+  }, [currentIsDark, setThemeMode, message]);
 
   /**
    * 특정 테마로 설정

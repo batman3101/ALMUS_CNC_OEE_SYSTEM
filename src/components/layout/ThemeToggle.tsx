@@ -3,7 +3,7 @@
 import React, { useCallback } from 'react';
 import { Button, Grid, Tooltip, App } from 'antd';
 import { SunOutlined, MoonOutlined } from '@ant-design/icons';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 const { useBreakpoint } = Grid;
@@ -17,37 +17,26 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
   size = 'middle',
   showTooltip = true
 }) => {
-  const { getDisplaySettings, updateSetting } = useSystemSettings();
+  // 테마는 개인 환경설정이다. 전역 system_settings 가 아니라 내 프로필에만 저장된다.
+  // (예전에는 전역 행을 고쳐서, 내가 다크로 바꾸면 다른 사용자 화면까지 다크가 됐다)
+  const { themeMode, setThemeMode } = useUserPreferences();
   const { t } = useLanguage();
   const { message } = App.useApp();
   const screens = useBreakpoint();
 
-  // 현재 테마 모드 가져오기
-  const displaySettings = getDisplaySettings();
-  const isDark = displaySettings.mode === 'dark';
+  const isDark = themeMode === 'dark';
 
   // 테마 토글 핸들러
   const handleToggleTheme = useCallback(async () => {
     try {
       const newMode = isDark ? 'light' : 'dark';
-
-      const success = await updateSetting({
-        category: 'display',
-        setting_key: 'theme_mode',
-        setting_value: newMode,
-        change_reason: 'User changed theme mode from header'
-      });
-
-      if (success) {
-        message.success(newMode === 'dark' ? t('theme.changedToDark') : t('theme.changedToLight'));
-      } else {
-        message.error(t('theme.changeFailed'));
-      }
+      await setThemeMode(newMode);
+      message.success(newMode === 'dark' ? t('theme.changedToDark') : t('theme.changedToLight'));
     } catch (error) {
       console.error('Theme toggle error:', error);
       message.error(t('theme.changeError'));
     }
-  }, [isDark, updateSetting, message, t]);
+  }, [isDark, setThemeMode, message, t]);
 
   // 토글 버튼 컨텐츠
   const buttonContent = (

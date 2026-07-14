@@ -13,6 +13,11 @@ export interface User {
   role: 'admin' | 'operator' | 'engineer';
   assigned_machines?: string[];
   created_at: string;
+
+  // 개인 환경설정. 전역 system_settings 가 아니라 user_profiles 에 사용자별로 저장한다.
+  // null = 아직 고르지 않음 -> system_settings 의 값을 "기본값"으로 사용한다.
+  language?: 'ko' | 'vi' | null;
+  theme_mode?: 'light' | 'dark' | null;
 }
 
 // 설비 상태 (DB enum `machine_status` 와 1:1 일치)
