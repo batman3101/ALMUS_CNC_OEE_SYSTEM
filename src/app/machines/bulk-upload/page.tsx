@@ -1,25 +1,14 @@
 'use client';
 
 import React from 'react';
-import { useTranslation } from '@/hooks/useTranslation';
 import MachinesBulkUpload from '@/components/machines/MachinesBulkUpload';
 import { ProtectedRoute } from '@/components/auth';
 
+// 제목/설명은 MachinesBulkUpload 가 자체 헤더로 렌더링한다. 여기서 다시 그리면 화면에 두 번 나온다.
 export default function BulkUploadPage() {
-  const { t } = useTranslation();
-
   return (
     <ProtectedRoute>
       <div className="container mx-auto p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">
-            {t('machines.bulkUpload')}
-          </h1>
-          <p className="text-gray-600 mt-2">
-            {t('machines.bulkUploadDescription')}
-          </p>
-        </div>
-
         <MachinesBulkUpload />
       </div>
     </ProtectedRoute>

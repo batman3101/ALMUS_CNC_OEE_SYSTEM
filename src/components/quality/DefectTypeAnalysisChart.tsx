@@ -3,6 +3,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, PieLabelRenderProps, PieLabel } from 'recharts';
 import { List, Tag } from 'antd';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface DefectTypeAnalysisChartProps {
   data: Array<{
@@ -17,21 +18,23 @@ interface DefectTypeAnalysisChartProps {
   height?: number;
 }
 
-const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({ 
-  data, 
+const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
+  data,
   height = 300
 }) => {
+  const { t } = useTranslation();
+
   // 불량 유형별 모의 데이터 생성 (실제로는 API에서 가져와야 함)
   const defectTypeData = React.useMemo(() => {
     const totalDefects = data.reduce((sum, item) => sum + item.defect_qty, 0);
-    
+
     // 일반적인 CNC 가공에서 발생하는 불량 유형들
     const defectTypes = [
-      { name: '치수 불량', value: Math.floor(totalDefects * 0.35), color: '#ff4d4f' },
-      { name: '표면 불량', value: Math.floor(totalDefects * 0.25), color: '#ff7a45' },
-      { name: '형상 불량', value: Math.floor(totalDefects * 0.20), color: '#ffa940' },
-      { name: '재질 불량', value: Math.floor(totalDefects * 0.12), color: '#ffec3d' },
-      { name: '기타', value: Math.floor(totalDefects * 0.08), color: '#bae637' }
+      { name: t('dashboard:charts.defectTypes.dimensional'), value: Math.floor(totalDefects * 0.35), color: '#ff4d4f' },
+      { name: t('dashboard:charts.defectTypes.surface'), value: Math.floor(totalDefects * 0.25), color: '#ff7a45' },
+      { name: t('dashboard:charts.defectTypes.shape'), value: Math.floor(totalDefects * 0.20), color: '#ffa940' },
+      { name: t('dashboard:charts.defectTypes.material'), value: Math.floor(totalDefects * 0.12), color: '#ffec3d' },
+      { name: t('dashboard:charts.defectTypes.other'), value: Math.floor(totalDefects * 0.08), color: '#bae637' }
     ];
 
     // 남은 수량을 첫 번째 항목에 추가
@@ -41,7 +44,7 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
     }
 
     return defectTypes.filter(item => item.value > 0);
-  }, [data]);
+  }, [data, t]);
 
   const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number }> }) => {
     if (active && payload && payload.length) {
@@ -59,8 +62,8 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
         }}>
           <p style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0' }}>{data.name}</p>
-          <p style={{ fontSize: '14px', margin: '0 0 4px 0' }}>수량: {data.value}개</p>
-          <p style={{ fontSize: '14px', margin: '0' }}>비율: {percentage}%</p>
+          <p style={{ fontSize: '14px', margin: '0 0 4px 0' }}>{t('dashboard:charts.quantity')}: {data.value}{t('dashboard:chart.unit')}</p>
+          <p style={{ fontSize: '14px', margin: '0' }}>{t('dashboard:charts.ratio')}: {percentage}%</p>
         </div>
       );
     }
@@ -128,10 +131,10 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
         <div style={{ width: '180px', padding: '0 16px' }}>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: 8 }}>
-              불량 유형별 현황
+              {t('dashboard:charts.defectTypeStatus')}
             </div>
             <div style={{ fontSize: '12px', color: '#666' }}>
-              전체 불량: {defectTypeData.reduce((sum, item) => sum + item.value, 0)}개
+              {t('dashboard:qualityChart.totalDefectQty')}: {defectTypeData.reduce((sum, item) => sum + item.value, 0)}{t('dashboard:chart.unit')}
             </div>
           </div>
 
@@ -175,7 +178,7 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
                       color: '#666',
                       marginLeft: 20
                     }}>
-                      {item.value}개
+                      {item.value}{t('dashboard:chart.unit')}
                     </div>
                   </div>
                 </List.Item>

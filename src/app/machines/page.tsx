@@ -13,7 +13,7 @@ import { Machine } from '@/types';
 const { Title, Paragraph } = Typography;
 
 export default function MachinesPage() {
-  const { t } = useMachinesTranslation();
+  const { t, language } = useMachinesTranslation();
   const { t: tCommon } = useCommonTranslation();
   
   const {
@@ -49,14 +49,15 @@ export default function MachinesPage() {
 
   // 마지막 업데이트 시간 포맷팅
   const formatLastUpdated = (date: Date | null) => {
-    if (!date) return '업데이트 없음';
-    
+    if (!date) return t('systemStatus.noUpdate');
+
     const now = new Date();
     const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (diff < 60) return `${diff}초 전`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
-    return date.toLocaleTimeString('ko-KR');
+
+    if (diff < 60) return t('systemStatus.secondsAgo', { count: diff });
+    if (diff < 3600) return t('systemStatus.minutesAgo', { count: Math.floor(diff / 60) });
+    // 시각 표기도 현재 언어를 따라야 한다 ('ko-KR' 고정이면 베트남어 화면에 한국식 표기가 남는다).
+    return date.toLocaleTimeString(language === 'vi' ? 'vi-VN' : 'ko-KR');
   };
 
   return (

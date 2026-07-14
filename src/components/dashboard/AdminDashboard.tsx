@@ -21,6 +21,7 @@ import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecor
 import { DateRangeSelector } from '@/components/common/DateRangeSelector';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { fetchMachines } from '@/lib/machinesCache';
+import { formatMachineLocation } from '@/utils/machineLocation';
 
 // 대시보드가 지원하는 최대 기간(최근 30일 프리셋)을 커버하는 행수 상한.
 // 설비 800대 × 2교대 × 30일 ≈ 48,000행이므로 50,000행이면 프리셋 전 구간이 잘리지 않는다.
@@ -108,19 +109,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   // 상태 텍스트 변환 함수 (DB의 상태 설명 데이터 사용)
   const getStatusText = (state?: string) => {
     if (!state || statusDescriptions.length === 0) {
-      // 상태 설명 데이터가 없으면 기본 번역 사용
-      const stateMap: Record<string, string> = {
-        'NORMAL_OPERATION': t('status.normalOperation'),
-        'PM_MAINTENANCE': t('status.maintenance'),
-        'INSPECTION': t('status.inspection'),
-        'BREAKDOWN_REPAIR': t('status.breakdownRepair'),
-        'MODEL_CHANGE': t('status.modelChange'),
-        'PLANNED_STOP': t('status.plannedStop'),
-        'PROGRAM_CHANGE': t('status.programChange'),
-        'TOOL_CHANGE': t('status.toolChange'),
-        'TEMPORARY_STOP': t('status.temporaryStop')
-      };
-      return stateMap[state || ''] || t('status.unknown');
+      // 상태 설명 데이터가 없으면 기본 번역 사용.
+      // 설비 상태 라벨은 machines:states.* 에 있다 (dashboard:status.* 는 폴링/실시간 연결 상태라
+      // 전혀 다른 키다. 예전에는 그쪽을 가리키고 있어서 이 폴백 경로가 raw 키를 그대로 노출했다).
+      const label = t(`machines:states.${state}`, { defaultValue: '' });
+      return label || t('machines:states.unknown');
     }
 
     // DB에서 가져온 상태 설명 데이터 사용
@@ -135,7 +128,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       console.warn(`Missing status description for machine state: ${state}`);
     }
 
-    return t('status.unknown');
+    return t('machines:states.unknown');
   };
 
   // 실시간 OEE 메트릭 계산
@@ -738,6 +731,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       dataIndex: 'location',
       key: 'location',
       width: 120,
+      // DB 에는 'A동'/'B동' 처럼 한국어로 저장돼 있으므로 표시할 때만 번역한다.
+      render: (location: string) => formatMachineLocation(location, t),
     },
     {
       title: t('table.status'),
@@ -878,7 +873,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               fetchDashboardData({ force: true });
               if (refreshRecords) refreshRecords();
             }}>
-              {t('common.retry')}
+              {t('common:common.retry')}
             </Button>
           }
         />
@@ -1081,7 +1076,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             ...notifications.map(notification => ({
               id: notification.id,
               priority: notification.severity,
-              message: notification.message,
+              // 알림은 번역 키를 들고 다니므로 여기서 현재 언어로 렌더링한다.
+              message: t(notification.messageKey, notification.messageParams),
               machineName: notification.machine_name,
               timestamp: notification.created_at,
               acknowledged: notification.acknowledged,

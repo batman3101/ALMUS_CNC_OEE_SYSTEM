@@ -26,12 +26,18 @@ type SettingDefinitionWithOptions = SettingDefinition & {
  * DB 에 저장된 canonical setting_key 와 코드 타입 계약(AllSystemSettings)의 필드명이
  * 다른 경우를 위한 별칭 매핑. 현재는 general.default_language (DB) <-> general.language
  * (AllSystemSettings 타입 계약) 하나뿐이다.
+ *
+ * 이 매핑은 DB 키가 로컬 설정 state 로 들어오는 "모든" 경계에서 적용되어야 한다.
+ * 한 경로에서라도 빠뜨리면 같은 설정이 두 개의 키(default_language / language)로
+ * 갈라져 state 에 공존하게 되고, 읽는 쪽은 갱신되지 않은 옛 키를 계속 보게 된다.
+ * (실제로 쓰기 경로에서 이 매핑이 빠져 있어 언어 토글이 눌러도 원래 언어로 되돌아갔다:
+ *  DB 와 localStorage 에는 새 언어가 저장되는데 화면만 옛 언어로 복귀했다.)
  */
 const DB_KEY_ALIASES: Partial<Record<SettingCategory, Record<string, string>>> = {
   general: { default_language: 'language' }
 };
 
-function mapDbKeyToCodeKey(category: SettingCategory, dbKey: string): string {
+export function mapDbKeyToCodeKey(category: SettingCategory, dbKey: string): string {
   return DB_KEY_ALIASES[category]?.[dbKey] ?? dbKey;
 }
 

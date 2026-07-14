@@ -26,6 +26,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useAdminTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
+import { formatMachineLocation } from '@/utils/machineLocation';
 import type { Machine } from '@/types';
 import MachineForm from './MachineForm';
 import MachinesBulkUpload from '@/components/machines/MachinesBulkUpload';
@@ -132,7 +133,9 @@ const MachineManagement: React.FC = () => {
       title: t('table.columns.location'),
       dataIndex: 'location',
       key: 'location',
+      // 정렬/검색은 DB 원본 값 기준, 표시만 번역한다.
       sorter: (a, b) => a.location.localeCompare(b.location),
+      render: (location: string) => formatMachineLocation(location, t),
     },
     {
       title: t('table.columns.machineType'),
@@ -283,7 +286,7 @@ const MachineManagement: React.FC = () => {
 
       {/* 일괄 업로드 모달 */}
       <Modal
-        title="설비 일괄 등록"
+        title={t('bulkUpload.title')}
         open={bulkUploadVisible}
         onCancel={() => setBulkUploadVisible(false)}
         footer={null}

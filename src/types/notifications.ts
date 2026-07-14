@@ -16,6 +16,10 @@ export type NotificationStatus = 'active' | 'acknowledged' | 'resolved';
 // ⚠️ `notifications` DB 테이블은 존재하지 않는다.
 //    알림은 NotificationContext 가 설비 상태/OEE 로부터 클라이언트에서 생성한다.
 //    따라서 아래 필드는 모두 클라이언트 전용이다.
+//
+// 알림은 "번역된 문장"이 아니라 "번역 키 + 파라미터"를 들고 다닌다.
+// 생성 시점에 번역해 버리면 언어를 바꿔도 이미 만들어진 알림은 옛 언어로 남는다
+// (언어 전환이 알림을 재생성하지 않기 때문). 번역은 렌더링 시점에 수행한다.
 export interface Notification {
   id: string;
   type: NotificationType;
@@ -23,8 +27,12 @@ export interface Notification {
   status: NotificationStatus;
   machine_id: string;
   machine_name: string;
-  title: string;
-  message: string;
+  /** 제목의 i18n 키 (예: 'notifications.machineState.title') */
+  titleKey: string;
+  /** 본문의 i18n 키 (예: 'notifications.machineState.TEMPORARY_STOP') */
+  messageKey: string;
+  /** messageKey 보간 파라미터 (예: { machineName: 'CNC-001' }) */
+  messageParams?: Record<string, string | number>;
   threshold_value?: number;
   current_value?: number;
   created_at: string;

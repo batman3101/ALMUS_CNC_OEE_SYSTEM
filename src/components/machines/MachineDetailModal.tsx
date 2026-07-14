@@ -27,6 +27,7 @@ import { ko, vi } from 'date-fns/locale';
 import MachineEditModal from './MachineEditModal';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
+import { formatMachineLocation } from '@/utils/machineLocation';
 
 const { Title, Text } = Typography;
 
@@ -181,7 +182,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                     <Descriptions.Item label={t('fields.location')}>
                       <Space>
                         <EnvironmentOutlined />
-                        {machine.location}
+                        {formatMachineLocation(machine.location, t)}
                       </Space>
                     </Descriptions.Item>
                     <Descriptions.Item label={t('fields.equipmentType')}>
@@ -230,7 +231,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                     </Descriptions.Item>
                     <Descriptions.Item label={t('fields.processOrder')}>
                       {machine.current_process?.process_order ? (
-                        <Text>{machine.current_process.process_order}{t('units.orderSuffix')}</Text>
+                        <Text>{t('units.processOrder', { n: machine.current_process.process_order })}</Text>
                       ) : (
                         <Text type="secondary">{t('common.notSet')}</Text>
                       )}

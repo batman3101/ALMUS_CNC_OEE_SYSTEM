@@ -53,14 +53,15 @@ interface OEETrendChartProps {
 
 export const OEETrendChart: React.FC<OEETrendChartProps> = ({
   data,
-  title = 'OEE 추이',
+  title,
   height = 400,
   showControls = true,
   onDateRangeChange,
   onPeriodChange
 }) => {
   const { t } = useDashboardTranslation();
-  
+  const displayTitle = title ?? `OEE ${t('oee.trend')}`;
+
   // 데이터 로깅 (디버깅용)
   React.useEffect(() => {
     console.log('📈 OEETrendChart 받은 데이터:', {
@@ -247,7 +248,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
         <Row justify="space-between" align="middle">
           <Col>
             <AntTitle level={4} style={{ margin: 0 }}>
-              {title}
+              {displayTitle}
             </AntTitle>
           </Col>
           
@@ -300,7 +301,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
             color: '#666',
             fontSize: 16
           }}>
-            선택된 기간에 데이터가 없습니다
+            {t('charts.noDataInPeriod')}
           </div>
         ) : (
           <Line data={chartData} options={options} plugins={[oeeCutoverMarkerPlugin]} />

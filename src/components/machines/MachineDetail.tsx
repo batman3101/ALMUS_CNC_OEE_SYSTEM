@@ -31,6 +31,9 @@ import {
 import { Machine, MachineState, MachineLog } from '@/types';
 import { formatDistanceToNow, format, differenceInMinutes } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
+import type { TFunction } from 'i18next';
+import { formatMachineLocation } from '@/utils/machineLocation';
+import { useMachinesTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
 
@@ -58,79 +61,70 @@ interface DailyMetrics {
 interface StateConfigEntry {
   color: string;
   icon: React.ReactNode;
-  text: { ko: string; vi: string };
+  label: string;
   bgColor: string;
   borderColor: string;
 }
 
-const getStateConfig = (state: MachineState): StateConfigEntry => {
-  const configs: Record<MachineState, StateConfigEntry> = {
+const getStateConfig = (state: MachineState, t: TFunction): StateConfigEntry => {
+  const configs: Record<MachineState, Omit<StateConfigEntry, 'label'>> = {
     NORMAL_OPERATION: {
       color: 'success',
       icon: <PlayCircleOutlined />,
-      text: { ko: '정상가동', vi: 'Hoạt động bình thường' },
       bgColor: '#f6ffed',
       borderColor: '#52c41a'
     },
     INSPECTION: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: { ko: '점검중', vi: 'Đang kiểm tra' },
       bgColor: '#fffbe6',
       borderColor: '#faad14'
     },
     BREAKDOWN_REPAIR: {
       color: 'error',
       icon: <WarningOutlined />,
-      text: { ko: '고장수리중', vi: 'Đang sửa chữa hỏng hóc' },
       bgColor: '#fff2f0',
       borderColor: '#ff4d4f'
     },
     PM_MAINTENANCE: {
       color: 'warning',
       icon: <ToolOutlined />,
-      text: { ko: 'PM중', vi: 'Bảo trì định kỳ' },
       bgColor: '#fffbe6',
       borderColor: '#faad14'
     },
     MODEL_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: { ko: '모델교체', vi: 'Thay đổi mô hình' },
       bgColor: '#e6f7ff',
       borderColor: '#1890ff'
     },
     PLANNED_STOP: {
       color: 'default',
       icon: <PauseCircleOutlined />,
-      text: { ko: '계획정지', vi: 'Dừng theo kế hoạch' },
       bgColor: '#fafafa',
       borderColor: '#d9d9d9'
     },
     PROGRAM_CHANGE: {
       color: 'processing',
       icon: <SettingOutlined />,
-      text: { ko: '프로그램 교체', vi: 'Thay đổi chương trình' },
       bgColor: '#e6f7ff',
       borderColor: '#1890ff'
     },
     TOOL_CHANGE: {
       color: 'processing',
       icon: <ToolOutlined />,
-      text: { ko: '공구교환', vi: 'Thay đổi công cụ' },
       bgColor: '#e6f7ff',
       borderColor: '#1890ff'
     },
     TEMPORARY_STOP: {
       color: 'error',
       icon: <WarningOutlined />,
-      text: { ko: '일시정지', vi: 'Dừng tạm thời' },
       bgColor: '#fff2f0',
       borderColor: '#ff4d4f'
     }
   };
-  
-  return configs[state];
+
+  return { ...configs[state], label: t(`states.${state}`) };
 };
 
 const MachineDetail: React.FC<MachineDetailProps> = ({
@@ -139,6 +133,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
   onRefresh,
   language = 'ko'
 }) => {
+  const { t } = useMachinesTranslation();
   const [, setCurrentTime] = useState(new Date());
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetrics | null>(null);
 
@@ -208,7 +203,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
   }, [machine.id]);
 
   const currentStateConfig = machine.current_state
-    ? getStateConfig(machine.current_state)
+    ? getStateConfig(machine.current_state, t)
     : null;
 
   // 현재 상태 지속 시간 계산 (실제 데이터 기반)
@@ -249,7 +244,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
               </Title>
               <Space>
                 <EnvironmentOutlined />
-                <Text type="secondary">{machine.location}</Text>
+                <Text type="secondary">{formatMachineLocation(machine.location, t)}</Text>
                 <Divider type="vertical" />
                 <Text type="secondary">{machine.production_model?.model_name}</Text>
                 <Divider type="vertical" />
@@ -261,18 +256,18 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
           </Col>
           <Col>
             <Space>
-              <Button 
-                icon={<ReloadOutlined />} 
+              <Button
+                icon={<ReloadOutlined />}
                 onClick={onRefresh}
               >
-                {language === 'ko' ? '새로고침' : 'Làm mới'}
+                {t('systemStatus.refresh')}
               </Button>
-              <Button 
-                type="primary" 
+              <Button
+                type="primary"
                 icon={<EditOutlined />}
                 onClick={() => onStatusChange?.(machine)}
               >
-                {language === 'ko' ? '상태 변경' : 'Thay đổi trạng thái'}
+                {t('actions.changeState')}
               </Button>
             </Space>
           </Col>
@@ -286,7 +281,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
             title={
               <Space>
                 <ClockCircleOutlined />
-                {language === 'ko' ? '현재 상태' : 'Trạng thái hiện tại'}
+                {t('labels.currentState')}
               </Space>
             }
             style={{
@@ -300,34 +295,30 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
                   <Tag
                     color={currentStateConfig.color}
                     icon={currentStateConfig.icon}
-                    style={{ 
-                      padding: '8px 16px', 
+                    style={{
+                      padding: '8px 16px',
                       fontSize: '16px',
                       borderRadius: '8px'
                     }}
                   >
-                    {currentStateConfig.text[language]}
+                    {currentStateConfig.label}
                   </Tag>
                 </div>
-                
+
                 {stateDuration && (
                   <div style={{ textAlign: 'center' }}>
                     <Statistic
-                      title={language === 'ko' ? '지속 시간' : 'Thời gian duy trì'}
+                      title={t('labels.duration')}
                       value={stateDuration.duration}
                       prefix={<ClockCircleOutlined />}
-                      valueStyle={{ 
+                      valueStyle={{
                         fontSize: '24px',
                         color: stateDuration.minutes > 120 ? '#ff4d4f' : '#1890ff'
                       }}
                     />
                     {stateDuration.minutes > 120 && (
                       <Alert
-                        message={
-                          language === 'ko' 
-                            ? '장시간 동일 상태가 지속되고 있습니다' 
-                            : 'Trạng thái đã duy trì trong thời gian dài'
-                        }
+                        message={t('detail.longDurationWarning')}
                         type="warning"
                         showIcon
                         style={{ marginTop: 12 }}
@@ -341,7 +332,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
                 <ExclamationCircleOutlined style={{ fontSize: '48px', color: '#d9d9d9' }} />
                 <div style={{ marginTop: 16 }}>
                   <Text type="secondary">
-                    {language === 'ko' ? '상태 정보 없음' : 'Không có thông tin trạng thái'}
+                    {t('statusChange.noStateInfo')}
                   </Text>
                 </div>
               </div>
@@ -355,7 +346,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
             title={
               <Space>
                 <TrophyOutlined />
-                {language === 'ko' ? '당일 누적 지표' : 'Chỉ số tích lũy trong ngày'}
+                {t('detail.dailyMetricsTitle')}
               </Space>
             }
           >
@@ -364,18 +355,18 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
                 <Row gutter={16}>
                   <Col span={12}>
                     <Statistic
-                      title={language === 'ko' ? '가동 시간' : 'Thời gian hoạt động'}
+                      title={t('detail.runtime')}
                       value={Math.floor(dailyMetrics.totalRuntime / 60)}
-                      suffix={language === 'ko' ? '시간' : 'giờ'}
+                      suffix={t('units.hours')}
                       precision={1}
                       valueStyle={{ color: '#52c41a' }}
                     />
                   </Col>
                   <Col span={12}>
                     <Statistic
-                      title={language === 'ko' ? '다운타임' : 'Thời gian dừng'}
+                      title={t('detail.downtime')}
                       value={Math.floor(dailyMetrics.downtime / 60)}
-                      suffix={language === 'ko' ? '시간' : 'giờ'}
+                      suffix={t('units.hours')}
                       precision={1}
                       valueStyle={{ color: '#ff4d4f' }}
                     />
@@ -385,7 +376,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
                 <div>
                   <div style={{ marginBottom: 8 }}>
                     <Text strong>
-                      {language === 'ko' ? '가동률' : 'Tỷ lệ hoạt động'}
+                      {t('detail.availabilityRate')}
                     </Text>
                     <Text style={{ float: 'right' }}>
                       {dailyMetrics.availability.toFixed(1)}%
@@ -400,17 +391,14 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
 
                 <div>
                   <Text type="secondary" style={{ fontSize: '12px' }}>
-                    {language === 'ko' 
-                      ? `계획 가동시간: ${Math.floor(dailyMetrics.plannedRuntime / 60)}시간` 
-                      : `Thời gian hoạt động theo kế hoạch: ${Math.floor(dailyMetrics.plannedRuntime / 60)} giờ`
-                    }
+                    {t('detail.plannedRuntime', { hours: Math.floor(dailyMetrics.plannedRuntime / 60) })}
                   </Text>
                 </div>
               </Space>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <Text type="secondary">
-                  {language === 'ko' ? '데이터 로딩 중...' : 'Đang tải dữ liệu...'}
+                  {t('operator.loadingData')}
                 </Text>
               </div>
             )}
@@ -423,20 +411,20 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
             title={
               <Space>
                 <ClockCircleOutlined />
-                {language === 'ko' ? '오늘의 상태 이력' : 'Lịch sử trạng thái hôm nay'}
+                {t('detail.todayStateHistory')}
               </Space>
             }
           >
             {dailyMetrics?.stateHistory ? (
               <Timeline
                 items={dailyMetrics.stateHistory.map((item) => {
-                  const config = getStateConfig(item.state);
+                  const config = getStateConfig(item.state, t);
                   const startTime = new Date(item.startTime);
                   const endTime = item.endTime ? new Date(item.endTime) : null;
-                  
+
                   return {
                     dot: config.icon,
-                    color: config.color === 'success' ? 'green' : 
+                    color: config.color === 'success' ? 'green' :
                            config.color === 'warning' ? 'orange' :
                            config.color === 'error' ? 'red' : 'blue',
                     children: (
@@ -444,18 +432,18 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
                         <Space direction="vertical" size="small">
                           <div>
                             <Tag color={config.color}>
-                              {config.text[language]}
+                              {config.label}
                             </Tag>
                             <Text type="secondary" style={{ marginLeft: 8 }}>
-                              {Math.floor(item.duration / 60)}
-                              {language === 'ko' ? '시간 ' : ' giờ '}
-                              {item.duration % 60}
-                              {language === 'ko' ? '분' : ' phút'}
+                              {t('detail.durationHM', {
+                                hours: Math.floor(item.duration / 60),
+                                minutes: item.duration % 60
+                              })}
                             </Text>
                           </div>
                           <Text type="secondary" style={{ fontSize: '12px' }}>
-                            {format(startTime, 'HH:mm')} - {endTime ? format(endTime, 'HH:mm') : 
-                              (language === 'ko' ? '진행중' : 'Đang tiến hành')}
+                            {format(startTime, 'HH:mm')} - {endTime ? format(endTime, 'HH:mm') :
+                              t('detail.ongoing')}
                           </Text>
                         </Space>
                       </div>
@@ -466,7 +454,7 @@ const MachineDetail: React.FC<MachineDetailProps> = ({
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <Text type="secondary">
-                  {language === 'ko' ? '상태 이력이 없습니다' : 'Không có lịch sử trạng thái'}
+                  {t('detail.noStateHistory')}
                 </Text>
               </div>
             )}

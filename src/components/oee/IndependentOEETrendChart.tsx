@@ -44,7 +44,7 @@ interface IndependentOEETrendChartProps {
 }
 
 export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> = ({
-  title = 'OEE 추이 분석',
+  title,
   height = 400,
   externalPeriod,
   onPeriodChange,
@@ -53,7 +53,8 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
   selectedShifts
 }) => {
   const { t } = useDashboardTranslation();
-  
+  const displayTitle = title ?? t('engineerDashboard.charts.oeeTrendAnalysis');
+
   // 외부 기간이 제공되면 그것을 사용하고, 그렇지 않으면 내부 상태 사용
   const initialPeriod = externalPeriod ? 
     (externalPeriod === 'week' ? 'daily' : 
@@ -219,7 +220,7 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
     return (
       <Card>
         <div style={{ textAlign: 'center', padding: '50px', color: '#ff4d4f' }}>
-          오류가 발생했습니다: {error}
+          {t('charts.errorOccurred', { error })}
         </div>
       </Card>
     );
@@ -230,7 +231,7 @@ export const IndependentOEETrendChart: React.FC<IndependentOEETrendChartProps> =
       {/* 제목 */}
       <div style={{ marginBottom: 16 }}>
         <AntTitle level={4} style={{ margin: 0 }}>
-          {title} {loading && <Spin size="small" style={{ marginLeft: 8 }} />}
+          {displayTitle} {loading && <Spin size="small" style={{ marginLeft: 8 }} />}
         </AntTitle>
       </div>
 

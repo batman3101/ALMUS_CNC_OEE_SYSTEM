@@ -16,6 +16,7 @@ import {
   Alert
 } from 'antd';
 import { UserAddOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { useAdminTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -41,6 +42,7 @@ interface SetupUserData {
 }
 
 const SetupUserPage: React.FC = () => {
+  const { t } = useAdminTranslation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [authUsers, setAuthUsers] = useState<AuthUser[]>([]);
@@ -55,13 +57,13 @@ const SetupUserPage: React.FC = () => {
       
       if (data.authUsers) {
         setAuthUsers(data.authUsers);
-        message.success(`${data.totalCount}명의 사용자를 찾았습니다`);
+        message.success(t('setupUser.messages.usersFound', { count: data.totalCount }));
       } else {
-        message.error('사용자 목록을 불러오는데 실패했습니다');
+        message.error(t('setupUser.messages.fetchUsersFailed'));
       }
     } catch (error) {
       console.error('Error fetching auth users:', error);
-      message.error('사용자 목록을 불러오는데 실패했습니다');
+      message.error(t('setupUser.messages.fetchUsersFailed'));
     } finally {
       setFetchingUsers(false);
     }
@@ -82,15 +84,15 @@ const SetupUserPage: React.FC = () => {
       const data = await response.json();
       
       if (data.success) {
-        message.success('사용자가 성공적으로 등록되었습니다!');
+        message.success(t('setupUser.messages.userRegistered'));
         form.resetFields();
         fetchAuthUsers(); // 목록 새로고침
       } else {
-        message.error(data.error || '사용자 등록에 실패했습니다');
+        message.error(data.error || t('setupUser.messages.userRegisterFailed'));
       }
     } catch (error) {
       console.error('Error setting up user:', error);
-      message.error('사용자 등록 중 오류가 발생했습니다');
+      message.error(t('setupUser.messages.userRegisterError'));
     } finally {
       setLoading(false);
     }
@@ -116,42 +118,42 @@ const SetupUserPage: React.FC = () => {
       render: (email: string) => <Text code>{email}</Text>,
     },
     {
-      title: '가입일',
+      title: t('setupUser.columns.createdAt'),
       dataIndex: 'created_at',
       key: 'created_at',
       render: (date: string) => new Date(date).toLocaleDateString(),
     },
     {
-      title: '이메일 인증',
+      title: t('setupUser.columns.emailVerified'),
       dataIndex: 'email_confirmed_at',
       key: 'email_confirmed_at',
       render: (date?: string) => (
         date ? (
-          <Tag color="green">인증 완료</Tag>
+          <Tag color="green">{t('setupUser.tags.verified')}</Tag>
         ) : (
-          <Tag color="orange">미인증</Tag>
+          <Tag color="orange">{t('setupUser.tags.unverified')}</Tag>
         )
       ),
     },
     {
-      title: '프로필 상태',
+      title: t('setupUser.columns.profileStatus'),
       dataIndex: 'hasProfile',
       key: 'hasProfile',
       render: (hasProfile: boolean, record: AuthUser) => (
         hasProfile ? (
           <Space>
-            <Tag color="blue">등록됨</Tag>
+            <Tag color="blue">{t('setupUser.tags.registered')}</Tag>
             <Text type="secondary">
               {record.profileInfo?.name} ({record.profileInfo?.role})
             </Text>
           </Space>
         ) : (
-          <Tag color="red">미등록</Tag>
+          <Tag color="red">{t('setupUser.tags.unregistered')}</Tag>
         )
       ),
     },
     {
-      title: '마지막 로그인',
+      title: t('setupUser.columns.lastLogin'),
       dataIndex: 'last_sign_in_at',
       key: 'last_sign_in_at',
       render: (date?: string) => (
@@ -163,18 +165,18 @@ const SetupUserPage: React.FC = () => {
   return (
     <div style={{ padding: 24 }}>
       <Title level={2}>
-        <UserAddOutlined /> 실제 사용자 계정 설정
+        <UserAddOutlined /> {t('setupUser.page.title')}
       </Title>
-      
+
       <Alert
-        message="실제 계정 등록"
-        description="Supabase Authentication에 등록된 실제 사용자를 user_profiles 테이블에 등록하여 시스템에 접근할 수 있도록 설정합니다."
+        message={t('setupUser.alerts.title')}
+        description={t('setupUser.alerts.description')}
         type="info"
         showIcon
         style={{ marginBottom: 24 }}
       />
 
-      <Card title="새 사용자 등록" style={{ marginBottom: 24 }}>
+      <Card title={t('setupUser.cards.newUserTitle')} style={{ marginBottom: 24 }}>
         <Form
           form={form}
           layout="vertical"
@@ -183,61 +185,61 @@ const SetupUserPage: React.FC = () => {
         >
           <Form.Item
             name="email"
-            label="이메일"
+            label={t('setupUser.fields.email')}
             rules={[
-              { required: true, message: '이메일을 입력해주세요' },
-              { type: 'email', message: '올바른 이메일 형식이 아닙니다' }
+              { required: true, message: t('setupUser.validation.emailRequired') },
+              { type: 'email', message: t('setupUser.validation.emailInvalid') }
             ]}
           >
-            <Input placeholder="실제 사용자 이메일 주소" />
+            <Input placeholder={t('setupUser.placeholders.email')} />
           </Form.Item>
 
           <Form.Item
             name="name"
-            label="사용자 이름"
+            label={t('setupUser.fields.name')}
             rules={[
-              { required: true, message: '사용자 이름을 입력해주세요' }
+              { required: true, message: t('setupUser.validation.nameRequired') }
             ]}
           >
-            <Input placeholder="실제 사용자 이름" />
+            <Input placeholder={t('setupUser.placeholders.name')} />
           </Form.Item>
 
           <Form.Item
             name="role"
-            label="역할"
+            label={t('setupUser.fields.role')}
             rules={[
-              { required: true, message: '역할을 선택해주세요' }
+              { required: true, message: t('setupUser.validation.roleRequired') }
             ]}
           >
             <Select>
-              <Option value="admin">관리자 (Admin)</Option>
-              <Option value="engineer">엔지니어 (Engineer)</Option>
-              <Option value="operator">운영자 (Operator)</Option>
+              <Option value="admin">{t('setupUser.roleOptions.admin')}</Option>
+              <Option value="engineer">{t('setupUser.roleOptions.engineer')}</Option>
+              <Option value="operator">{t('setupUser.roleOptions.operator')}</Option>
             </Select>
           </Form.Item>
 
           <Form.Item>
-            <Button 
-              type="primary" 
-              htmlType="submit" 
+            <Button
+              type="primary"
+              htmlType="submit"
               loading={loading}
               icon={<CheckCircleOutlined />}
             >
-              사용자 등록
+              {t('setupUser.buttons.register')}
             </Button>
           </Form.Item>
         </Form>
       </Card>
 
-      <Card 
-        title="Authentication 사용자 목록" 
+      <Card
+        title={t('setupUser.cards.userListTitle')}
         extra={
-          <Button 
+          <Button
             onClick={fetchAuthUsers}
             loading={fetchingUsers}
             icon={<ReloadOutlined />}
           >
-            새로고침
+            {t('table.refresh')}
           </Button>
         }
       >
@@ -248,7 +250,7 @@ const SetupUserPage: React.FC = () => {
           loading={fetchingUsers}
           pagination={{
             pageSize: 10,
-            showTotal: (total) => `총 ${total}명`,
+            showTotal: (total) => t('setupUser.table.showTotal', { total }),
           }}
           onRow={(record) => ({
             onClick: () => {
@@ -266,7 +268,7 @@ const SetupUserPage: React.FC = () => {
         <Divider />
         
         <Text type="secondary">
-          💡 팁: 프로필이 없는 사용자(미등록)를 클릭하면 이메일이 자동으로 입력됩니다.
+          {t('setupUser.tips.selectUnregistered')}
         </Text>
       </Card>
     </div>

@@ -182,13 +182,13 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
                 <Col span={12}>
                   <Text type="secondary">{t('oee.outputQuantity')}:</Text>
                   <Text strong style={{ marginLeft: 8 }}>
-                    {metrics.output_qty}{t('oee.units.quantity')}
+                    {t('oee.units.quantityValue', { n: metrics.output_qty })}
                   </Text>
                 </Col>
                 <Col span={12}>
                   <Text type="secondary">{t('oee.defectQuantity')}:</Text>
                   <Text strong style={{ marginLeft: 8 }}>
-                    {metrics.defect_qty}{t('oee.units.quantity')}
+                    {t('oee.units.quantityValue', { n: metrics.defect_qty })}
                   </Text>
                 </Col>
               </Row>

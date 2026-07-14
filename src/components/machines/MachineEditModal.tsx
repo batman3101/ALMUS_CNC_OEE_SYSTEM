@@ -349,7 +349,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
                       {process.process_name}
                       {process.process_order && (
                         <span style={{ color: '#8c8c8c', fontSize: '12px', marginLeft: '8px' }}>
-                          - {process.process_order}{t('units.orderSuffix')}
+                          - {t('units.processOrder', { n: process.process_order })}
                         </span>
                       )}
                       {process.tact_time_seconds && (

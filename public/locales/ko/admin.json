@@ -123,10 +123,210 @@
     "updatedAt": "수정일",
     "assignedMachinesCount": "개 설비"
   },
+  "bulkUpload": {
+    "title": "설비 일괄 등록",
+    "description": "Excel 파일을 사용하여 여러 설비를 한 번에 등록할 수 있습니다.",
+    "steps": {
+      "selectFile": {
+        "title": "파일 선택",
+        "description": "Excel 파일을 업로드합니다"
+      },
+      "preview": {
+        "title": "데이터 미리보기",
+        "description": "데이터 검증 및 미리보기를 확인합니다"
+      },
+      "complete": {
+        "title": "완료",
+        "description": "설비 등록이 완료되었습니다"
+      }
+    },
+    "cards": {
+      "downloadTemplate": "1. 템플릿 다운로드",
+      "uploadFile": "2. 파일 업로드",
+      "previewList": "등록될 설비 목록",
+      "errorDetail": "검증 오류 상세"
+    },
+    "instructions": {
+      "downloadFirst": "먼저 Excel 템플릿을 다운로드하여 설비 정보를 입력하세요.",
+      "uploadFile": "작성한 Excel 파일을 업로드하세요."
+    },
+    "buttons": {
+      "downloadTemplate": "템플릿 다운로드",
+      "preview": "미리보기",
+      "confirmUpload": "등록 확정",
+      "restart": "다시 시작",
+      "registerNew": "새로 등록하기"
+    },
+    "upload": {
+      "dragText": "클릭하거나 파일을 드래그하여 업로드",
+      "hint": ".xlsx, .xls 파일만 지원 (최대 10MB)"
+    },
+    "messages": {
+      "templateDownloaded": "템플릿이 다운로드되었습니다.",
+      "templateDownloadError": "템플릿 다운로드 중 오류가 발생했습니다.",
+      "selectFileFirst": "업로드할 파일을 선택해주세요.",
+      "previewSuccess": "데이터 미리보기가 완료되었습니다.",
+      "previewError": "미리보기 중 오류가 발생했습니다.",
+      "previewCatchError": "파일 미리보기 중 오류가 발생했습니다.",
+      "uploadError": "업로드 중 오류가 발생했습니다.",
+      "uploadCatchError": "파일 업로드 중 오류가 발생했습니다.",
+      "invalidFileType": "Excel 파일(.xlsx, .xls)만 업로드 가능합니다.",
+      "fileSizeExceeded": "파일 크기는 10MB를 초과할 수 없습니다."
+    },
+    "alerts": {
+      "previewTitle": "데이터 미리보기",
+      "previewDescription": "총 {{count}}행의 데이터가 성공적으로 검증되었습니다.",
+      "warningTitle": "경고 사항",
+      "validationErrorTitle": "데이터 검증 오류",
+      "validationErrorDescription": "총 {{totalRows}}행 중 {{errorRows}}행에서 오류가 발견되었습니다.",
+      "duplicateNamesTitle": "중복된 설비명",
+      "duplicateNamesDescription": "이미 등록된 설비가 있습니다:",
+      "completeTitle": "업로드 완료",
+      "insertedCountLabel": "등록된 설비 수"
+    },
+    "loading": {
+      "analyzing": "파일을 분석하고 있습니다...",
+      "registering": "설비를 등록하고 있습니다..."
+    },
+    "columns": {
+      "row": "행 번호",
+      "field": "필드",
+      "message": "오류 내용",
+      "value": "입력된 값",
+      "emptyValue": "(비어있음)",
+      "equipmentType": "설비 타입",
+      "activeStatus": "활성상태",
+      "currentState": "현재상태"
+    },
+    "units": {
+      "piece": "개"
+    }
+  },
   "roles": {
     "admin": "시스템 관리자",
     "engineer": "관리자",
     "operator": "사용자",
     "user": "사용자"
+  },
+  "aggregation": {
+    "noPermission": {
+      "title": "접근 권한 없음",
+      "description": "OEE 집계 관리는 관리자만 접근할 수 있습니다."
+    },
+    "stats": {
+      "missingDates": "집계 필요 날짜",
+      "recentSuccess": "최근 성공 집계",
+      "recentFailed": "최근 실패 집계",
+      "totalProcessed": "총 처리 레코드"
+    },
+    "cards": {
+      "executionTitle": "OEE 집계 실행",
+      "logsTitle": "집계 실행 로그"
+    },
+    "alerts": {
+      "missingDatesMessage": "집계가 필요한 날짜: {{dates}}"
+    },
+    "buttons": {
+      "batchAggregation": "일괄 집계",
+      "singleAggregation": "단일 집계 실행",
+      "close": "닫기"
+    },
+    "placeholders": {
+      "selectDate": "집계할 날짜 선택"
+    },
+    "columns": {
+      "targetDate": "대상 날짜",
+      "executedAt": "실행 시간",
+      "status": "상태",
+      "processedRecords": "처리 레코드",
+      "executionTime": "실행 시간",
+      "errorMessage": "오류 메시지",
+      "checkError": "오류 확인"
+    },
+    "status": {
+      "started": "진행중",
+      "completed": "완료",
+      "failed": "실패"
+    },
+    "table": {
+      "showTotal": "{{start}}-{{end}} / 총 {{total}}개"
+    },
+    "modal": {
+      "batchTitle": "일괄 OEE 집계 진행 상황"
+    },
+    "messages": {
+      "loadLogsFailed": "집계 로그를 불러오는데 실패했습니다.",
+      "singleDone": "{{date}} 날짜의 OEE 집계가 완료되었습니다. ({{count}}개 레코드 처리)",
+      "singleFailed": "집계 실패: {{error}}",
+      "executionError": "집계 실행 중 오류가 발생했습니다.",
+      "noMissingDates": "집계가 필요한 날짜가 없습니다.",
+      "batchDone": "일괄 집계 완료: {{successful}}/{{total}} 성공, 총 {{recordsProcessed}}개 레코드 처리",
+      "batchError": "일괄 집계 중 오류가 발생했습니다.",
+      "inProgress": "집계 진행 중... ({{current}}/{{total}})",
+      "batchCompleted": "일괄 집계가 완료되었습니다!",
+      "resultsHeading": "집계 결과:",
+      "successCount": "성공 ({{count}}개)"
+    }
+  },
+  "setupUser": {
+    "page": {
+      "title": "실제 사용자 계정 설정"
+    },
+    "alerts": {
+      "title": "실제 계정 등록",
+      "description": "Supabase Authentication에 등록된 실제 사용자를 user_profiles 테이블에 등록하여 시스템에 접근할 수 있도록 설정합니다."
+    },
+    "cards": {
+      "newUserTitle": "새 사용자 등록",
+      "userListTitle": "Authentication 사용자 목록"
+    },
+    "fields": {
+      "email": "이메일",
+      "name": "사용자 이름",
+      "role": "역할"
+    },
+    "placeholders": {
+      "email": "실제 사용자 이메일 주소",
+      "name": "실제 사용자 이름"
+    },
+    "validation": {
+      "emailRequired": "이메일을 입력해주세요",
+      "emailInvalid": "올바른 이메일 형식이 아닙니다",
+      "nameRequired": "사용자 이름을 입력해주세요",
+      "roleRequired": "역할을 선택해주세요"
+    },
+    "roleOptions": {
+      "admin": "관리자 (Admin)",
+      "engineer": "엔지니어 (Engineer)",
+      "operator": "운영자 (Operator)"
+    },
+    "buttons": {
+      "register": "사용자 등록"
+    },
+    "columns": {
+      "createdAt": "가입일",
+      "emailVerified": "이메일 인증",
+      "profileStatus": "프로필 상태",
+      "lastLogin": "마지막 로그인"
+    },
+    "tags": {
+      "verified": "인증 완료",
+      "unverified": "미인증",
+      "registered": "등록됨",
+      "unregistered": "미등록"
+    },
+    "table": {
+      "showTotal": "총 {{total}}명"
+    },
+    "tips": {
+      "selectUnregistered": "💡 팁: 프로필이 없는 사용자(미등록)를 클릭하면 이메일이 자동으로 입력됩니다."
+    },
+    "messages": {
+      "usersFound": "{{count}}명의 사용자를 찾았습니다",
+      "fetchUsersFailed": "사용자 목록을 불러오는데 실패했습니다",
+      "userRegistered": "사용자가 성공적으로 등록되었습니다!",
+      "userRegisterFailed": "사용자 등록에 실패했습니다",
+      "userRegisterError": "사용자 등록 중 오류가 발생했습니다"
+    }
   }
 }

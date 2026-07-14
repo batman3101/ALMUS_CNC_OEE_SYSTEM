@@ -105,7 +105,7 @@
     "modelSaveFailed": "Không thể lưu mô hình",
     "modelLoadFailed": "Không thể tải danh sách mô hình"
   },
-  "멤시지": {
+  "메시지": {
     "모델생성완료": "Đã tạo mô hình thành công",
     "모델수정완료": "Đã cập nhật mô hình thành công",
     "모델삭제완료": "Đã xóa mô hình thành công",
@@ -125,7 +125,9 @@
     "취소": "Hủy"
   },
   "단위": {
-    "개": "",
-    "초": "giây"
+    "개": "cái",
+    "초": "giây",
+    "초값": "{{n}} giây",
+    "개값": "{{n}} cái"
   }
 }

@@ -17,7 +17,7 @@ import {
 } from 'chart.js';
 import { Card, Typography, Select, Row, Col, Statistic } from 'antd';
 import { format } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { ko, vi } from 'date-fns/locale';
 import { useTranslation } from '@/hooks/useTranslation';
 import { ProductionData } from '@/types';
 
@@ -51,12 +51,13 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
   showControls = true,
   onChartTypeChange
 }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const dateLocale = language === 'vi' ? vi : ko;
   // 차트 데이터 구성
   const chartData = {
     labels: data.map(item => {
       const date = new Date(item.date);
-      return format(date, 'MM/dd', { locale: ko });
+      return format(date, 'MM/dd', { locale: dateLocale });
     }),
     datasets: [
       {
@@ -153,7 +154,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
         display: true,
         title: {
           display: true,
-          text: '날짜',
+          text: t('dashboard:time.date'),
         },
         grid: {
           display: true,
@@ -210,8 +211,8 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
 
   // 차트 타입 옵션
   const chartTypeOptions = [
-    { label: '막대 차트', value: 'bar' },
-    { label: '선 차트', value: 'line' },
+    { label: t('dashboard:chartTypes.bar'), value: 'bar' },
+    { label: t('dashboard:chartTypes.line'), value: 'line' },
   ];
 
   return (

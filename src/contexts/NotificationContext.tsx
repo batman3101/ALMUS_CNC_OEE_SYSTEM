@@ -6,11 +6,27 @@ import {
   NotificationContextType,
   NotificationSeverity
 } from '@/types/notifications';
-import type { Machine } from '@/types';
+import type { Machine, MachineState } from '@/types';
 import { useAuth } from './AuthContext';
 import { showToast } from '@/components/notifications';
 import { useLanguage } from './LanguageContext';
 import { fetchMachines } from '@/lib/machinesCache';
+
+/**
+ * 비정상 설비 상태별 심각도.
+ * 여기에 있는 상태는 notifications.machineState.<상태> 번역 키를 그대로 갖는다
+ * (public/locales/{ko,vi}/common.json). 목록에 없는 상태는 'unknown' 문구로 처리한다.
+ */
+const STATE_SEVERITY: Partial<Record<MachineState, NotificationSeverity>> = {
+  TEMPORARY_STOP: 'high',
+  INSPECTION: 'low',
+  PM_MAINTENANCE: 'low',
+  BREAKDOWN_REPAIR: 'critical',
+  MODEL_CHANGE: 'low',
+  PROGRAM_CHANGE: 'low',
+  TOOL_CHANGE: 'low',
+  PLANNED_STOP: 'low',
+};
 
 // 알림 상태 관리를 위한 리듀서
 interface NotificationState {
@@ -141,52 +157,24 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
           }
 
           console.log(`🚨 새 알림 생성: ${machine.name} - ${machine.current_state}`);
-          let message = '';
-          let severity: NotificationSeverity = 'high';
 
-          switch (machine.current_state) {
-            case 'TEMPORARY_STOP':
-              message = `${machine.name}이(가) 일시정지 상태입니다.`;
-              severity = 'high';
-              break;
-            case 'PM_MAINTENANCE':
-            case 'INSPECTION':
-              message = `${machine.name}이(가) 점검 중입니다.`;
-              severity = 'low';
-              break;
-            case 'BREAKDOWN_REPAIR':
-              message = `${machine.name}에서 고장이 발생했습니다.`;
-              severity = 'critical';
-              break;
-            case 'MODEL_CHANGE':
-              message = `${machine.name}에서 모델 교체 중입니다.`;
-              severity = 'low';
-              break;
-            case 'PROGRAM_CHANGE':
-              message = `${machine.name}에서 프로그램 교체 중입니다.`;
-              severity = 'low';
-              break;
-            case 'TOOL_CHANGE':
-              message = `${machine.name}에서 공구 교환 중입니다.`;
-              severity = 'low';
-              break;
-            case 'PLANNED_STOP':
-              message = `${machine.name}이(가) 계획 정지 상태입니다.`;
-              severity = 'low';
-              break;
-            default:
-              message = `${machine.name}의 상태를 확인해주세요.`;
-              severity = 'high';
-          }
+          // current_state 는 optional 이라 값이 없을 수도 있다. 그 경우 'unknown' 문구로 처리한다.
+          const state = machine.current_state;
+          const known = state !== undefined && state in STATE_SEVERITY;
+          const severity: NotificationSeverity = (state && STATE_SEVERITY[state]) ?? 'high';
+          // 문구는 번역 키로만 남기고, 실제 번역은 렌더링 시점에 수행한다.
+          const messageKey = known
+            ? `notifications.machineState.${state}`
+            : 'notifications.machineState.unknown';
 
           notifications.push({
             id: notificationKey, // 고유한 키로 ID 설정
-            type: machine.current_state === 'BREAKDOWN_REPAIR' ||
-                  machine.current_state === 'TEMPORARY_STOP'
+            type: state === 'BREAKDOWN_REPAIR' || state === 'TEMPORARY_STOP'
                   ? 'MACHINE_STOPPED' : 'MAINTENANCE_DUE',
             severity,
-            title: `설비 상태 알림`,
-            message,
+            titleKey: 'notifications.machineState.title',
+            messageKey,
+            messageParams: { machineName: machine.name },
             machine_id: machine.id,
             machine_name: machine.name,
             user_id: user?.id || '',
@@ -243,10 +231,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     dispatch({ type: 'ADD_NOTIFICATION', payload: newNotification });
 
-    // Toast 알림 표시
-    const toastTitle = notification.title;
-    const toastMessage = `${notification.machine_name}: ${notification.message}`;
-    
+    // Toast 알림 표시 (토스트는 즉시 소비되므로 여기서 번역해도 무방하다)
+    const toastTitle = t(notification.titleKey);
+    const toastMessage = `${notification.machine_name}: ${t(notification.messageKey, notification.messageParams)}`;
+
     switch (notification.severity) {
       case 'critical':
         showToast({ type: 'error', title: toastTitle, message: toastMessage });
@@ -259,7 +247,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         showToast({ type: 'info', title: toastTitle, message: toastMessage });
         break;
     }
-  }, []);
+  }, [t]);
 
   // 알림 확인 처리 (로컬스토리지에 저장)
   const acknowledgeNotification = useCallback(async (id: string) => {
@@ -292,7 +280,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.error('Failed to acknowledge notification:', error);
       showToast({
         type: 'error',
-        title: t('common.error'),
+        title: t('app.error'),
         message: t('notifications.acknowledgeError')
       });
     }
@@ -322,7 +310,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.error('Failed to resolve notification:', error);
       showToast({ 
         type: 'error', 
-        title: t('common.error'), 
+        title: t('app.error'), 
         message: t('notifications.resolveError') 
       });
     }
@@ -343,7 +331,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.error('Failed to delete notification:', error);
       showToast({ 
         type: 'error', 
-        title: t('common.error'), 
+        title: t('app.error'), 
         message: t('notifications.deleteError') 
       });
     }
@@ -381,7 +369,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.error('Failed to clear all notifications:', error);
       showToast({
         type: 'error',
-        title: t('common.error'),
+        title: t('app.error'),
         message: t('notifications.clearAllError')
       });
     }

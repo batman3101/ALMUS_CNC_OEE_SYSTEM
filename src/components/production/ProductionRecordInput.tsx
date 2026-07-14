@@ -178,7 +178,7 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
           <Text><strong>{t('productionInput.machineName')}:</strong> {machine?.name || t('productionInput.noMachineInfo')}</Text>
           <Text><strong>{t('productionInput.location')}:</strong> {machine?.location || t('productionInput.noLocationInfo')}</Text>
           <Text><strong>{t('productionInput.date')}:</strong> {date}</Text>
-          <Text><strong>{t('productionInput.shift')}:</strong> {shift}{t('productionInput.shiftSuffix')}</Text>
+          <Text><strong>{t('productionInput.shift')}:</strong> {t('productionInput.shiftValue', { shift })}</Text>
         </Space>
       </div>
 
@@ -215,7 +215,7 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
               {t('productionInput.estimatedOutput')}: {estimatedOutput.toLocaleString()}{t('productionInput.piece')}
               {cavityCount && cavityCount > 1 && (
                 <span style={{ marginLeft: 8, color: token.colorTextSecondary }}>
-                  (Cavity {cavityCount}{t('단위.개')} × {Math.floor(estimatedOutput / cavityCount).toLocaleString()} {t('productionInput.cycles')})
+                  (Cavity {cavityCount}{t('productionInput.piece')} × {Math.floor(estimatedOutput / cavityCount).toLocaleString()} {t('productionInput.cycles')})
                 </span>
               )}
             </Text>

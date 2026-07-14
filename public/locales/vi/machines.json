@@ -31,7 +31,8 @@
     "PLANNED_STOP": "Dừng theo kế hoạch",
     "PROGRAM_CHANGE": "Thay đổi chương trình",
     "TOOL_CHANGE": "Thay dụng cụ",
-    "TEMPORARY_STOP": "Dừng tạm thời"
+    "TEMPORARY_STOP": "Dừng tạm thời",
+    "unknown": "Không xác định"
   },
   "labels": {
     "machineId": "ID thiết bị",
@@ -60,7 +61,17 @@
     "basicInfo": "Thông tin cơ bản",
     "productionInfo": "Thông tin sản xuất",
     "editButton": "Chỉnh sửa thông tin thiết bị",
-    "lastUpdate": "Cập nhật lần cuối"
+    "lastUpdate": "Cập nhật lần cuối",
+    "dailyMetricsTitle": "Chỉ số tích lũy trong ngày",
+    "runtime": "Thời gian hoạt động",
+    "downtime": "Thời gian dừng",
+    "availabilityRate": "Tỷ lệ hoạt động",
+    "plannedRuntime": "Thời gian hoạt động theo kế hoạch: {{hours}} giờ",
+    "todayStateHistory": "Lịch sử trạng thái hôm nay",
+    "noStateHistory": "Không có lịch sử trạng thái",
+    "longDurationWarning": "Trạng thái đã duy trì trong thời gian dài",
+    "durationHM": "{{hours}} giờ {{minutes}} phút",
+    "ongoing": "Đang tiến hành"
   },
   "fields": {
     "name": "Tên thiết bị",
@@ -90,7 +101,9 @@
     "inactive": "Không hoạt động",
     "close": "Đóng",
     "noInfo": "Không có thông tin",
-    "notSet": "Chưa thiết lập"
+    "notSet": "Chưa thiết lập",
+    "cancel": "Hủy",
+    "save": "Lưu"
   },
   "units": {
     "seconds": "giây",
@@ -98,7 +111,7 @@
     "hours": "giờ",
     "month": "tháng",
     "day": "ngày",
-    "orderSuffix": ""
+    "processOrder": "thứ {{n}}"
   },
   "edit": {
     "title": "Chỉnh sửa thông tin thiết bị",
@@ -118,15 +131,6 @@
       "selectStatus": "Vui lòng chọn trạng thái hiện tại"
     }
   },
-  "common": {
-    "active": "Hoạt động",
-    "inactive": "Không hoạt động",
-    "close": "Đóng",
-    "noInfo": "Không có thông tin",
-    "notSet": "Chưa thiết lập",
-    "cancel": "Hủy",
-    "save": "Lưu"
-  },
   "systemStatus": {
     "autoRefreshing": "Tự động làm mới",
     "refresh": "Làm mới",
@@ -138,7 +142,10 @@
     "hybridMode": "Chế độ kết hợp (polling + thời gian thực)",
     "realtimeMode": "Chế độ thời gian thực",
     "pollingMode": "Chế độ polling",
-    "manualMode": "Chế độ thủ công"
+    "manualMode": "Chế độ thủ công",
+    "noUpdate": "Chưa cập nhật",
+    "secondsAgo": "{{count}} giây trước",
+    "minutesAgo": "{{count}} phút trước"
   },
   "operator": {
     "title": "Bảng điều khiển vận hành viên",
@@ -166,7 +173,6 @@
     "location": "Vị trí",
     "date": "Ngày",
     "shift": "Ca làm việc",
-    "shiftSuffix": "",
     "outputQty": "Tổng số lượng sản xuất",
     "defectQty": "Số lượng lỗi",
     "outputQtyPlaceholder": "Nhập tổng số lượng đã sản xuất",
@@ -190,7 +196,8 @@
     "cancel": "Hủy",
     "submit": "Hoàn thành nhập",
     "noMachineInfo": "Không có thông tin thiết bị",
-    "noLocationInfo": "Không có thông tin vị trí"
+    "noLocationInfo": "Không có thông tin vị trí",
+    "shiftValue": "Ca {{shift}}"
   },
   "statusChange": {
     "title": "Thay đổi trạng thái thiết bị",
@@ -217,5 +224,9 @@
     "unknown": "Không xác định",
     "cancel": "Hủy",
     "change": "Thay đổi"
+  },
+  "locations": {
+    "buildingA": "Xưởng A",
+    "buildingB": "Xưởng B"
   }
 }

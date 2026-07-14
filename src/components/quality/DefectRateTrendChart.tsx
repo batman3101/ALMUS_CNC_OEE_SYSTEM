@@ -16,7 +16,7 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
   height = 300,
   period = 'month'
 }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const chartData = data.map(item => ({
     date: item.date,
@@ -74,9 +74,10 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
               fontSize={12}
               tickFormatter={(value) => {
                 const date = new Date(value);
-                return period === 'week' ? 
-                  date.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) :
-                  date.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+                const locale = language === 'vi' ? 'vi-VN' : 'ko-KR';
+                return period === 'week' ?
+                  date.toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) :
+                  date.toLocaleDateString(locale, { month: 'numeric', day: 'numeric' });
               }}
             />
             <YAxis 

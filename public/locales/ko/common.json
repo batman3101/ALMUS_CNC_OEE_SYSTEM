@@ -13,7 +13,8 @@
     "search": "검색",
     "filter": "필터",
     "refresh": "새로고침",
-    "goBack": "돌아가기"
+    "goBack": "돌아가기",
+    "monitoringSystem": "모니터링 시스템"
   },
   "actions": {
     "autoRefresh": "자동 새로고침",
@@ -55,7 +56,8 @@
     "startDate": "시작일",
     "endDate": "종료일",
     "actions": "작업",
-    "retry": "다시 시도"
+    "retry": "다시 시도",
+    "user": "사용자"
   },
   "theme": {
     "darkMode": "다크 모드",
@@ -98,7 +100,8 @@
     "noPermission": "이 페이지에 접근할 권한이 없습니다.",
     "goBack": "뒤로 가기",
     "loginSubtitle": "ALMUS TECH 모니터링 시스템에 로그인하세요",
-    "systemInfo": "신규 사용자 가입은 운영자에게 문의"
+    "systemInfo": "신규 사용자 가입은 운영자에게 문의",
+    "preparingLoginPage": "로그인 페이지를 준비하는 중..."
   },
   "roles": {
     "admin": "관리자",
@@ -154,6 +157,18 @@
       "resolve": "해결",
       "delete": "삭제",
       "clearAll": "모두 삭제"
+    },
+    "machineState": {
+      "title": "설비 상태 알림",
+      "TEMPORARY_STOP": "{{machineName}}이(가) 일시정지 상태입니다.",
+      "INSPECTION": "{{machineName}}이(가) 점검 중입니다.",
+      "PM_MAINTENANCE": "{{machineName}}이(가) 점검 중입니다.",
+      "BREAKDOWN_REPAIR": "{{machineName}}에서 고장이 발생했습니다.",
+      "MODEL_CHANGE": "{{machineName}}에서 모델 교체 중입니다.",
+      "PROGRAM_CHANGE": "{{machineName}}에서 프로그램 교체 중입니다.",
+      "TOOL_CHANGE": "{{machineName}}에서 공구 교환 중입니다.",
+      "PLANNED_STOP": "{{machineName}}이(가) 계획 정지 상태입니다.",
+      "unknown": "{{machineName}}의 상태를 확인해주세요."
     }
   },
   "settings": {
@@ -195,8 +210,8 @@
       "companyLogo": "회사 로고",
       "uploadLogo": "로고 업로드",
       "logoImageOnly": "이미지 파일만 업로드할 수 있습니다",
-      "logoSizeLimit": "파일 크기는 2MB 이하여야 합니다",
-      "logoHint": "권장 크기: 200x60px, 최대 2MB",
+      "logoSizeLimit": "파일 크기는 5MB 이하여야 합니다",
+      "logoHint": "권장 크기: 200x60px, 최대 5MB",
       "timezone": "시간대",
       "timezoneRequired": "시간대를 선택하세요",
       "timezoneSelect": "시간대를 선택하세요",
@@ -206,7 +221,29 @@
       "dateFormat": "날짜 형식",
       "dateFormatSelect": "날짜 형식을 선택하세요",
       "timeFormat": "시간 형식",
-      "timeFormatSelect": "시간 형식을 선택하세요"
+      "timeFormatSelect": "시간 형식을 선택하세요",
+      "logoUploadSuccess": "로고가 업로드되었습니다",
+      "logoUploadError": "로고 업로드에 실패했습니다",
+      "uploading": "업로드 중...",
+      "uploadingHint": "업로드 중입니다. 잠시 기다려주세요...",
+      "logoFileHint": "이미지 파일만 가능 (JPG, PNG 등) - 최대 5MB",
+      "timezones": {
+        "seoul": "서울 (Asia/Seoul)",
+        "hoChiMinh": "호치민 (Asia/Ho_Chi_Minh)",
+        "utc": "UTC",
+        "tokyo": "도쿄 (Asia/Tokyo)",
+        "shanghai": "상하이 (Asia/Shanghai)"
+      },
+      "timeFormats": {
+        "h24s": "24시간 (HH:mm:ss)",
+        "h12s": "12시간 (hh:mm:ss A)",
+        "h24m": "24시간 분만 (HH:mm)",
+        "h12m": "12시간 분만 (hh:mm A)"
+      },
+      "noChanges": "저장할 변경사항이 없습니다.",
+      "updateFailed": "시스템 설정 업데이트에 실패했습니다. 네트워크 연결이나 권한을 확인해주세요.",
+      "uploadFailed": "업로드에 실패했습니다.",
+      "uploadNoUrl": "업로드된 파일 URL을 받을 수 없습니다."
     },
     "oee": {
       "title": "OEE 설정",
@@ -260,7 +297,10 @@
       "totalWorkingTime": "총 작업 시간",
       "totalBreakTime": "총 휴식 시간",
       "efficiency": "운영 효율성",
-      "aShiftTimeError": "A교대 종료 시간은 시작 시간보다 늦어야 합니다"
+      "aShiftTimeError": "A교대 종료 시간은 시작 시간보다 늦어야 합니다",
+      "hoursMinutes": "{{h}}시간 {{m}}분",
+      "fullDay": "24시간",
+      "breakPerShift": "{{total}}분 (교대당 {{each}}분)"
     },
     "notification": {
       "title": "알림 설정",
@@ -433,5 +473,13 @@
       "weekly": "주간 보고서 미리보기",
       "monthly": "월간 보고서 미리보기"
     }
+  },
+  "pagination": {
+    "itemsRange": "{{start}}-{{end}} / 총 {{total}}개",
+    "machinesRange": "{{start}}-{{end}} / 총 {{total}}개 설비",
+    "totalItems": "총 {{total}}개",
+    "totalMachines": "총 {{total}}개 설비",
+    "totalUsers": "총 {{total}}명",
+    "totalErrors": "총 {{total}}개 오류"
   }
 }
