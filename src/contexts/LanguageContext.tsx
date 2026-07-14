@@ -1,10 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageContextType } from '@/types';
-import { getStoredLanguage, setStoredLanguage } from '@/utils/localStorage';
-import { useSystemSettings } from '@/contexts/SystemSettingsContext';
+import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
@@ -20,122 +19,34 @@ interface LanguageProviderProps {
   children: React.ReactNode;
 }
 
+/**
+ * 언어는 "개인 환경설정"이다. 전역 system_settings 가 아니라 UserPreferences 를 따른다.
+ *
+ * 예전에는 이 컨텍스트가
+ *   1) system_settings.default_language 를 직접 읽고 쓰고,
+ *   2) 그 값이 로컬 상태와 다르면 사용자의 선택을 되돌리는 effect 를 갖고 있었다.
+ * system_settings 는 사용자 구분이 없는 전역 행이라, 다른 사용자가 언어를 바꾸면
+ * 그 값이 Realtime 으로 전파되어 내 화면까지 바뀌었고, 서로 다른 언어를 원하면
+ * 두 클라이언트가 같은 행을 되돌려 쓰며 무한히 뒤집혔다.
+ *
+ * 이제 값의 출처는 UserPreferences 하나뿐이고(내 프로필 -> localStorage -> 시스템 기본값),
+ * 여기서는 그 값을 i18next 에 반영하는 일만 한다. 되돌리는 effect 는 존재하지 않는다.
+ */
 export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) => {
   const { i18n, t } = useTranslation();
-  const [language, setLanguage] = useState<'ko' | 'vi'>('ko');
-  const [isInitialized, setIsInitialized] = useState(false);
-  
-  const { 
-    getSetting, 
-    updateSetting, 
-    isLoading: systemSettingsLoading 
-  } = useSystemSettings();
+  const { language, setLanguage } = useUserPreferences();
 
-  // SystemSettings에서 언어 설정 초기화
+  // 개인 설정 -> i18next 단방향 반영
   useEffect(() => {
-    if (systemSettingsLoading || isInitialized) return;
-
-    const initializeLanguage = async () => {
-      try {
-        // 1. 먼저 SystemSettings에서 언어 설정 확인
-        const systemLanguage = getSetting('general', 'language');
-        let targetLanguage: 'ko' | 'vi' = 'ko';
-
-        if (systemLanguage) {
-          targetLanguage = systemLanguage as 'ko' | 'vi';
-          console.log('언어 설정을 SystemSettings에서 로드:', targetLanguage);
-        } else {
-          // 2. SystemSettings에 없다면 localStorage에서 확인
-          const localLanguage = getStoredLanguage();
-          if (localLanguage) {
-            targetLanguage = localLanguage;
-            console.log('언어 설정을 localStorage에서 로드:', targetLanguage);
-
-            // SystemSettings에 저장 (DB 의 canonical key 는 default_language)
-            await updateSetting({
-              category: 'general',
-              setting_key: 'default_language',
-              setting_value: targetLanguage
-            });
-          }
-        }
-
-        // 3. 언어 설정 적용
-        setLanguage(targetLanguage);
-        await i18n.changeLanguage(targetLanguage);
-        setStoredLanguage(targetLanguage);
-        setIsInitialized(true);
-        
-        console.log('언어 초기화 완료:', targetLanguage);
-      } catch (error) {
-        console.error('언어 초기화 중 오류:', error);
-        // 오류 발생 시 기본값으로 설정
-        setLanguage('ko');
-        await i18n.changeLanguage('ko');
-        setStoredLanguage('ko');
-        setIsInitialized(true);
-      }
-    };
-
-    initializeLanguage();
-  }, [systemSettingsLoading, isInitialized, getSetting, updateSetting, i18n]);
-
-  // SystemSettings 변경 감지 및 동기화
-  // 함수 호출을 deps 배열에 직접 넣으면 매 렌더마다 재평가되어 정적 분석이 불가능하므로 변수로 추출한다
-  const systemLanguageSetting = getSetting('general', 'language');
-
-  useEffect(() => {
-    if (!isInitialized || systemSettingsLoading) return;
-
-    const systemLanguage = systemLanguageSetting;
-    if (systemLanguage && systemLanguage !== language) {
-      const newLanguage = systemLanguage as 'ko' | 'vi';
-      console.log('SystemSettings에서 언어 변경 감지:', newLanguage);
-      setLanguage(newLanguage);
-      i18n.changeLanguage(newLanguage);
-      setStoredLanguage(newLanguage);
+    if (i18n.language !== language) {
+      i18n.changeLanguage(language);
     }
-  }, [systemLanguageSetting, language, isInitialized, systemSettingsLoading, i18n]);
+  }, [language, i18n]);
 
   const changeLanguage = useCallback(async (lang: 'ko' | 'vi') => {
-    if (language === lang) return;
+    await setLanguage(lang);
+  }, [setLanguage]);
 
-    try {
-      console.log('언어 변경 시작:', lang);
-      
-      // 1. 로컬 상태 업데이트
-      setLanguage(lang);
-      
-      // 2. i18next 업데이트
-      await i18n.changeLanguage(lang);
-      
-      // 3. localStorage 업데이트
-      setStoredLanguage(lang);
-      
-      // 4. SystemSettings 업데이트 (DB 의 canonical key 는 default_language)
-      const success = await updateSetting({
-        category: 'general',
-        setting_key: 'default_language',
-        setting_value: lang
-      });
-
-      if (success) {
-        console.log('언어 설정이 모든 저장소에 성공적으로 업데이트됨:', lang);
-      } else {
-        console.error('SystemSettings 업데이트 실패');
-      }
-    } catch (error) {
-      console.error('언어 변경 중 오류:', error);
-      // 오류 발생 시 이전 상태로 복원
-      setLanguage(language);
-      await i18n.changeLanguage(language);
-      setStoredLanguage(language);
-    }
-  }, [language, i18n, updateSetting]);
-
-  // changeLanguage는 [language, i18n, updateSetting]에 의존하는 고정 identity의 useCallback이고
-  // updateSetting(SystemSettingsContext)도 고정 identity이므로, 이 value는 language/t가 실제로
-  // 바뀔 때만 새 identity를 얻는다 (하위 모든 useLanguage() 소비자의 불필요한 재렌더링 방지)
   const value: LanguageContextType = useMemo(() => ({
     language,
     changeLanguage,

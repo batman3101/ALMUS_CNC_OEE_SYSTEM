@@ -163,7 +163,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         name: profile.name,
         role: profile.role,
         assigned_machines: profile.assigned_machines,
-        created_at: profile.created_at
+        created_at: profile.created_at,
+        // 개인 환경설정 (null 이면 아직 고르지 않은 것 -> 시스템 기본값을 따른다)
+        language: profile.language ?? null,
+        theme_mode: profile.theme_mode ?? null
       };
       
       console.log('🎉 최종 사용자 프로필:', userProfile);

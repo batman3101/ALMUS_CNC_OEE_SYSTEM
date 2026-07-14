@@ -26,7 +26,7 @@ interface GeneralSettingsTabProps {
 }
 
 const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChange }) => {
-  const { t, changeLanguage } = useLanguage();
+  const { t } = useLanguage();
   const { settings, updateMultipleSettings } = useGeneralSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
@@ -68,10 +68,10 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         throw new Error('Invalid form values');
       }
 
-      // 언어 변경 사항 확인
-      const currentLanguage = settings?.language || 'ko';
-      const newLanguage = values.language;
-      const languageChanged = currentLanguage !== newLanguage;
+      // 여기서 저장하는 language 는 "전역 기본 언어"다 — 아직 개인 언어를 고르지 않은
+      // 사용자에게 적용되는 초기값이며, 이미 사용 중인 사용자(관리자 본인 포함)의 화면 언어를
+      // 바꾸지 않는다. 개인 언어는 헤더의 언어 토글(UserPreferences)로만 바뀐다.
+      // (예전에는 이 저장이 곧 모든 사용자의 언어 변경이었다)
 
       // updateMultipleSettings 가 기대하는 { key, value, reason } 형태로 변환
       // (DB 의 canonical key 는 default_language 이므로 폼 필드명 language 를 매핑해준다)
@@ -95,12 +95,6 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
       if (!success) {
         // 이 메시지는 아래 catch 에서 error.message 로 토스트에 그대로 표시된다.
         throw new Error(t('settings.general.updateFailed'));
-      }
-
-      // 언어가 변경된 경우 LanguageContext 업데이트
-      if (languageChanged && newLanguage) {
-        console.log('언어 변경 감지, LanguageContext 업데이트:', newLanguage);
-        await changeLanguage(newLanguage as 'ko' | 'vi');
       }
 
       showSuccess(t('settings.saveSuccess'));

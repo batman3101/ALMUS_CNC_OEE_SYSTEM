@@ -3,20 +3,18 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { ConfigProvider, type ThemeConfig } from 'antd';
 import { useThemeSettings } from '@/hooks/useThemeSettings';
-import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 
 interface ThemeProviderProps {
   children: React.ReactNode;
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const { settings } = useSystemSettings();
   const { antdTheme: customTheme } = useThemeSettings();
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // 원시값(mode)만 의존성으로 사용 — settings 객체나 getDisplaySettings 함수의
-  // 참조가 상위에서 매 렌더마다 바뀌더라도 실제 모드가 그대로면 재실행되지 않는다.
-  const mode = settings.display?.theme_mode ?? 'light';
+  // 다크/라이트 모드는 개인 환경설정을 따른다 (전역 system_settings 가 아니다).
+  const { themeMode: mode } = useUserPreferences();
 
   // 테마 모드에 따른 CSS 변수 값 (mode가 실제로 바뀔 때만 새 객체 생성)
   const themeCssVars = useMemo(() => ({
