@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
-
-const DEFAULT_TACT_SECONDS = 120;
-const DEFAULT_CAVITY = 1;
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(Math.max(value, min), max);
+import {
+  calculateOeeMetrics,
+  DEFAULT_CAVITY,
+  DEFAULT_TACT_SECONDS,
+  resolveActualRuntime,
+} from './oeeRules';
 
 // 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량
 function validateQuantities(outputQty: unknown, defectQty: unknown): string | null {
@@ -34,18 +34,14 @@ function calculateOEEMetrics(params: {
   cavity: number;
 }) {
   const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
-  const actualRuntime = clamp(params.actualRuntime, 0, plannedRuntime);
-  const idealRuntime = (params.outputQty / Math.max(1, params.cavity)) * params.tactSeconds / 60;
-
-  const availability = plannedRuntime > 0 ? clamp(actualRuntime / plannedRuntime, 0, 1) : 0;
-  const performance = actualRuntime > 0 ? clamp(idealRuntime / actualRuntime, 0, 1) : 0;
-  const quality =
-    params.outputQty > 0
-      ? clamp((params.outputQty - params.defectQty) / params.outputQty, 0, 1)
-      : 0;
-  const oee = availability * performance * quality;
-
-  return { plannedRuntime, actualRuntime, idealRuntime, availability, performance, quality, oee };
+  const actualRuntime = resolveActualRuntime(params.actualRuntime, plannedRuntime);
+  return calculateOeeMetrics({
+    plannedRuntime,
+    actualRuntime,
+    outputQty: params.outputQty,
+    defectQty: params.defectQty,
+    minutesPerUnit: params.tactSeconds / 60 / Math.max(1, params.cavity),
+  });
 }
 
 // GET /api/production-records - 생산 기록 목록 조회
@@ -236,7 +232,7 @@ export async function POST(request: NextRequest) {
     const metrics = calculateOEEMetrics({
       operatingMinutes: Number(planned_runtime),
       breakMinutes,
-      actualRuntime: actual_runtime || 0,
+      actualRuntime: actual_runtime,
       outputQty: outputQtyValue,
       defectQty: defectQtyValue,
       tactSeconds,
@@ -255,6 +251,11 @@ export async function POST(request: NextRequest) {
         ideal_runtime: Math.round(metrics.idealRuntime),
         output_qty: outputQtyValue,
         defect_qty: defectQtyValue,
+        downtime_minutes: actual_runtime === undefined || actual_runtime === null
+          ? null
+          : Math.max(0, Math.round(metrics.plannedRuntime - metrics.actualRuntime)),
+        tact_time_seconds: tactSeconds,
+        cavity_count: cavity,
         availability: Math.round(metrics.availability * 10000) / 10000, // 소수점 4자리
         performance: Math.round(metrics.performance * 10000) / 10000,
         quality: Math.round(metrics.quality * 10000) / 10000,

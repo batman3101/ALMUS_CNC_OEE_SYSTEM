@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { format } from 'date-fns';
+import { getInclusiveDateRange } from '@/utils/engineerDateRange';
 
 export interface MachineOEEStat {
   machine_id: string;
@@ -28,7 +28,10 @@ export const useMachineOEEStats = (
   customDateRange?: [string, string] | null,
   selectedShifts?: string[]
 ) => {
-  const [stats, setStats] = useState<MachineOEEStatMap>({});
+  const [snapshot, setSnapshot] = useState<{ scopeKey: string; stats: MachineOEEStatMap }>({
+    scopeKey: '',
+    stats: {}
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,35 +43,18 @@ export const useMachineOEEStats = (
       return { start_date: customDateRange[0], end_date: customDateRange[1] };
     }
 
-    const endDate = new Date();
-    const startDate = new Date();
-
-    switch (selectedPeriod) {
-      case 'week':
-        startDate.setDate(endDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setDate(endDate.getDate() - 30);
-        break;
-      case 'quarter':
-        startDate.setDate(endDate.getDate() - 90);
-        break;
-    }
-
-    // toISOString() 은 UTC 로 변환되어 현지 새벽(B조 근무 중)에 날짜가 하루 밀린다.
-    return {
-      start_date: format(startDate, 'yyyy-MM-dd'),
-      end_date: format(endDate, 'yyyy-MM-dd')
-    };
+    return getInclusiveDateRange(selectedPeriod === 'week' ? 7 : selectedPeriod === 'month' ? 30 : 90);
   }, [selectedPeriod, customDateRange]);
 
   const refresh = useCallback(async () => {
     const requestId = ++requestIdRef.current;
+    const { start_date, end_date } = getDateRange();
+    const scopeKey = `${start_date}|${end_date}|${machineId || ''}|${(selectedShifts || []).join(',')}`;
     setLoading(true);
     setError(null);
+    setSnapshot({ scopeKey: '', stats: {} });
 
     try {
-      const { start_date, end_date } = getDateRange();
       const params = new URLSearchParams({
         start_date,
         end_date,
@@ -90,10 +76,11 @@ export const useMachineOEEStats = (
       }
 
       if (requestId !== requestIdRef.current) return; // 오래된 응답 무시
-      setStats(map);
+      setSnapshot({ scopeKey, stats: map });
     } catch (err) {
       console.error('Error fetching machine OEE stats:', err);
       if (requestId !== requestIdRef.current) return;
+      setSnapshot({ scopeKey: '', stats: {} });
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       if (requestId === requestIdRef.current) {
@@ -105,6 +92,10 @@ export const useMachineOEEStats = (
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const { start_date, end_date } = getDateRange();
+  const currentScopeKey = `${start_date}|${end_date}|${machineId || ''}|${(selectedShifts || []).join(',')}`;
+  const stats = snapshot.scopeKey === currentScopeKey ? snapshot.stats : {};
 
   return { stats, loading, error, refresh };
 };

@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import {
+  calculateChronologicalTrend,
+  isoWeek,
+  isValidDateOnly,
+  sortPeriodsChronologically,
+  type AggregationPeriod,
+} from './aggregationRules';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +59,7 @@ interface AggregatedPeriod {
   planned_runtime: number;
 }
 
-type TrendKey = 'oee' | 'availability' | 'performance' | 'quality';
+const PERIODS: AggregationPeriod[] = ['daily', 'weekly', 'monthly', 'yearly'];
 
 const emptyBucket = (): PeriodBucket => ({
   records_count: 0,
@@ -71,34 +78,51 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
-    const period = searchParams.get('period') || 'daily'; // daily, weekly, monthly, yearly
-    const startDate = searchParams.get('start_date');
-    const endDate = searchParams.get('end_date');
+    const requestedPeriod = searchParams.get('period') || 'daily';
+    const requestedStartDate = searchParams.get('start_date');
+    const requestedEndDate = searchParams.get('end_date');
+
+    if (!PERIODS.includes(requestedPeriod as AggregationPeriod)) {
+      return NextResponse.json({ error: 'Invalid period' }, { status: 400 });
+    }
+    if ((requestedStartDate === null) !== (requestedEndDate === null)) {
+      return NextResponse.json({ error: 'start_date and end_date must be provided together' }, { status: 400 });
+    }
+    if (requestedStartDate && requestedEndDate && (
+      !isValidDateOnly(requestedStartDate)
+      || !isValidDateOnly(requestedEndDate)
+      || requestedStartDate > requestedEndDate
+    )) {
+      return NextResponse.json({ error: 'Invalid date range' }, { status: 400 });
+    }
+    const period = requestedPeriod as AggregationPeriod;
 
     // 실제 production_records에서 집계 데이터 조회
-    const generateRealAggregatedData = async (period: string, machineId: string | null) => {
-      // 날짜 필터 설정 (start_date/end_date 파라미터는 기존과 동일하게 메타데이터에만 반영된다)
+    const generateRealAggregatedData = async (period: AggregationPeriod, machineId: string | null) => {
+      // 사용자 지정 범위가 있으면 그 범위를 그대로 사용한다.
       const now = new Date();
-      const startDate = new Date();
+      const defaultStart = new Date();
 
       switch (period) {
         case 'daily':
-          startDate.setDate(now.getDate() - 30);
+          defaultStart.setDate(now.getDate() - 30);
           break;
         case 'weekly':
-          startDate.setDate(now.getDate() - (12 * 7));
+          defaultStart.setDate(now.getDate() - (12 * 7));
           break;
         case 'monthly':
-          startDate.setMonth(now.getMonth() - 12);
+          defaultStart.setMonth(now.getMonth() - 12);
           break;
         case 'yearly':
-          startDate.setFullYear(now.getFullYear() - 5);
+          defaultStart.setFullYear(now.getFullYear() - 5);
           break;
       }
+      const effectiveStartDate = requestedStartDate ?? defaultStart.toISOString().split('T')[0];
+      const effectiveEndDate = requestedEndDate ?? now.toISOString().split('T')[0];
 
       // 집계는 DB에서 수행한다.
       const { data, error } = await supabaseAdmin.rpc('analytics_oee_daily', {
-        p_start_date: startDate.toISOString().split('T')[0],
+        p_start_date: effectiveStartDate,
         p_machine_id: machineId,
       });
 
@@ -107,7 +131,8 @@ export async function GET(request: NextRequest) {
         return [];
       }
 
-      const dailyRows = (data ?? []) as DailyAggregateRow[];
+      const dailyRows = ((data ?? []) as DailyAggregateRow[])
+        .filter(row => row.date >= effectiveStartDate && row.date <= effectiveEndDate);
 
       // 일 단위 집계를 기간별로 그룹핑
       const groupedData = new Map<string, PeriodBucket>();
@@ -121,9 +146,7 @@ export async function GET(request: NextRequest) {
             periodKey = row.date;
             break;
           case 'weekly':
-            const weekStart = new Date(recordDate);
-            weekStart.setDate(recordDate.getDate() - recordDate.getDay());
-            periodKey = weekStart.toISOString().split('T')[0];
+            periodKey = isoWeek(row.date).key;
             break;
           case 'monthly':
             periodKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
@@ -164,8 +187,8 @@ export async function GET(request: NextRequest) {
             label = new Date(periodKey).toLocaleDateString('ko-KR');
             break;
           case 'weekly':
-            const weekDate = new Date(periodKey);
-            label = `${weekDate.getFullYear()}년 ${Math.floor(weekDate.getMonth() / 3) + 1}분기`;
+            const [isoYear, isoWeekNumber] = periodKey.split('-W');
+            label = `${isoYear}년 ${Number(isoWeekNumber)}주`;
             break;
           case 'monthly':
             const [year, month] = periodKey.split('-');
@@ -194,50 +217,33 @@ export async function GET(request: NextRequest) {
       });
 
       // 시간순 정렬
-      return aggregatedResults.sort((a, b) => {
-        if (period === 'yearly') {
-          return parseInt(a.period) - parseInt(b.period);
-        }
-        return a.period.localeCompare(b.period);
-      });
+      return sortPeriodsChronologically(aggregatedResults);
     };
 
     const aggregatedData = await generateRealAggregatedData(period, machineId);
 
     // 트렌드 분석
-    const calculateTrend = (data: AggregatedPeriod[], key: TrendKey) => {
-      if (data.length < 2) return 0;
-
-      const recent = data.slice(0, Math.ceil(data.length / 2));
-      const older = data.slice(Math.ceil(data.length / 2));
-
-      const recentAvg = recent.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / recent.length;
-      const olderAvg = older.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / older.length;
-
-      return ((recentAvg - olderAvg) / olderAvg) * 100;
-    };
-
     const trends = {
-      oee: calculateTrend(aggregatedData, 'oee'),
-      availability: calculateTrend(aggregatedData, 'availability'),
-      performance: calculateTrend(aggregatedData, 'performance'),
-      quality: calculateTrend(aggregatedData, 'quality'),
+      oee: calculateChronologicalTrend(aggregatedData, 'oee'),
+      availability: calculateChronologicalTrend(aggregatedData, 'availability'),
+      performance: calculateChronologicalTrend(aggregatedData, 'performance'),
+      quality: calculateChronologicalTrend(aggregatedData, 'quality'),
     };
 
     // 전체 통계
     const totalRecords = aggregatedData.length;
     const overallStats = {
-      avg_oee: aggregatedData.reduce((sum, data) => sum + data.oee, 0) / totalRecords,
-      avg_availability: aggregatedData.reduce((sum, data) => sum + data.availability, 0) / totalRecords,
-      avg_performance: aggregatedData.reduce((sum, data) => sum + data.performance, 0) / totalRecords,
-      avg_quality: aggregatedData.reduce((sum, data) => sum + data.quality, 0) / totalRecords,
+      avg_oee: totalRecords > 0 ? aggregatedData.reduce((sum, data) => sum + data.oee, 0) / totalRecords : 0,
+      avg_availability: totalRecords > 0 ? aggregatedData.reduce((sum, data) => sum + data.availability, 0) / totalRecords : 0,
+      avg_performance: totalRecords > 0 ? aggregatedData.reduce((sum, data) => sum + data.performance, 0) / totalRecords : 0,
+      avg_quality: totalRecords > 0 ? aggregatedData.reduce((sum, data) => sum + data.quality, 0) / totalRecords : 0,
       total_output: aggregatedData.reduce((sum, data) => sum + data.total_output, 0),
       total_defects: aggregatedData.reduce((sum, data) => sum + data.total_defects, 0),
       total_runtime: aggregatedData.reduce((sum, data) => sum + data.total_runtime, 0),
     };
 
     return NextResponse.json({
-      aggregated_data: aggregatedData.reverse(), // 시간순 정렬
+      aggregated_data: aggregatedData,
       trends: Object.fromEntries(
         Object.entries(trends).map(([key, value]) => [key, Math.round(value * 100) / 100])
       ),
@@ -252,8 +258,8 @@ export async function GET(request: NextRequest) {
       metadata: {
         period,
         machine_id: machineId || 'all',
-        start_date: startDate,
-        end_date: endDate,
+        start_date: requestedStartDate,
+        end_date: requestedEndDate,
         generated_at: new Date().toISOString(),
       }
     });

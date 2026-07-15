@@ -15,9 +15,6 @@ const { Title } = Typography;
 // 조회 기간은 빠른 보고서 템플릿 중 가장 긴 것(월간=30일)과 반드시 같거나 길어야 한다.
 // 상수를 공유해, 템플릿 기간만 늘리고 조회 기간을 안 늘려서 앞쪽 날짜가 조용히 비는 일을 막는다.
 const DEFAULT_REPORT_WINDOW_DAYS = MAX_REPORT_TEMPLATE_DAYS;
-// 설비 800대 × 2교대 × 30일 ≈ 48,000행 → 50,000행 상한이면 기본 기간이 잘리지 않는다.
-const REPORT_RECORD_LIMIT = 50000;
-
 export default function ReportsPage() {
   const { t } = useReportsTranslation();
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -44,7 +41,9 @@ export default function ReportsPage() {
     refreshRecords
   } = useRealtimeProductionRecords({
     filters: recordsFilter,
-    limit: REPORT_RECORD_LIMIT
+    // 보고서 미리보기와 Excel/PDF 원본은 통계 카드와 같은 전체 범위를 사용해야 한다.
+    // API의 안정 정렬 페이지를 끝까지 따라가므로 1,000/50,000행 경계에서 잘리지 않는다.
+    fetchAll: true
   });
 
   // 실제 설비 데이터 가져오기 (공용 캐시로 중복 호출 제거)

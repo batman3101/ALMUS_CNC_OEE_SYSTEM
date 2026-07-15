@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { format } from 'date-fns';
 import { fetchJsonDeduped } from '@/lib/requestCache';
+import { getInclusiveDateRange } from '@/utils/engineerDateRange';
 
 interface OEEChartData {
   date: string;
@@ -42,27 +42,7 @@ export const useOEEChartData = (
 
   // 기간별 날짜 계산
   const getDateRangeForPeriod = useCallback((periodType: 'daily' | 'weekly' | 'monthly') => {
-    const endDate = new Date();
-    const startDate = new Date();
-
-    switch (periodType) {
-      case 'daily':
-        startDate.setDate(endDate.getDate() - 7); // 7일
-        break;
-      case 'weekly':
-        startDate.setDate(endDate.getDate() - 30); // 30일
-        break;
-      case 'monthly':
-        startDate.setDate(endDate.getDate() - 90); // 90일
-        break;
-    }
-
-    return {
-      // toISOString()은 UTC 기준으로 변환되어 KST 새벽 시간대(B조 근무 중)에 날짜가 하루 밀리는 문제가 있었음.
-      // 로컬 달력 날짜를 그대로 사용하도록 date-fns format으로 변경.
-      start_date: format(startDate, 'yyyy-MM-dd'),
-      end_date: format(endDate, 'yyyy-MM-dd')
-    };
+    return getInclusiveDateRange(periodType === 'daily' ? 7 : periodType === 'weekly' ? 30 : 90);
   }, []);
 
   // API 데이터 가져오기

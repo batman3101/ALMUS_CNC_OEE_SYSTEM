@@ -13,14 +13,17 @@
  * 이 경로는 로그인된 화면에서만 실행되므로 브라우저로 확인하지 못했다. 여기서 실행 검증한다.
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { App } from 'antd';
 import ShiftDataInputForm from '../ShiftDataInputForm';
 
+jest.setTimeout(15_000);
+
 const MACHINE = { id: 'machine-1', name: 'CNC-001', location: 'A동', production_model_id: null, current_process_id: null };
+const MACHINE_2 = { ...MACHINE, id: 'machine-2', name: 'CNC-002' };
 
 jest.mock('@/hooks/useMachines', () => ({
-  useMachines: () => ({ machines: [MACHINE], loading: false, error: null })
+  useMachines: () => ({ machines: [MACHINE, MACHINE_2], loading: false, error: null })
 }));
 
 jest.mock('@/hooks/useUserProfiles', () => ({
@@ -63,6 +66,14 @@ const selectMachine = async () => {
   await waitFor(() => {
     expect(screen.getByText('dataEntry.shiftDataInput')).toBeTruthy();
   });
+};
+
+const selectMachineByIndex = async (index: number) => {
+  const select = document.querySelector('.ant-select-selector');
+  fireEvent.mouseDown(select!);
+  await waitFor(() => expect(document.querySelectorAll('.ant-select-item-option').length).toBe(2));
+  fireEvent.click(document.querySelectorAll('.ant-select-item-option')[index]!);
+  await waitFor(() => expect(screen.getByText('dataEntry.shiftDataInput')).toBeTruthy());
 };
 
 /** 저장 요청이 전송되었는지 */
@@ -133,7 +144,8 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
 
     // 저장 시도
     // 기존 기록이 있으므로 버튼 라벨은 editMode.updateData 다
-    const saveButton = screen.getByText('editMode.updateData').closest('button');
+    const saveButton = screen.getByText('editMode.updateData').closest('button')!;
+    await waitFor(() => expect(saveButton.disabled).toBe(false));
     fireEvent.click(saveButton!);
 
     // 저장 요청이 나가면 안 된다
@@ -171,7 +183,16 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
           ok: true,
           json: async () => ({
             success: true,
-            data: [{ id: 'dt-1', duration_minutes: 30, reason: 'equipmentFailure', start_time: '2026-07-14T01:00:00Z' }]
+            data: [{
+              id: 'dt-1',
+              machine_id: MACHINE.id,
+              date: '2026-07-14',
+              shift: 'A',
+              duration_minutes: 30,
+              reason: 'equipmentFailure',
+              start_time: '2026-07-14T01:00:00Z',
+              end_time: '2026-07-14T01:30:00Z'
+            }]
           })
         };
       }
@@ -190,12 +211,144 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
     });
 
     // 기존 기록이 있으므로 버튼 라벨은 editMode.updateData 다
-    const saveButton = screen.getByText('editMode.updateData').closest('button');
-    fireEvent.click(saveButton!);
+    const saveButton = screen.getByText('editMode.updateData').closest('button')!;
+    await waitFor(() => expect(saveButton.disabled).toBe(false));
+    fireEvent.click(saveButton);
 
     // 비가동이 30분이므로 무중단 확인 모달 없이 바로 저장된다
     await waitFor(() => {
       expect(savePosted(fetchMock)).toBe(true);
     });
+
+    const dailyCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes('/api/production-records/daily') && init?.method === 'POST'
+    );
+    const payload = JSON.parse(String(dailyCall?.[1]?.body));
+    expect(payload.day_downtime_entries).toEqual([
+      expect.objectContaining({
+        start_time: '2026-07-14T01:00:00Z',
+        end_time: '2026-07-14T01:30:00Z',
+        reason: 'equipmentFailure'
+      })
+    ]);
+    expect(fetchMock.mock.calls.some(
+      ([url, init]) => String(url) === '/api/downtime-entries' && init?.method === 'POST'
+    )).toBe(false);
+  });
+
+  it('설비 전환 조회가 끝나기 전에는 이전 기록으로 저장할 수 없다', async () => {
+    let resolveSecond!: (value: unknown) => void;
+    const secondResponse = new Promise(resolve => { resolveSecond = resolve; });
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('machine_id=machine-2') && url.startsWith('/api/production-records?')) {
+        return secondResponse;
+      }
+      if (url.startsWith('/api/production-records?')) {
+        return { ok: true, json: async () => ({ records: [{ record_id: 'a', shift: 'A', output_qty: 100, defect_qty: 0 }] }) };
+      }
+      if (url.startsWith('/api/downtime-entries?')) {
+        return { ok: true, json: async () => ({ success: true, data: [] }) };
+      }
+      return { ok: true, json: async () => ({ success: true }) };
+    });
+
+    renderForm();
+    await selectMachineByIndex(0);
+    await waitFor(() => expect(screen.getByText('editMode.updateData')).toBeTruthy());
+    await selectMachineByIndex(1);
+
+    const saveButton = screen.getByText('editMode.newRecord').closest('button')!;
+    expect(saveButton.disabled).toBe(true);
+    fireEvent.click(saveButton);
+    expect(savePosted(fetchMock)).toBe(false);
+
+    resolveSecond({ ok: true, json: async () => ({ records: [] }) });
+    await waitFor(() => expect(saveButton.disabled).toBe(false));
+  });
+
+  it('응답 순서가 뒤집혀도 이전 설비 응답이 최신 선택을 덮어쓰지 않는다', async () => {
+    let resolveFirst!: (value: unknown) => void;
+    const firstResponse = new Promise(resolve => { resolveFirst = resolve; });
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('machine_id=machine-1') && url.startsWith('/api/production-records?')) return firstResponse;
+      if (url.startsWith('/api/production-records?')) return { ok: true, json: async () => ({ records: [] }) };
+      if (url.startsWith('/api/downtime-entries?')) return { ok: true, json: async () => ({ success: true, data: [] }) };
+      return { ok: true, json: async () => ({ success: true }) };
+    });
+
+    renderForm();
+    await selectMachineByIndex(0);
+    await selectMachineByIndex(1);
+    await waitFor(() => expect(screen.getByText('editMode.newRecord').closest('button')!.disabled).toBe(false));
+
+    resolveFirst({ ok: true, json: async () => ({ records: [{ record_id: 'stale-a', shift: 'A', output_qty: 999, defect_qty: 0 }] }) });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByText('editMode.updateData')).toBeNull();
+  });
+
+  it('기존 생산 기록 조회가 실패하면 다른 교대 데이터까지 보호하도록 저장을 전부 차단한다', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/production-records?')) {
+        return { ok: false, status: 500, json: async () => ({ error: 'boom' }) };
+      }
+      if (url.includes('shift=A') && url.startsWith('/api/downtime-entries?')) {
+        return { ok: false, status: 500, json: async () => ({ error: 'boom' }) };
+      }
+      if (url.startsWith('/api/downtime-entries?')) {
+        return { ok: true, json: async () => ({ success: true, data: [] }) };
+      }
+      return { ok: true, json: async () => ({ success: true }) };
+    });
+
+    renderForm();
+    await selectMachine();
+    await waitFor(() => expect(screen.getByText('recordList.loadFailedTitle')).toBeTruthy());
+
+    const saveButton = screen.getByText('editMode.newRecord').closest('button')!;
+    await waitFor(() => expect(saveButton.disabled).toBe(false));
+    fireEvent.click(saveButton);
+    await waitFor(() => expect(savePosted(fetchMock)).toBe(false));
+  });
+
+  it('기존 비가동이 있는 교대를 휴무로 바꾸면 비가동 배열을 비워 원자 저장한다', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/production-records?')) {
+        return {
+          ok: true,
+          json: async () => ({ records: [{
+            record_id: 'rec-1', shift: 'A', output_qty: 100, defect_qty: 2, planned_runtime: 660
+          }] })
+        };
+      }
+      if (url.startsWith('/api/downtime-entries?')) {
+        return {
+          ok: true,
+          json: async () => ({ success: true, data: [{
+            id: 'dt-1', machine_id: MACHINE.id, date: '2026-07-14', shift: 'A',
+            duration_minutes: 30, reason: 'equipmentFailure',
+            start_time: '2026-07-14T01:00:00Z', end_time: '2026-07-14T01:30:00Z'
+          }] })
+        };
+      }
+      if (url.startsWith('/api/production-records/daily')) {
+        return { ok: true, json: async () => ({ success: true, records_saved: 1 }) };
+      }
+      return { ok: true, json: async () => ({ success: true }) };
+    });
+
+    renderForm();
+    await selectMachine();
+    await waitFor(() => expect(screen.getByText('editMode.updateData')).toBeTruthy());
+
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    fireEvent.click(screen.getByText('editMode.updateData').closest('button')!);
+
+    await waitFor(() => expect(savePosted(fetchMock)).toBe(true));
+    const dailyCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes('/api/production-records/daily') && init?.method === 'POST'
+    );
+    const payload = JSON.parse(String(dailyCall?.[1]?.body));
+    expect(payload.day_shift_off).toBe(true);
+    expect(payload.day_downtime_entries).toEqual([]);
   });
 });

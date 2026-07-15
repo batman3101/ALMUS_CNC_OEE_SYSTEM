@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format, subDays } from 'date-fns';
-import { supabase, checkSupabaseConnection } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { collectOeeDataPages, OeeDataPage } from '@/lib/oeeDataPages';
 
 // production_records는 설비 800대 × 2교대 ≈ 1,600행/일로 증가한다.
 // 필터가 없으면 전체 테이블(32만행 이상)을 내려받아 statement timeout(57014)에 걸리므로
@@ -10,6 +11,7 @@ import { supabase, checkSupabaseConnection } from '@/lib/supabase';
 const DEFAULT_WINDOW_DAYS = 7;       // useRealtimeData와 동일한 기본 조회 기간
 const DEFAULT_RECORD_LIMIT = 15000;  // 7일 × 약 1,600행/일 ≈ 11,200행 + 여유분
 const MAX_RECORD_LIMIT = 50000;      // 호출부가 지정할 수 있는 상한 (30일 프리셋 ≈ 48,000행 커버)
+const API_PAGE_SIZE = 5000;
 
 // 채널 토픽이 고정 문자열이면 이펙트가 재실행될 때 같은 토픽의 채널이 중복 생성된다.
 // 구독마다 고유한 토픽을 부여해 이전 채널과 충돌하지 않도록 한다.
@@ -93,12 +95,15 @@ interface UseRealtimeProductionRecordsProps {
   };
   /** 조회 행수 상한 (기본 15,000행, 최대 50,000행) */
   limit?: number;
+  /** 보고서/내보내기처럼 원본 전체가 필요한 경우 API 페이지를 끝까지 조회 */
+  fetchAll?: boolean;
 }
 
 export const useRealtimeProductionRecords = ({
   initialData = [],
   filters = {},
-  limit
+  limit,
+  fetchAll = false
 }: UseRealtimeProductionRecordsProps = {}) => {
   const [records, setRecords] = useState<ProductionRecord[]>(initialData);
   const [loading, setLoading] = useState(true);
@@ -144,6 +149,38 @@ export const useRealtimeProductionRecords = ({
       return payload.statistics as ServerAggregateStatistics;
     };
 
+    const fetchRecordsPage = async (
+      offset: number,
+      pageLimit: number,
+      includeStatistics: boolean,
+      knownTotal?: number
+    ): Promise<OeeDataPage<ProductionRecord, ServerAggregateStatistics>> => {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        limit: String(pageLimit),
+        offset: String(offset),
+        include_statistics: String(includeStatistics),
+        ...(knownTotal === undefined ? {} : { known_total: String(knownTotal) }),
+        ...(machineId ? { machine_id: machineId } : {}),
+        ...(shift && shift !== 'ALL' ? { shift } : {}),
+      });
+      const response = await fetch(`/api/oee-data?${params}`, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`생산 기록 조회 실패 (HTTP ${response.status})`);
+      }
+      return response.json() as Promise<OeeDataPage<ProductionRecord, ServerAggregateStatistics>>;
+    };
+
+    const fetchPagedRecords = async () => {
+      const result = await collectOeeDataPages({
+        pageSize: API_PAGE_SIZE,
+        maxRecords: fetchAll ? undefined : effectiveLimit,
+        fetchPage: fetchRecordsPage,
+      });
+      return cancelled ? null : result;
+    };
+
     const scheduleAggregateRefresh = () => {
       if (aggregateRefreshTimer) clearTimeout(aggregateRefreshTimer);
       aggregateRefreshTimer = setTimeout(async () => {
@@ -176,50 +213,11 @@ export const useRealtimeProductionRecords = ({
         setLoading(true);
         setError(null);
 
-        // 먼저 Supabase 연결 상태 확인
-        const isConnected = await checkSupabaseConnection();
-        if (cancelled) return;
-        if (!isConnected) {
-          throw new Error('Supabase 연결에 실패했습니다. 네트워크 연결과 환경 변수를 확인해주세요.');
-        }
-        console.log('✅ Supabase connection verified');
-
-        // 조인(machines)은 어떤 호출부도 사용하지 않으면서 행마다 설비 객체를 중복 생성하므로 제거한다.
-        let query = supabase
-          .from('production_records')
-          .select(PRODUCTION_RECORD_COLUMNS)
-          // 기간 필터는 항상 적용된다 (필터 미지정 시 기본 7일)
-          .gte('date', startDate)
-          .lte('date', endDate)
-          .order('date', { ascending: false })
-          .order('machine_id', { ascending: true })
-          .order('shift', { ascending: true })
-          .limit(effectiveLimit);
-
-        // 선택 필터 적용
-        if (machineId) {
-          query = query.eq('machine_id', machineId);
-        }
-
-        if (shift && shift !== 'ALL') {
-          query = query.eq('shift', shift);
-        }
-
-        // 원본 목록은 표/상세용 페이지이고, 통계는 전체 필터 범위를 DB에서 집계한다.
-        // 두 요청을 분리해야 3개월 이상에서 max_rows 또는 클라이언트 limit 때문에
-        // 통계가 최신 일부 행만 반영하는 문제가 생기지 않는다.
-        const statisticsPromise = fetchAggregateStats().catch(aggregateError => {
-          console.error('전체 기간 OEE 집계 조회 실패:', aggregateError);
-          return null;
-        });
-        const [recordsResult, statistics] = await Promise.all([query, statisticsPromise]);
-        const { data, error } = recordsResult;
-        if (cancelled) return;
-
-        if (error) {
-          console.error('❌ Supabase query error:', error);
-          throw error;
-        }
+        // 브라우저의 Supabase 직접 select는 프로젝트 max_rows(1,000)에 조용히 잘린다.
+        // 서버 API의 안정 정렬 페이지를 따라가서 요청한 상한 또는 전체 범위를 정확히 채운다.
+        const result = await fetchPagedRecords();
+        if (cancelled || !result) return;
+        const { records: data, statistics, total } = result;
 
         console.log('✅ Supabase query successful:', {
           recordCount: data?.length || 0,
@@ -233,13 +231,13 @@ export const useRealtimeProductionRecords = ({
           } : null
         });
 
-        if (data && data.length >= effectiveLimit) {
+        if (!fetchAll && total > data.length) {
           console.warn(
-            `⚠️ 생산 기록이 상한(${effectiveLimit}행)까지 조회되었습니다. 선택한 기간의 일부만 표시될 수 있습니다.`
+            `⚠️ 생산 기록 ${total}건 중 ${data.length}건을 조회했습니다. 전체 원본이 필요한 보고서는 fetchAll을 사용해야 합니다.`
           );
         }
 
-        setRecords(data || []);
+        setRecords(data);
         setAggregateStats(statistics);
         if (statistics) {
           setAggregateSnapshot(previous => ({
@@ -250,7 +248,7 @@ export const useRealtimeProductionRecords = ({
           setAggregateSnapshot(previous => ({ scopeKey: '', revision: previous.revision + 1 }));
           setError('전체 기간 OEE 통계를 불러오지 못했습니다.');
         }
-        console.log(`📊 Loaded ${data?.length || 0} production records`);
+        console.log(`📊 Loaded ${data.length} / ${total} production records`);
       } catch (err: unknown) {
         if (cancelled) return;
         console.error('Error fetching production records:', err);
@@ -321,10 +319,11 @@ export const useRealtimeProductionRecords = ({
                   if (prevRecords.find(r => r.record_id === insertedRecord.record_id)) {
                     return prevRecords;
                   }
-                  // 조회 상한과 동일하게 배열 길이를 제한한다 (무한 증가 방지)
+                  // 전체 보고서 범위는 첫 INSERT 후 50,000행으로 축소되면 안 된다.
+                  // 제한 조회만 기존 상한을 유지하고, 전체 조회는 기간 필터가 배열 경계가 된다.
                   return [
                     insertedRecord as unknown as ProductionRecord,
-                    ...prevRecords.slice(0, effectiveLimit - 1)
+                    ...(fetchAll ? prevRecords : prevRecords.slice(0, effectiveLimit - 1))
                   ];
                 });
                 console.log('Production record added:', newRecord.record_id);
@@ -401,7 +400,7 @@ export const useRealtimeProductionRecords = ({
         clearTimeout(aggregateRefreshTimer);
       }
     };
-  }, [machineId, startDate, endDate, shift, effectiveLimit, initialData.length, refreshTrigger, aggregateScopeKey]);
+  }, [machineId, startDate, endDate, shift, effectiveLimit, fetchAll, initialData.length, refreshTrigger, aggregateScopeKey]);
 
   // 생산 기록 업데이트 함수
   const updateProductionRecord = useCallback(async (

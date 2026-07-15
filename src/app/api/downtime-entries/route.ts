@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (endTime.getTime() < startTime.getTime()) {
+    if (endTime.getTime() <= startTime.getTime()) {
       return NextResponse.json(
         {
           success: false,
@@ -108,6 +108,17 @@ export async function POST(request: NextRequest) {
 
     if (saveError) {
       console.error('Error saving downtime entry:', saveError);
+      if (saveError.code === '23P01' || saveError.code === '23503') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: saveError.code === '23P01'
+              ? '같은 설비·날짜·교대에 겹치는 비가동 시간이 있습니다'
+              : '비가동을 저장하려면 먼저 같은 교대의 생산 실적이 필요합니다'
+          },
+          { status: 409 }
+        );
+      }
       throw new Error(`비가동 시간 저장 실패: ${saveError.message}`);
     }
 

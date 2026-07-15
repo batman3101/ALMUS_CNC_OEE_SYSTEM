@@ -8,6 +8,12 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 import { unwrapJoin } from '@/types';
+import {
+  allocateDowntimeIntervals,
+  buildBusinessRange,
+  clipInterval,
+  totalMinutes as totalIntervalMinutes,
+} from '@/utils/downtimeIntervals';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +21,7 @@ export const dynamic = 'force-dynamic';
 const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Ho_Chi_Minh';
 const DEFAULT_SHIFT_A_START = '08:00';
 const DEFAULT_SHIFT_B_START = '20:00';
+const RAW_PAGE_SIZE = 1000;
 
 interface BusinessTimeConfig {
   timezone: string;
@@ -75,13 +82,21 @@ export async function GET(request: NextRequest) {
 
     const businessConfig = await getBusinessTimeConfig();
 
-    // 날짜 범위 설정 (영업시간 기준, 기본값: 최근 30일). 종료일 전체(자정까지)를 포함하도록 하루 전체 범위로 설정
-    const fromDate = startDate
-      ? dayjs.tz(startDate, businessConfig.timezone).startOf('day')
-      : dayjs().tz(businessConfig.timezone).subtract(30, 'day').startOf('day');
-    const toDate = endDate
-      ? dayjs.tz(endDate, businessConfig.timezone).endOf('day')
-      : dayjs().tz(businessConfig.timezone).endOf('day');
+    // 영업일은 A교대 시작부터 다음 영업일 A교대 시작 직전까지다.
+    // 단일 날짜 B교대의 자정 이후 00:00~08:00을 포함하도록 달력 day 경계를 사용하지 않는다.
+    const effectiveEndDate = endDate || dayjs().tz(businessConfig.timezone).format('YYYY-MM-DD');
+    const effectiveStartDate = startDate || dayjs()
+      .tz(businessConfig.timezone)
+      .subtract(29, 'day')
+      .format('YYYY-MM-DD');
+    const businessRange = buildBusinessRange(
+      effectiveStartDate,
+      effectiveEndDate,
+      businessConfig.timezone,
+      businessConfig.shiftAStart
+    );
+    const fromDate = dayjs(businessRange.start).tz(businessConfig.timezone);
+    const toDate = dayjs(businessRange.end).tz(businessConfig.timezone);
 
     // 조회 구간과 "겹치는" 로그를 모두 가져온다.
     //   - start_time 만으로 필터하면 구간 시작 전에 발생해 구간 안까지 이어진 장애가 통째로 누락된다.
@@ -101,8 +116,8 @@ export async function GET(request: NextRequest) {
         created_at,
         machines!inner(name, equipment_type, location)
       `)
-      .lte('start_time', toDate.toISOString())
-      .or(`end_time.is.null,end_time.gte.${fromDate.toISOString()}`)
+      .lt('start_time', toDate.toISOString())
+      .or(`end_time.is.null,end_time.gt.${fromDate.toISOString()}`)
       .neq('state', 'NORMAL_OPERATION')
       .order('start_time', { ascending: false });
 
@@ -116,14 +131,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: rawDowntimeLogs, error: logsError } = await baseQuery;
-
-    if (logsError) {
-      console.error('다운타임 로그 조회 오류:', logsError);
-      return NextResponse.json(
-        { error: 'Failed to fetch downtime logs' },
-        { status: 500 }
+    const rawDowntimeLogs: NonNullable<Awaited<typeof baseQuery>['data']> = [];
+    for (let offset = 0; ; offset += RAW_PAGE_SIZE) {
+      const { data: page, error: logsError } = await baseQuery.range(
+        offset,
+        offset + RAW_PAGE_SIZE - 1
       );
+      if (logsError) {
+        console.error('다운타임 로그 조회 오류:', logsError);
+        return NextResponse.json(
+          { error: 'Failed to fetch downtime logs' },
+          { status: 500 }
+        );
+      }
+      rawDowntimeLogs.push(...(page || []));
+      if (!page || page.length < RAW_PAGE_SIZE) break;
     }
 
     // machine_logs 에는 shift 컬럼이 없다.
@@ -150,8 +172,8 @@ export async function GET(request: NextRequest) {
         created_at,
         machines!inner(name, equipment_type, location)
       `)
-      .gte('date', fromDate.format('YYYY-MM-DD'))
-      .lte('date', toDate.format('YYYY-MM-DD'))
+      .gte('date', effectiveStartDate)
+      .lte('date', effectiveEndDate)
       .not('duration_minutes', 'is', null)
       .gt('duration_minutes', 0)
       .order('start_time', { ascending: false });
@@ -166,18 +188,67 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: rawDowntimeEntries, error: entriesError } = await entriesQuery;
-
-    if (entriesError) {
-      console.error('비가동 시간(downtime_entries) 조회 오류:', entriesError);
-      return NextResponse.json(
-        { error: 'Failed to fetch downtime entries' },
-        { status: 500 }
+    const rawDowntimeEntries: NonNullable<Awaited<typeof entriesQuery>['data']> = [];
+    for (let offset = 0; ; offset += RAW_PAGE_SIZE) {
+      const { data: page, error: entriesError } = await entriesQuery.range(
+        offset,
+        offset + RAW_PAGE_SIZE - 1
       );
+      if (entriesError) {
+        console.error('비가동 시간(downtime_entries) 조회 오류:', entriesError);
+        return NextResponse.json(
+          { error: 'Failed to fetch downtime entries' },
+          { status: 500 }
+        );
+      }
+      rawDowntimeEntries.push(...(page || []));
+      if (!page || page.length < RAW_PAGE_SIZE) break;
     }
 
+    // 과거에 즉시 저장된 고아 비가동이 남아 있을 수 있다. 같은 설비/영업일/교대의
+    // 생산 실적이 존재하는 수동 입력만 공식 통계에 포함한다.
+    let productionScopeQuery = supabaseAdmin
+      .from('production_records')
+      .select('machine_id, date, shift')
+      .gte('date', effectiveStartDate)
+      .lte('date', effectiveEndDate)
+      .order('date', { ascending: true })
+      .order('machine_id', { ascending: true })
+      .order('shift', { ascending: true });
+    if (machineId) {
+      const machineIds = machineId.split(',').map(id => id.trim()).filter(Boolean);
+      if (machineIds.length > 1) {
+        productionScopeQuery = productionScopeQuery.in('machine_id', machineIds);
+      } else if (machineIds.length === 1) {
+        productionScopeQuery = productionScopeQuery.eq('machine_id', machineIds[0]);
+      }
+    }
+
+    const productionScopeRows: NonNullable<Awaited<typeof productionScopeQuery>['data']> = [];
+    for (let offset = 0; ; offset += RAW_PAGE_SIZE) {
+      const { data: page, error: productionScopeError } = await productionScopeQuery.range(
+        offset,
+        offset + RAW_PAGE_SIZE - 1
+      );
+      if (productionScopeError) {
+        console.error('비가동 생산 범위 검증 오류:', productionScopeError);
+        return NextResponse.json(
+          { error: 'Failed to validate downtime production scope' },
+          { status: 500 }
+        );
+      }
+      productionScopeRows.push(...(page || []));
+      if (!page || page.length < RAW_PAGE_SIZE) break;
+    }
+
+    const validProductionScopes = new Set(
+      productionScopeRows.map(row => `${row.machine_id}\u0000${row.date}\u0000${row.shift}`)
+    );
+
     // 교대 필터링 (downtime_entries는 shift 컬럼을 직접 보유하므로 정확히 일치시킴)
-    let downtimeEntries = rawDowntimeEntries || [];
+    let downtimeEntries = rawDowntimeEntries.filter(entry =>
+      validProductionScopes.has(`${entry.machine_id}\u0000${entry.date}\u0000${entry.shift}`)
+    );
     if (shift) {
       const requestedShifts = shift.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
       if (requestedShifts.length > 0) {
@@ -215,18 +286,6 @@ export async function GET(request: NextRequest) {
     // 윈도우는 반드시 "실제로 합산에 쓰이는" 교대 필터 적용 후 목록(downtimeEntries)으로 만든다.
     // 필터 전 원본으로 만들면, B교대 조회 시 A교대 수동 기록이 machine_logs 를 깎아내지만 그 수동
     // 기록 자체는 응답에 없어 해당 다운타임이 통째로 증발한다.
-    const entryWindowsByMachine: Record<string, Array<{ start: number; end: number }>> = {};
-    downtimeEntries.forEach(entry => {
-      if (!entry.start_time) return;
-      const start = new Date(entry.start_time).getTime();
-      const end = entry.end_time ? new Date(entry.end_time).getTime() : start;
-      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return;
-      if (!entryWindowsByMachine[entry.machine_id]) {
-        entryWindowsByMachine[entry.machine_id] = [];
-      }
-      entryWindowsByMachine[entry.machine_id].push({ start, end });
-    });
-
     type Interval = { start: number; end: number };
 
     // 겹치는 구간들을 병합 (이중 계산 방지)
@@ -341,6 +400,35 @@ export async function GET(request: NextRequest) {
       : null;
     const allowedWindows = buildShiftWindows(requestedShifts);
 
+    // 같은 설비/영업일/교대에서 겹치는 수동 입력은 먼저 시작한 행에 중첩 구간을 귀속한다.
+    // 이후 모든 수동/자동 집계가 동일한 잘린 구간 집합을 사용한다.
+    const allocatedManualEntries = allocateDowntimeIntervals(
+      downtimeEntries.flatMap(entry => {
+        const start = new Date(entry.start_time).getTime();
+        const end = entry.end_time ? new Date(entry.end_time).getTime() : start;
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+        return [{
+          ...entry,
+          id: entry.id,
+          machineId: entry.machine_id,
+          businessDate: entry.date,
+          shift: entry.shift,
+          start,
+          end,
+        }];
+      })
+    ).map(allocation => ({
+      ...allocation,
+      intervals: allocation.intervals.flatMap(interval => clipInterval(interval, allowedWindows)),
+    }));
+
+    const entryWindowsByMachine: Record<string, Interval[]> = {};
+    allocatedManualEntries.forEach(({ entry, intervals }) => {
+      if (intervals.length === 0) return;
+      if (!entryWindowsByMachine[entry.machine_id]) entryWindowsByMachine[entry.machine_id] = [];
+      entryWindowsByMachine[entry.machine_id].push(...intervals);
+    });
+
     /**
      * machine_log 한 건이 조회 구간(+교대 필터) 안에서 실제로 차지하는 비가동 구간들.
      * 구간 밖은 잘라내고, 수동 기록(downtime_entries)과 겹치는 부분은 뺀다.
@@ -360,16 +448,6 @@ export async function GET(request: NextRequest) {
       if (clipped.length === 0) return [];
 
       return subtractIntervals(clipped, entryWindowsByMachine[machineIdValue] || []);
-    };
-
-    // 수동 입력(downtime_entries)은 shift 컬럼으로 이미 필터링됐다. 조회 구간으로만 자른다.
-    const manualEntryIntervals = (startTime: string, endTime: string | null): Interval[] => {
-      const start = new Date(startTime).getTime();
-      if (!Number.isFinite(start)) return [];
-      const end = endTime ? new Date(endTime).getTime() : start;
-      if (!Number.isFinite(end) || end <= start) return [];
-
-      return intersectIntervals([{ start, end }], [{ start: rangeStartMs, end: rangeEndMs }]);
     };
 
     // machine_logs + downtime_entries를 하나의 형태로 정규화하여 이후 집계 로직을 공통화한다.
@@ -422,25 +500,23 @@ export async function GET(request: NextRequest) {
         };
       });
 
-    const manualEntryRows: UnifiedDowntimeRow[] = downtimeEntries.map(entry => {
-      const intervals = manualEntryIntervals(entry.start_time, entry.end_time);
-      return {
+    const manualEntryRows: UnifiedDowntimeRow[] = allocatedManualEntries
+      .filter(({ intervals }) => intervals.length > 0)
+      .map(({ entry, intervals }) => ({
         log_id: entry.id,
         machine_id: entry.machine_id,
         machine_name: unwrapJoin(entry.machines)?.name || 'Unknown',
         state: mapReasonToState(entry.reason),
         start_time: entry.start_time,
         end_time: entry.end_time,
-        // 작업자가 입력한 duration_minutes 를 그대로 신뢰한다 (합계의 단일 진실 공급원)
-        duration: entry.duration_minutes || 0,
+        duration: totalIntervalMinutes(intervals),
         intervals,
         operator_id: entry.operator_id,
         created_at: entry.created_at,
         source: 'manual' as const,
         reason: entry.reason,
         description: entry.description
-      };
-    });
+      }));
 
     const unifiedRows: UnifiedDowntimeRow[] = [...machineLogRows, ...manualEntryRows];
 

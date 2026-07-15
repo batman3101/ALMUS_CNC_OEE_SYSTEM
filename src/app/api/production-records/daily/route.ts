@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
-
-const DEFAULT_TACT_SECONDS = 120;
-const DEFAULT_CAVITY = 1;
+import {
+  calculateOeeMetrics,
+  DEFAULT_CAVITY,
+  DEFAULT_TACT_SECONDS,
+  resolveHistoricalProductionParameters,
+  validateDowntimeEntriesForWindow,
+  type HistoricalProductionSnapshot,
+} from '../oeeRules';
+import { buildShiftWindows } from '@/utils/downtimeIntervals';
 
 // 교대별 입력 데이터 (클라이언트 폼에서 전송)
 interface ShiftInputData {
@@ -17,6 +23,14 @@ interface ShiftInputData {
   downtime_confirmed?: boolean;
 }
 
+interface DowntimeSaveEntry {
+  start_time: string;
+  end_time: string;
+  reason: string;
+  description?: string;
+  operator_id?: string;
+}
+
 interface DailyProductionRequest {
   machine_id: string;
   date: string;
@@ -24,6 +38,8 @@ interface DailyProductionRequest {
   night_shift_off?: boolean;
   day_shift?: ShiftInputData;
   night_shift?: ShiftInputData;
+  day_downtime_entries?: DowntimeSaveEntry[];
+  night_downtime_entries?: DowntimeSaveEntry[];
 }
 
 interface SavedRecord {
@@ -55,6 +71,38 @@ function validateQuantities(
   return null;
 }
 
+const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Ho_Chi_Minh';
+const DEFAULT_SHIFT_A_START = '08:00';
+const DEFAULT_SHIFT_B_START = '20:00';
+
+async function getBusinessTimeConfig() {
+  const defaults = {
+    timezone: DEFAULT_BUSINESS_TIMEZONE,
+    shiftAStart: DEFAULT_SHIFT_A_START,
+    shiftBStart: DEFAULT_SHIFT_B_START,
+  };
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('system_settings')
+      .select('category, setting_key, setting_value')
+      .in('category', ['general', 'shift'])
+      .eq('is_active', true);
+    if (error || !data) return defaults;
+    const readValue = (category: string, key: string): string | undefined => {
+      const row = data.find(item => item.category === category && item.setting_key === key);
+      const value = row?.setting_value as { value?: unknown } | null | undefined;
+      return typeof value?.value === 'string' ? value.value : undefined;
+    };
+    return {
+      timezone: readValue('general', 'timezone') || defaults.timezone,
+      shiftAStart: readValue('shift', 'shift_a_start') || defaults.shiftAStart,
+      shiftBStart: readValue('shift', 'shift_b_start') || defaults.shiftBStart,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
 // 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시)
 // 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
 function calculateShiftMetrics(params: {
@@ -69,18 +117,16 @@ function calculateShiftMetrics(params: {
   const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
   const downtime = clamp(params.downtimeMinutes, 0, plannedRuntime);
   const actualRuntime = Math.max(0, plannedRuntime - downtime);
-  const idealRuntime =
-    (params.outputQty / Math.max(1, params.cavity)) * params.tactSeconds / 60;
-
-  const availability = plannedRuntime > 0 ? clamp(actualRuntime / plannedRuntime, 0, 1) : 0;
-  const performance = actualRuntime > 0 ? clamp(idealRuntime / actualRuntime, 0, 1) : 0;
-  const quality =
-    params.outputQty > 0
-      ? clamp((params.outputQty - params.defectQty) / params.outputQty, 0, 1)
-      : 0;
-  const oee = availability * performance * quality;
-
-  return { plannedRuntime, actualRuntime, idealRuntime, downtime, availability, performance, quality, oee };
+  return {
+    ...calculateOeeMetrics({
+      plannedRuntime,
+      actualRuntime,
+      outputQty: params.outputQty,
+      defectQty: params.defectQty,
+      minutesPerUnit: params.tactSeconds / 60 / Math.max(1, params.cavity),
+    }),
+    downtime,
+  };
 }
 
 /**
@@ -114,7 +160,9 @@ export async function POST(request: NextRequest) {
       day_shift,
       day_shift_off,
       night_shift,
-      night_shift_off
+      night_shift_off,
+      day_downtime_entries,
+      night_downtime_entries
     } = body;
 
     // 필수 필드 검증
@@ -143,6 +191,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const businessTime = await getBusinessTimeConfig();
+    const [dayWindow] = buildShiftWindows({
+      startDate: date,
+      endDate: date,
+      ...businessTime,
+      requestedShifts: ['A'],
+    });
+    const [nightWindow] = buildShiftWindows({
+      startDate: date,
+      endDate: date,
+      ...businessTime,
+      requestedShifts: ['B'],
+    });
+    const normalizedDayEntries = day_shift_off ? [] : day_downtime_entries;
+    const normalizedNightEntries = night_shift_off ? [] : night_downtime_entries;
+    const dayDowntime = validateDowntimeEntriesForWindow('주간조', normalizedDayEntries, dayWindow);
+    if (dayDowntime.error) {
+      return NextResponse.json({ success: false, error: dayDowntime.error }, { status: 400 });
+    }
+    const nightDowntime = validateDowntimeEntriesForWindow('야간조', normalizedNightEntries, nightWindow);
+    if (nightDowntime.error) {
+      return NextResponse.json({ success: false, error: nightDowntime.error }, { status: 400 });
+    }
+
     // 설비 존재 확인
     const { data: machine, error: machineError } = await supabaseAdmin
       .from('machines')
@@ -161,12 +233,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
-    const { data: productionInfo } = await supabaseAdmin
-      .from('machines_with_production_info')
-      .select('current_tact_time, current_cavity_count')
-      .eq('id', machine_id)
-      .maybeSingle();
+    // 기존 교대 snapshot과 현재 공정값을 함께 조회한다. 기존 행은 반드시 과거 snapshot을 우선한다.
+    const [{ data: productionInfo }, { data: existingRows, error: existingError }] = await Promise.all([
+      supabaseAdmin
+        .from('machines_with_production_info')
+        .select('current_tact_time, current_cavity_count')
+        .eq('id', machine_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('production_records')
+        .select('shift, output_qty, ideal_runtime, tact_time_seconds, cavity_count')
+        .eq('machine_id', machine_id)
+        .eq('date', date)
+        .in('shift', ['A', 'B'])
+    ]);
+
+    if (existingError) throw existingError;
 
     const tactSeconds =
       productionInfo?.current_tact_time && productionInfo.current_tact_time > 0
@@ -181,18 +263,31 @@ export async function POST(request: NextRequest) {
     const breakMinutes = await getBreakTimeMinutes();
 
     // 교대별 저장 레코드 구성 (서버에서 지표 재계산)
-    const buildShiftRecord = (shiftData: ShiftInputData) => {
+    const existingByShift = new Map(
+      (existingRows ?? []).map(row => [row.shift, row as HistoricalProductionSnapshot])
+    );
+
+    const buildShiftRecord = (
+      shift: 'A' | 'B',
+      shiftData: ShiftInputData,
+      downtimeTotal?: number
+    ) => {
       const outputQty = shiftData.actual_production;
       const defectQty = shiftData.defect_quantity;
+      const parameters = resolveHistoricalProductionParameters(
+        existingByShift.get(shift),
+        tactSeconds,
+        cavity
+      );
 
       const metrics = calculateShiftMetrics({
         operatingMinutes: toNumber(shiftData.operating_minutes),
         breakMinutes,
-        downtimeMinutes: toNumber(shiftData.total_downtime_minutes),
+        downtimeMinutes: downtimeTotal ?? toNumber(shiftData.total_downtime_minutes),
         outputQty,
         defectQty,
-        tactSeconds,
-        cavity
+        tactSeconds: parameters.minutesPerUnit * 60,
+        cavity: 1
       });
 
       return {
@@ -210,25 +305,48 @@ export async function POST(request: NextRequest) {
         // 계산에 실제로 쓴 Tact/Cavity 를 함께 남긴다.
         // 이 값이 없으면 나중에 이 기록을 수정할 때 서버가 "그때"가 아니라 "지금"의 공정
         // 조건으로 ideal_runtime/performance/oee 를 다시 계산해 역사를 덮어쓴다.
-        tact_time_seconds: tactSeconds,
-        cavity_count: cavity
+        tact_time_seconds: parameters.tactSeconds || null,
+        cavity_count: parameters.cavity || null
       };
     };
 
     // 주간(A)/야간(B) 교대의 삭제·저장을 하나의 트랜잭션에서 처리한다.
     // (기존에는 교대별 delete/upsert 를 개별 왕복으로 실행해, 중간 실패 시 하루치가
     //  반쪽만 적용된 채로 남는 문제가 있었다)
-    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('save_daily_production', {
+    const useAtomicDowntimeSave = normalizedDayEntries !== undefined || normalizedNightEntries !== undefined;
+    const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc(
+      useAtomicDowntimeSave ? 'save_daily_production_with_downtime' : 'save_daily_production',
+      {
       p_machine_id: machine_id,
       p_date: date,
       p_day_shift_off: Boolean(day_shift_off),
       p_night_shift_off: Boolean(night_shift_off),
-      p_day_record: !day_shift_off && day_shift ? buildShiftRecord(day_shift) : null,
-      p_night_record: !night_shift_off && night_shift ? buildShiftRecord(night_shift) : null
+      p_day_record: !day_shift_off && day_shift
+        ? buildShiftRecord('A', day_shift, dayDowntime.totalMinutes)
+        : null,
+      p_night_record: !night_shift_off && night_shift
+        ? buildShiftRecord('B', night_shift, nightDowntime.totalMinutes)
+        : null,
+      ...(useAtomicDowntimeSave && {
+        p_day_downtime_entries: dayDowntime.entries ?? null,
+        p_night_downtime_entries: nightDowntime.entries ?? null,
+      })
     });
 
     if (rpcError) {
       console.error('Error saving daily production records:', rpcError);
+      if (rpcError.code === '23P01' || rpcError.code === '23503') {
+        return NextResponse.json(
+          { success: false, error: rpcError.message },
+          { status: 409 }
+        );
+      }
+      if (rpcError.code === '22007' || rpcError.code === '22023' || rpcError.code === '23502') {
+        return NextResponse.json(
+          { success: false, error: rpcError.message },
+          { status: 400 }
+        );
+      }
       throw new Error(`일일 생산 데이터 저장 실패: ${rpcError.message}`);
     }
 

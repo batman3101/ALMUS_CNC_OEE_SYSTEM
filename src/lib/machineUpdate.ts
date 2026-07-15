@@ -42,6 +42,7 @@ export interface ApplyMachineUpdateResult {
 
 export class MachineNotFoundError extends Error {}
 export class InvalidMachineStateError extends Error {}
+export class InvalidMachineUpdateError extends Error {}
 
 /**
  * 요청 본문에서 허용된 키만 골라낸다. 값이 undefined 인 키는 제외되어 기존 값이 유지된다.
@@ -54,17 +55,29 @@ export function pickMachineUpdates(body: Record<string, unknown>): MachineUpdate
 
     switch (key) {
       case 'is_active':
-        updates.is_active = Boolean(body[key]);
+        if (typeof body[key] !== 'boolean') {
+          throw new InvalidMachineUpdateError('is_active must be a boolean');
+        }
+        updates.is_active = body[key];
         break;
       case 'name':
-        updates.name = String(body[key]);
+        if (typeof body[key] !== 'string' || body[key].trim().length === 0) {
+          throw new InvalidMachineUpdateError('name must be a non-empty string');
+        }
+        updates.name = body[key].trim();
         break;
       case 'current_state':
-        updates.current_state = String(body[key]);
+        if (typeof body[key] !== 'string' || body[key].trim().length === 0) {
+          throw new InvalidMachineUpdateError('current_state must be a non-empty string');
+        }
+        updates.current_state = body[key].trim();
         break;
       default:
         // location / equipment_type / production_model_id / current_process_id 는 null 허용
-        updates[key] = (body[key] === null ? null : String(body[key])) as never;
+        if (body[key] !== null && (typeof body[key] !== 'string' || body[key].trim().length === 0)) {
+          throw new InvalidMachineUpdateError(`${key} must be null or a non-empty string`);
+        }
+        updates[key] = (body[key] === null ? null : body[key].trim()) as never;
         break;
     }
   }
@@ -111,6 +124,12 @@ export function machineUpdateErrorResponse(error: unknown): NextResponse | null 
   if (error instanceof InvalidMachineStateError) {
     return NextResponse.json(
       { success: false, error: 'Invalid machine state', message: error.message },
+      { status: 400 }
+    );
+  }
+  if (error instanceof InvalidMachineUpdateError) {
+    return NextResponse.json(
+      { success: false, error: 'Invalid machine update', message: error.message },
       { status: 400 }
     );
   }

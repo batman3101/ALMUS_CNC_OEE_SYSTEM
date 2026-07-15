@@ -80,6 +80,14 @@ interface ShiftSavePayload {
 // (daily/route.ts -> save_daily_production RPC 의 "ELSIF v_record IS NOT NULL" 분기)
 // 입력하지 않은 교대를 0으로 채워 보내면 output_qty=0 / oee=0 인 유령 레코드가 생기므로,
 // "입력되지 않은 교대"는 반드시 생략해야 한다.
+interface DowntimeSavePayload {
+  start_time: string;
+  end_time: string;
+  reason: string;
+  description?: string;
+  operator_id?: string;
+}
+
 interface DailyProductionSavePayload {
   machine_id: string;
   date: string;
@@ -87,6 +95,8 @@ interface DailyProductionSavePayload {
   night_shift_off: boolean;
   day_shift?: ShiftSavePayload;
   night_shift?: ShiftSavePayload;
+  day_downtime_entries: DowntimeSavePayload[];
+  night_downtime_entries: DowntimeSavePayload[];
 }
 
 // AbortController에 의한 취소 여부 확인
@@ -128,11 +138,13 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   const [activeShift, setActiveShift] = useState<'DAY' | 'NIGHT'>('DAY');
   const [loading, setLoading] = useState(false);
   const [loadingDowntime, setLoadingDowntime] = useState(false);
+  const [loadingSelectionData, setLoadingSelectionData] = useState(false);
 
   // 기존 생산 기록 관련 상태
   const [existingDayRecord, setExistingDayRecord] = useState<ExistingProductionRecord | null>(null);
   const [existingNightRecord, setExistingNightRecord] = useState<ExistingProductionRecord | null>(null);
   const [loadingExistingRecords, setLoadingExistingRecords] = useState(false);
+  const [productionRecordsLoadFailed, setProductionRecordsLoadFailed] = useState(false);
   
   // 교대조별 기본 가동시간 (분 단위)
   const [dayShiftOperatingMinutes, setDayShiftOperatingMinutes] = useState<number>(DEFAULT_OPERATING_MINUTES);
@@ -245,6 +257,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       const result = await response.json();
 
       if (isStale()) return;
+      setProductionRecordsLoadFailed(false);
 
       if (result.records && result.records.length > 0) {
         // 주간조(A)와 야간조(B) 기록 분리
@@ -314,6 +327,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       console.error('Error loading existing production records:', error);
       setExistingDayRecord(null);
       setExistingNightRecord(null);
+      setProductionRecordsLoadFailed(true);
     } finally {
       if (!isStale()) {
         setLoadingExistingRecords(false);
@@ -377,6 +391,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
   // 설비 선택 및 날짜 변경 시 기존 생산 기록 및 비가동 데이터 로드
   React.useEffect(() => {
     if (!selectedMachineId || !selectedDate) {
+      ++loadRequestIdRef.current;
+      setLoadingSelectionData(false);
       return;
     }
 
@@ -384,20 +400,44 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     const requestId = ++loadRequestIdRef.current;
     const controller = new AbortController();
 
-    // 설비/날짜가 바뀌면 이전 설비의 휴무 여부, 가동시간, 비가동 목록이 남아있지 않도록 즉시 초기화 (F1)
+    // 설비/날짜가 바뀌는 즉시 이전 선택의 저장 근거를 모두 지운다. 조회가 끝날 때까지
+    // 이전 수량/record id가 잠깐 보이거나 저장 payload에 섞여서는 안 된다.
+    setLoadingSelectionData(true);
+    setExistingDayRecord(null);
+    setExistingNightRecord(null);
     setDayShiftOff(false);
     setNightShiftOff(false);
     setDayShiftOperatingMinutes(DEFAULT_OPERATING_MINUTES);
     setNightShiftOperatingMinutes(DEFAULT_OPERATING_MINUTES);
-    setDayShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
-    setNightShiftData(prev => ({ ...prev, downtime_entries: [], total_downtime_minutes: 0 }));
+    setDayShiftData(prev => ({
+      ...prev,
+      actual_production: 0,
+      defect_quantity: 0,
+      good_quantity: 0,
+      downtime_entries: [],
+      total_downtime_minutes: 0
+    }));
+    setNightShiftData(prev => ({
+      ...prev,
+      actual_production: 0,
+      defect_quantity: 0,
+      good_quantity: 0,
+      downtime_entries: [],
+      total_downtime_minutes: 0
+    }));
     setDowntimeLoadFailed({ DAY: false, NIGHT: false });
+    setProductionRecordsLoadFailed(false);
 
     // 기존 생산 기록 로드
-    loadExistingProductionRecords(selectedMachineId, selectedDate, requestId, controller.signal);
-    // 주간조와 야간조 비가동 데이터 모두 로드
-    loadDowntimeEntries(selectedMachineId, selectedDate, 'DAY', requestId, controller.signal);
-    loadDowntimeEntries(selectedMachineId, selectedDate, 'NIGHT', requestId, controller.signal);
+    void Promise.all([
+      loadExistingProductionRecords(selectedMachineId, selectedDate, requestId, controller.signal),
+      loadDowntimeEntries(selectedMachineId, selectedDate, 'DAY', requestId, controller.signal),
+      loadDowntimeEntries(selectedMachineId, selectedDate, 'NIGHT', requestId, controller.signal)
+    ]).finally(() => {
+      if (requestId === loadRequestIdRef.current) {
+        setLoadingSelectionData(false);
+      }
+    });
 
     return () => {
       controller.abort();
@@ -655,10 +695,15 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
     }
   };
 
-  // 비가동 시간 추가 (DB에 즉시 저장)
+  // 비가동 시간은 생산 실적과 함께 원자적으로 저장한다. 여기서는 로컬 초안만 추가한다.
   const addDowntimeEntry = async (values: { start_time: string; end_time?: string; reason: string; description?: string }) => {
     if (!selectedMachineId) {
       message.error(t('messages.selectMachineFirst'));
+      return;
+    }
+
+    // 기존 생산실적과 두 교대의 비가동 조회가 모두 끝나기 전에는 어떤 저장도 허용하지 않는다.
+    if (loadingSelectionData || loadingExistingRecords || loadingDowntime) {
       return;
     }
 
@@ -669,91 +714,74 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
 
     try {
       setDowntimeSubmitting(true);
-      setLoading(true);
-
       const startTime = dayjs(values.start_time);
       const endTime = values.end_time ? dayjs(values.end_time) : dayjs();
-      const shiftCode = activeShift === 'DAY' ? 'A' : 'B';
+      if (!startTime.isValid() || !endTime.isValid() || !endTime.isAfter(startTime)) {
+        throw new Error('비가동 종료 시각은 시작 시각보다 늦어야 합니다.');
+      }
 
-      const downtimeData = {
+      const activeData = activeShift === 'DAY' ? dayShiftData : nightShiftData;
+      const overlapsExisting = activeData.downtime_entries.some(entry => {
+        const existingStart = dayjs(entry.start_time);
+        const existingEnd = entry.end_time ? dayjs(entry.end_time) : existingStart;
+        return startTime.isBefore(existingEnd) && endTime.isAfter(existingStart);
+      });
+      if (overlapsExisting) throw new Error('같은 교대의 비가동 시간이 서로 겹칩니다.');
+
+      const entry: DowntimeEntry = {
+        id: globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}-${Math.random()}`,
         machine_id: selectedMachineId,
         date: selectedDate,
-        shift: shiftCode,
+        shift: activeShift === 'DAY' ? 'A' : 'B',
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
+        duration_minutes: Math.round(endTime.diff(startTime, 'minute', true)),
         reason: values.reason,
         description: values.description || ''
       };
+      const appendEntry = (previous: ShiftProductionData): ShiftProductionData => {
+        const downtimeEntries = [...previous.downtime_entries, entry];
+        return {
+          ...previous,
+          downtime_entries: downtimeEntries,
+          total_downtime_minutes: downtimeEntries.reduce(
+            (sum, item) => sum + (item.duration_minutes || 0),
+            0
+          )
+        };
+      };
+      if (activeShift === 'DAY') setDayShiftData(appendEntry);
+      else setNightShiftData(appendEntry);
 
-      const response = await fetch('/api/downtime-entries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(downtimeData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        message.success(t('messages.downtimeAdded'));
-
-        // 비가동 데이터 새로 로드
-        await loadDowntimeEntries(selectedMachineId, selectedDate, activeShift);
-
-        setDowntimeModalVisible(false);
-        downtimeForm.resetFields();
-      } else {
-        throw new Error(result.error || 'Failed to save downtime');
-      }
+      message.success(t('messages.downtimeAdded'));
+      setDowntimeModalVisible(false);
+      downtimeForm.resetFields();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error adding downtime entry:', error);
       message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
     } finally {
-      setLoading(false);
       setDowntimeSubmitting(false);
     }
   };
 
-  // 비가동 시간 삭제 (DB에서 삭제)
+  // 저장 전 로컬 초안/기존 행에서 제거한다. 실제 DB 교체는 생산 저장 성공 시 한 번만 수행한다.
   const removeDowntimeEntry = async (entryId: string) => {
     if (!selectedMachineId) return;
-
-    try {
-      setLoading(true);
-
-      const response = await fetch(`/api/downtime-entries/${entryId}`, {
-        method: 'DELETE'
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        message.success(t('messages.downtimeDeleted'));
-
-        // 비가동 데이터 새로 로드
-        await loadDowntimeEntries(selectedMachineId, selectedDate, activeShift);
-      } else {
-        throw new Error(result.error || 'Failed to delete downtime');
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error deleting downtime entry:', error);
-      message.error(`삭제 실패: ${errorMessage}`);
-    } finally {
-      setLoading(false);
-    }
+    const removeEntry = (previous: ShiftProductionData): ShiftProductionData => {
+      const downtimeEntries = previous.downtime_entries.filter(entry => entry.id !== entryId);
+      return {
+        ...previous,
+        downtime_entries: downtimeEntries,
+        total_downtime_minutes: downtimeEntries.reduce(
+          (sum, item) => sum + (item.duration_minutes || 0),
+          0
+        )
+      };
+    };
+    if (activeShift === 'DAY') setDayShiftData(removeEntry);
+    else setNightShiftData(removeEntry);
+    message.success(t('messages.downtimeDeleted'));
   };
 
   // 일일 데이터 계산
@@ -913,10 +941,19 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
       submittedShifts.push({ label: t('shift.nightShift'), data: nightShiftData, shift: 'NIGHT' });
     }
 
-    // 비가동 조회가 실패한 교대는 저장하지 않는다.
+    // 기존 생산 기록 조회 실패를 "기록 없음"으로 취급하면 다른 교대를 저장하는 순간
+    // 실패한 교대의 기존 데이터가 삭제될 수 있다. 전체 조회가 성공하기 전에는 저장하지 않는다.
+    if (productionRecordsLoadFailed) {
+      message.error(t('recordList.loadFailedBlockSave'));
+      return;
+    }
+
+    // 비가동 조회가 실패한 교대가 하나라도 있으면 저장하지 않는다.
     // 화면의 0분은 "비가동 없음"이 아니라 "알 수 없음"이므로, 저장하면 기존 비가동을 0으로
     // 덮어써 가동률이 100%가 된다. 조회를 다시 성공시킨 뒤에만 저장할 수 있다.
-    const failedShifts = submittedShifts.filter(s => downtimeLoadFailed[s.shift]);
+    const failedShifts = (['DAY', 'NIGHT'] as const)
+      .filter(shift => downtimeLoadFailed[shift])
+      .map(shift => ({ label: t(shift === 'DAY' ? 'shift.dayShift' : 'shift.nightShift') }));
     if (failedShifts.length > 0) {
       message.error(
         t('downtime.loadFailedBlockSave', { shifts: failedShifts.map(s => s.label).join(', ') })
@@ -950,6 +987,20 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         date: selectedDate,
         day_shift_off: dayShiftOff,
         night_shift_off: nightShiftOff,
+        day_downtime_entries: dayShiftOff ? [] : dayShiftData.downtime_entries.map(entry => ({
+          start_time: entry.start_time,
+          end_time: entry.end_time || dayjs().toISOString(),
+          reason: entry.reason,
+          description: entry.description,
+          operator_id: entry.operator_id
+        })),
+        night_downtime_entries: nightShiftOff ? [] : nightShiftData.downtime_entries.map(entry => ({
+          start_time: entry.start_time,
+          end_time: entry.end_time || dayjs().toISOString(),
+          reason: entry.reason,
+          description: entry.description,
+          operator_id: entry.operator_id
+        })),
         // 입력되지 않은 교대는 아예 생략한다 (0으로 채워 보내면 유령 레코드가 생김)
         ...(shouldSubmitShift(dayShiftData, dayShiftOff, existingDayRecord) && {
           day_shift: {
@@ -1333,6 +1384,17 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
         />
       )}
 
+      {/* 기존 생산 기록 조회 실패 경고 (저장 차단) */}
+      {selectedMachineId && productionRecordsLoadFailed && (
+        <Alert
+          message={t('recordList.loadFailedTitle')}
+          description={t('recordList.loadFailedDescription')}
+          type="error"
+          showIcon
+          style={{ marginBottom: '16px' }}
+        />
+      )}
+
       {/* 비가동 조회 실패 경고 (저장 차단) */}
       {selectedMachineId && (downtimeLoadFailed.DAY || downtimeLoadFailed.NIGHT) && (
         <Alert
@@ -1688,7 +1750,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({
           <Button
             type="primary"
             htmlType="submit"
-            loading={loading}
+            loading={loading || loadingSelectionData}
+            disabled={loadingSelectionData || loadingExistingRecords || loadingDowntime}
             icon={<SaveOutlined />}
             size="large"
             onClick={handleSave}

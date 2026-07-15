@@ -65,6 +65,10 @@ function defaultWindowDays(aggregation: string): number {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const round3 = (value: unknown): number => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric * 1000) / 1000 : 0;
+};
 
 /**
  * 잘못된 machine_id/날짜는 DB 까지 내려가면 타입 캐스팅 오류로 500 이 된다.
@@ -99,6 +103,13 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('end_date');
     const shift = searchParams.get('shift');
     const aggregation = searchParams.get('aggregation') || 'daily'; // 기본 조회 창 선택에만 사용
+    const includeStatistics = searchParams.get('include_statistics') !== 'false';
+    const knownTotal = parseIntParam(
+      searchParams.get('known_total'),
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER
+    );
 
     const limit = parseIntParam(searchParams.get('limit'), DEFAULT_PAGE_LIMIT, 1, MAX_PAGE_LIMIT);
     const offset = parseIntParam(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
@@ -125,23 +136,24 @@ export async function GET(request: NextRequest) {
 
     // 통계는 전체 집합 위에서 DB 가 계산한다.
     // 행을 전송하지 않으므로 max-rows 한도의 영향을 받지 않는다.
-    const { data: summaryRows, error: summaryError } = await supabaseAdmin.rpc(
-      'analytics_oee_records_summary',
-      {
-        p_start_date: effectiveStartDate,
-        p_end_date: effectiveEndDate,
-        p_machine_id: machineId,
-        p_shift: shift,
-      }
-    );
+    const summaryResult = includeStatistics
+      ? await supabaseAdmin.rpc('analytics_oee_records_summary', {
+          p_start_date: effectiveStartDate,
+          p_end_date: effectiveEndDate,
+          p_machine_id: machineId,
+          p_shift: shift,
+        })
+      : { data: null, error: null };
 
-    if (summaryError) {
-      console.error('Database error (oee summary):', summaryError);
+    if (summaryResult.error) {
+      console.error('Database error (oee summary):', summaryResult.error);
       return NextResponse.json(
         { error: 'Failed to fetch OEE statistics' },
         { status: 500 }
       );
     }
+
+    const summaryRows = summaryResult.data;
 
     const summary = (summaryRows as OeeRecordsSummary[] | null)?.[0] ?? {
       total_records: 0,
@@ -163,7 +175,9 @@ export async function GET(request: NextRequest) {
       avg_oee_excluding_impossible: 0,
       avg_quality_excluding_impossible: 0,
     };
-    const totalRecords = Number(summary.total_records) || 0;
+    const totalRecords = includeStatistics
+      ? Number(summary.total_records) || 0
+      : knownTotal;
 
     // 원시 행은 요청한 페이지만 가져온다.
     let query = supabaseAdmin
@@ -182,6 +196,7 @@ export async function GET(request: NextRequest) {
         ideal_runtime,
         output_qty,
         defect_qty,
+        downtime_minutes,
         created_at,
         machines!inner(name)
       `)
@@ -215,6 +230,7 @@ export async function GET(request: NextRequest) {
 
     const oeeData = (productionData || []).map(record => ({
       id: record.record_id,
+      record_id: record.record_id,
       machine_id: record.machine_id,
       machine_name: unwrapJoin(record.machines)?.name || 'Unknown',
       date: record.date,
@@ -228,19 +244,20 @@ export async function GET(request: NextRequest) {
       ideal_runtime: record.ideal_runtime || 0,
       output_qty: record.output_qty || 0,
       defect_qty: record.defect_qty || 0,
+      downtime_minutes: record.downtime_minutes,
       created_at: record.created_at,
       updated_at: record.created_at
     }));
 
     return NextResponse.json({
       oee_data: oeeData,
-      statistics: {
+      statistics: includeStatistics ? {
         // 전체 집합 기준. oee_data 에 담긴 페이지가 아니라 필터에 해당하는 모든 행의 평균이다.
         total_records: totalRecords,
-        avg_oee: Math.round(summary.avg_oee * 1000) / 1000,
-        avg_availability: Math.round(summary.avg_availability * 1000) / 1000,
-        avg_performance: Math.round(summary.avg_performance * 1000) / 1000,
-        avg_quality: Math.round(summary.avg_quality * 1000) / 1000,
+        avg_oee: round3(summary.avg_oee),
+        avg_availability: round3(summary.avg_availability),
+        avg_performance: round3(summary.avg_performance),
+        avg_quality: round3(summary.avg_quality),
         total_output: Number(summary.total_output) || 0,
         total_defect: Number(summary.total_defect) || 0,
         total_good: Number(summary.total_good) || 0,
@@ -250,10 +267,8 @@ export async function GET(request: NextRequest) {
         aggregation_method: 'runtime_output_weighted',
         data_quality: {
           impossible_records: Number(summary.impossible_records) || 0,
-          avg_oee_excluding_impossible:
-            Math.round(summary.avg_oee_excluding_impossible * 1000) / 1000,
-          avg_quality_excluding_impossible:
-            Math.round(summary.avg_quality_excluding_impossible * 1000) / 1000,
+          avg_oee_excluding_impossible: round3(summary.avg_oee_excluding_impossible),
+          avg_quality_excluding_impossible: round3(summary.avg_quality_excluding_impossible),
         },
 
         // 위 평균을 얼마나 믿을 수 있는지 나타내는 지표.
@@ -267,11 +282,10 @@ export async function GET(request: NextRequest) {
             totalRecords > 0
               ? Math.round(((Number(summary.unreported_records) || 0) / totalRecords) * 1000) / 1000
               : 0,
-          avg_availability_reported:
-            Math.round(summary.avg_availability_reported * 1000) / 1000,
-          avg_oee_reported: Math.round(summary.avg_oee_reported * 1000) / 1000,
+          avg_availability_reported: round3(summary.avg_availability_reported),
+          avg_oee_reported: round3(summary.avg_oee_reported),
         },
-      },
+      } : null,
       pagination: buildPaginationMeta(limit, offset, oeeData.length, totalRecords),
       filters: {
         machine_id: machineId,

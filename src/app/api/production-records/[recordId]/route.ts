@@ -5,6 +5,7 @@ import {
   getBreakTimeMinutes,
   resolvePlannedRuntime
 } from '@/lib/plannedRuntime';
+import { synchronizeDowntime } from '../oeeRules';
 
 const DEFAULT_TACT_SECONDS = 120;
 const DEFAULT_CAVITY = 1;
@@ -38,10 +39,11 @@ interface ExistingRecord {
   defect_qty: number;
   tact_time_seconds: number | null;
   cavity_count: number | null;
+  downtime_minutes: number | null;
 }
 
 const EXISTING_RECORD_COLUMNS =
-  'record_id, machine_id, date, shift, planned_runtime, actual_runtime, ideal_runtime, output_qty, defect_qty, tact_time_seconds, cavity_count';
+  'record_id, machine_id, date, shift, planned_runtime, actual_runtime, ideal_runtime, output_qty, defect_qty, tact_time_seconds, cavity_count, downtime_minutes';
 
 // 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
 async function getMachineTactInfo(machineId: string) {
@@ -104,7 +106,7 @@ async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number> 
 async function buildUpdateData(
   body: Record<string, unknown>,
   existing: ExistingRecord
-): Promise<{ updateData?: Record<string, number>; error?: string }> {
+): Promise<{ updateData?: Record<string, number | null>; error?: string }> {
   const baseFields = ['output_qty', 'defect_qty', 'actual_runtime', 'planned_runtime'] as const;
   const hasBaseField = baseFields.some(field => body[field] !== undefined);
 
@@ -144,6 +146,13 @@ async function buildUpdateData(
     0,
     plannedRuntime
   );
+  const runtimeWasEdited = body.actual_runtime !== undefined || body.planned_runtime !== undefined;
+  const downtimeMinutes = synchronizeDowntime(
+    plannedRuntime,
+    actualRuntime,
+    runtimeWasEdited,
+    existing.downtime_minutes
+  );
 
   // 현재 공정이 아니라 "이 기록이 만들어질 때의 조건"으로 계산한다 (역사 덮어쓰기 방지)
   const minutesPerUnit = await resolveMinutesPerUnit(existing);
@@ -164,6 +173,7 @@ async function buildUpdateData(
       defect_qty: defectQtyValue,
       planned_runtime: Math.round(plannedRuntime),
       actual_runtime: Math.round(actualRuntime),
+      downtime_minutes: downtimeMinutes,
       ideal_runtime: Math.round(idealRuntime),
       availability: Math.round(availability * 10000) / 10000, // 소수점 4자리
       performance: Math.round(performance * 10000) / 10000,

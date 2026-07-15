@@ -538,7 +538,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                         align: 'right'
                       }
                     ]}
-                    pagination={false}
+                    pagination={{ pageSize: 100, showSizeChanger: true }}
                     size="small"
                   />
                 </Tabs.TabPane>
