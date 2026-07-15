@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 import { Machine, ProductionRecord } from '@/types';
 import { OEEMetrics } from '@/types/reports';
+import { calculateWeightedOEE } from '@/utils/weightedOee';
 import { addKoreanText } from '@/lib/fonts';
 
 export interface ReportData {
@@ -835,17 +836,24 @@ export const calculateWeightedReportMetrics = (rows: OEEMetrics[]): WeightedRepo
     defects: sum.defects + Math.max(0, row.defect_qty || 0),
   }), { planned: 0, actual: 0, ideal: 0, output: 0, defects: 0 });
 
-  const availability = totals.planned > 0 ? totals.actual / totals.planned : 0;
-  const performance = totals.actual > 0 ? totals.ideal / totals.actual : 0;
-  const quality = totals.output > 0
-    ? Math.max(0, totals.output - totals.defects) / totals.output
-    : 0;
+  // 공식 가중 집계(calculateWeightedOEE)에 위임해 [0,1] clamp와 계산식을 단일화한다.
+  const weighted = calculateWeightedOEE({
+    reportedRecords: rows.length,
+    totalPlannedRuntime: totals.planned,
+    totalActualRuntime: totals.actual,
+    totalIdealRuntime: totals.ideal,
+    totalOutput: totals.output,
+    totalDefects: totals.defects,
+  });
+  const availability = weighted.availability ?? 0;
+  const performance = weighted.performance ?? 0;
+  const quality = weighted.quality ?? 0;
 
   return {
     availability,
     performance,
     quality,
-    oee: availability * performance * quality,
+    oee: weighted.oee ?? 0,
     totalPlannedRuntime: totals.planned,
     totalActualRuntime: totals.actual,
     totalIdealRuntime: totals.ideal,

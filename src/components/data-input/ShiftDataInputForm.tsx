@@ -1048,7 +1048,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
 
     const availability = plannedOperatingTime > 0 ? actualOperatingTime / plannedOperatingTime : 0;
     const performance = actualOperatingTime > 0 ? Math.min(1, idealRuntime / actualOperatingTime) : 0;
-    const quality = totalProduction > 0 ? totalGoodQuantity / totalProduction : 1;
+    const quality = totalProduction > 0 ? totalGoodQuantity / totalProduction : 0;
     const oee = availability * performance * quality;
 
     return {
