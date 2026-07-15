@@ -96,8 +96,25 @@ const savePosted = (fetchMock: jest.Mock) =>
 describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
   let fetchMock: jest.Mock;
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
+    // 기본 교대(A/B)는 현재 시각으로 결정된다. A교대(회사 시간대 08:00~20:00) 한가운데인
+    // 2026-07-14 10:00 Asia/Ho_Chi_Minh(=03:00Z)로 Date 만 고정해 시각 의존 실패를 없앤다.
+    // 타이머·microtask 는 doNotFake 로 진짜를 유지해 waitFor/비동기 로딩 타이밍은 그대로 둔다.
+    jest.useFakeTimers({
+      now: new Date('2026-07-14T03:00:00Z'),
+      doNotFake: [
+        'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+        'setImmediate', 'clearImmediate', 'queueMicrotask',
+        'requestAnimationFrame', 'cancelAnimationFrame',
+        'requestIdleCallback', 'cancelIdleCallback',
+        'hrtime', 'nextTick', 'performance',
+      ],
+    });
 
     fetchMock = jest.fn(async (url: string) => {
       // 이미 저장된 기록이 있다 -> shouldSubmitShift 가 true 가 되어 재제출 대상이 된다
