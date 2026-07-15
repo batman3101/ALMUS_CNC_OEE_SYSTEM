@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Machine, unwrapJoin } from '@/types';
+import { authFetch } from '@/lib/authFetch';
 
 export interface UseMachinesOptions {
   enableAutoRefresh?: boolean;
@@ -40,7 +41,7 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
 
       console.log(`Fetching machines via API... ${isBackgroundRefresh ? '(background)' : '(initial/manual)'}`);
 
-      const response = await fetch('/api/machines', {
+      const response = await authFetch('/api/machines', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

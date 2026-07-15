@@ -1,6 +1,10 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useMachineOEEStats } from '../useMachineOEEStats';
 
+jest.mock('@/lib/authFetch', () => ({
+  authFetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+}));
+
 const ok = (machineId: string) => ({
   ok: true,
   json: async () => ({

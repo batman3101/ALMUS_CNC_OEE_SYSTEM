@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // GET /api/model-processes - 특정 모델의 공정 목록 조회
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerClient();
+    await requireUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const modelId = searchParams.get('model_id');
 
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: processes, error } = await supabase
+    const { data: processes, error } = await supabaseAdmin
       .from('model_processes')
       .select(`
         *,
@@ -38,7 +39,10 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(processes || []);
-  } catch (error) {
+  } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Unexpected error in model processes API:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
@@ -50,7 +54,7 @@ export async function GET(request: NextRequest) {
 // POST /api/model-processes - 새로운 공정 생성 (관리자용)
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient();
+    await requireUser(request, ['admin']);
     const body = await request.json();
     
     const { model_id, process_name, process_order, tact_time_seconds = 120 } = body;
@@ -63,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if model exists and is active
-    const { data: model, error: modelError } = await supabase
+    const { data: model, error: modelError } = await supabaseAdmin
       .from('product_models')
       .select('id, is_active')
       .eq('id', model_id)
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: newProcess, error } = await supabase
+    const { data: newProcess, error } = await supabaseAdmin
       .from('model_processes')
       .insert({
         model_id,
@@ -103,7 +107,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(newProcess, { status: 201 });
-  } catch (error) {
+  } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Unexpected error in model processes POST API:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },

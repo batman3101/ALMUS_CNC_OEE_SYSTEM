@@ -49,6 +49,10 @@
     "endDate": "Ngày kết thúc"
   },
   "refreshData": "Làm mới dữ liệu",
+  "coverage": {
+    "title": "Bản ghi có thể tính OEE: {{reported}} / {{total}}",
+    "description": "Các bản ghi thiếu thời gian chạy hoặc tiêu chuẩn quy trình được loại khỏi OEE nhưng vẫn được tính vào tổng sản lượng."
+  },
   "metrics": {
     "averageOEE": "OEE trung bình",
     "averageAvailability": "Tỷ lệ hoạt động trung bình",

@@ -77,14 +77,20 @@ export class OEECalculator {
    * @param productionRecord 생산 실적 데이터
    * @returns OEE 지표
    */
-  static calculateOEEFromRecord(productionRecord: ProductionRecord): OEEMetrics {
+  static calculateOEEFromRecord(productionRecord: ProductionRecord): OEEMetrics | null {
     const {
-      planned_runtime = 0,
-      actual_runtime = 0,
-      ideal_runtime = 0,
+      planned_runtime,
+      actual_runtime,
+      ideal_runtime,
       output_qty,
       defect_qty
     } = productionRecord;
+
+    // 런타임이 보고되지 않은 기록은 실제 0분 기록이 아니다. 완전한 입력이
+    // 들어오기 전에는 계산값을 만들지 않아 호출자가 "미확인"으로 표시하게 한다.
+    if (planned_runtime == null || actual_runtime == null || ideal_runtime == null) {
+      return null;
+    }
 
     const availability = this.calculateAvailability(actual_runtime, planned_runtime);
     const performance = this.calculatePerformance(ideal_runtime, actual_runtime);

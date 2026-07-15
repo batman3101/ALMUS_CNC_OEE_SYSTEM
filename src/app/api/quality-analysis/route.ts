@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 import { unwrapJoin } from '@/types';
+import { calculateWeightedQualityPercent, parseDetailPagination } from './qualityRules';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +93,8 @@ type QualityTrend = 'improving' | 'stable' | 'declining';
 // GET /api/quality-analysis - 품질 분석 데이터 조회
 export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin', 'engineer']);
+
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const startDate = searchParams.get('start_date');
@@ -98,6 +102,7 @@ export async function GET(request: NextRequest) {
     const analysisType = searchParams.get('analysis_type') || 'summary'; // summary, detail, trends
     const shift = searchParams.get('shift'); // 'A', 'B', 'C', 'D'
     const qualityThreshold = parseFloat(searchParams.get('quality_threshold') || '95'); // 품질 임계값 (%)
+    const detailPagination = parseDetailPagination(searchParams);
 
     console.info('🔍 품질 분석 API 요청:', { machineId, startDate, endDate, analysisType, shift, qualityThreshold });
 
@@ -144,7 +149,7 @@ export async function GET(request: NextRequest) {
     const recordsAboveThreshold = totals.records_above_threshold || 0;
     const recordsBelowThreshold = totals.records_below_threshold || 0;
 
-    const avgQuality = totalRecords > 0 ? (totals.quality_sum || 0) / totalRecords : 0;
+    const avgQuality = calculateWeightedQualityPercent(totalOutputQty, totalDefectQty);
     const overallDefectRate = totalOutputQty > 0 ? (totalDefectQty / totalOutputQty) * 100 : 0;
     const qualityComplianceRate = totalRecords > 0 ? (recordsAboveThreshold / totalRecords) * 100 : 0;
 
@@ -187,7 +192,7 @@ export async function GET(request: NextRequest) {
       records_count: shiftRow.records_count,
       total_output: shiftRow.total_output,
       total_defects: shiftRow.total_defects,
-      avg_quality: shiftRow.sum_quality / shiftRow.records_count,
+      avg_quality: calculateWeightedQualityPercent(shiftRow.total_output, shiftRow.total_defects),
       defect_rate: shiftRow.total_output > 0 ? (shiftRow.total_defects / shiftRow.total_output) * 100 : 0,
       compliance_rate: shiftRow.records_count > 0 ? (shiftRow.compliant_count / shiftRow.records_count) * 100 : 0,
       machines_count: shiftRow.machines_count,
@@ -198,7 +203,7 @@ export async function GET(request: NextRequest) {
       date: day.date,
       total_output: day.total_output,
       total_defects: day.total_defects,
-      avg_quality: day.sum_quality / day.records_count,
+      avg_quality: calculateWeightedQualityPercent(day.total_output, day.total_defects),
       defect_rate: day.total_output > 0 ? (day.total_defects / day.total_output) * 100 : 0,
       compliance_rate: day.records_count > 0 ? (day.compliant_count / day.records_count) * 100 : 0,
       records_count: day.records_count,
@@ -221,6 +226,7 @@ export async function GET(request: NextRequest) {
 
     // 상세 레코드는 요청이 있을 때만 원본 행을 조회한다 (집계 경로에서는 원본을 가져오지 않는다)
     let detailedRecords: Array<Record<string, unknown>> | undefined;
+    let detailTotal: number | undefined;
     if (analysisType === 'detail') {
       let detailQuery = supabaseAdmin
         .from('production_records')
@@ -233,13 +239,14 @@ export async function GET(request: NextRequest) {
           output_qty,
           defect_qty,
           machines!inner(name)
-        `)
+        `, { count: 'exact' })
         .gte('date', fromDateStr)
         .lte('date', toDateStr)
         .not('output_qty', 'is', null)
         .not('defect_qty', 'is', null)
         .gt('output_qty', 0)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .order('record_id', { ascending: false });
 
       if (machineIds.length > 1) {
         detailQuery = detailQuery.in('machine_id', machineIds);
@@ -253,7 +260,10 @@ export async function GET(request: NextRequest) {
         detailQuery = detailQuery.eq('shift', shifts[0]);
       }
 
-      const { data: detailRows, error: detailError } = await detailQuery;
+      const { data: detailRows, error: detailError, count } = await detailQuery.range(
+        detailPagination.offset,
+        detailPagination.offset + detailPagination.limit - 1
+      );
 
       if (detailError) {
         console.error('품질 기록 상세 조회 오류:', detailError);
@@ -276,6 +286,7 @@ export async function GET(request: NextRequest) {
         defect_rate: record.output_qty > 0 ? Math.round(((record.defect_qty / record.output_qty) * 100) * 100) / 100 : 0,
         meets_threshold: toQualityPercent(record.quality) >= qualityThreshold
       }));
+      detailTotal = count || 0;
     }
 
     // 응답 구성
@@ -340,6 +351,13 @@ export async function GET(request: NextRequest) {
         }))
       },
       detailed_records: detailedRecords,
+      detail_pagination: analysisType === 'detail' ? {
+        limit: detailPagination.limit,
+        offset: detailPagination.offset,
+        returned: detailedRecords?.length || 0,
+        total: detailTotal || 0,
+        has_more: detailPagination.offset + (detailedRecords?.length || 0) < (detailTotal || 0),
+      } : undefined,
       metadata: {
         query_time: new Date().toISOString(),
         filters: {
@@ -364,6 +382,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response);
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('❌ 품질 분석 API 오류:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

@@ -33,10 +33,10 @@
 - 앱 서버 API 4개는 모두 HTTP 200이었다.
 - headless Chrome 격리 환경에서 브라우저의 Supabase 외부 직접 요청은 `ERR_NETWORK_ACCESS_DENIED`로 차단됐다. 동일 데이터를 읽는 Next.js 서버 API는 정상 응답했다.
 - 개발 모드에서 기존 theme class hydration 경고가 관찰됐다. 이번 16개 버그 수정에서 새로 추가된 예외 또는 React crash는 없었다.
-- 신규 원자 저장 RPC는 migration 적용 전 원격 DB에는 존재하지 않으므로, 운영 데이터에 쓰기를 발생시키는 브라우저 저장 테스트는 수행하지 않았다. UI payload와 migration 계약은 Jest 회귀 테스트로 검증했다.
+- 당시 작성된 원자 저장 RPC는 migration 적용 전 원격 DB에는 존재하지 않았으므로, 운영 데이터에 쓰기를 발생시키는 브라우저 저장 테스트는 수행하지 않았다. 후속 재감사에서 비가동을 생산실적과 독립된 lifecycle로 다시 정의했으며, 이 문서의 브라우저 기록은 읽기 경로 검증 증거로만 사용한다.
 
 ## 판정
 
 - 읽기/집계/페이지네이션/화면 렌더링: 통과
-- 생산실적+비가동 원자 저장: 코드·계약 테스트 통과, 실제 DB migration 적용 후 운영 전 smoke test 필요
-- 독립 리뷰 후 추가된 데이터 손실 방지 경로까지 포함해 Jest 12개 스위트, 61개 테스트 및 프로덕션 빌드 통과
+- 독립 비가동 lifecycle: `20260715160000_independent_downtime_lifecycle.sql` 파일과 계약 테스트 작성, main PR 병합 후 DB 적용 및 운영 전 smoke test 필요
+- 아래 테스트 개수는 이 브라우저 검증 당시의 스냅샷이다. 후속 재감사의 최종 결과는 PR 검증 기록을 따른다.

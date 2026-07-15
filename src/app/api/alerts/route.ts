@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { unwrapJoin } from '@/types';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { getBusinessDateAt, getShiftAt } from '@/utils/downtimeIntervals';
+
+const DEFAULT_BUSINESS_CLOCK = {
+  timezone: 'Asia/Ho_Chi_Minh',
+  shiftAStart: '08:00',
+  shiftBStart: '20:00',
+};
+
+async function getBusinessClock() {
+  const { data, error } = await supabaseAdmin
+    .from('system_settings')
+    .select('category, setting_key, setting_value')
+    .in('category', ['general', 'shift'])
+    .eq('is_active', true);
+  if (error || !data) return DEFAULT_BUSINESS_CLOCK;
+  const value = (category: string, key: string): string | undefined => {
+    const setting = data.find(row => row.category === category && row.setting_key === key)
+      ?.setting_value as { value?: unknown } | null | undefined;
+    return typeof setting?.value === 'string' ? setting.value : undefined;
+  };
+  return {
+    timezone: value('general', 'timezone') || DEFAULT_BUSINESS_CLOCK.timezone,
+    shiftAStart: value('shift', 'shift_a_start') || DEFAULT_BUSINESS_CLOCK.shiftAStart,
+    shiftBStart: value('shift', 'shift_b_start') || DEFAULT_BUSINESS_CLOCK.shiftBStart,
+  };
+}
 
 // 알림 임계값 설정
 const ALERT_THRESHOLDS = {
@@ -42,110 +69,226 @@ interface Alert {
   acknowledged: boolean;
 }
 
+interface MachineJoin {
+  name?: string | null;
+  equipment_type?: string | null;
+}
+
 // GET /api/alerts - 실시간 알림 조회
 export async function GET(request: NextRequest) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const severity = searchParams.get('severity'); // 'critical', 'warning', 'info'
     const isActive = searchParams.get('is_active'); // 'true', 'false'
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const requestedLimit = Number.parseInt(searchParams.get('limit') || '50', 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(10_000, Math.max(1, requestedLimit))
+      : 50;
 
     console.info('🔔 실시간 알림 API 요청:', { machineId, severity, isActive, limit });
 
     // 현재 시간 기준으로 최근 데이터 조회
     const currentTime = new Date();
     const recentTime = new Date(currentTime.getTime() - 30 * 60 * 1000); // 최근 30분
+    const businessClock = await getBusinessClock();
+    const currentBusinessDate = getBusinessDateAt(
+      currentTime,
+      businessClock.timezone,
+      businessClock.shiftAStart
+    );
+    const currentShift = getShiftAt(
+      currentTime,
+      businessClock.timezone,
+      businessClock.shiftAStart,
+      businessClock.shiftBStart
+    );
 
-    // 현재 운영 중인 설비 상태 조회
-    const { data: currentStatus, error: statusError } = await supabaseAdmin
-      .from('machines')
-      .select(`
-        id,
-        name,
-        current_state,
-        equipment_type,
-        location
-      `)
-      .eq('is_active', true);
-
-    if (statusError) {
-      console.error('설비 상태 조회 오류:', statusError);
-      return NextResponse.json(
-        { error: 'Failed to fetch machine status' },
-        { status: 500 }
-      );
+    const pageSize = 1000;
+    // 현재 운영 중인 설비 상태도 Supabase 행 상한을 넘길 수 있으므로 전 페이지를 읽는다.
+    const currentStatus: Array<{
+      id: string;
+      name: string;
+      current_state: string;
+      equipment_type?: string | null;
+      location?: string | null;
+      updated_at?: string | null;
+    }> = [];
+    for (let from = 0; ; from += pageSize) {
+      let query = supabaseAdmin
+        .from('machines')
+        .select('id, name, current_state, equipment_type, location, updated_at')
+        .eq('is_active', true)
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (machineId) query = query.eq('id', machineId);
+      const { data, error } = await query;
+      if (error) {
+        console.error('설비 상태 조회 오류:', error);
+        return NextResponse.json({ error: 'Failed to fetch machine status' }, { status: 500 });
+      }
+      currentStatus.push(...((data || []) as typeof currentStatus));
+      if (!data || data.length < pageSize) break;
     }
 
-    // 최근 생산 기록 조회 (성능 지표용)
-    let performanceQuery = supabaseAdmin
-      .from('production_records')
-      .select(`
-        machine_id,
-        oee,
-        availability,
-        performance,
-        quality,
-        date,
-        shift,
-        machines!inner(name, equipment_type)
-      `)
-      .gte('date', recentTime.toISOString().split('T')[0])
-      .order('date', { ascending: false })
-      .limit(200);
+    // Supabase의 행 상한 때문에 일부 설비가 알림 대상에서 사라지지 않도록 전 페이지를 읽는다.
+    const performanceData: Array<{
+      machine_id: string;
+      oee: number | null;
+      availability: number | null;
+      performance: number | null;
+      quality: number | null;
+      record_id?: string | null;
+      date: string;
+      shift: string;
+      created_at?: string | null;
+      machines: MachineJoin | MachineJoin[] | null;
+    }> = [];
+    for (let from = 0; ; from += pageSize) {
+      let query = supabaseAdmin
+        .from('production_records')
+        .select(`
+          machine_id,
+          oee,
+          availability,
+          performance,
+          quality,
+          record_id,
+          date,
+          shift,
+          created_at,
+          machines!inner(name, equipment_type)
+        `)
+        .eq('date', currentBusinessDate)
+        .eq('shift', currentShift)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1);
 
-    if (machineId) {
-      performanceQuery = performanceQuery.eq('machine_id', machineId);
+      if (machineId) query = query.eq('machine_id', machineId);
+      const { data, error } = await query;
+      if (error) {
+        console.error('성능 데이터 조회 오류:', error);
+        return NextResponse.json({ error: 'Failed to fetch performance data' }, { status: 500 });
+      }
+      performanceData.push(...((data || []) as typeof performanceData));
+      if (!data || data.length < pageSize) break;
     }
 
-    const { data: performanceData, error: perfError } = await performanceQuery;
+    // 진행 중인 장애는 시작 시각과 무관하게 포함하고, 최근 종료 건도 함께 조회한다.
+    const machineLogDowntimeData: Array<{
+      machine_id: string;
+      state: string;
+      start_time: string;
+      end_time: string | null;
+      duration: number | null;
+      machines: MachineJoin | MachineJoin[] | null;
+      source_key?: string;
+    }> = [];
+    for (let from = 0; ; from += pageSize) {
+      let query = supabaseAdmin
+        .from('machine_logs')
+        .select(`
+          machine_id,
+          state,
+          start_time,
+          end_time,
+          duration,
+          machines!inner(name, equipment_type)
+        `)
+        .or(`end_time.is.null,start_time.gte.${recentTime.toISOString()}`)
+        .neq('state', 'NORMAL_OPERATION')
+        .order('start_time', { ascending: false })
+        .range(from, from + pageSize - 1);
 
-    if (perfError) {
-      console.error('성능 데이터 조회 오류:', perfError);
-      return NextResponse.json(
-        { error: 'Failed to fetch performance data' },
-        { status: 500 }
-      );
+      if (machineId) query = query.eq('machine_id', machineId);
+      const { data, error } = await query;
+      if (error) {
+        console.error('다운타임 데이터 조회 오류:', error);
+        return NextResponse.json({ error: 'Failed to fetch machine downtime' }, { status: 500 });
+      }
+      machineLogDowntimeData.push(...((data || []) as typeof machineLogDowntimeData));
+      if (!data || data.length < pageSize) break;
     }
 
-    // 최근 다운타임 로그 조회
-    let downtimeQuery = supabaseAdmin
-      .from('machine_logs')
-      .select(`
-        machine_id,
-        state,
-        start_time,
-        end_time,
-        duration,
-        machines!inner(name, equipment_type)
-      `)
-      .gte('start_time', recentTime.toISOString())
-      .neq('state', 'NORMAL_OPERATION')
-      .order('start_time', { ascending: false })
-      .limit(100);
+    // 작업자가 기록한 비가동은 생산실적이나 machine_logs보다 독립적인 원본이다.
+    // 설비 상태 로그가 없더라도 진행 중 사건을 관리자 알림에서 놓치지 않는다.
+    const manualDowntimeData: Array<{
+      id: string;
+      machine_id: string;
+      reason: string;
+      start_time: string;
+      end_time: string | null;
+      duration_minutes: number | null;
+      machines: MachineJoin | MachineJoin[] | null;
+    }> = [];
+    for (let from = 0; ; from += pageSize) {
+      let query = supabaseAdmin
+        .from('downtime_entries')
+        .select(`
+          id,
+          machine_id,
+          reason,
+          start_time,
+          end_time,
+          duration_minutes,
+          machines!inner(name, equipment_type)
+        `)
+        .or(`end_time.is.null,start_time.gte.${recentTime.toISOString()}`)
+        .order('start_time', { ascending: false })
+        .range(from, from + pageSize - 1);
 
-    if (machineId) {
-      downtimeQuery = downtimeQuery.eq('machine_id', machineId);
+      if (machineId) query = query.eq('machine_id', machineId);
+      const { data, error } = await query;
+      if (error) {
+        console.error('수동 비가동 데이터 조회 오류:', error);
+        return NextResponse.json({ error: 'Failed to fetch manual downtime' }, { status: 500 });
+      }
+      manualDowntimeData.push(...((data || []) as typeof manualDowntimeData));
+      if (!data || data.length < pageSize) break;
     }
 
-    const { data: downtimeData, error: downtimeError } = await downtimeQuery;
-
-    if (downtimeError) {
-      console.error('다운타임 데이터 조회 오류:', downtimeError);
-    }
+    const downtimeByMachineAndStart = new Map<string, {
+      machine_id: string;
+      state: string;
+      start_time: string;
+      end_time: string | null;
+      duration: number | null;
+      machines: MachineJoin | MachineJoin[] | null;
+      source_key: string;
+    }>();
+    machineLogDowntimeData.forEach(log => {
+      downtimeByMachineAndStart.set(`${log.machine_id}:${log.start_time}`, {
+        ...log,
+        source_key: log.start_time,
+      });
+    });
+    manualDowntimeData.forEach(entry => {
+      // 같은 시작 시각의 설비 로그가 있으면 작업자가 분류한 독립 사건을 우선한다.
+      downtimeByMachineAndStart.set(`${entry.machine_id}:${entry.start_time}`, {
+        machine_id: entry.machine_id,
+        state: entry.reason,
+        start_time: entry.start_time,
+        end_time: entry.end_time,
+        duration: entry.duration_minutes,
+        machines: entry.machines,
+        source_key: entry.id,
+      });
+    });
+    const downtimeData = Array.from(downtimeByMachineAndStart.values());
 
     // 알림 생성 로직
     const alerts: Alert[] = [];
-    let alertId = 1;
-
     // 1. 성능 지표 기반 알림 생성
     const machinePerformance: Record<string, {
       machine_id: string;
       machine_name: string;
-      latest_oee: number;
-      latest_availability: number;
-      latest_performance: number;
-      latest_quality: number;
+      latest_oee: number | null;
+      latest_availability: number | null;
+      latest_performance: number | null;
+      latest_quality: number | null;
+      source_key: string;
       record_count: number;
     }> = {};
 
@@ -157,34 +300,36 @@ export async function GET(request: NextRequest) {
         machinePerformance[machineId] = {
           machine_id: machineId,
           machine_name: machineName,
-          latest_oee: record.oee || 0,
-          latest_availability: record.availability || 0,
-          latest_performance: record.performance || 0,
-          latest_quality: record.quality || 0,
+          latest_oee: record.oee,
+          latest_availability: record.availability,
+          latest_performance: record.performance,
+          latest_quality: record.quality,
+          // One production row is one stable source event. Acknowledgement survives
+          // repeated polling for that event, while a later record starts a new incident.
+          source_key: record.record_id || record.created_at || `${record.date}:${record.shift}`,
           record_count: 1
         };
       } else {
-        // 최신 기록으로 업데이트 (이미 date 순으로 정렬됨)
-        if (machinePerformance[machineId].record_count === 1) {
-          machinePerformance[machineId].latest_oee = record.oee || 0;
-          machinePerformance[machineId].latest_availability = record.availability || 0;
-          machinePerformance[machineId].latest_performance = record.performance || 0;
-          machinePerformance[machineId].latest_quality = record.quality || 0;
-        }
+        // 첫 행이 최신이다. 이후 행은 통계용 개수만 증가시키고 값을 덮어쓰지 않는다.
         machinePerformance[machineId].record_count++;
       }
     });
 
     // 성능 지표별 알림 생성
     Object.values(machinePerformance).forEach(machine => {
-      const oee = machine.latest_oee * 100;
-      const availability = machine.latest_availability * 100;
-      const quality = machine.latest_quality * 100;
+      const oee = machine.latest_oee === null ? null : machine.latest_oee * 100;
+      const availability = machine.latest_availability === null
+        ? null
+        : machine.latest_availability * 100;
+      const performance = machine.latest_performance === null
+        ? null
+        : machine.latest_performance * 100;
+      const quality = machine.latest_quality === null ? null : machine.latest_quality * 100;
 
       // OEE 알림
-      if (oee < ALERT_THRESHOLDS.oee.critical) {
+      if (oee !== null && oee < ALERT_THRESHOLDS.oee.critical) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `oee:${machine.machine_id}:${machine.source_key}:critical`,
           machine_id: machine.machine_id,
           machine_name: machine.machine_name,
           alert_type: 'oee',
@@ -197,9 +342,9 @@ export async function GET(request: NextRequest) {
           is_active: true,
           acknowledged: false
         });
-      } else if (oee < ALERT_THRESHOLDS.oee.warning) {
+      } else if (oee !== null && oee < ALERT_THRESHOLDS.oee.warning) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `oee:${machine.machine_id}:${machine.source_key}:warning`,
           machine_id: machine.machine_id,
           machine_name: machine.machine_name,
           alert_type: 'oee',
@@ -215,9 +360,9 @@ export async function GET(request: NextRequest) {
       }
 
       // 가용성 알림
-      if (availability < ALERT_THRESHOLDS.availability.critical) {
+      if (availability !== null && availability < ALERT_THRESHOLDS.availability.critical) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `availability:${machine.machine_id}:${machine.source_key}:critical`,
           machine_id: machine.machine_id,
           machine_name: machine.machine_name,
           alert_type: 'availability',
@@ -230,9 +375,9 @@ export async function GET(request: NextRequest) {
           is_active: true,
           acknowledged: false
         });
-      } else if (availability < ALERT_THRESHOLDS.availability.warning) {
+      } else if (availability !== null && availability < ALERT_THRESHOLDS.availability.warning) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `availability:${machine.machine_id}:${machine.source_key}:warning`,
           machine_id: machine.machine_id,
           machine_name: machine.machine_name,
           alert_type: 'availability',
@@ -247,10 +392,43 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // 품질 알림
-      if (quality < ALERT_THRESHOLDS.quality.critical) {
+      // 성능 알림
+      if (performance !== null && performance < ALERT_THRESHOLDS.performance.critical) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `performance:${machine.machine_id}:${machine.source_key}:critical`,
+          machine_id: machine.machine_id,
+          machine_name: machine.machine_name,
+          alert_type: 'performance',
+          severity: 'critical',
+          title: '성능 치명적 저하',
+          message: `${machine.machine_name}의 성능이 ${performance.toFixed(1)}%로 임계값을 하회했습니다.`,
+          current_value: performance,
+          threshold_value: ALERT_THRESHOLDS.performance.critical,
+          timestamp: currentTime.toISOString(),
+          is_active: true,
+          acknowledged: false
+        });
+      } else if (performance !== null && performance < ALERT_THRESHOLDS.performance.warning) {
+        alerts.push({
+          id: `performance:${machine.machine_id}:${machine.source_key}:warning`,
+          machine_id: machine.machine_id,
+          machine_name: machine.machine_name,
+          alert_type: 'performance',
+          severity: 'warning',
+          title: '성능 경고',
+          message: `${machine.machine_name}의 성능이 ${performance.toFixed(1)}%로 경고 수준입니다.`,
+          current_value: performance,
+          threshold_value: ALERT_THRESHOLDS.performance.warning,
+          timestamp: currentTime.toISOString(),
+          is_active: true,
+          acknowledged: false
+        });
+      }
+
+      // 품질 알림
+      if (quality !== null && quality < ALERT_THRESHOLDS.quality.critical) {
+        alerts.push({
+          id: `quality:${machine.machine_id}:${machine.source_key}:critical`,
           machine_id: machine.machine_id,
           machine_name: machine.machine_name,
           alert_type: 'quality',
@@ -263,9 +441,9 @@ export async function GET(request: NextRequest) {
           is_active: true,
           acknowledged: false
         });
-      } else if (quality < ALERT_THRESHOLDS.quality.warning) {
+      } else if (quality !== null && quality < ALERT_THRESHOLDS.quality.warning) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `quality:${machine.machine_id}:${machine.source_key}:warning`,
           machine_id: machine.machine_id,
           machine_name: machine.machine_name,
           alert_type: 'quality',
@@ -283,12 +461,19 @@ export async function GET(request: NextRequest) {
 
     // 2. 다운타임 기반 알림 생성
     (downtimeData || []).forEach(log => {
-      const duration = log.duration || 0;
+      const startMs = Date.parse(log.start_time);
+      const endMs = log.end_time ? Date.parse(log.end_time) : currentTime.getTime();
+      const elapsedMinutes = Number.isFinite(startMs) && Number.isFinite(endMs)
+        ? Math.max(0, Math.floor((endMs - startMs) / 60_000))
+        : 0;
+      const duration = typeof log.duration === 'number' && log.duration > 0
+        ? log.duration
+        : elapsedMinutes;
       const machineName = unwrapJoin(log.machines)?.name || 'Unknown';
 
       if (duration >= ALERT_THRESHOLDS.downtime.critical) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `downtime:${log.machine_id}:${log.source_key}:critical`,
           machine_id: log.machine_id,
           machine_name: machineName,
           alert_type: 'downtime',
@@ -303,7 +488,7 @@ export async function GET(request: NextRequest) {
         });
       } else if (duration >= ALERT_THRESHOLDS.downtime.warning) {
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `downtime:${log.machine_id}:${log.source_key}:warning`,
           machine_id: log.machine_id,
           machine_name: machineName,
           alert_type: 'downtime',
@@ -338,7 +523,7 @@ export async function GET(request: NextRequest) {
         }
 
         alerts.push({
-          id: `alert_${alertId++}`,
+          id: `maintenance:${machine.id}:${machine.current_state}:${machine.updated_at || 'unknown'}`,
           machine_id: machine.id,
           machine_name: machine.name,
           alert_type: 'maintenance',
@@ -352,6 +537,37 @@ export async function GET(request: NextRequest) {
           acknowledged: false
         });
       }
+    });
+
+    const acknowledgementRows: Array<{ alert_key: string; action: string }> = [];
+    let acknowledgementError: { code?: string } | null = null;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabaseAdmin
+        .from('alert_acknowledgements')
+        .select('alert_key, action')
+        .eq('user_id', authenticatedUser.userId)
+        .order('alert_key', { ascending: true })
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        acknowledgementError = error;
+        break;
+      }
+      acknowledgementRows.push(...((data || []) as typeof acknowledgementRows));
+      if (!data || data.length < pageSize) break;
+    }
+
+    if (acknowledgementError && acknowledgementError.code !== '42P01') {
+      console.error('알림 확인 상태 조회 오류:', acknowledgementError);
+    }
+
+    const acknowledgementByKey = new Map(
+      acknowledgementRows.map(row => [row.alert_key, row.action])
+    );
+    alerts.forEach(alert => {
+      const action = acknowledgementByKey.get(alert.id);
+      alert.acknowledged = action === 'acknowledge' || action === 'dismiss';
+      if (action === 'dismiss') alert.is_active = false;
     });
 
     // 필터링 적용
@@ -418,7 +634,9 @@ export async function GET(request: NextRequest) {
         analysis_window: {
           start_time: recentTime.toISOString(),
           end_time: currentTime.toISOString(),
-          duration_minutes: 30
+          duration_minutes: 30,
+          performance_business_date: currentBusinessDate,
+          performance_shift: currentShift,
         }
       }
     };
@@ -433,6 +651,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response);
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('❌ 실시간 알림 API 오류:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -444,19 +665,42 @@ export async function GET(request: NextRequest) {
 // POST /api/alerts - 알림 상태 업데이트 (확인 처리 등)
 export async function POST(request: NextRequest) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer']);
     const body = await request.json();
     const { alert_id, action } = body; // action: 'acknowledge', 'dismiss'
 
     console.info('🔔 알림 상태 업데이트:', { alert_id, action });
 
-    // 실제 환경에서는 alerts 테이블에 저장/업데이트
-    // 현재는 메모리 기반이므로 성공 응답만 반환
+    if (typeof alert_id !== 'string' || !alert_id.trim()) {
+      return NextResponse.json({ success: false, error: 'alert_id is required' }, { status: 400 });
+    }
+    if (action !== 'acknowledge' && action !== 'dismiss') {
+      return NextResponse.json({ success: false, error: 'Invalid alert action' }, { status: 400 });
+    }
+
+    const updatedAt = new Date().toISOString();
+    const { error: persistenceError } = await supabaseAdmin
+      .from('alert_acknowledgements')
+      .upsert({
+        alert_key: alert_id,
+        user_id: authenticatedUser.userId,
+        action,
+        updated_at: updatedAt,
+      }, { onConflict: 'alert_key,user_id' });
+
+    if (persistenceError) {
+      console.error('알림 확인 상태 저장 오류:', persistenceError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to persist alert acknowledgement' },
+        { status: persistenceError.code === '42P01' ? 503 : 500 }
+      );
+    }
 
     const response = {
       success: true,
       alert_id,
       action,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
       message: `알림 ${alert_id}이 ${action === 'acknowledge' ? '확인' : '해제'}되었습니다.`
     };
 
@@ -465,6 +709,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response);
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('❌ 알림 상태 업데이트 오류:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

@@ -144,7 +144,11 @@ export class SystemSettingsService {
       // 서버 사이드에서만 실행 가능
       if (typeof window !== 'undefined') {
         // 클라이언트 사이드에서는 API 라우트를 통해 조회
-        const response = await fetch('/api/system-settings/service-role');
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        const response = await fetch('/api/system-settings/service-role', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
         if (response.ok) {
           const result = await response.json();
           return { data: result.data, error: null };

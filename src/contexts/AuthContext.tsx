@@ -39,7 +39,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // 사용자 프로필 정보 가져오기 (메모리 누수 방지 최적화)
   // ref와 외부 모듈(supabase/log)만 참조하고 상태(state)에 의존하지 않으므로 deps: []로 고정 identity 유지
-  const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser): Promise<User | null> => {
+  const fetchUserProfile = useCallback(async (
+    supabaseUser: SupabaseUser,
+    accessToken?: string
+  ): Promise<User | null> => {
     // 컴포넌트가 언마운트된 경우 early return
     if (!isMountedRef.current) {
       return null;
@@ -70,7 +73,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }, 5000); // 5초 timeout
         
         const response = await fetch(`/api/auth/profile-admin?user_id=${supabaseUser.id}`, {
-          signal: controller.signal
+          signal: controller.signal,
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         });
         
         // timeout 정리
@@ -97,6 +101,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         } else {
           console.warn('⚠️ 서버 API 조회 실패:', response.status);
+          // 인증/인가 거부는 네트워크 장애가 아니다. 특히 비활성 계정의 403을
+          // 브라우저 anon 클라이언트 조회로 우회하면 세션이 다시 살아난다.
+          if (response.status === 401 || response.status === 403) {
+            return null;
+          }
         }
       } catch (apiError: unknown) {
         // timeout 정리 (에러 발생 시)
@@ -149,9 +158,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return null;
       }
 
-      if (!profile) {
+      if (!profile || profile.is_active !== true) {
         log.warn('No user profile found, user needs to be set up', { userId: supabaseUser.id }, LogCategories.AUTH);
-        console.warn('❌ 사용자 프로필이 존재하지 않음 - 관리자가 설정해야 합니다.');
+        console.warn('❌ 사용자 프로필이 없거나 비활성 상태입니다.');
         
         // 프로필이 없는 경우 null 반환하여 로그인으로 리다이렉트
         return null;
@@ -220,7 +229,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('✅ Supabase 로그인 성공, 사용자 프로필 로딩 중...');
       
       // 사용자 프로필 정보 가져오기
-      const userProfile = await fetchUserProfile(data.user);
+      const userProfile = await fetchUserProfile(data.user, data.session?.access_token);
       if (!userProfile) {
         await supabase.auth.signOut();
         throw new Error('사용자 프로필이 설정되지 않았습니다. 관리자에게 문의하세요.');
@@ -341,7 +350,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         if (session?.user) {
           console.log('✅ 유효한 세션 발견, 사용자 프로필 로딩 중...');
-          const userProfile = await fetchUserProfile(session.user);
+          const userProfile = await fetchUserProfile(session.user, session.access_token);
           if (userProfile) {
             safeSetState(() => setUser(userProfile));
             safeSetState(() => setError(null));
@@ -391,7 +400,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           if (event === 'SIGNED_IN' && session?.user) {
             console.log('✅ SIGNED_IN 이벤트 - 프로필 로딩 중...');
-            const userProfile = await fetchUserProfile(session.user);
+            const userProfile = await fetchUserProfile(session.user, session.access_token);
             if (userProfile) {
               safeSetState(() => setUser(userProfile));
               safeSetState(() => setError(null));
@@ -407,7 +416,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             safeSetState(() => setError(null));
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
             console.log('🔄 TOKEN_REFRESHED 이벤트 - 프로필 재로딩');
-            const userProfile = await fetchUserProfile(session.user);
+            const userProfile = await fetchUserProfile(session.user, session.access_token);
             if (userProfile) {
               safeSetState(() => setUser(userProfile));
               safeSetState(() => setError(null));

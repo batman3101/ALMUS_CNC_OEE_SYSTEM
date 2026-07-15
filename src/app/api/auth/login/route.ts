@@ -55,6 +55,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!profile || profile.is_active !== true) {
+      await supabaseClient.auth.signOut();
+      return NextResponse.json(
+        { error: 'Account is inactive' },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       user: {

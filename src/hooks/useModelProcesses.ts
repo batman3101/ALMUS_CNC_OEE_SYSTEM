@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Database } from '@/types/database';
+import { authFetch } from '@/lib/authFetch';
 
 type ModelProcess = Database['public']['Tables']['model_processes']['Row'];
 
@@ -26,7 +27,7 @@ export const useModelProcesses = (): UseModelProcessesResult => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/model-processes?model_id=${modelId}`);
+      const response = await authFetch(`/api/model-processes?model_id=${modelId}`);
       
       if (!response.ok) {
         const errorData = await response.json();

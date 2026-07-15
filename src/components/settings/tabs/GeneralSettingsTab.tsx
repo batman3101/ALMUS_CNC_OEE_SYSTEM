@@ -18,6 +18,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useGeneralSettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
 import type { UploadFile, UploadChangeParam } from 'antd/es/upload/interface';
+import { authFetch } from '@/lib/authFetch';
 
 const { Title, Text } = Typography;
 
@@ -133,7 +134,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
       formData.append('type', 'logo');
 
       // API 호출
-      const response = await fetch('/api/upload/image', {
+      const response = await authFetch('/api/upload/image', {
         method: 'POST',
         body: formData,
       });

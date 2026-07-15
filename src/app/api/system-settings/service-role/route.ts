@@ -1,33 +1,15 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
   try {
-    // Service Role Key 확인
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    if (!serviceRoleKey) {
-      console.error('❌ Missing SUPABASE_SERVICE_ROLE_KEY');
-      return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      );
-    }
-
-    // Service Role Client 생성 (RLS 우회)
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
+    await requireUser(request, ['admin', 'engineer', 'operator']);
 
     // 모든 활성 설정 조회
-    const { data, error } = await serviceClient
+    const { data, error } = await supabaseAdmin
       .from('system_settings')
       .select('*')
       .eq('is_active', true)
@@ -36,7 +18,7 @@ export async function GET() {
     if (error) {
       console.error('❌ Error fetching settings with service role:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch settings', details: error.message },
+        { error: 'Failed to fetch settings' },
         { status: 500 }
       );
     }
@@ -49,12 +31,11 @@ export async function GET() {
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('❌ Unexpected error in service-role route:', error);
     return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

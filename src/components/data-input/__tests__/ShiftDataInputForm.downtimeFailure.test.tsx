@@ -31,7 +31,14 @@ jest.mock('@/hooks/useUserProfiles', () => ({
 }));
 
 jest.mock('@/hooks/useSystemSettings', () => ({
-  useSystemSettings: () => ({ getShiftTimes: () => ({ breakTime: 60 }) })
+  useSystemSettings: () => ({
+    getShiftTimes: () => ({
+      shiftA: { start: '08:00', end: '20:00' },
+      shiftB: { start: '20:00', end: '08:00' },
+      breakTime: 60
+    }),
+    getCompanyInfo: () => ({ timezone: 'Asia/Ho_Chi_Minh' })
+  })
 }));
 
 // 번역은 키를 그대로 돌려준다 (문구가 아니라 동작을 검증한다)
@@ -41,6 +48,10 @@ jest.mock('@/hooks/useTranslation', () => ({
 
 jest.mock('@/utils/machineLocation', () => ({
   formatMachineLocation: (loc: string) => loc
+}));
+
+jest.mock('@/lib/authFetch', () => ({
+  authFetch: (input: string, init?: RequestInit) => fetch(input, init)
 }));
 
 const renderForm = () =>
@@ -134,7 +145,7 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
     });
   });
 
-  it('조회에 실패한 교대는 저장을 차단한다 (기존 비가동이 0으로 덮이는 것을 막는다)', async () => {
+  it('비가동 조회가 실패해도 생산수량 저장은 독립적으로 진행하고 서버가 비가동을 재조회한다', async () => {
     renderForm();
     await selectMachine();
 
@@ -148,13 +159,19 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
     await waitFor(() => expect(saveButton.disabled).toBe(false));
     fireEvent.click(saveButton!);
 
-    // 저장 요청이 나가면 안 된다
+    // 생산실적과 비가동은 독립된 원본이다. 화면 조회 실패가 생산수량 입력을 막지 않는다.
     await waitFor(() => {
-      expect(savePosted(fetchMock)).toBe(false);
+      expect(savePosted(fetchMock)).toBe(true);
     });
 
-    // 무중단 확인 모달도 뜨면 안 된다 (실패한 0분을 "확인된 0분"으로 승격시키는 경로)
+    // 화면의 0분을 확인된 무중단으로 승격하지 않는다. 서버가 원본 사건을 직접 집계한다.
     expect(screen.queryByText('downtime.confirmZeroTitle')).toBeNull();
+    const dailyCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes('/api/production-records/daily') && init?.method === 'POST'
+    );
+    const payload = JSON.parse(String(dailyCall?.[1]?.body));
+    expect(payload.day_shift).toHaveProperty('downtime_confirmed', false);
+    expect(payload.day_shift).not.toHaveProperty('total_downtime_minutes');
   });
 
   it('조회에 성공하면 저장이 정상 진행된다 (차단이 과하게 걸리지 않는다)', async () => {
@@ -224,13 +241,8 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
       ([url, init]) => String(url).includes('/api/production-records/daily') && init?.method === 'POST'
     );
     const payload = JSON.parse(String(dailyCall?.[1]?.body));
-    expect(payload.day_downtime_entries).toEqual([
-      expect.objectContaining({
-        start_time: '2026-07-14T01:00:00Z',
-        end_time: '2026-07-14T01:30:00Z',
-        reason: 'equipmentFailure'
-      })
-    ]);
+    expect(payload).not.toHaveProperty('day_downtime_entries');
+    expect(payload).not.toHaveProperty('night_downtime_entries');
     expect(fetchMock.mock.calls.some(
       ([url, init]) => String(url) === '/api/downtime-entries' && init?.method === 'POST'
     )).toBe(false);
@@ -310,7 +322,7 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
     await waitFor(() => expect(savePosted(fetchMock)).toBe(false));
   });
 
-  it('기존 비가동이 있는 교대를 휴무로 바꾸면 비가동 배열을 비워 원자 저장한다', async () => {
+  it('기존 비가동이 있는 교대를 휴무로 바꿔도 생산 저장 payload로 비가동을 삭제하지 않는다', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url.startsWith('/api/production-records?')) {
         return {
@@ -349,6 +361,150 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
     );
     const payload = JSON.parse(String(dailyCall?.[1]?.body));
     expect(payload.day_shift_off).toBe(true);
-    expect(payload.day_downtime_entries).toEqual([]);
+    expect(payload).not.toHaveProperty('day_downtime_entries');
+    expect(fetchMock.mock.calls.some(
+      ([url, init]) => String(url).startsWith('/api/downtime-entries/') && init?.method === 'DELETE'
+    )).toBe(false);
+  });
+
+  it('생산실적이 없어도 종료시각 없는 비가동을 즉시 독립 저장한다', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/production-records?')) {
+        return { ok: true, json: async () => ({ records: [] }) };
+      }
+      if (url.startsWith('/api/downtime-entries?')) {
+        return { ok: true, json: async () => ({ success: true, data: [] }) };
+      }
+      if (url === '/api/downtime-entries' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              id: 'dt-open-1',
+              ...body,
+              end_time: null,
+              duration_minutes: null,
+              version: 1,
+              created_at: '2026-07-14T03:00:00Z',
+              updated_at: '2026-07-14T03:00:00Z'
+            }
+          })
+        };
+      }
+      return { ok: true, json: async () => ({ success: true }) };
+    });
+
+    renderForm();
+    await selectMachine();
+    await waitFor(() => expect(screen.getByText('editMode.newRecord')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('downtime.addDowntime'));
+    await waitFor(() => expect(document.querySelector('.ant-modal')).toBeTruthy());
+
+    const modal = document.querySelector('.ant-modal')!;
+    const reasonSelect = modal.querySelector('.ant-select-selector')!;
+    fireEvent.mouseDown(reasonSelect);
+    await waitFor(() => expect(screen.getByText('downtime.reasons.equipmentFailure')).toBeTruthy());
+    fireEvent.click(screen.getByText('downtime.reasons.equipmentFailure'));
+
+    fireEvent.click(screen.getByText('downtime.add').closest('button')!);
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(
+        ([url, init]) => String(url) === '/api/downtime-entries' && init?.method === 'POST'
+      )).toBe(true);
+    });
+
+    const createCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url) === '/api/downtime-entries' && init?.method === 'POST'
+    );
+    const payload = JSON.parse(String(createCall?.[1]?.body));
+    expect(payload.machine_id).toBe(MACHINE.id);
+    expect(payload.date).toBe('2026-07-14');
+    expect(payload.shift).toBe('A');
+    expect(payload.end_time).toBeNull();
+    expect(savePosted(fetchMock)).toBe(false);
+
+    // 비가동 사건은 이미 별도 저장됐다. 생산 저장 버튼을 눌러도 비가동만 있다는
+    // 이유로 output=0 생산실적을 만들면 안 된다.
+    fireEvent.click(screen.getByText('editMode.newRecord').closest('button')!);
+    await waitFor(() => expect(savePosted(fetchMock)).toBe(true));
+    const productionCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).includes('/api/production-records/daily') && init?.method === 'POST'
+    );
+    const productionPayload = JSON.parse(String(productionCall?.[1]?.body));
+    expect(productionPayload).not.toHaveProperty('day_shift');
+    expect(productionPayload).not.toHaveProperty('night_shift');
+  });
+
+  it('진행 중 사건을 같은 ID와 expected_version으로 종료한다', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/production-records?')) {
+        return { ok: true, json: async () => ({ records: [] }) };
+      }
+      if (url.includes('shift=A') && url.startsWith('/api/downtime-entries?')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: [{
+              id: 'dt-open-1',
+              machine_id: MACHINE.id,
+              date: '2026-07-14',
+              shift: 'A',
+              start_time: '2026-07-14T01:00:00Z',
+              end_time: null,
+              duration_minutes: null,
+              reason: 'equipmentFailure',
+              version: 4,
+              created_at: '2026-07-14T01:00:00Z',
+              updated_at: '2026-07-14T01:00:00Z'
+            }]
+          })
+        };
+      }
+      if (url.startsWith('/api/downtime-entries?')) {
+        return { ok: true, json: async () => ({ success: true, data: [] }) };
+      }
+      if (url === '/api/downtime-entries/dt-open-1' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body));
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              id: 'dt-open-1',
+              machine_id: MACHINE.id,
+              date: '2026-07-14',
+              shift: 'A',
+              start_time: '2026-07-14T01:00:00Z',
+              end_time: body.end_time,
+              duration_minutes: 30,
+              reason: 'equipmentFailure',
+              version: 5
+            }
+          })
+        };
+      }
+      return { ok: true, json: async () => ({ success: true }) };
+    });
+
+    renderForm();
+    await selectMachine();
+    await waitFor(() => expect(screen.getByText('common.close')).toBeTruthy());
+    fireEvent.click(screen.getByText('common.close'));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(
+      ([url, init]) => String(url) === '/api/downtime-entries/dt-open-1' && init?.method === 'PATCH'
+    )).toBe(true));
+
+    const closeCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url) === '/api/downtime-entries/dt-open-1' && init?.method === 'PATCH'
+    );
+    const payload = JSON.parse(String(closeCall?.[1]?.body));
+    expect(payload.expected_version).toBe(4);
+    expect(payload.end_time).toEqual(expect.any(String));
   });
 });

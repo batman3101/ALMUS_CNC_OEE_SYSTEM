@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { authFetch } from '@/lib/authFetch';
 
 export interface UserProfile {
   user_id: string;
@@ -22,7 +23,7 @@ export const useUserProfiles = () => {
 
       console.log('Fetching user profiles via API...');
 
-      const response = await fetch('/api/user-profiles', {
+      const response = await authFetch('/api/user-profiles', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

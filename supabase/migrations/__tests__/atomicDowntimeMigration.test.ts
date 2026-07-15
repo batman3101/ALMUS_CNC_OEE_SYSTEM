@@ -6,7 +6,10 @@ const migrationPath = resolve(
   'supabase/migrations/20260715120000_atomic_downtime_save.sql'
 );
 
-describe('atomic production and downtime migration', () => {
+// This file verifies the historical migration remains reproducible. Its production-coupled
+// contract is intentionally superseded by 20260715160000_independent_downtime_lifecycle.sql;
+// current behavior is asserted in independentDowntimeLifecycleMigration.test.ts.
+describe('historical atomic production and downtime migration (superseded)', () => {
   const readMigration = (): string => readFileSync(migrationPath, 'utf8');
 
   test('provides a separate backwards-compatible atomic save RPC', () => {
@@ -19,7 +22,7 @@ describe('atomic production and downtime migration', () => {
     expect(sql).toContain("jsonb_typeof(v_entries) <> 'array'");
   });
 
-  test('replaces downtime only after production save inside the same function', () => {
+  test('records the historical whole-list replacement behavior for migration reproducibility', () => {
     const sql = readMigration();
     const productionSave = sql.indexOf('public.save_daily_production(');
     const downtimeDelete = sql.indexOf('DELETE FROM public.downtime_entries');
@@ -31,7 +34,7 @@ describe('atomic production and downtime migration', () => {
     expect(sql).toMatch(/IF\s+v_entries\s+IS\s+NULL\s+THEN\s+CONTINUE/i);
   });
 
-  test('rejects orphan and overlapping downtime at the database boundary', () => {
+  test('records the historical production dependency that the later migration removes', () => {
     const sql = readMigration();
 
     expect(sql).toContain("ERRCODE = '23503'");

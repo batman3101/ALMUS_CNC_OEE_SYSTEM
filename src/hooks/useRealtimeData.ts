@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Machine, MachineLog, ProductionRecord, OEEMetrics, User } from '@/types';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { authFetch } from '@/lib/authFetch';
 
 // 생산 실적 조회 기간 (초기 조회와 실시간 반영이 동일한 윈도우를 사용해야 배열이 무한히 커지지 않는다)
 const PRODUCTION_WINDOW_DAYS = 7;
@@ -64,30 +65,43 @@ interface OeeDataPage {
 }
 
 /** API의 명시적 페이지 계약을 끝까지 따라가 Supabase max_rows 절삭을 피한다. */
-export const fetchAllRecentProductionRecords = async (): Promise<ProductionRecord[]> => {
+export const fetchAllRecentProductionRecords = async (machineIds?: string[]): Promise<ProductionRecord[]> => {
   const pageLimit = 5000;
-  let offset = 0;
-  let knownTotal = 0;
   const records: ProductionRecord[] = [];
 
-  while (true) {
-    const params = new URLSearchParams({
-      start_date: getProductionWindowStart(),
-      end_date: new Date().toISOString().split('T')[0],
-      limit: String(pageLimit),
-      offset: String(offset),
-      include_statistics: offset === 0 ? 'true' : 'false',
-      ...(offset > 0 ? { known_total: String(knownTotal) } : {})
-    });
-    const response = await fetch(`/api/oee-data?${params}`);
-    if (!response.ok) throw new Error(`OEE data HTTP ${response.status}`);
-    const page = await response.json() as OeeDataPage;
-    records.push(...(page.oee_data || []));
-    knownTotal = page.pagination?.total ?? records.length;
-    if (!page.pagination?.has_more) return records;
-    if (!page.pagination.returned) throw new Error('OEE data pagination made no progress');
-    offset += page.pagination.returned;
+  // undefined는 관리자/엔지니어의 전체 조회, []는 담당 설비가 없는 운영자의 빈 결과다.
+  // 운영자는 각 담당 설비를 단일 machine_id로 조회해야 서버의 assigned-machine 검사를
+  // 우회하지 않으면서 여러 담당 설비를 모두 볼 수 있다.
+  const scopes: Array<string | undefined> = machineIds === undefined
+    ? [undefined]
+    : [...new Set(machineIds)];
+
+  for (const machineId of scopes) {
+    let offset = 0;
+    let knownTotal = 0;
+
+    while (true) {
+      const params = new URLSearchParams({
+        start_date: getProductionWindowStart(),
+        end_date: new Date().toISOString().split('T')[0],
+        limit: String(pageLimit),
+        offset: String(offset),
+        include_statistics: offset === 0 ? 'true' : 'false',
+        ...(machineId ? { machine_id: machineId } : {}),
+        ...(offset > 0 ? { known_total: String(knownTotal) } : {})
+      });
+      const response = await authFetch(`/api/oee-data?${params}`);
+      if (!response.ok) throw new Error(`OEE data HTTP ${response.status}`);
+      const page = await response.json() as OeeDataPage;
+      records.push(...(page.oee_data || []));
+      knownTotal = page.pagination?.total ?? records.length;
+      if (!page.pagination?.has_more) break;
+      if (!page.pagination.returned) throw new Error('OEE data pagination made no progress');
+      offset += page.pagination.returned;
+    }
   }
+
+  return records;
 };
 
 // 같은 날짜에서는 B(야간, 20:00~08:00)조가 A(주간)조보다 나중이다.
@@ -229,8 +243,12 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
 
       // 열린 로그는 최근 N 제한과 분리한다. 오래 열린 설비도 현재 상태 계산에서 누락되지 않는다.
       // (기존에는 4개 쿼리를 순차적으로 await 하여 첫 화면 렌더링까지 불필요하게 오래 걸렸음)
-      const [userProfile, machinesResult, openLogsResult, recentMachineLogs, productionRecords] = await Promise.all([
-        fetchUserProfile(),
+      const userProfile = await fetchUserProfile();
+      const assignedMachineIds = userRole === 'operator'
+        ? (userProfile?.assigned_machines || [])
+        : undefined;
+
+      const [machinesResult, openLogsResult, recentMachineLogs, productionRecords] = await Promise.all([
         supabase
           .from('machines')
           .select('*')
@@ -241,7 +259,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           .is('end_time', null)
           .order('start_time', { ascending: false }),
         fetchRecentMachineLogs(),
-        fetchAllRecentProductionRecords()
+        fetchAllRecentProductionRecords(assignedMachineIds)
       ]);
 
       // 설비 데이터

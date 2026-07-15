@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
@@ -17,6 +17,7 @@ export type UserRole = 'admin' | 'engineer' | 'operator';
 export interface AuthenticatedUser {
   userId: string;
   role: UserRole;
+  assignedMachineIds: string[];
 }
 
 export class ApiAuthError extends Error {
@@ -51,7 +52,7 @@ export async function requireUser(
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('user_profiles')
-    .select('role')
+    .select('role, assigned_machines, is_active')
     .eq('user_id', data.user.id)
     .single();
 
@@ -59,11 +60,46 @@ export async function requireUser(
     throw new ApiAuthError('사용자 프로필을 찾을 수 없습니다', 403);
   }
 
-  const role = profile.role as UserRole;
+  if (profile.is_active !== true) {
+    throw new ApiAuthError('비활성화된 계정입니다', 403);
+  }
+
+  if (!isUserRole(profile.role)) {
+    throw new ApiAuthError('유효하지 않은 사용자 역할입니다', 403);
+  }
+
+  const role = profile.role;
 
   if (allowedRoles && !allowedRoles.includes(role)) {
     throw new ApiAuthError('권한이 없습니다', 403);
   }
 
-  return { userId: data.user.id, role };
+  const assignedMachineIds = Array.isArray(profile.assigned_machines)
+    ? profile.assigned_machines.filter(
+        (machineId): machineId is string => typeof machineId === 'string' && machineId.length > 0
+      )
+    : [];
+
+  return { userId: data.user.id, role, assignedMachineIds };
+}
+
+function isUserRole(value: unknown): value is UserRole {
+  return value === 'admin' || value === 'engineer' || value === 'operator';
+}
+
+/** 운영자는 관리자에게 배정된 설비만 변경할 수 있다. */
+export function assertMachineAccess(user: AuthenticatedUser, machineId: string): void {
+  if (user.role === 'operator' && !user.assignedMachineIds.includes(machineId)) {
+    throw new ApiAuthError('담당 설비에 대한 권한이 없습니다', 403);
+  }
+}
+
+/** 인증/인가 예외를 기존 API 응답 모양으로 변환한다. */
+export function apiAuthErrorResponse(error: unknown): NextResponse | null {
+  if (!(error instanceof ApiAuthError)) return null;
+
+  return NextResponse.json(
+    { success: false, error: error.message },
+    { status: error.status }
+  );
 }

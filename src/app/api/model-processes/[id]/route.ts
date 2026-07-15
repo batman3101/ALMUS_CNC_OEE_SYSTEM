@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // GET /api/model-processes/[id] - 특정 공정 정보 조회
 export async function GET(
@@ -7,6 +8,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/model-processes/[id] called with id:', params.id);
 
     const { data: process, error } = await supabaseAdmin
@@ -47,6 +49,9 @@ export async function GET(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in GET /api/model-processes/[id]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(

@@ -1,4 +1,7 @@
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
+jest.mock('@/lib/authFetch', () => ({
+  authFetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+}));
 
 import {
   applyRealtimeMachineLog,
@@ -52,5 +55,22 @@ describe('useRealtimeData helpers', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[1][0])).toContain('offset=1');
     expect(String(fetchMock.mock.calls[1][0])).toContain('known_total=2');
+  });
+
+  it('운영자 담당 설비를 각각 machine_id로 제한해 조회한다', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        oee_data: [],
+        pagination: { returned: 0, total: 0, has_more: false }
+      })
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await fetchAllRecentProductionRecords(['machine-1', 'machine-2']);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('machine_id=machine-1');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('machine_id=machine-2');
   });
 });

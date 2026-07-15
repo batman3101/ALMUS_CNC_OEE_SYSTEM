@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
-import { getEnvConfig } from '@/lib/env-validation';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🔧 [API] Profile Admin Route - GET request started');
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
     
     // Get user_id from query parameters
     const { searchParams } = new URL(request.url);
@@ -20,24 +21,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('🔍 [API] Querying profile for user_id:', userId);
-
-    // Validate environment configuration
-    const env = getEnvConfig();
-    if (!env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('❌ [API] Missing SUPABASE_SERVICE_ROLE_KEY');
+    // 프로필 bootstrap은 본인 조회만 허용한다. 관리자는 사용자 관리 화면에서만
+    // 다른 사용자를 조회할 수 있으며, 그 경로는 별도의 admin API를 사용한다.
+    if (authenticatedUser.userId !== userId) {
       return NextResponse.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
+        { error: '다른 사용자의 프로필을 조회할 수 없습니다' },
+        { status: 403 }
       );
     }
 
-    // Create Service Role client (server-side only)
-    const adminClient = createServerClient();
-    console.log('✅ [API] Service Role client created successfully');
+    console.log('🔍 [API] Querying profile for user_id:', userId);
 
     // Query user profile using Service Role (bypasses RLS)
-    const { data: profile, error } = await adminClient
+    const { data: profile, error } = await supabaseAdmin
       .from('user_profiles')
       .select('*')
       .eq('user_id', userId)
@@ -77,6 +73,8 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('❌ [API] Unexpected error in profile admin route:', error);
     return NextResponse.json(
       { 

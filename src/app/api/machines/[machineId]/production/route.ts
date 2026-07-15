@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import {
+  apiAuthErrorResponse,
+  assertMachineAccess,
+  requireUser,
+} from '@/lib/apiAuth';
 
 // GET /api/machines/[machineId]/production - 특정 설비의 생산 데이터 조회
 export async function GET(
@@ -8,6 +13,8 @@ export async function GET(
 ) {
   try {
     const { machineId } = params;
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    assertMachineAccess(authenticatedUser, machineId);
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
@@ -61,6 +68,9 @@ export async function GET(
       machine_id: machineId
     });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error fetching production data:', error);
     return NextResponse.json(
       { error: 'Failed to fetch production data' },

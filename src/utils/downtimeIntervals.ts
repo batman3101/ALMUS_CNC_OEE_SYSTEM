@@ -60,6 +60,42 @@ const atLocalTime = (
   return result;
 };
 
+/** Resolve the production business date. Times before shift A starts belong to the
+ * previous date's overnight B shift, regardless of the server's UTC timezone. */
+export const getBusinessDateAt = (
+  timestamp: Date | string | number,
+  timezoneName: string,
+  shiftAStart: string
+): string => {
+  const localTime = dayjs(timestamp).tz(timezoneName);
+  if (!localTime.isValid()) throw new Error('Invalid business timestamp');
+  const [hour, minute] = parseTime(shiftAStart);
+  const boundary = localTime.startOf('day').hour(hour).minute(minute);
+  return (localTime.isBefore(boundary) ? localTime.subtract(1, 'day') : localTime)
+    .format('YYYY-MM-DD');
+};
+
+/** Resolve the active shift in the configured business timezone. */
+export const getShiftAt = (
+  timestamp: Date | string | number,
+  timezoneName: string,
+  shiftAStart: string,
+  shiftBStart: string
+): 'A' | 'B' => {
+  const localTime = dayjs(timestamp).tz(timezoneName);
+  if (!localTime.isValid()) throw new Error('Invalid business timestamp');
+
+  const [aHour, aMinute] = parseTime(shiftAStart);
+  const [bHour, bMinute] = parseTime(shiftBStart);
+  const current = localTime.hour() * 60 + localTime.minute();
+  const aStart = aHour * 60 + aMinute;
+  const bStart = bHour * 60 + bMinute;
+
+  if (aStart === bStart) throw new Error('Shift start times must be different');
+  if (aStart < bStart) return current >= aStart && current < bStart ? 'A' : 'B';
+  return current >= aStart || current < bStart ? 'A' : 'B';
+};
+
 export const mergeIntervals = (intervals: Interval[]): Interval[] => {
   const sorted = intervals
     .filter(interval => Number.isFinite(interval.start) && Number.isFinite(interval.end))

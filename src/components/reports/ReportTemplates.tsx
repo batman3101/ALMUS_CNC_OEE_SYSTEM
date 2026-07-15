@@ -8,7 +8,7 @@ import { Machine, ProductionRecord } from '@/types';
 import { OEEMetrics } from '@/types/reports';
 import { addKoreanText } from '@/lib/fonts';
 
-interface ReportData {
+export interface ReportData {
   machines: Machine[];
   oeeData: OEEMetrics[];
   productionData: ProductionRecord[];
@@ -18,7 +18,6 @@ interface ReportData {
   includeCharts: boolean;
   includeOEE: boolean;
   includeProduction: boolean;
-  includeDowntime: boolean;
   groupBy: 'machine' | 'date' | 'shift';
 }
 
@@ -63,6 +62,9 @@ export class ReportTemplates {
 
   static async generatePDFReport(data: ReportData, charts?: ChartData[]): Promise<void> {
     try {
+      if (data.reportType === 'detailed' && data.productionData.length > MAX_PDF_DETAIL_RECORDS) {
+        throw new Error(`상세 PDF는 최대 ${MAX_PDF_DETAIL_RECORDS.toLocaleString()}건까지 생성할 수 있습니다. 기간 또는 설비 범위를 줄이거나 Excel을 사용하세요.`);
+      }
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -198,10 +200,11 @@ export class ReportTemplates {
       yPosition += 25;
 
       // OEE 통계 계산
-      const avgOEE = data.oeeData.reduce((sum, oee) => sum + oee.oee, 0) / data.oeeData.length;
-      const avgAvailability = data.oeeData.reduce((sum, oee) => sum + oee.availability, 0) / data.oeeData.length;
-      const avgPerformance = data.oeeData.reduce((sum, oee) => sum + oee.performance, 0) / data.oeeData.length;
-      const avgQuality = data.oeeData.reduce((sum, oee) => sum + oee.quality, 0) / data.oeeData.length;
+      const weighted = calculateWeightedReportMetrics(data.oeeData);
+      const avgOEE = weighted.oee;
+      const avgAvailability = weighted.availability;
+      const avgPerformance = weighted.performance;
+      const avgQuality = weighted.quality;
       const maxOEE = Math.max(...data.oeeData.map(oee => oee.oee));
       const minOEE = Math.min(...data.oeeData.map(oee => oee.oee));
 
@@ -321,21 +324,7 @@ export class ReportTemplates {
       doc.text('Detailed OEE Data by Machine', 20, yPosition);
       yPosition += 15;
 
-      // 간단한 상세 데이터 테이블
-      const detailData = data.machines.slice(0, 10).map((machine, index) => {
-        // 해당 설비의 평균 OEE 계산 (설비별 실제 데이터로 필터링)
-        const machineOEE = data.oeeData.filter(oee => oee.machine_id === machine.id);
-        const avgOEE = machineOEE.length > 0 ?
-          ((machineOEE.reduce((sum, oee) => sum + oee.oee, 0) / machineOEE.length) * 100).toFixed(1) : '0.0';
-
-        return [
-          (index + 1).toString(),
-          machine.name || '-',
-          machine.location || '-',
-          `${avgOEE}%`,
-          machine.is_active ? 'Active' : 'Inactive'
-        ];
-      });
+      const detailData = buildDetailedMachineRows(data.machines, data.oeeData);
 
       autoTable(doc, {
         head: [['No.', 'Machine', 'Location', 'Avg OEE', 'Status']],
@@ -367,29 +356,22 @@ export class ReportTemplates {
       yPosition += 40;
     }
 
-    // 생산 실적 상세 (최근 10건)
-    if (data.productionData.length > 0) {
+    // 상세 보고서에서만 원본 생산실적 전체를 포함한다. 요약 보고서는 표본을 "상세"로 오인시키지 않는다.
+    if (data.reportType === 'detailed' && data.productionData.length > 0) {
       if (yPosition > pageHeight - 100) {
         doc.addPage();
         yPosition = 20;
       }
       
       doc.setFontSize(14);
-      doc.text('Recent Production Records (Max 10 items)', 20, yPosition);
+      doc.text('Production Records', 20, yPosition);
       yPosition += 15;
 
-      const recentProduction = data.productionData.slice(0, 10).map((record, index) => [
-        (index + 1).toString(),
-        record.date || '-',
-        record.shift || '-',
-        record.output_qty?.toString() || '0',
-        record.defect_qty?.toString() || '0',
-        record.oee ? `${(record.oee * 100).toFixed(1)}%` : '0.0%'
-      ]);
+      const productionRows = buildProductionDetailRows(data.productionData);
 
       autoTable(doc, {
         head: [['No.', 'Date', 'Shift', 'Output', 'Defects', 'OEE']],
-        body: recentProduction,
+        body: productionRows,
         startY: yPosition,
         margin: { left: 20, right: 20 },
         styles: {
@@ -450,10 +432,11 @@ export class ReportTemplates {
 
     // OEE 요약 통계
     if (data.includeOEE && data.oeeData.length > 0) {
-      const avgOEE = data.oeeData.reduce((sum, oee) => sum + oee.oee, 0) / data.oeeData.length;
-      const avgAvailability = data.oeeData.reduce((sum, oee) => sum + oee.availability, 0) / data.oeeData.length;
-      const avgPerformance = data.oeeData.reduce((sum, oee) => sum + oee.performance, 0) / data.oeeData.length;
-      const avgQuality = data.oeeData.reduce((sum, oee) => sum + oee.quality, 0) / data.oeeData.length;
+      const weighted = calculateWeightedReportMetrics(data.oeeData);
+      const avgOEE = weighted.oee;
+      const avgAvailability = weighted.availability;
+      const avgPerformance = weighted.performance;
+      const avgQuality = weighted.quality;
       const maxOEE = Math.max(...data.oeeData.map(oee => oee.oee));
       const minOEE = Math.min(...data.oeeData.map(oee => oee.oee));
       const excellentCount = data.oeeData.filter(oee => oee.oee >= 0.85).length;
@@ -615,6 +598,32 @@ export class ReportTemplates {
   static generateAnalysisData(data: ReportData): (string | number)[][] {
     const analysisData: (string | number)[][] = [];
 
+    const appendGroupedRows = (
+      title: string,
+      keyLabel: string,
+      groups: Map<string, number[]>
+    ) => {
+      analysisData.push([title]);
+      analysisData.push([keyLabel, 'OEE(%)', '가동률(%)', '성능(%)', '품질(%)', '총 생산량', '불량률(%)']);
+      for (const [key, indexes] of Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b))) {
+        const metrics = calculateWeightedReportMetrics(
+          indexes.map(index => data.oeeData[index]).filter((row): row is OEEMetrics => Boolean(row))
+        );
+        const production = indexes.map(index => data.productionData[index]).filter(Boolean);
+        const totalOutput = production.reduce((sum, row) => sum + (row.output_qty || 0), 0);
+        const totalDefects = production.reduce((sum, row) => sum + (row.defect_qty || 0), 0);
+        analysisData.push([
+          key,
+          (metrics.oee * 100).toFixed(1),
+          (metrics.availability * 100).toFixed(1),
+          (metrics.performance * 100).toFixed(1),
+          (metrics.quality * 100).toFixed(1),
+          totalOutput,
+          totalOutput > 0 ? ((totalDefects / totalOutput) * 100).toFixed(2) : '0.00',
+        ]);
+      }
+    };
+
     if (data.groupBy === 'machine' && data.machines.length > 0) {
       analysisData.push(['설비별 분석', 'Machine Analysis']);
       analysisData.push(['설비명', '평균 OEE(%)', '평균 가동률(%)', '총 생산량', '불량률(%)']);
@@ -624,10 +633,9 @@ export class ReportTemplates {
         const machineProduction = data.productionData.filter(prod => prod.machine_id === machine.id);
 
         if (machineOEE.length > 0 || machineProduction.length > 0) {
-          const avgOEE = machineOEE.length > 0 ?
-            (machineOEE.reduce((sum, oee) => sum + oee.oee, 0) / machineOEE.length * 100).toFixed(1) : '-';
-          const avgAvailability = machineOEE.length > 0 ?
-            (machineOEE.reduce((sum, oee) => sum + oee.availability, 0) / machineOEE.length * 100).toFixed(1) : '-';
+          const weighted = calculateWeightedReportMetrics(machineOEE);
+          const avgOEE = machineOEE.length > 0 ? (weighted.oee * 100).toFixed(1) : '-';
+          const avgAvailability = machineOEE.length > 0 ? (weighted.availability * 100).toFixed(1) : '-';
           const totalOutput = machineProduction.reduce((sum, prod) => sum + prod.output_qty, 0);
           const totalDefects = machineProduction.reduce((sum, prod) => sum + prod.defect_qty, 0);
           const defectRate = totalOutput > 0 ? ((totalDefects / totalOutput) * 100).toFixed(2) : '0.00';
@@ -641,6 +649,19 @@ export class ReportTemplates {
           ]);
         }
       });
+    } else if (data.groupBy === 'date') {
+      const groups = new Map<string, number[]>();
+      data.productionData.forEach((row, index) => {
+        groups.set(row.date, [...(groups.get(row.date) || []), index]);
+      });
+      appendGroupedRows('날짜별 분석', '날짜', groups);
+    } else if (data.groupBy === 'shift') {
+      const groups = new Map<string, number[]>();
+      data.productionData.forEach((row, index) => {
+        const key = row.shift || '-';
+        groups.set(key, [...(groups.get(key) || []), index]);
+      });
+      appendGroupedRows('교대별 분석', '교대', groups);
     }
 
     return analysisData;
@@ -648,14 +669,15 @@ export class ReportTemplates {
 
   // 템플릿별 보고서 생성
   static async generateTemplateReport(
-    templateType: 'daily' | 'weekly' | 'monthly',
+    _templateType: 'daily' | 'weekly' | 'monthly',
     data: ReportData,
     format: 'pdf' | 'excel',
     charts?: ChartData[]
   ): Promise<void> {
     const templateData = {
       ...data,
-      reportType: templateType as ReportData['reportType']
+      // daily/weekly/monthly는 기간 템플릿이지 보고서 유형이 아니다.
+      reportType: 'summary' as const
     };
 
     if (format === 'pdf') {
@@ -672,24 +694,18 @@ export class ReportTemplates {
     productionData: ProductionRecord[],
     format: 'pdf' | 'excel' = 'pdf'
   ): Promise<void> {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 7); // 최근 7일
+    const productionRange = getProductionDateRange(productionData);
 
     const reportData: ReportData = {
       machines,
       oeeData,
       productionData,
       reportType: 'summary',
-      dateRange: [
-        startDate.toISOString().split('T')[0],
-        endDate.toISOString().split('T')[0]
-      ],
+      dateRange: productionRange,
       selectedMachines: machines.map(m => m.id),
       includeCharts: true,
       includeOEE: true,
       includeProduction: true,
-      includeDowntime: true,
       groupBy: 'machine'
     };
 
@@ -783,7 +799,6 @@ export class ReportTemplates {
     let chartCount = 0;
     if (data.includeCharts) {
       if (data.includeOEE) chartCount += 2; // OEE 게이지 + 추이
-      if (data.includeDowntime) chartCount += 1; // 다운타임 차트
       if (data.includeProduction) chartCount += 1; // 생산 차트
     }
 
@@ -797,3 +812,102 @@ export class ReportTemplates {
     return { summary, chartCount, pageCount };
   }
 }
+
+export interface WeightedReportMetrics {
+  availability: number;
+  performance: number;
+  quality: number;
+  oee: number;
+  totalPlannedRuntime: number;
+  totalActualRuntime: number;
+  totalIdealRuntime: number;
+  totalOutput: number;
+  totalDefects: number;
+}
+
+/** 공식 집계와 같은 런타임/생산수량 가중 방식으로 OEE를 계산한다. */
+export const calculateWeightedReportMetrics = (rows: OEEMetrics[]): WeightedReportMetrics => {
+  const totals = rows.reduce((sum, row) => ({
+    planned: sum.planned + Math.max(0, row.planned_runtime || 0),
+    actual: sum.actual + Math.max(0, row.actual_runtime || 0),
+    ideal: sum.ideal + Math.max(0, row.ideal_runtime || 0),
+    output: sum.output + Math.max(0, row.output_qty || 0),
+    defects: sum.defects + Math.max(0, row.defect_qty || 0),
+  }), { planned: 0, actual: 0, ideal: 0, output: 0, defects: 0 });
+
+  const availability = totals.planned > 0 ? totals.actual / totals.planned : 0;
+  const performance = totals.actual > 0 ? totals.ideal / totals.actual : 0;
+  const quality = totals.output > 0
+    ? Math.max(0, totals.output - totals.defects) / totals.output
+    : 0;
+
+  return {
+    availability,
+    performance,
+    quality,
+    oee: availability * performance * quality,
+    totalPlannedRuntime: totals.planned,
+    totalActualRuntime: totals.actual,
+    totalIdealRuntime: totals.ideal,
+    totalOutput: totals.output,
+    totalDefects: totals.defects,
+  };
+};
+
+export const isRangeCovered = (
+  loadedRange: [string, string],
+  requestedRange: [string, string]
+): boolean => requestedRange[0] >= loadedRange[0] && requestedRange[1] <= loadedRange[1];
+
+export const getProductionDateRange = (productionData: ProductionRecord[]): [string, string] => {
+  if (productionData.length === 0) {
+    throw new Error('현재 필터에 내보낼 생산실적이 없습니다.');
+  }
+  const dates = productionData.map(record => record.date).sort();
+  return [dates[0], dates[dates.length - 1]];
+};
+
+export const assertReportExportReady = ({
+  loadedRange,
+  requestedRange,
+  isComplete,
+}: {
+  loadedRange: [string, string];
+  requestedRange: [string, string];
+  isComplete: boolean;
+}): void => {
+  if (!isRangeCovered(loadedRange, requestedRange)) {
+    throw new Error('선택한 보고서 기간이 현재 조회된 기간을 벗어났습니다. 먼저 화면의 기간 필터로 데이터를 조회하세요.');
+  }
+  if (!isComplete) {
+    throw new Error('현재 범위의 전체 데이터를 불러오지 못해 보고서를 생성할 수 없습니다. 기간 또는 설비 범위를 줄여주세요.');
+  }
+};
+
+export const buildDetailedMachineRows = (
+  machines: Machine[],
+  oeeData: OEEMetrics[]
+): string[][] => machines.map((machine, index) => {
+  const machineMetrics = calculateWeightedReportMetrics(
+    oeeData.filter(row => row.machine_id === machine.id)
+  );
+  return [
+    (index + 1).toString(),
+    machine.name || '-',
+    machine.location || '-',
+    `${(machineMetrics.oee * 100).toFixed(1)}%`,
+    machine.is_active ? 'Active' : 'Inactive',
+  ];
+});
+
+export const buildProductionDetailRows = (productionData: ProductionRecord[]): string[][] =>
+  productionData.map((record, index) => [
+    (index + 1).toString(),
+    record.date || '-',
+    record.shift || '-',
+    record.output_qty?.toString() || '0',
+    record.defect_qty?.toString() || '0',
+    `${((record.oee || 0) * 100).toFixed(1)}%`,
+  ]);
+
+const MAX_PDF_DETAIL_RECORDS = 5000;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // PUT /api/admin/users/[userId] - 사용자 정보 수정
 export async function PUT(
@@ -7,6 +8,8 @@ export async function PUT(
   { params }: { params: { userId: string } }
 ) {
   try {
+    await requireUser(request, ['admin']);
+
     const { userId } = params;
     const body = await request.json();
     const { email, name, role, assigned_machines, currentEmail } = body;
@@ -68,6 +71,9 @@ export async function PUT(
     throw new Error('Failed to update user profile');
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error updating user:', error);
     return NextResponse.json(
       { error: 'Failed to update user' },
@@ -82,6 +88,8 @@ export async function DELETE(
   { params }: { params: { userId: string } }
 ) {
   try {
+    await requireUser(request, ['admin']);
+
     const { userId } = params;
     let profileDeleted = false;
     let authDeleted = false;
@@ -137,6 +145,9 @@ export async function DELETE(
     throw new Error('Failed to delete user profile');
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error deleting user:', error);
     return NextResponse.json(
       { error: 'Failed to delete user' },

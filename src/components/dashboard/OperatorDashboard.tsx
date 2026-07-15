@@ -23,6 +23,7 @@ import { useProductionRecords } from '@/hooks/useProductionRecords';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { getCurrentShiftInfo } from '@/utils/shiftUtils';
+import { authFetch } from '@/lib/authFetch';
 
 // Removed deprecated TabPane import
 
@@ -171,7 +172,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       console.log(`설비 ${machineId} 상태를 ${newState}로 변경 중...`);
       
       // API 호출하여 설비 상태 변경
-      const response = await fetch(`/api/machines/${machineId}`, {
+      const response = await authFetch(`/api/machines/${machineId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

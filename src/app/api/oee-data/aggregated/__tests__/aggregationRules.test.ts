@@ -4,6 +4,8 @@ import {
   isValidDateOnly,
   sortPeriodsChronologically,
 } from '../aggregationRules';
+import fs from 'fs';
+import path from 'path';
 
 describe('BUG-011 aggregated OEE rules', () => {
   it('validates real calendar dates', () => {
@@ -28,6 +30,17 @@ describe('BUG-011 aggregated OEE rules', () => {
     expect(calculateChronologicalTrend([...points].reverse().map((p, i) => ({ ...p, oee: 0.8 - i * 0.2 })), 'oee')).toBeLessThan(0);
   });
 
+  it('excludes unavailable OEE periods instead of treating them as zero', () => {
+    const points = [
+      { period: '2026-07-01', oee: null, availability: null, performance: null, quality: null },
+      { period: '2026-07-02', oee: 0.5, availability: 0.5, performance: 1, quality: 1 },
+      { period: '2026-07-03', oee: 0.75, availability: 0.75, performance: 1, quality: 1 },
+    ];
+
+    expect(calculateChronologicalTrend(points, 'oee')).toBeCloseTo(50);
+    expect(calculateChronologicalTrend(points.slice(0, 2), 'oee')).toBeNull();
+  });
+
   it('returns chart periods in chronological order', () => {
     expect(sortPeriodsChronologically([
       { period: '2026-07-15' },
@@ -38,5 +51,14 @@ describe('BUG-011 aggregated OEE rules', () => {
       { period: '2026-06-30' },
       { period: '2026-07-15' },
     ]);
+  });
+
+  it('uses accumulated runtime and output instead of averaging record or period ratios', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../route.ts'), 'utf8');
+
+    expect(source).toMatch(/calculateWeightedOEE/);
+    expect(source).not.toMatch(/sum_oee\s*\/\s*totalRecords/);
+    expect(source).not.toMatch(/reduce\(\(sum, data\) => sum \+ data\.oee, 0\) \/ totalRecords/);
+    expect(source).not.toMatch(/\|\| 480/);
   });
 });

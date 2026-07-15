@@ -16,7 +16,7 @@ import {
   message
 } from 'antd';
 import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
-import { ReportTemplates } from './ReportTemplates';
+import { ReportTemplates, assertReportExportReady } from './ReportTemplates';
 import { Machine, ProductionRecord } from '@/types';
 import { OEEMetrics } from '@/types/reports';
 
@@ -56,6 +56,8 @@ interface ReportExportModalProps {
   machines?: Machine[];
   oeeData?: OEEMetrics[];
   productionData?: ProductionRecord[];
+  loadedDateRange: [string, string];
+  isDataComplete?: boolean;
 }
 
 interface ReportConfig {
@@ -65,7 +67,6 @@ interface ReportConfig {
   includeCharts: boolean;
   includeOEE: boolean;
   includeProduction: boolean;
-  includeDowntime: boolean;
   groupBy: 'machine' | 'date' | 'shift';
 }
 
@@ -75,7 +76,9 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
   exportType,
   machines = [],
   oeeData = [],
-  productionData = []
+  productionData = [],
+  loadedDateRange,
+  isDataComplete = true
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -92,9 +95,14 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
         includeCharts: values.includeCharts ?? true,
         includeOEE: values.includeOEE ?? true,
         includeProduction: values.includeProduction ?? true,
-        includeDowntime: values.includeDowntime ?? true,
         groupBy: values.groupBy || 'machine'
       };
+
+      assertReportExportReady({
+        loadedRange: loadedDateRange,
+        requestedRange: reportConfig.dateRange,
+        isComplete: isDataComplete,
+      });
 
       const { productionData: filteredProductionData, oeeData: filteredOeeData } = filterByMachineAndDate(
         productionData,
@@ -182,7 +190,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
       onCancel();
     } catch (error) {
       console.error('보고서 생성 실패:', error);
-      message.error('보고서 생성 중 오류가 발생했습니다.');
+      message.error(error instanceof Error ? error.message : '보고서 생성 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -191,8 +199,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
   const reportTypeOptions = [
     { label: '요약 보고서', value: 'summary' },
     { label: '상세 보고서', value: 'detailed' },
-    { label: '추이 분석', value: 'trend' },
-    { label: '다운타임 분석', value: 'downtime' }
+    { label: '추이 분석', value: 'trend' }
   ];
 
   const groupByOptions = [
@@ -235,7 +242,6 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
           includeCharts: true,
           includeOEE: true,
           includeProduction: true,
-          includeDowntime: true,
           groupBy: 'machine'
         }}
       >
@@ -302,9 +308,6 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="includeDowntime" valuePropName="checked">
-                <Checkbox>다운타임 분석</Checkbox>
-              </Form.Item>
               <Form.Item name="includeCharts" valuePropName="checked">
                 <Checkbox>차트 포함</Checkbox>
               </Form.Item>

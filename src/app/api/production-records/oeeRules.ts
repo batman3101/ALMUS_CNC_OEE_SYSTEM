@@ -14,76 +14,6 @@ export interface ProductionParameters {
   minutesPerUnit: number;
 }
 
-export interface DowntimeSaveEntry {
-  start_time: string;
-  end_time: string;
-  reason: string;
-  description?: string;
-  operator_id?: string;
-}
-
-export interface TimeWindow {
-  start: number;
-  end: number;
-}
-
-/**
- * 비가동 입력은 해당 영업일/교대의 실제 시간창 안에 완전히 포함되어야 한다.
- * 범위 밖 시간을 생산 OEE에는 더하고 분석 API에서는 잘라내는 불일치를 막는다.
- */
-export function validateDowntimeEntriesForWindow(
-  shiftName: string,
-  value: unknown,
-  window: TimeWindow
-): { entries?: DowntimeSaveEntry[]; totalMinutes?: number; error?: string } {
-  if (value === undefined) return {};
-  if (!Array.isArray(value)) return { error: `${shiftName} 비가동 목록은 배열이어야 합니다` };
-
-  const entries: DowntimeSaveEntry[] = [];
-  const intervals: TimeWindow[] = [];
-  for (const raw of value) {
-    if (!raw || typeof raw !== 'object') return { error: `${shiftName} 비가동 입력 형식이 잘못되었습니다` };
-    const candidate = raw as Record<string, unknown>;
-    const start = typeof candidate.start_time === 'string' ? Date.parse(candidate.start_time) : NaN;
-    const end = typeof candidate.end_time === 'string' ? Date.parse(candidate.end_time) : NaN;
-    const reason = typeof candidate.reason === 'string' ? candidate.reason.trim() : '';
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-      return { error: `${shiftName} 비가동 종료 시각은 시작 시각보다 늦어야 합니다` };
-    }
-    if (start < window.start || end > window.end) {
-      return { error: `${shiftName} 비가동 시간은 해당 날짜와 교대 범위 안에 있어야 합니다` };
-    }
-    if (!reason) return { error: `${shiftName} 비가동 원인은 필수입니다` };
-
-    intervals.push({ start, end });
-    entries.push({
-      start_time: new Date(start).toISOString(),
-      end_time: new Date(end).toISOString(),
-      reason,
-      ...(typeof candidate.description === 'string' && candidate.description.trim()
-        ? { description: candidate.description.trim() }
-        : {}),
-      ...(typeof candidate.operator_id === 'string' && candidate.operator_id.trim()
-        ? { operator_id: candidate.operator_id.trim() }
-        : {}),
-    });
-  }
-
-  const sorted = intervals.sort((left, right) => left.start - right.start || left.end - right.end);
-  let claimedEnd = sorted[0]?.end ?? 0;
-  for (let index = 1; index < sorted.length; index++) {
-    if (sorted[index].start < claimedEnd) {
-      return { error: `${shiftName} 비가동 시간이 서로 겹칩니다` };
-    }
-    claimedEnd = Math.max(claimedEnd, sorted[index].end);
-  }
-
-  const totalMinutes = Math.round(
-    sorted.reduce((sum, interval) => sum + interval.end - interval.start, 0) / 60000
-  );
-  return { entries, totalMinutes };
-}
-
 export function calculateOeeMetrics(params: {
   plannedRuntime: number;
   actualRuntime: number;
@@ -150,9 +80,9 @@ export function resolveHistoricalProductionParameters(
   };
 }
 
-/** 런타임을 생략한 단건 입력은 계획 가동시간 전체를 가동한 것으로 명시적으로 처리한다. */
-export function resolveActualRuntime(actualRuntime: unknown, plannedRuntime: number): number {
-  if (actualRuntime === undefined || actualRuntime === null) return plannedRuntime;
+/** 런타임 미보고는 완전 가동으로 추정하지 않고 NULL로 유지한다. */
+export function resolveActualRuntime(actualRuntime: unknown, plannedRuntime: number): number | null {
+  if (actualRuntime === undefined || actualRuntime === null) return null;
   const parsed = typeof actualRuntime === 'number' ? actualRuntime : Number.NaN;
   if (!Number.isFinite(parsed)) return 0;
   return Math.min(Math.max(parsed, 0), plannedRuntime);

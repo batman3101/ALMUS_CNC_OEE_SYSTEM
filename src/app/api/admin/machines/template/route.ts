@@ -1,9 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createMachineTemplate } from '@/lib/excel/machineTemplate';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+
+export const dynamic = 'force-dynamic';
 
 // GET /api/admin/machines/template - Excel 템플릿 다운로드
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     // Excel 템플릿 생성
     const excelBuffer = createMachineTemplate();
     // Node Buffer로 변환 (Uint8Array<ArrayBufferLike>는 BodyInit과 타입 호환되지 않음)
@@ -25,6 +30,9 @@ export async function GET() {
     });
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error generating template:', error);
     return NextResponse.json(
       { error: '템플릿 생성 중 오류가 발생했습니다.' },

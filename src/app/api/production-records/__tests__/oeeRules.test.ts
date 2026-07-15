@@ -3,22 +3,21 @@ import {
   resolveActualRuntime,
   resolveHistoricalProductionParameters,
   synchronizeDowntime,
-  validateDowntimeEntriesForWindow,
 } from '../oeeRules';
 
 describe('production record OEE rules', () => {
   describe('BUG-001 runtime defaults', () => {
-    it('uses planned runtime when the operator request omits actual_runtime', () => {
-      expect(resolveActualRuntime(undefined, 660)).toBe(660);
-      expect(resolveActualRuntime(null, 660)).toBe(660);
+    it('keeps omitted actual_runtime unreported instead of assuming full availability', () => {
+      expect(resolveActualRuntime(undefined, 660)).toBeNull();
+      expect(resolveActualRuntime(null, 660)).toBeNull();
       expect(resolveActualRuntime(0, 660)).toBe(0);
       expect(resolveActualRuntime(800, 660)).toBe(660);
     });
 
-    it('produces non-zero OEE for normal production and zero at real zero boundaries', () => {
+    it('produces non-zero OEE only after runtime has been explicitly reported', () => {
       const normal = calculateOeeMetrics({
         plannedRuntime: 660,
-        actualRuntime: resolveActualRuntime(undefined, 660),
+        actualRuntime: resolveActualRuntime(600, 660) as number,
         outputQty: 100,
         defectQty: 0,
         minutesPerUnit: 2,
@@ -76,42 +75,6 @@ describe('production record OEE rules', () => {
 
     it('preserves NULL downtime when only quantities are edited', () => {
       expect(synchronizeDowntime(660, 600, false, null)).toBeNull();
-    });
-  });
-
-  describe('BUG-007 downtime shift boundaries', () => {
-    const dayWindow = {
-      start: Date.parse('2026-07-14T01:00:00.000Z'),
-      end: Date.parse('2026-07-14T13:00:00.000Z'),
-    };
-    const nightWindow = {
-      start: Date.parse('2026-07-14T13:00:00.000Z'),
-      end: Date.parse('2026-07-15T01:00:00.000Z'),
-    };
-
-    it('rejects downtime that extends outside its declared business date and shift', () => {
-      expect(validateDowntimeEntriesForWindow('주간조', [{
-        start_time: '2026-07-14T00:59:00.000Z',
-        end_time: '2026-07-14T02:00:00.000Z',
-        reason: 'failure',
-      }], dayWindow).error).toContain('교대 범위');
-
-      expect(validateDowntimeEntriesForWindow('야간조', [{
-        start_time: '2026-07-15T00:30:00.000Z',
-        end_time: '2026-07-15T01:01:00.000Z',
-        reason: 'failure',
-      }], nightWindow).error).toContain('교대 범위');
-    });
-
-    it('accepts a night-shift interval that crosses midnight inside the window', () => {
-      const result = validateDowntimeEntriesForWindow('야간조', [{
-        start_time: '2026-07-14T16:30:00.000Z',
-        end_time: '2026-07-14T18:30:00.000Z',
-        reason: 'failure',
-      }], nightWindow);
-
-      expect(result.error).toBeUndefined();
-      expect(result.totalMinutes).toBe(120);
     });
   });
 });

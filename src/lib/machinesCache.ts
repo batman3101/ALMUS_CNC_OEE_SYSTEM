@@ -1,4 +1,5 @@
 import { Machine } from '@/types';
+import { authFetch } from '@/lib/authFetch';
 
 /**
  * `/api/machines` 공용 캐시.
@@ -18,11 +19,11 @@ interface MachinesCacheEntry {
   fetchedAt: number;
 }
 
-let cache: MachinesCacheEntry | null = null;
-let inFlight: Promise<Machine[]> | null = null;
+const caches = new Map<string, MachinesCacheEntry>();
+const inFlights = new Map<string, Promise<Machine[]>>();
 
-async function requestMachines(): Promise<Machine[]> {
-  const response = await fetch('/api/machines', {
+async function requestMachines(includeInactive: boolean): Promise<Machine[]> {
+  const response = await authFetch(includeInactive ? '/api/machines?is_active=false' : '/api/machines', {
     cache: 'no-store',
     headers: { 'Cache-Control': 'no-cache' }
   });
@@ -41,7 +42,10 @@ async function requestMachines(): Promise<Machine[]> {
   return machines ?? [];
 }
 
-export function fetchMachines(options?: { force?: boolean }): Promise<Machine[]> {
+export function fetchMachines(options?: { force?: boolean; includeInactive?: boolean }): Promise<Machine[]> {
+  const key = options?.includeInactive ? 'all' : 'active';
+  const cache = caches.get(key);
+  const inFlight = inFlights.get(key);
   if (!options?.force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return Promise.resolve(cache.machines);
   }
@@ -50,18 +54,19 @@ export function fetchMachines(options?: { force?: boolean }): Promise<Machine[]>
     return inFlight;
   }
 
-  inFlight = requestMachines()
+  const request = requestMachines(Boolean(options?.includeInactive))
     .then(machines => {
-      cache = { machines, fetchedAt: Date.now() };
+      caches.set(key, { machines, fetchedAt: Date.now() });
       return machines;
     })
     .finally(() => {
-      inFlight = null;
+      inFlights.delete(key);
     });
+  inFlights.set(key, request);
 
-  return inFlight;
+  return request;
 }
 
 export function invalidateMachinesCache(): void {
-  cache = null;
+  caches.clear();
 }

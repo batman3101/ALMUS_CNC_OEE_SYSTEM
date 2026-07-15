@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -22,6 +23,7 @@ const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Ho_Chi_Minh';
 const DEFAULT_SHIFT_A_START = '08:00';
 const DEFAULT_SHIFT_B_START = '20:00';
 const RAW_PAGE_SIZE = 1000;
+const DOWNTIME_SOURCE_POLICY = 'manual_overrides_overlap' as const;
 
 interface BusinessTimeConfig {
   timezone: string;
@@ -71,6 +73,8 @@ async function getBusinessTimeConfig(): Promise<BusinessTimeConfig> {
 // GET /api/downtime-analysis - 다운타임 분석 데이터 조회
 export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin', 'engineer']);
+
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const startDate = searchParams.get('start_date');
@@ -154,8 +158,9 @@ export async function GET(request: NextRequest) {
     // 아래에서 교대 시간 구간과 교집합을 내어 "실제로 그 교대에 걸친 만큼"만 집계한다.
     const downtimeLogs = rawDowntimeLogs || [];
 
-    // 운영자가 교대 데이터 입력 화면에서 직접 기록한 비가동 시간(downtime_entries).
-    // date/shift 컬럼을 직접 보유하고 있어 machine_logs보다 정확하게 필터링할 수 있음.
+    // 운영자가 직접 기록한 비가동(downtime_entries)도 machine_logs와 똑같이 "시간 구간
+    // 겹침"으로 조회한다. date/shift는 사건이 시작된 영업 범위를 설명하는 라벨일 뿐이다.
+    // 이를 날짜/교대 일치 조건으로 조회하면 전일부터 이어지거나 교대를 넘긴 사건이 누락된다.
     let entriesQuery = supabaseAdmin
       .from('downtime_entries')
       .select(`
@@ -172,10 +177,8 @@ export async function GET(request: NextRequest) {
         created_at,
         machines!inner(name, equipment_type, location)
       `)
-      .gte('date', effectiveStartDate)
-      .lte('date', effectiveEndDate)
-      .not('duration_minutes', 'is', null)
-      .gt('duration_minutes', 0)
+      .lt('start_time', toDate.toISOString())
+      .or(`end_time.is.null,end_time.gt.${fromDate.toISOString()}`)
       .order('start_time', { ascending: false });
 
     // 설비 필터링 (machine_logs와 동일한 규칙 적용)
@@ -205,58 +208,9 @@ export async function GET(request: NextRequest) {
       if (!page || page.length < RAW_PAGE_SIZE) break;
     }
 
-    // 과거에 즉시 저장된 고아 비가동이 남아 있을 수 있다. 같은 설비/영업일/교대의
-    // 생산 실적이 존재하는 수동 입력만 공식 통계에 포함한다.
-    let productionScopeQuery = supabaseAdmin
-      .from('production_records')
-      .select('machine_id, date, shift')
-      .gte('date', effectiveStartDate)
-      .lte('date', effectiveEndDate)
-      .order('date', { ascending: true })
-      .order('machine_id', { ascending: true })
-      .order('shift', { ascending: true });
-    if (machineId) {
-      const machineIds = machineId.split(',').map(id => id.trim()).filter(Boolean);
-      if (machineIds.length > 1) {
-        productionScopeQuery = productionScopeQuery.in('machine_id', machineIds);
-      } else if (machineIds.length === 1) {
-        productionScopeQuery = productionScopeQuery.eq('machine_id', machineIds[0]);
-      }
-    }
-
-    const productionScopeRows: NonNullable<Awaited<typeof productionScopeQuery>['data']> = [];
-    for (let offset = 0; ; offset += RAW_PAGE_SIZE) {
-      const { data: page, error: productionScopeError } = await productionScopeQuery.range(
-        offset,
-        offset + RAW_PAGE_SIZE - 1
-      );
-      if (productionScopeError) {
-        console.error('비가동 생산 범위 검증 오류:', productionScopeError);
-        return NextResponse.json(
-          { error: 'Failed to validate downtime production scope' },
-          { status: 500 }
-        );
-      }
-      productionScopeRows.push(...(page || []));
-      if (!page || page.length < RAW_PAGE_SIZE) break;
-    }
-
-    const validProductionScopes = new Set(
-      productionScopeRows.map(row => `${row.machine_id}\u0000${row.date}\u0000${row.shift}`)
-    );
-
-    // 교대 필터링 (downtime_entries는 shift 컬럼을 직접 보유하므로 정확히 일치시킴)
-    let downtimeEntries = rawDowntimeEntries.filter(entry =>
-      validProductionScopes.has(`${entry.machine_id}\u0000${entry.date}\u0000${entry.shift}`)
-    );
-    if (shift) {
-      const requestedShifts = shift.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-      if (requestedShifts.length > 0) {
-        downtimeEntries = downtimeEntries.filter(entry =>
-          entry.shift ? requestedShifts.includes(entry.shift.toUpperCase()) : false
-        );
-      }
-    }
+    // 비가동은 생산실적과 독립된 원본 사건이다. 생산 레코드 존재 여부나 사건이 시작된
+    // shift 라벨로 제거하지 않고, 아래 allowedWindows와의 실제 교집합만 사용한다.
+    const downtimeEntries = rawDowntimeEntries;
 
     // downtime_entries.reason(i18n 키) -> machine_status enum 매핑.
     // dashboard:downtimeReasons 번역 네임스페이스에는 machine_status 값만 정의되어 있고
@@ -400,19 +354,26 @@ export async function GET(request: NextRequest) {
       : null;
     const allowedWindows = buildShiftWindows(requestedShifts);
 
-    // 같은 설비/영업일/교대에서 겹치는 수동 입력은 먼저 시작한 행에 중첩 구간을 귀속한다.
-    // 이후 모든 수동/자동 집계가 동일한 잘린 구간 집합을 사용한다.
+    // SOURCE UNION POLICY (manual_overrides_overlap):
+    //   1) 같은 설비의 수동 사건끼리는 분석 범위 전체에서 시간 합집합으로 만든다.
+    //   2) 수동 사건은 작업자의 구체적인 원인을 보유하므로 겹친 구간을 우선 소유한다.
+    //   3) machine_logs에서는 그 겹친 부분만 빼고 나머지 자동 상태 구간은 보존한다.
+    // 이 정책은 두 소스의 합을 실제 비가동 시간 합집합과 같게 만들며, 전일/교대 경계에서도 같다.
     const allocatedManualEntries = allocateDowntimeIntervals(
       downtimeEntries.flatMap(entry => {
         const start = new Date(entry.start_time).getTime();
-        const end = entry.end_time ? new Date(entry.end_time).getTime() : start;
+        const end = entry.end_time
+          ? new Date(entry.end_time).getTime()
+          : Math.min(nowMs, rangeEndMs);
         if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
         return [{
           ...entry,
           id: entry.id,
           machineId: entry.machine_id,
-          businessDate: entry.date,
-          shift: entry.shift,
+          // allocateDowntimeIntervals의 scope를 설비+분석범위로 통일한다. 원본 date/shift는
+          // spread된 entry에 그대로 남아 상세 응답에서 보존된다.
+          businessDate: effectiveStartDate,
+          shift: 'ALL',
           start,
           end,
         }];
@@ -500,23 +461,27 @@ export async function GET(request: NextRequest) {
         };
       });
 
+    let ongoingManualEventCount = 0;
     const manualEntryRows: UnifiedDowntimeRow[] = allocatedManualEntries
       .filter(({ intervals }) => intervals.length > 0)
-      .map(({ entry, intervals }) => ({
-        log_id: entry.id,
-        machine_id: entry.machine_id,
-        machine_name: unwrapJoin(entry.machines)?.name || 'Unknown',
-        state: mapReasonToState(entry.reason),
-        start_time: entry.start_time,
-        end_time: entry.end_time,
-        duration: totalIntervalMinutes(intervals),
-        intervals,
-        operator_id: entry.operator_id,
-        created_at: entry.created_at,
-        source: 'manual' as const,
-        reason: entry.reason,
-        description: entry.description
-      }));
+      .map(({ entry, intervals }) => {
+        if (!entry.end_time) ongoingManualEventCount++;
+        return {
+          log_id: entry.id,
+          machine_id: entry.machine_id,
+          machine_name: unwrapJoin(entry.machines)?.name || 'Unknown',
+          state: mapReasonToState(entry.reason),
+          start_time: entry.start_time,
+          end_time: entry.end_time,
+          duration: totalIntervalMinutes(intervals),
+          intervals,
+          operator_id: entry.operator_id,
+          created_at: entry.created_at,
+          source: 'manual' as const,
+          reason: entry.reason,
+          description: entry.description
+        };
+      });
 
     const unifiedRows: UnifiedDowntimeRow[] = [...machineLogRows, ...manualEntryRows];
 
@@ -582,6 +547,7 @@ export async function GET(request: NextRequest) {
       avg_downtime_per_event: number;
       most_frequent_cause: string;
       downtime_by_state: Record<string, number>;
+      downtime_events_by_state: Record<string, number>;
     }> = {};
 
     unifiedRows.forEach(row => {
@@ -598,7 +564,8 @@ export async function GET(request: NextRequest) {
           downtime_events: 0,
           avg_downtime_per_event: 0,
           most_frequent_cause: '',
-          downtime_by_state: {}
+          downtime_by_state: {},
+          downtime_events_by_state: {}
         };
       }
 
@@ -606,6 +573,8 @@ export async function GET(request: NextRequest) {
       machineDowntime[rowMachineId].downtime_events++;
       machineDowntime[rowMachineId].downtime_by_state[state] =
         (machineDowntime[rowMachineId].downtime_by_state[state] || 0) + duration;
+      machineDowntime[rowMachineId].downtime_events_by_state[state] =
+        (machineDowntime[rowMachineId].downtime_events_by_state[state] || 0) + 1;
     });
 
     // 설비별 통계 완성
@@ -613,7 +582,7 @@ export async function GET(request: NextRequest) {
       machine.avg_downtime_per_event = machine.total_downtime / machine.downtime_events;
       
       // 가장 빈번한 다운타임 원인 찾기
-      const mostFrequentCause = Object.entries(machine.downtime_by_state)
+      const mostFrequentCause = Object.entries(machine.downtime_events_by_state)
         .reduce((a, b) => a[1] > b[1] ? a : b, ['', 0]);
       machine.most_frequent_cause = mostFrequentCause[0];
       
@@ -758,6 +727,7 @@ export async function GET(request: NextRequest) {
       })) : undefined,
       metadata: {
         query_time: new Date().toISOString(),
+        source_policy: DOWNTIME_SOURCE_POLICY,
         filters: {
           machine_id: machineId,
           start_date: startDate,
@@ -776,7 +746,8 @@ export async function GET(request: NextRequest) {
           },
           manual: {
             events: manualEntryRows.length,
-            total_duration_minutes: manualEntryRows.reduce((sum, row) => sum + row.duration, 0)
+            total_duration_minutes: manualEntryRows.reduce((sum, row) => sum + row.duration, 0),
+            ongoing_events: ongoingManualEventCount
           }
         }
       }
@@ -794,6 +765,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response);
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('❌ 다운타임 분석 API 오류:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

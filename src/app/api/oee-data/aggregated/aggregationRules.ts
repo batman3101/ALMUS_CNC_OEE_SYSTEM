@@ -2,10 +2,10 @@ export type AggregationPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export interface TrendPoint {
   period: string;
-  oee: number;
-  availability: number;
-  performance: number;
-  quality: number;
+  oee: number | null;
+  availability: number | null;
+  performance: number | null;
+  quality: number | null;
 }
 
 export function isValidDateOnly(value: string): boolean {
@@ -34,17 +34,19 @@ export function isoWeek(dateOnly: string): { key: string; label: string } {
 export function calculateChronologicalTrend(
   data: TrendPoint[],
   key: keyof Omit<TrendPoint, 'period'>
-): number {
-  if (data.length < 2) return 0;
-  const sorted = [...data].sort((a, b) => a.period.localeCompare(b.period));
+): number | null {
+  const sorted = data
+    .filter(item => item[key] !== null)
+    .sort((a, b) => a.period.localeCompare(b.period));
+  if (sorted.length < 2) return null;
   const split = Math.ceil(sorted.length / 2);
   const older = sorted.slice(0, split);
   const recent = sorted.slice(split);
-  if (recent.length === 0) return 0;
+  if (recent.length === 0) return null;
   const average = (items: TrendPoint[]) =>
-    items.reduce((sum, item) => sum + item[key], 0) / items.length;
+    items.reduce((sum, item) => sum + (item[key] as number), 0) / items.length;
   const olderAverage = average(older);
-  if (olderAverage === 0) return 0;
+  if (olderAverage === 0) return null;
   return ((average(recent) - olderAverage) / olderAverage) * 100;
 }
 

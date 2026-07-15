@@ -5,6 +5,11 @@ import {
   machineUpdateErrorResponse,
   type MachineUpdates
 } from '@/lib/machineUpdate';
+import {
+  apiAuthErrorResponse,
+  assertMachineAccess,
+  requireUser,
+} from '@/lib/apiAuth';
 
 // GET /api/machines/[machineId] - 특정 설비 상세 정보 조회
 export async function GET(
@@ -12,6 +17,8 @@ export async function GET(
   { params }: { params: { machineId: string } }
 ) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    assertMachineAccess(authenticatedUser, params.machineId);
     console.log('GET /api/machines/[machineId] called with id:', params.machineId);
 
     const { data: machine, error } = await supabaseAdmin
@@ -61,6 +68,9 @@ export async function GET(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in GET /api/machines/[machineId]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
@@ -81,6 +91,7 @@ export async function PUT(
   { params }: { params: { machineId: string } }
 ) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin']);
     console.log('PUT /api/machines/[machineId] called with id:', params.machineId);
 
     const body = await request.json();
@@ -125,7 +136,8 @@ export async function PUT(
     const result = await applyMachineUpdate(
       params.machineId,
       updates,
-      body.change_reason || null
+      body.change_reason || null,
+      authenticatedUser.userId
     );
 
     const updatedMachine = result.machine as { name?: string } | null;
@@ -138,6 +150,9 @@ export async function PUT(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     const mapped = machineUpdateErrorResponse(error);
     if (mapped) return mapped;
 
@@ -161,7 +176,24 @@ export async function PATCH(
   { params }: { params: { machineId: string } }
 ) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    assertMachineAccess(authenticatedUser, params.machineId);
     console.log('PATCH /api/machines/[machineId] called with id:', params.machineId);
+
+    const { data: machineState, error: machineStateError } = await supabaseAdmin
+      .from('machines')
+      .select('is_active')
+      .eq('id', params.machineId)
+      .single();
+    if (machineStateError || !machineState) {
+      return NextResponse.json({ success: false, error: 'Machine not found' }, { status: 404 });
+    }
+    if (!machineState.is_active) {
+      return NextResponse.json(
+        { success: false, error: 'Inactive machines cannot receive operational status changes' },
+        { status: 409 }
+      );
+    }
 
     const body = await request.json();
     const { current_state, production_model_id, current_process_id } = body;
@@ -191,7 +223,8 @@ export async function PATCH(
     const result = await applyMachineUpdate(
       params.machineId,
       updates,
-      body.change_reason || null
+      body.change_reason || null,
+      authenticatedUser.userId
     );
 
     const updatedMachine = result.machine as { name?: string } | null;
@@ -204,6 +237,9 @@ export async function PATCH(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     const mapped = machineUpdateErrorResponse(error);
     if (mapped) return mapped;
 

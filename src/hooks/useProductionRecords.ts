@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { ProductionRecord } from '@/types';
 import { format } from 'date-fns';
+import { authFetch } from '@/lib/authFetch';
 
 interface ProductionRecordInput {
   machine_id: string;
@@ -22,7 +23,7 @@ export const useProductionRecords = () => {
     setError(null);
 
     try {
-      const response = await fetch('/api/production-records', {
+      const response = await authFetch('/api/production-records', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

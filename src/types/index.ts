@@ -119,21 +119,21 @@ export interface ProductionRecord {
   machine_id: string;
   date: string;
   shift: 'A' | 'B';
-  planned_runtime?: number;
-  actual_runtime?: number;
-  ideal_runtime?: number;
+  planned_runtime?: number | null;
+  actual_runtime?: number | null;
+  ideal_runtime?: number | null;
   output_qty: number;
   defect_qty: number;
-  availability?: number;
-  performance?: number;
-  quality?: number;
-  oee?: number;
+  availability?: number | null;
+  performance?: number | null;
+  quality?: number | null;
+  oee?: number | null;
   /**
    * 비가동 시간(분). 비가동은 작업자가 직접 입력하므로 "입력하지 않은 것"과
    * "0분이라고 확인한 것"을 반드시 구분해야 한다.
    *
-   *   null  : 미입력 -> actual_runtime = planned_runtime 이 되어 가동률이 100% 로 잡힌다.
-   *           이 기록의 availability / oee 는 신뢰할 수 없다.
+   *   null  : 비가동 미확인. actual_runtime / availability / performance / oee 역시
+   *           NULL일 수 있으며 0분 또는 완전 가동으로 추정하지 않는다.
    *   0     : 무중단으로 확인됨
    *   > 0   : 비가동 있음
    */

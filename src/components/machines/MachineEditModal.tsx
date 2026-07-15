@@ -21,6 +21,7 @@ import {
 import { Machine, MachineProductModel, MachineProcessInfo, unwrapJoin } from '@/types';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
+import { authFetch } from '@/lib/authFetch';
 
 const { Option } = Select;
 
@@ -86,7 +87,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
   const fetchProductModels = async () => {
     try {
       setModelsLoading(true);
-      const response = await fetch('/api/product-models');
+      const response = await authFetch('/api/product-models');
       if (response.ok) {
         const data = await response.json();
         // API는 배열을 직접 반환함
@@ -109,7 +110,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
         return;
       }
 
-      const response = await fetch(`/api/model-processes?model_id=${modelId}`);
+      const response = await authFetch(`/api/model-processes?model_id=${modelId}`);
       if (response.ok) {
         const data = await response.json();
         // API는 배열을 직접 반환함
@@ -190,7 +191,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
         current_process_id: values.current_process_id
       };
 
-      const response = await fetch(`/api/machines/${machine.id}`, {
+      const response = await authFetch(`/api/machines/${machine.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

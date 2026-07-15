@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getInclusiveDateRange } from '@/utils/engineerDateRange';
+import { authFetch } from '@/lib/authFetch';
 
 export interface MachineOEEStat {
   machine_id: string;
   total_records: number;
-  avg_availability: number;
-  avg_performance: number;
-  avg_quality: number;
-  avg_oee: number;
+  avg_availability: number | null;
+  avg_performance: number | null;
+  avg_quality: number | null;
+  avg_oee: number | null;
   total_output: number;
   total_defect: number;
   unreported_records: number;
+  reported_records: number;
+  impossible_records: number;
 }
 
 export type MachineOEEStatMap = Record<string, MachineOEEStat>;
@@ -64,7 +67,7 @@ export const useMachineOEEStats = (
           !selectedShifts.includes('all') && { shift: selectedShifts.join(',') })
       });
 
-      const response = await fetch(`/api/oee-data/by-machine?${params}`);
+      const response = await authFetch(`/api/oee-data/by-machine?${params}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const data = await response.json();

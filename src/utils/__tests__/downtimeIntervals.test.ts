@@ -3,6 +3,8 @@ import {
   buildBusinessRange,
   buildShiftWindows,
   clipInterval,
+  getBusinessDateAt,
+  getShiftAt,
   totalMinutes,
   type DowntimeIntervalEntry,
 } from '@/utils/downtimeIntervals';
@@ -12,6 +14,33 @@ const HOUR = 60 * 60 * 1000;
 const at = (iso: string): number => new Date(iso).getTime();
 
 describe('downtime business-day windows', () => {
+  test('resolves the configured shift in business time', () => {
+    expect(getShiftAt(
+      '2026-07-15T00:30:00+07:00',
+      'Asia/Ho_Chi_Minh',
+      '08:00',
+      '20:00'
+    )).toBe('B');
+    expect(getShiftAt(
+      '2026-07-15T10:00:00+07:00',
+      'Asia/Ho_Chi_Minh',
+      '08:00',
+      '20:00'
+    )).toBe('A');
+  });
+
+  test('post-midnight B shift stays on the previous business date', () => {
+    expect(getBusinessDateAt(
+      '2026-07-16T02:00:00+07:00',
+      'Asia/Ho_Chi_Minh',
+      '08:00'
+    )).toBe('2026-07-15');
+    expect(getBusinessDateAt(
+      '2026-07-16T08:00:00+07:00',
+      'Asia/Ho_Chi_Minh',
+      '08:00'
+    )).toBe('2026-07-16');
+  });
   test('a single business day includes B shift through next-day 08:00', () => {
     const range = buildBusinessRange(
       '2026-07-15',
