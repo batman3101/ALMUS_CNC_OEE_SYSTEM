@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { getCurrentShiftInfo, shouldShowShiftEndNotification, getTimeUntilShiftEnd } from '@/utils/shiftUtils';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getCurrentShiftInfo, shouldShowShiftEndNotification, getTimeUntilShiftEnd, type ShiftTimeConfig } from '@/utils/shiftUtils';
+import { useSystemSettings } from './useSystemSettings';
 import { Machine } from '@/types';
 
 interface UseShiftNotificationProps {
@@ -30,14 +31,26 @@ export const useShiftNotification = ({
   const [notificationShown, setNotificationShown] = useState(false);
   const [postponedUntil, setPostponedUntil] = useState<Date | null>(null);
 
+  // 시스템 설정의 시간대·교대 시간으로 교대 계산 설정을 구성한다
+  const { getCompanyInfo, getShiftTimes } = useSystemSettings();
+  const shiftTimes = getShiftTimes();
+  const timezone = getCompanyInfo().timezone;
+  const shiftConfig = useMemo<ShiftTimeConfig>(() => ({
+    timezone,
+    shiftAStart: shiftTimes.shiftA.start,
+    shiftAEnd: shiftTimes.shiftA.end,
+    shiftBStart: shiftTimes.shiftB.start,
+    shiftBEnd: shiftTimes.shiftB.end
+  }), [timezone, shiftTimes.shiftA.start, shiftTimes.shiftA.end, shiftTimes.shiftB.start, shiftTimes.shiftB.end]);
+
   // 교대 상태 업데이트
   const updateShiftState = useCallback(() => {
     if (!enabled) return;
 
     const now = new Date();
-    const shiftInfo = getCurrentShiftInfo(now);
-    const minutesUntilEnd = getTimeUntilShiftEnd(now);
-    const shouldShow = shouldShowShiftEndNotification(now);
+    const shiftInfo = getCurrentShiftInfo(now, shiftConfig);
+    const minutesUntilEnd = getTimeUntilShiftEnd(now, shiftConfig);
+    const shouldShow = shouldShowShiftEndNotification(now, shiftConfig);
 
     // 연기된 시간이 지났는지 확인
     const isPostponeExpired = postponedUntil ? now > postponedUntil : true;
@@ -60,7 +73,7 @@ export const useShiftNotification = ({
       setNotificationShown(false);
       setPostponedUntil(null);
     }
-  }, [enabled, machines, notificationShown, postponedUntil]);
+  }, [enabled, machines, notificationShown, postponedUntil, shiftConfig]);
 
   // 주기적으로 교대 상태 체크 (1분마다)
   useEffect(() => {

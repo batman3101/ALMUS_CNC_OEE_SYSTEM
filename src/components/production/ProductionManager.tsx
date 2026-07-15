@@ -8,8 +8,9 @@ import ProductionRecordInput from './ProductionRecordInput';
 import { ShiftEndNotification } from './ShiftEndNotification';
 import { useShiftNotification } from '@/hooks/useShiftNotification';
 import { useProductionRecords } from '@/hooks/useProductionRecords';
-import { getCurrentShiftInfo, formatShiftTime } from '@/utils/shiftUtils';
-import { format } from 'date-fns';
+import { getCurrentShiftInfo, formatShiftTime, type ShiftTimeConfig } from '@/utils/shiftUtils';
+import { getBusinessDateAt } from '@/utils/downtimeIntervals';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const { Title, Text } = Typography;
 
@@ -29,12 +30,23 @@ export const ProductionManager: React.FC<ProductionManagerProps> = ({
   const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
 
   const { createProductionRecord } = useProductionRecords();
-  const shiftNotification = useShiftNotification({ 
+  const { getCompanyInfo, getShiftTimes } = useSystemSettings();
+  const shiftNotification = useShiftNotification({
     machines,
     enabled: currentUser?.role === 'operator' // 운영자만 교대 알림 활성화
   });
 
-  const currentShift = getCurrentShiftInfo();
+  // 교대·업무일자는 시스템 설정의 시간대·교대 시간을 단일 소스에 위임해 계산한다
+  const shiftTimes = getShiftTimes();
+  const shiftConfig: ShiftTimeConfig = {
+    timezone: getCompanyInfo().timezone,
+    shiftAStart: shiftTimes.shiftA.start,
+    shiftAEnd: shiftTimes.shiftA.end,
+    shiftBStart: shiftTimes.shiftB.start,
+    shiftBEnd: shiftTimes.shiftB.end
+  };
+  const currentShift = getCurrentShiftInfo(new Date(), shiftConfig);
+  const businessDate = getBusinessDateAt(new Date(), shiftConfig.timezone, shiftConfig.shiftAStart);
 
   // 수동 생산 실적 입력
   const handleManualInput = (machine: Machine) => {
@@ -53,7 +65,7 @@ export const ProductionManager: React.FC<ProductionManagerProps> = ({
       output_qty: data.output_qty,
       defect_qty: data.defect_qty,
       shift: currentShift.shift,
-      date: format(new Date(), 'yyyy-MM-dd')
+      date: businessDate
     });
 
     // 교대 알림에서 해당 설비 완료 처리
@@ -127,7 +139,7 @@ export const ProductionManager: React.FC<ProductionManagerProps> = ({
           }}
           machine={selectedMachine}
           shift={currentShift.shift}
-          date={format(new Date(), 'yyyy-MM-dd')}
+          date={businessDate}
           onSubmit={handleProductionRecordSubmit}
         />
       )}
