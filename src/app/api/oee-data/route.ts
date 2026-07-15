@@ -26,6 +26,12 @@ interface OeeRecordsSummary {
   avg_performance: number;
   avg_quality: number;
   avg_oee: number;
+  total_output: number;
+  total_defect: number;
+  total_good: number;
+  total_planned_runtime: number;
+  total_actual_runtime: number;
+  total_ideal_runtime: number;
   /**
    * 비가동 신뢰도 지표.
    *
@@ -38,6 +44,9 @@ interface OeeRecordsSummary {
   reported_records: number;
   avg_availability_reported: number;
   avg_oee_reported: number;
+  impossible_records: number;
+  avg_oee_excluding_impossible: number;
+  avg_quality_excluding_impossible: number;
 }
 
 /** 기본 조회 창(일). start_date/end_date 가 없을 때만 사용한다. */
@@ -140,10 +149,19 @@ export async function GET(request: NextRequest) {
       avg_performance: 0,
       avg_quality: 0,
       avg_oee: 0,
+      total_output: 0,
+      total_defect: 0,
+      total_good: 0,
+      total_planned_runtime: 0,
+      total_actual_runtime: 0,
+      total_ideal_runtime: 0,
       unreported_records: 0,
       reported_records: 0,
       avg_availability_reported: 0,
       avg_oee_reported: 0,
+      impossible_records: 0,
+      avg_oee_excluding_impossible: 0,
+      avg_quality_excluding_impossible: 0,
     };
     const totalRecords = Number(summary.total_records) || 0;
 
@@ -223,6 +241,20 @@ export async function GET(request: NextRequest) {
         avg_availability: Math.round(summary.avg_availability * 1000) / 1000,
         avg_performance: Math.round(summary.avg_performance * 1000) / 1000,
         avg_quality: Math.round(summary.avg_quality * 1000) / 1000,
+        total_output: Number(summary.total_output) || 0,
+        total_defect: Number(summary.total_defect) || 0,
+        total_good: Number(summary.total_good) || 0,
+        total_planned_runtime: Number(summary.total_planned_runtime) || 0,
+        total_actual_runtime: Number(summary.total_actual_runtime) || 0,
+        total_ideal_runtime: Number(summary.total_ideal_runtime) || 0,
+        aggregation_method: 'runtime_output_weighted',
+        data_quality: {
+          impossible_records: Number(summary.impossible_records) || 0,
+          avg_oee_excluding_impossible:
+            Math.round(summary.avg_oee_excluding_impossible * 1000) / 1000,
+          avg_quality_excluding_impossible:
+            Math.round(summary.avg_quality_excluding_impossible * 1000) / 1000,
+        },
 
         // 위 평균을 얼마나 믿을 수 있는지 나타내는 지표.
         // 비가동이 확인되지 않은 기록은 가동률이 100% 로 잡혀 OEE 를 끌어올린다.

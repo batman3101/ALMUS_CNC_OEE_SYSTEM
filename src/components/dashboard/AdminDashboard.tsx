@@ -31,12 +31,40 @@ interface AdminDashboardProps {
   onError?: (error: Error) => void;
 }
 
+interface AdminOeeAnalytics {
+  machine_analysis: Array<{
+    machine_id: string;
+    machine_name: string;
+    avg_oee: number;
+    avg_availability: number;
+    avg_performance: number;
+    avg_quality: number;
+    total_output: number;
+    total_defect_qty: number;
+    total_planned_runtime: number;
+    total_actual_runtime: number;
+    total_ideal_runtime: number;
+  }>;
+  trends: {
+    daily: Array<{
+      date: string;
+      avg_oee: number;
+      avg_availability: number;
+      avg_performance: number;
+      avg_quality: number;
+    }>;
+  };
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const { t, i18n } = useDashboardTranslation();
   const isClient = useClientOnly();
   const { notifications, acknowledgeNotification } = useNotifications();
   const { dateRange, getFormattedRange, preset } = useDateRange();
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [adminOeeAnalytics, setAdminOeeAnalytics] = useState<AdminOeeAnalytics | null>(null);
   const [dashboardData, setDashboardData] = useState<{
     machines: Machine[];
     models: unknown[];
@@ -58,6 +86,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     loading: recordsLoading,
     error: recordsError,
     aggregatedData,
+    aggregateSnapshot,
     refreshRecords
   } = useRealtimeProductionRecords({
     filters: {
@@ -68,6 +97,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     },
     limit: ADMIN_RECORD_LIMIT
   });
+
+  const currentAggregateScope = `${formattedRange.startDate}|${formattedRange.endDate}||`;
+
+  // Headline summary와 동일한 DB 시점이 확정된 뒤 설비별/일별 집계를 조회한다.
+  // Realtime 및 수동 refresh가 summary revision을 올리므로 세 통계가 함께 갱신된다.
+  useEffect(() => {
+    if (aggregateSnapshot.scopeKey !== currentAggregateScope) {
+      setAdminOeeAnalytics(null);
+      setAnalyticsLoading(recordsLoading);
+      if (!recordsLoading) setAnalyticsError('전체 기간 OEE 통계를 불러오지 못했습니다.');
+      return;
+    }
+
+    const controller = new AbortController();
+    const loadAnalytics = async () => {
+      setAnalyticsLoading(true);
+      setAnalyticsError(null);
+      try {
+        const params = new URLSearchParams({
+          start_date: formattedRange.startDate,
+          end_date: formattedRange.endDate,
+          analysis_type: 'summary',
+        });
+        const response = await fetch(`/api/productivity-analysis?${params}`, {
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json() as AdminOeeAnalytics;
+        setAdminOeeAnalytics(payload);
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Admin 전체 기간 OEE 분석 조회 실패:', error);
+          setAdminOeeAnalytics(null);
+          setAnalyticsError('전체 기간 OEE 분석을 불러오지 못했습니다.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setAnalyticsLoading(false);
+      }
+    };
+    void loadAnalytics();
+    return () => controller.abort();
+  }, [aggregateSnapshot, currentAggregateScope, formattedRange.startDate, formattedRange.endDate, recordsLoading]);
 
   // 실시간 알림 시스템 (현재 NotificationContext로 대체하여 비활성화)
   // const {
@@ -155,9 +227,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       performance: aggregated.avgPerformance / 100,
       quality: aggregated.avgQuality / 100,
       oee: aggregated.avgOEE / 100,
-      actual_runtime: productionRecords.reduce((sum, record) => sum + (record.actual_runtime || 0), 0),
-      planned_runtime: productionRecords.reduce((sum, record) => sum + (record.planned_runtime || 0), 0),
-      ideal_runtime: productionRecords.reduce((sum, record) => sum + (record.ideal_runtime || 0), 0),
+      actual_runtime: aggregated.totalActualRuntime,
+      planned_runtime: aggregated.totalPlannedRuntime,
+      ideal_runtime: aggregated.totalIdealRuntime,
       output_qty: aggregated.totalProduction,
       defect_qty: aggregated.totalDefects
     };
@@ -282,29 +354,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
   // 에러 핸들링 (mockRealtimeData는 에러가 없으므로 제거)
 
-  // 설비별 OEE 계산 (실시간 훅이 조회한 "선택된 기간"의 생산 기록 기반)
-  // 이전에는 /api/production-records를 중복 호출해 계산했으나, 이제 훅의 records가 단일 소스다.
+  // 설비별 OEE도 전체 기간 DB 집계를 사용한다. 원본 페이지는 상세 표시에만 사용한다.
   const machineOeeData = React.useMemo(() => {
     const oeeMetrics: Record<string, OEEMetrics> = {};
     // 생산 기록이 실제로 존재하는 설비 목록 (전체 OEE 평균 계산 시 데이터 없는 설비 제외용)
     const machinesWithData: string[] = [];
     const machines = dashboardData?.machines ?? [];
 
-    // 설비별 생산 기록 그룹핑 (설비 수 × 기록 수 이중 순회 방지)
-    const recordsByMachine = new Map<string, typeof productionRecords>();
-    productionRecords.forEach(record => {
-      const existing = recordsByMachine.get(record.machine_id);
-      if (existing) {
-        existing.push(record);
-      } else {
-        recordsByMachine.set(record.machine_id, [record]);
-      }
-    });
+    const analyticsByMachine = new Map(
+      (adminOeeAnalytics?.machine_analysis ?? []).map(row => [row.machine_id, row])
+    );
 
     machines.forEach((machine: Machine) => {
-      const machineProduction = recordsByMachine.get(machine.id) ?? [];
+      const machineAggregate = analyticsByMachine.get(machine.id);
 
-      if (machineProduction.length === 0) {
+      if (!machineAggregate) {
         // 생산 기록이 없는 경우 0으로 설정 (mock 데이터 제거)
         oeeMetrics[machine.id] = {
           availability: 0,
@@ -322,42 +386,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
       machinesWithData.push(machine.id);
 
-      const count = machineProduction.length;
-      const totals = machineProduction.reduce(
-        (acc, record) => {
-          acc.output += record.output_qty || 0;
-          acc.defects += record.defect_qty || 0;
-          acc.actualRuntime += record.actual_runtime || 0;
-          acc.plannedRuntime += record.planned_runtime || 0;
-          acc.idealRuntime += record.ideal_runtime || 0;
-          acc.oee += record.oee || 0;
-          acc.availability += record.availability || 0;
-          acc.performance += record.performance || 0;
-          acc.quality += record.quality || 0;
-          return acc;
-        },
-        {
-          output: 0, defects: 0, actualRuntime: 0, plannedRuntime: 0, idealRuntime: 0,
-          oee: 0, availability: 0, performance: 0, quality: 0
-        }
-      );
-
       oeeMetrics[machine.id] = {
-        // ✅ Supabase에 저장된 실제 값 사용 (DB에는 0~1 범위로 저장됨)
-        availability: totals.availability / count,
-        performance: totals.performance / count,
-        quality: totals.quality / count,
-        oee: totals.oee / count,
-        actual_runtime: totals.actualRuntime,
-        planned_runtime: totals.plannedRuntime,
-        ideal_runtime: totals.idealRuntime,
-        output_qty: totals.output,
-        defect_qty: totals.defects
+        availability: machineAggregate.avg_availability,
+        performance: machineAggregate.avg_performance,
+        quality: machineAggregate.avg_quality,
+        oee: machineAggregate.avg_oee,
+        actual_runtime: machineAggregate.total_actual_runtime,
+        planned_runtime: machineAggregate.total_planned_runtime,
+        ideal_runtime: machineAggregate.total_ideal_runtime,
+        output_qty: machineAggregate.total_output,
+        defect_qty: machineAggregate.total_defect_qty
       };
     });
 
     return { oeeMetrics, machinesWithData };
-  }, [dashboardData, productionRecords]);
+  }, [dashboardData, adminOeeAnalytics]);
 
   // 데이터 처리 및 계산
   const processedData = React.useMemo(() => {
@@ -386,33 +429,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       }
 
       // 대시보드 데이터가 있으면 우선 사용 (강제 조건 확인)
-      if (dashboardData && dashboardData.machines && Array.isArray(dashboardData.machines) && dashboardData.machines.length > 0) {
+      if (dashboardData && dashboardData.machines && Array.isArray(dashboardData.machines) && dashboardData.machines.length > 0 && adminOeeAnalytics && aggregateSnapshot.scopeKey === currentAggregateScope) {
         console.log('✅ 실제 데이터베이스 데이터 처리 시작 - 설비 수:', dashboardData.machines.length);
         const { machines: dbMachines } = dashboardData;
         const { oeeMetrics: dbOeeMetrics, machinesWithData: dbMachinesWithData } = machineOeeData;
 
-        // 생산 기록이 있는 설비만 전체 OEE 평균 계산에 포함 (데이터 없는 설비의 0%가 평균을 희석시키지 않도록)
-        const metricsWithData: OEEMetrics[] = (dbMachinesWithData || [])
-          .map(machineId => dbOeeMetrics[machineId])
-          .filter((metrics): metrics is OEEMetrics => !!metrics);
-        const machinesWithDataCount = metricsWithData.length;
-
-        const totalOEE = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.oee, 0) / machinesWithDataCount : 0;
-        const totalAvailability = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.availability, 0) / machinesWithDataCount : 0;
-        const totalPerformance = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.performance, 0) / machinesWithDataCount : 0;
-        const totalQuality = machinesWithDataCount > 0 ? metricsWithData.reduce((sum, metrics) => sum + metrics.quality, 0) / machinesWithDataCount : 0;
-
-        const overallMetrics: OEEMetrics = {
-          availability: totalAvailability,
-          performance: totalPerformance,
-          quality: totalQuality,
-          oee: totalOEE,
-          actual_runtime: metricsWithData.reduce((sum, metrics) => sum + metrics.actual_runtime, 0),
-          planned_runtime: metricsWithData.reduce((sum, metrics) => sum + metrics.planned_runtime, 0),
-          ideal_runtime: metricsWithData.reduce((sum, metrics) => sum + metrics.ideal_runtime, 0),
-          output_qty: metricsWithData.reduce((sum, metrics) => sum + metrics.output_qty, 0),
-          defect_qty: metricsWithData.reduce((sum, metrics) => sum + metrics.defect_qty, 0)
-        };
+        // 전체 카드는 원본 행 페이지가 아니라 DB 전체 범위 집계를 사용한다.
+        // 3개월 이상에서는 원본 행이 50,000건을 넘으므로 클라이언트 설비 평균을 다시
+        // 평균하면 최신 일부 데이터만 전체처럼 보이게 된다.
+        const overallMetrics = calculateRealTimeOEEMetrics();
         
         // 설비 목록에 OEE 정보 추가
         const machineList = dbMachines.map((machine: Machine) => ({
@@ -437,68 +462,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             time: t('time.realTime')
           }));
         
-        // 추이 데이터 - 선택된 기간에 따른 실제 생산 기록에서 계산
-        // dateRange를 사용한 필터링
-        const filteredRecords = productionRecords
-          .filter(record => {
-            const recordDate = new Date(record.date);
-            return recordDate >= dateRange.startDate && recordDate <= dateRange.endDate;
-          })
-          .sort((a, b) => {
-            const dateA = new Date(a.date);
-            const dateB = new Date(b.date);
-            return dateA.getTime() - dateB.getTime();
-          });
-
-        console.log('🔍 필터링된 레코드:', {
-          selectedPreset: preset,
-          dateRange: {
-            start: dateRange.startDate.toISOString(),
-            end: dateRange.endDate.toISOString()
-          },
-          totalRecords: productionRecords.length,
-          filteredCount: filteredRecords.length,
-          filteredDateRange: filteredRecords.length > 0 ? {
-            start: filteredRecords[0]?.date,
-            end: filteredRecords[filteredRecords.length - 1]?.date
-          } : 'No data',
-          sampleRecords: filteredRecords.slice(0, 3).map(r => ({
-            date: r.date,
-            oee: r.oee,
-            availability: r.availability
-          }))
-        });
-
-        // ✅ 날짜별로 집계 (A, B shift 평균) - 차트 가독성 향상
-        type DailyAggregatedItem = { date: string; records: typeof productionRecords };
-        const dailyAggregated = filteredRecords.reduce((acc: Record<string, DailyAggregatedItem>, record) => {
-          const date = record.date;
-          if (!acc[date]) {
-            acc[date] = {
-              date,
-              records: []
-            };
-          }
-          acc[date].records.push(record);
-          return acc;
-        }, {});
-
-        const trendData = Object.values(dailyAggregated).map((item: DailyAggregatedItem) => {
-          const records = item.records;
-          const avgAvailability = records.reduce((sum: number, r) => sum + (r.availability || 0), 0) / records.length;
-          const avgPerformance = records.reduce((sum: number, r) => sum + (r.performance || 0), 0) / records.length;
-          const avgQuality = records.reduce((sum: number, r) => sum + (r.quality || 0), 0) / records.length;
-          const avgOee = records.reduce((sum: number, r) => sum + (r.oee || 0), 0) / records.length;
-
-          return {
-            date: item.date,
-            // ✅ Supabase 데이터는 이미 0~1 범위 (0.79 = 79%)
-            availability: avgAvailability,
-            performance: avgPerformance,
-            quality: avgQuality,
-            oee: avgOee
-          };
-        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const trendData = (adminOeeAnalytics?.trends.daily ?? []).map(item => ({
+          date: item.date,
+          availability: item.avg_availability,
+          performance: item.avg_performance,
+          quality: item.avg_quality,
+          oee: item.avg_oee,
+        }));
 
         console.log('📊 차트용 변환된 데이터 (날짜별 집계):', {
           trendDataLength: trendData.length,
@@ -514,38 +484,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           machineList,
           alerts,
           trendData,
-          machinesWithDataCount
+          machinesWithDataCount: dbMachinesWithData.length
         };
       }
 
-      // 실시간 생산 기록 데이터가 있으면 사용 (로딩 완료 후)
-      // 주의: aggregatedData는 함수이므로 항상 truthy함 - 호출 결과에 실제 집계 데이터(recordCount > 0)가 있는지 확인해야 함
-      if (!recordsLoading && productionRecords.length > 0 && aggregatedData().recordCount > 0) {
-        console.log('Using realtime production records:', productionRecords.length);
+      // 설비 마스터 조회가 비어도 서버 집계 자체는 부분 raw 행으로 되돌리지 않는다.
+      if (!recordsLoading && adminOeeAnalytics && aggregateSnapshot.scopeKey === currentAggregateScope && aggregatedData().recordCount > 0) {
         const realTimeMetrics = calculateRealTimeOEEMetrics();
-        
-        // 실시간 설비 목록 (설비별 생산 기록에 기반)
-        const machineProductionMap = new Map();
-        productionRecords.forEach(record => {
-          if (!machineProductionMap.has(record.machine_id)) {
-            machineProductionMap.set(record.machine_id, []);
-          }
-          machineProductionMap.get(record.machine_id).push(record);
-        });
 
-        const machineList = Array.from(machineProductionMap.entries()).map(([machineId, records]: [string, typeof productionRecords]) => {
-          const avgOEE = records.reduce((sum, r) => sum + (r.oee || 0), 0) / records.length;
-          
+        const machineList = adminOeeAnalytics.machine_analysis.map(machine => {
           return {
-            id: machineId,
-            name: `CNC-${machineId.padStart(3, '0')}`,
+            id: machine.machine_id,
+            name: machine.machine_name,
             location: 'Production Floor',
             is_active: true,
-            current_state: avgOEE > 0.7 ? 'NORMAL_OPERATION' as const : 'INSPECTION' as const,
+            current_state: machine.avg_oee > 0.7 ? 'NORMAL_OPERATION' as const : 'INSPECTION' as const,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            oee: avgOEE,
-            status: getStatusText(avgOEE > 0.7 ? 'NORMAL_OPERATION' : 'INSPECTION')
+            oee: machine.avg_oee,
+            status: getStatusText(machine.avg_oee > 0.7 ? 'NORMAL_OPERATION' : 'INSPECTION')
           };
         });
 
@@ -561,48 +518,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
             time: '실시간'
           }));
 
-        // 실시간 productionRecords를 trendData로 변환 (날짜 범위 필터링 포함)
-        const filteredRecords = productionRecords
-          .filter(record => {
-            const recordDate = new Date(record.date);
-            return recordDate >= dateRange.startDate && recordDate <= dateRange.endDate;
-          })
-          .sort((a, b) => {
-            const dateA = new Date(a.date);
-            const dateB = new Date(b.date);
-            return dateA.getTime() - dateB.getTime();
-          });
-
-        // ✅ 날짜별로 집계 (A, B shift 평균) - 차트 가독성 향상
-        type DailyAggregatedItem = { date: string; records: typeof productionRecords };
-        const dailyAggregated = filteredRecords.reduce((acc: Record<string, DailyAggregatedItem>, record) => {
-          const date = record.date;
-          if (!acc[date]) {
-            acc[date] = {
-              date,
-              records: []
-            };
-          }
-          acc[date].records.push(record);
-          return acc;
-        }, {});
-
-        const trendData = Object.values(dailyAggregated).map((item: DailyAggregatedItem) => {
-          const records = item.records;
-          const avgAvailability = records.reduce((sum: number, r) => sum + (r.availability || 0), 0) / records.length;
-          const avgPerformance = records.reduce((sum: number, r) => sum + (r.performance || 0), 0) / records.length;
-          const avgQuality = records.reduce((sum: number, r) => sum + (r.quality || 0), 0) / records.length;
-          const avgOee = records.reduce((sum: number, r) => sum + (r.oee || 0), 0) / records.length;
-
-          return {
-            date: item.date,
-            // ✅ Supabase 데이터는 이미 0~1 범위 (0.79 = 79%)
-            availability: avgAvailability,
-            performance: avgPerformance,
-            quality: avgQuality,
-            oee: avgOee
-          };
-        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const trendData = adminOeeAnalytics.trends.daily.map(item => ({
+          date: item.date,
+          availability: item.avg_availability,
+          performance: item.avg_performance,
+          quality: item.avg_quality,
+          oee: item.avg_oee,
+        }));
 
         console.log('📊 실시간 차트용 변환된 데이터 (날짜별 집계):', {
           trendDataLength: trendData.length,
@@ -623,7 +545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       }
 
       // 로딩 중일 때는 빈 데이터 반환 (에러 없이)
-      if (recordsLoading || dashboardLoading) {
+      if (recordsLoading || dashboardLoading || analyticsLoading || aggregateSnapshot.scopeKey !== currentAggregateScope) {
         console.log('Data is loading, returning empty data');
         return {
           overallMetrics: {
@@ -640,7 +562,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
 
       // 데이터가 없는 경우 에러 메시지 표시
       console.log('No data available, throwing error');
-      throw new Error('설비 데이터를 불러올 수 없습니다. Supabase 연결을 확인해주세요.');
+      throw new Error(analyticsError || '설비 데이터를 불러올 수 없습니다. Supabase 연결을 확인해주세요.');
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error processing admin dashboard data:', error);
@@ -673,7 +595,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         machinesWithDataCount: 0
       };
     }
-  }, [productionRecords, aggregatedData, dashboardData, machineOeeData]);
+  }, [productionRecords, aggregatedData, dashboardData, machineOeeData, adminOeeAnalytics, analyticsLoading, analyticsError, aggregateSnapshot.scopeKey, currentAggregateScope]);
 
   // 설비 상태별 통계 (실제 데이터베이스 기반)
   const machineStats = React.useMemo(() => {
@@ -785,7 +707,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   }
 
   return (
-    <Spin spinning={dashboardLoading} tip={t('adminDashboard.updatingMessage')}>
+    <Spin spinning={dashboardLoading || recordsLoading || analyticsLoading || aggregateSnapshot.scopeKey !== currentAggregateScope} tip={t('adminDashboard.updatingMessage')}>
       <div>
       {/* 헤더 */}
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

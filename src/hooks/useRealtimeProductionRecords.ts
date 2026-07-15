@@ -54,6 +54,33 @@ interface ProductionRecord {
   created_at: string;
 }
 
+interface ServerAggregateStatistics {
+  total_records: number;
+  avg_oee: number;
+  avg_availability: number;
+  avg_performance: number;
+  avg_quality: number;
+  total_output: number;
+  total_defect: number;
+  total_good: number;
+  total_planned_runtime: number;
+  total_actual_runtime: number;
+  total_ideal_runtime: number;
+  aggregation_method: 'runtime_output_weighted';
+  data_quality: {
+    impossible_records: number;
+    avg_oee_excluding_impossible: number;
+    avg_quality_excluding_impossible: number;
+  };
+  downtime_reporting: {
+    unreported_records: number;
+    reported_records: number;
+    unreported_ratio: number;
+    avg_availability_reported: number;
+    avg_oee_reported: number;
+  };
+}
+
 interface UseRealtimeProductionRecordsProps {
   initialData?: ProductionRecord[];
   filters?: {
@@ -76,6 +103,8 @@ export const useRealtimeProductionRecords = ({
   const [records, setRecords] = useState<ProductionRecord[]>(initialData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aggregateStats, setAggregateStats] = useState<ServerAggregateStatistics | null>(null);
+  const [aggregateSnapshot, setAggregateSnapshot] = useState({ scopeKey: '', revision: 0 });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // 기본 조회 조건 (호출부가 기간을 넘기지 않아도 최근 7일로 제한)
@@ -85,15 +114,60 @@ export const useRealtimeProductionRecords = ({
   const machineId = filters.machineId;
   const shift = filters.shift;
   const effectiveLimit = Math.min(Math.max(1, limit ?? DEFAULT_RECORD_LIMIT), MAX_RECORD_LIMIT);
+  const aggregateScopeKey = `${startDate}|${endDate}|${machineId ?? ''}|${shift ?? ''}`;
 
   // 실시간 구독 설정
   useEffect(() => {
     console.log('Setting up realtime subscription for production_records');
 
     let subscription: ReturnType<typeof supabase.channel> | null = null;
+    let aggregateRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let aggregateRequestVersion = 0;
     // 이 이펙트가 정리되었는지 표시한다. await 이후에는 항상 이 플래그를 확인해서
     // 이미 정리된 이펙트가 setState 하거나 채널을 남기지 않도록 한다.
     let cancelled = false;
+    setAggregateStats(null);
+
+    const fetchAggregateStats = async (): Promise<ServerAggregateStatistics> => {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+        limit: '1',
+        ...(machineId ? { machine_id: machineId } : {}),
+        ...(shift && shift !== 'ALL' ? { shift } : {}),
+      });
+      const response = await fetch(`/api/oee-data?${params}`);
+      if (!response.ok) {
+        throw new Error(`OEE aggregate HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      return payload.statistics as ServerAggregateStatistics;
+    };
+
+    const scheduleAggregateRefresh = () => {
+      if (aggregateRefreshTimer) clearTimeout(aggregateRefreshTimer);
+      aggregateRefreshTimer = setTimeout(async () => {
+        const requestVersion = ++aggregateRequestVersion;
+        try {
+          const statistics = await fetchAggregateStats();
+          if (!cancelled && requestVersion === aggregateRequestVersion) {
+            setAggregateStats(statistics);
+            setAggregateSnapshot(previous => ({
+              scopeKey: aggregateScopeKey,
+              revision: previous.revision + 1,
+            }));
+            setError(null);
+          }
+        } catch (aggregateError) {
+          if (!cancelled && requestVersion === aggregateRequestVersion) {
+            console.error('장기 기간 OEE 집계 새로고침 실패:', aggregateError);
+            setAggregateStats(null);
+            setAggregateSnapshot(previous => ({ scopeKey: '', revision: previous.revision + 1 }));
+            setError('전체 기간 OEE 통계를 새로고침하지 못했습니다.');
+          }
+        }
+      }, 500);
+    };
 
     // 생산 기록 새로고침 함수 (useEffect 내부에서 정의)
     const refreshRecords = async () => {
@@ -131,7 +205,15 @@ export const useRealtimeProductionRecords = ({
           query = query.eq('shift', shift);
         }
 
-        const { data, error } = await query;
+        // 원본 목록은 표/상세용 페이지이고, 통계는 전체 필터 범위를 DB에서 집계한다.
+        // 두 요청을 분리해야 3개월 이상에서 max_rows 또는 클라이언트 limit 때문에
+        // 통계가 최신 일부 행만 반영하는 문제가 생기지 않는다.
+        const statisticsPromise = fetchAggregateStats().catch(aggregateError => {
+          console.error('전체 기간 OEE 집계 조회 실패:', aggregateError);
+          return null;
+        });
+        const [recordsResult, statistics] = await Promise.all([query, statisticsPromise]);
+        const { data, error } = recordsResult;
         if (cancelled) return;
 
         if (error) {
@@ -158,11 +240,23 @@ export const useRealtimeProductionRecords = ({
         }
 
         setRecords(data || []);
+        setAggregateStats(statistics);
+        if (statistics) {
+          setAggregateSnapshot(previous => ({
+            scopeKey: aggregateScopeKey,
+            revision: previous.revision + 1,
+          }));
+        } else {
+          setAggregateSnapshot(previous => ({ scopeKey: '', revision: previous.revision + 1 }));
+          setError('전체 기간 OEE 통계를 불러오지 못했습니다.');
+        }
         console.log(`📊 Loaded ${data?.length || 0} production records`);
       } catch (err: unknown) {
         if (cancelled) return;
         console.error('Error fetching production records:', err);
         const errorMessage = err instanceof Error ? err.message : '생산 기록을 불러오는데 실패했습니다.';
+        setAggregateStats(null);
+        setAggregateSnapshot(previous => ({ scopeKey: '', revision: previous.revision + 1 }));
         setError(errorMessage);
       } finally {
         // 이미 정리된 이펙트의 응답이 현재 이펙트의 로딩 상태를 끄지 않도록 한다
@@ -234,6 +328,7 @@ export const useRealtimeProductionRecords = ({
                   ];
                 });
                 console.log('Production record added:', newRecord.record_id);
+                scheduleAggregateRefresh();
                 return;
               }
 
@@ -257,6 +352,7 @@ export const useRealtimeProductionRecords = ({
 
                 return updatedRecords;
               });
+              scheduleAggregateRefresh();
             }
           )
           .subscribe((status) => {
@@ -301,8 +397,11 @@ export const useRealtimeProductionRecords = ({
         subscription.unsubscribe();
         subscription = null;
       }
+      if (aggregateRefreshTimer) {
+        clearTimeout(aggregateRefreshTimer);
+      }
     };
-  }, [machineId, startDate, endDate, shift, effectiveLimit, initialData.length, refreshTrigger]);
+  }, [machineId, startDate, endDate, shift, effectiveLimit, initialData.length, refreshTrigger, aggregateScopeKey]);
 
   // 생산 기록 업데이트 함수
   const updateProductionRecord = useCallback(async (
@@ -368,84 +467,42 @@ export const useRealtimeProductionRecords = ({
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
-  // 집계 데이터 계산 (records가 바뀔 때만 1회 순회)
+  // 전체 기간 통계는 원본 페이지가 아니라 DB 집계 응답만 사용한다.
+  // 집계 요청이 실패한 경우 부분 raw 행을 전체 통계처럼 표시하지 않는다.
   const aggregatedResult = useMemo(() => {
-    const totals = records.reduce(
-      (acc, record) => {
-        acc.output += record.output_qty;
-        acc.defects += record.defect_qty;
-        acc.oee += record.oee;
-        acc.availability += record.availability;
-        acc.performance += record.performance;
-        acc.quality += record.quality;
-        return acc;
-      },
-      { output: 0, defects: 0, oee: 0, availability: 0, performance: 0, quality: 0 }
-    );
-
-    const count = records.length;
-    const average = (sum: number) => (count > 0 ? sum / count : 0);
-
-    // 비가동 신뢰도.
-    // 비가동은 작업자가 직접 입력한다. 입력하지 않으면 actual_runtime = planned_runtime 이 되어
-    // 가동률이 100% 로 잡히고 평균 OEE 가 부풀려진다 (downtime_minutes 가 null 인 기록).
-    // 평균만 보여주면 이 왜곡이 화면에서 보이지 않으므로,
-    // "비가동이 확인된 기록만의 평균"을 함께 계산해 호출부가 나란히 표시할 수 있게 한다.
-    const reported = records.filter(
-      record => record.downtime_minutes !== null && record.downtime_minutes !== undefined
-    );
-    const reportedCount = reported.length;
-    const reportedOeeSum = reported.reduce((sum, record) => sum + record.oee, 0);
-    const reportedAvailabilitySum = reported.reduce((sum, record) => sum + record.availability, 0);
-    const reportedAverage = (sum: number) => (reportedCount > 0 ? sum / reportedCount : 0);
-
-    // 물리적으로 불가능한 레거시 기록.
-    //
-    //   품질 = 양품 / 생산  이므로 생산이 0이면 품질은 0이고,
-    //   OEE = 가동률 x 성능 x 품질  이므로 OEE 도 반드시 0이다.
-    //   이론 생산시간도 생산량에서 나오므로 0이어야 한다.
-    //
-    // 그런데 옛 쓰기 경로가 남긴 기록 중에는 생산 수량이 0인데 OEE 가 0.43, 품질이 1.0 으로
-    // 저장된 것들이 있다(적용 시점 기준 전체 47,748건, 그중 OEE 가 양수인 것 36,078건).
-    // 이 행들은 평균 OEE·품질을 실제보다 높게 만든다.
-    //
-    // 과거 데이터는 복구하지 않기로 했으므로(계산식 변경 전 구간과 동일한 방침), 대신 화면이
-    // 이 사실을 숨기지 않도록 개수와 "제외했을 때의 평균"을 함께 계산해 호출부에 넘긴다.
-    // 판별 명제는 Edge Function(daily-oee-aggregation)의 isInconsistentEmptyShift 와 동일하다.
-    const isImpossibleRecord = (record: ProductionRecord): boolean =>
-      (record.output_qty ?? 0) <= 0 &&
-      ((record.oee ?? 0) !== 0 ||
-        (record.quality ?? 0) !== 0 ||
-        (record.ideal_runtime ?? 0) !== 0);
-
-    const valid = records.filter(record => !isImpossibleRecord(record));
-    const validCount = valid.length;
-    const validAverage = (sum: number) => (validCount > 0 ? sum / validCount : 0);
-    const validOeeSum = valid.reduce((sum, record) => sum + record.oee, 0);
-    const validQualitySum = valid.reduce((sum, record) => sum + record.quality, 0);
-
     return {
-      totalProduction: totals.output,
-      totalDefects: totals.defects,
-      totalGoodQuantity: totals.output - totals.defects,
-      avgOEE: Math.round(average(totals.oee) * 1000) / 10, // 소수점 1자리 %
-      avgAvailability: Math.round(average(totals.availability) * 1000) / 10,
-      avgPerformance: Math.round(average(totals.performance) * 1000) / 10,
-      avgQuality: Math.round(average(totals.quality) * 1000) / 10,
-      recordCount: count,
+      totalProduction: aggregateStats?.total_output ?? 0,
+      totalDefects: aggregateStats?.total_defect ?? 0,
+      totalGoodQuantity: aggregateStats?.total_good ?? 0,
+      totalPlannedRuntime: aggregateStats?.total_planned_runtime ?? 0,
+      totalActualRuntime: aggregateStats?.total_actual_runtime ?? 0,
+      totalIdealRuntime: aggregateStats?.total_ideal_runtime ?? 0,
+      avgOEE: aggregateStats ? Math.round(aggregateStats.avg_oee * 1000) / 10 : 0,
+      avgAvailability: aggregateStats ? Math.round(aggregateStats.avg_availability * 1000) / 10 : 0,
+      avgPerformance: aggregateStats ? Math.round(aggregateStats.avg_performance * 1000) / 10 : 0,
+      avgQuality: aggregateStats ? Math.round(aggregateStats.avg_quality * 1000) / 10 : 0,
+      recordCount: aggregateStats?.total_records ?? 0,
 
       // 비가동 미입력 규모 및 "확인된 기록만"의 지표 (모두 % 단위, 소수점 1자리)
-      unreportedCount: count - reportedCount,
-      reportedCount,
-      avgOEEReported: Math.round(reportedAverage(reportedOeeSum) * 1000) / 10,
-      avgAvailabilityReported: Math.round(reportedAverage(reportedAvailabilitySum) * 1000) / 10,
+      unreportedCount: aggregateStats?.downtime_reporting.unreported_records ?? 0,
+      reportedCount: aggregateStats?.downtime_reporting.reported_records ?? 0,
+      avgOEEReported: aggregateStats
+        ? Math.round(aggregateStats.downtime_reporting.avg_oee_reported * 1000) / 10
+        : 0,
+      avgAvailabilityReported: aggregateStats
+        ? Math.round(aggregateStats.downtime_reporting.avg_availability_reported * 1000) / 10
+        : 0,
 
       // 물리적으로 불가능한 레거시 기록 규모 및 "그 행들을 제외한" 지표
-      impossibleCount: count - validCount,
-      avgOEEExcludingImpossible: Math.round(validAverage(validOeeSum) * 1000) / 10,
-      avgQualityExcludingImpossible: Math.round(validAverage(validQualitySum) * 1000) / 10
+      impossibleCount: aggregateStats?.data_quality.impossible_records ?? 0,
+      avgOEEExcludingImpossible: aggregateStats
+        ? Math.round(aggregateStats.data_quality.avg_oee_excluding_impossible * 1000) / 10
+        : 0,
+      avgQualityExcludingImpossible: aggregateStats
+        ? Math.round(aggregateStats.data_quality.avg_quality_excluding_impossible * 1000) / 10
+        : 0
     };
-  }, [records]);
+  }, [aggregateStats]);
 
   // 호출부 시그니처 유지: aggregatedData()는 메모된 결과를 그대로 반환한다.
   const aggregatedData = useCallback(() => aggregatedResult, [aggregatedResult]);
@@ -458,6 +515,7 @@ export const useRealtimeProductionRecords = ({
     updateProductionRecord,
     deleteProductionRecord,
     aggregatedData,
+    aggregateSnapshot,
     setError
   };
 };

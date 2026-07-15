@@ -371,6 +371,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     downtimeData,
     productionData,
     machineDowntime,
+    overallPerformance,
     loading: engineerDataLoading,
     error: engineerDataError,
     refreshData: refreshEngineerData
@@ -437,7 +438,19 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       // 기간별 API 데이터가 있을 때는 API 데이터를 우선 사용
       let overallMetrics: OEEMetrics;
 
-      if (oeeData.length > 0) {
+      if (overallPerformance) {
+        overallMetrics = {
+          availability: overallPerformance.avg_availability,
+          performance: overallPerformance.avg_performance,
+          quality: overallPerformance.avg_quality,
+          oee: overallPerformance.avg_oee,
+          actual_runtime: 0,
+          planned_runtime: 0,
+          ideal_runtime: 0,
+          output_qty: overallPerformance.total_output_qty,
+          defect_qty: overallPerformance.total_defect_qty
+        };
+      } else if (oeeData.length > 0) {
         const totalRecords = oeeData.length;
         const avgOEE = oeeData.reduce((sum, item) => sum + item.oee, 0) / totalRecords;
         const avgAvailability = oeeData.reduce((sum, item) => sum + item.availability, 0) / totalRecords;
@@ -456,10 +469,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           defect_qty: 0
         };
       } else {
-        // 조건에 맞는 데이터가 없으면 빈 값을 보여준다.
-        // (예전에는 여기서 "설비별 최신 실적"으로 폴백해, 필터를 걸었는데도 필터가 적용되지 않은
-        //  평균이 카드에 표시됐다)
-        return getEmptyData();
+        overallMetrics = getEmptyData().overallMetrics;
       }
 
       // 설비별 분석 데이터.
@@ -507,7 +517,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       }
       return getEmptyData();
     }
-  }, [machines, machineStats, machineDowntime, effectiveMachineIds, oeeData, downtimeData, productionData, onError]);
+  }, [machines, machineStats, machineDowntime, effectiveMachineIds, overallPerformance, oeeData, downtimeData, productionData, onError]);
 
   // 등급 필터가 걸리면 그 등급의 설비만 표에 남긴다 (카드·추세와 같은 설비 집합).
   const filteredAnalysisData = React.useMemo(() => {

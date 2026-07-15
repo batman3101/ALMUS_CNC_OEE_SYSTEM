@@ -38,6 +38,8 @@ interface ProductivityAnalysisResponse {
   };
 }
 
+type OverallPerformance = ProductivityAnalysisResponse['summary']['overall_performance'];
+
 interface DowntimeAnalysisResponse {
   downtime_by_cause: Array<{
     state: string;
@@ -79,6 +81,7 @@ export const useEngineerData = (
   const [downtimeData, setDowntimeData] = useState<DowntimeData[]>([]);
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
   const [machineDowntime, setMachineDowntime] = useState<MachineDowntimeMap>({});
+  const [overallPerformance, setOverallPerformance] = useState<OverallPerformance | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,6 +155,7 @@ export const useEngineerData = (
       console.log('OEE 트렌드 데이터:', { sampleData: trendData.slice(0, 3), totalCount: trendData.length });
 
       if (requestId !== requestIdRef.current) return; // 오래된 응답은 반영하지 않음
+      setOverallPerformance(data.summary.overall_performance);
       setOeeData(trendData);
     } catch (error) {
       console.error('Error fetching OEE trend data:', error);
@@ -262,6 +266,7 @@ export const useEngineerData = (
     console.log(`🔄 엔지니어 데이터 새로고침 시작 - ${dateRangeInfo}, 설비: ${machineId || 'all'}, 교대: ${shiftInfo}`);
     setLoading(true);
     setError(null);
+    setOverallPerformance(null);
 
     try {
       await Promise.all([
@@ -297,6 +302,7 @@ export const useEngineerData = (
     downtimeData,
     productionData,
     machineDowntime,
+    overallPerformance,
     loading,
     error,
     refreshData

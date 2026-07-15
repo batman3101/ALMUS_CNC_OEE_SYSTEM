@@ -8,6 +8,7 @@ import {
   type PaginationMeta,
 } from '@/lib/pagination';
 import { unwrapJoin } from '@/types';
+import { calculateWeightedOEE } from '@/utils/weightedOee';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,13 +32,12 @@ interface ProductivityMachineRow {
   machine_name: string;
   equipment_type: string;
   records_count: number;
-  sum_performance: number;
-  sum_quality: number;
   total_output: number;
   total_defect_qty: number;
   total_good_qty: number;
   total_planned_runtime: number;
   total_actual_runtime: number;
+  total_ideal_runtime: number;
   best_shift: string | null;
   worst_shift: string | null;
   first_rn: number;
@@ -46,11 +46,11 @@ interface ProductivityMachineRow {
 interface ProductivityShiftRow {
   shift: string;
   records_count: number;
-  sum_oee: number;
-  sum_availability: number;
-  sum_performance: number;
-  sum_quality: number;
+  total_planned_runtime: number;
+  total_actual_runtime: number;
+  total_ideal_runtime: number;
   total_output: number;
+  total_defect_qty: number;
   total_good_qty: number;
   machines_count: number;
   first_rn: number;
@@ -59,23 +59,20 @@ interface ProductivityShiftRow {
 interface ProductivityDailyRow {
   date: string;
   records_count: number;
-  sum_oee: number;
-  sum_availability: number;
-  sum_performance: number;
-  sum_quality: number;
+  total_planned_runtime: number;
+  total_actual_runtime: number;
+  total_ideal_runtime: number;
   total_output: number;
+  total_defect_qty: number;
   total_good_qty: number;
   active_machines: number;
 }
 
 interface ProductivityTotals {
   records_count: number;
-  sum_availability: number | null;
-  sum_performance: number | null;
-  sum_quality: number | null;
-  sum_oee: number | null;
   total_planned_runtime: number | null;
   total_actual_runtime: number | null;
+  total_ideal_runtime: number | null;
   total_output_qty: number | null;
   total_defect_qty: number | null;
   unique_machines: number;
@@ -139,79 +136,101 @@ export async function GET(request: NextRequest) {
     const totalRecords = totals.records_count || 0;
     const totalPlannedRuntime = totals.total_planned_runtime || 0;
     const totalActualRuntime = totals.total_actual_runtime || 0;
+    const totalIdealRuntime = totals.total_ideal_runtime || 0;
     const totalOutputQty = totals.total_output_qty || 0;
     const totalDefectQty = totals.total_defect_qty || 0;
     const totalGoodQty = totalOutputQty - totalDefectQty;
 
-    const avgAvailability = (totals.sum_availability || 0) / totalRecords || 0;
-    const avgPerformance = (totals.sum_performance || 0) / totalRecords || 0;
-    const avgQuality = (totals.sum_quality || 0) / totalRecords || 0;
-    const avgOEE = (totals.sum_oee || 0) / totalRecords || 0;
+    const overallMetrics = calculateWeightedOEE({
+      totalPlannedRuntime,
+      totalActualRuntime,
+      totalIdealRuntime,
+      totalOutput: totalOutputQty,
+      totalDefects: totalDefectQty,
+    });
 
     // 설비별 생산성 분석 (RPC 가 최초 등장 순으로 돌려주므로 기존 삽입 순서와 동일하다)
     const machineAnalysis = aggregate.machines.map(machine => {
-      // 가동률은 레코드 단순 평균이 아닌 총 실제가동시간/총 계획가동시간 비율로 계산 (Simpson's paradox 방지)
-      const avg_availability = machine.total_planned_runtime > 0
-        ? machine.total_actual_runtime / machine.total_planned_runtime
-        : 0;
-      const avg_performance = machine.sum_performance / machine.records_count;
-      const avg_quality = machine.sum_quality / machine.records_count;
-      // OEE = 가동률 × 성능 × 품질 정의에 따라 재계산 (oee 컬럼의 단순 평균은 레코드 수에 따라 왜곡됨)
-      const avg_oee = avg_availability * avg_performance * avg_quality;
+      const metrics = calculateWeightedOEE({
+        totalPlannedRuntime: machine.total_planned_runtime,
+        totalActualRuntime: machine.total_actual_runtime,
+        totalIdealRuntime: machine.total_ideal_runtime,
+        totalOutput: machine.total_output,
+        totalDefects: machine.total_defect_qty,
+      });
 
       return {
         machine_id: machine.machine_id,
         machine_name: machine.machine_name,
         equipment_type: machine.equipment_type,
         records_count: machine.records_count,
-        avg_oee,
-        avg_availability,
-        avg_performance,
-        avg_quality,
+        avg_oee: metrics.oee,
+        avg_availability: metrics.availability,
+        avg_performance: metrics.performance,
+        avg_quality: metrics.quality,
         total_output: machine.total_output,
         total_good_qty: machine.total_good_qty,
         total_defect_qty: machine.total_defect_qty,
         total_planned_runtime: machine.total_planned_runtime,
         total_actual_runtime: machine.total_actual_runtime,
+        total_ideal_runtime: machine.total_ideal_runtime,
         defect_rate: machine.total_output > 0 ? (machine.total_defect_qty / machine.total_output) * 100 : 0,
-        utilization_rate: avg_availability,
-        efficiency_score: (avg_oee * 0.4) + (avg_performance * 0.3) + (avg_quality * 0.3),
+        utilization_rate: metrics.availability,
+        efficiency_score: (metrics.oee * 0.4) + (metrics.performance * 0.3) + (metrics.quality * 0.3),
         best_shift: machine.best_shift || '',
         worst_shift: machine.worst_shift || '',
       };
     }).sort((a, b) => b.avg_oee - a.avg_oee);
 
     // 교대별 생산성 분석
-    const shiftSummary = aggregate.shifts.map(shiftRow => ({
-      shift: shiftRow.shift,
-      records_count: shiftRow.records_count,
-      avg_oee: shiftRow.sum_oee / shiftRow.records_count,
-      avg_availability: shiftRow.sum_availability / shiftRow.records_count,
-      avg_performance: shiftRow.sum_performance / shiftRow.records_count,
-      avg_quality: shiftRow.sum_quality / shiftRow.records_count,
-      total_output: shiftRow.total_output,
-      total_good_qty: shiftRow.total_good_qty,
-      defect_rate: shiftRow.total_output > 0
-        ? ((shiftRow.total_output - shiftRow.total_good_qty) / shiftRow.total_output) * 100
-        : 0,
-      machines_count: shiftRow.machines_count,
-    })).sort((a, b) => b.avg_oee - a.avg_oee);
+    const shiftSummary = aggregate.shifts.map(shiftRow => {
+      const metrics = calculateWeightedOEE({
+        totalPlannedRuntime: shiftRow.total_planned_runtime,
+        totalActualRuntime: shiftRow.total_actual_runtime,
+        totalIdealRuntime: shiftRow.total_ideal_runtime,
+        totalOutput: shiftRow.total_output,
+        totalDefects: shiftRow.total_defect_qty,
+      });
+      return {
+        shift: shiftRow.shift,
+        records_count: shiftRow.records_count,
+        avg_oee: metrics.oee,
+        avg_availability: metrics.availability,
+        avg_performance: metrics.performance,
+        avg_quality: metrics.quality,
+        total_output: shiftRow.total_output,
+        total_good_qty: shiftRow.total_good_qty,
+        defect_rate: shiftRow.total_output > 0
+          ? (shiftRow.total_defect_qty / shiftRow.total_output) * 100
+          : 0,
+        machines_count: shiftRow.machines_count,
+      };
+    }).sort((a, b) => b.avg_oee - a.avg_oee);
 
     // 일별 생산성 트렌드
-    const sortedDailyTrends = aggregate.daily.map(day => ({
-      date: day.date,
-      avg_oee: day.sum_oee / day.records_count,
-      avg_availability: day.sum_availability / day.records_count,
-      avg_performance: day.sum_performance / day.records_count,
-      avg_quality: day.sum_quality / day.records_count,
-      total_output: day.total_output,
-      total_good_qty: day.total_good_qty,
-      defect_rate: day.total_output > 0
-        ? ((day.total_output - day.total_good_qty) / day.total_output) * 100
-        : 0,
-      records_count: day.records_count,
-      active_machines: day.active_machines,
-    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const sortedDailyTrends = aggregate.daily.map(day => {
+      const metrics = calculateWeightedOEE({
+        totalPlannedRuntime: day.total_planned_runtime,
+        totalActualRuntime: day.total_actual_runtime,
+        totalIdealRuntime: day.total_ideal_runtime,
+        totalOutput: day.total_output,
+        totalDefects: day.total_defect_qty,
+      });
+      return {
+        date: day.date,
+        avg_oee: metrics.oee,
+        avg_availability: metrics.availability,
+        avg_performance: metrics.performance,
+        avg_quality: metrics.quality,
+        total_output: day.total_output,
+        total_good_qty: day.total_good_qty,
+        defect_rate: day.total_output > 0
+          ? (day.total_defect_qty / day.total_output) * 100
+          : 0,
+        records_count: day.records_count,
+        active_machines: day.active_machines,
+      };
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Top/Bottom 성과 분석 (설비 수가 적을 때 상위/하위 목록이 겹치지 않도록 구성)
     const topCount = Math.min(5, machineAnalysis.length);
@@ -320,10 +339,10 @@ export async function GET(request: NextRequest) {
           total_records: totalRecords
         },
         overall_performance: {
-          avg_oee: Math.round(avgOEE * 100) / 100,
-          avg_availability: Math.round(avgAvailability * 100) / 100,
-          avg_performance: Math.round(avgPerformance * 100) / 100,
-          avg_quality: Math.round(avgQuality * 100) / 100,
+          avg_oee: Math.round(overallMetrics.oee * 10000) / 10000,
+          avg_availability: Math.round(overallMetrics.availability * 10000) / 10000,
+          avg_performance: Math.round(overallMetrics.performance * 10000) / 10000,
+          avg_quality: Math.round(overallMetrics.quality * 10000) / 10000,
           total_output_qty: totalOutputQty,
           total_good_qty: totalGoodQty,
           total_defect_qty: totalDefectQty,
@@ -364,6 +383,7 @@ export async function GET(request: NextRequest) {
       // 잘린 페이지인지 호출자가 알 수 있게 total/has_more 를 함께 싣는다.
       detailed_records_pagination: detailedRecordsPagination,
       metadata: {
+        aggregation_method: 'runtime_output_weighted',
         query_time: new Date().toISOString(),
         filters: {
           machine_id: machineId,
@@ -376,7 +396,7 @@ export async function GET(request: NextRequest) {
     };
 
     console.info('✅ 생산성 분석 완료:', {
-      평균OEE: avgOEE,
+      평균OEE: overallMetrics.oee,
       총생산량: totalOutputQty,
       설비수: response.summary.unique_machines,
       교대수: response.summary.shifts_analyzed
