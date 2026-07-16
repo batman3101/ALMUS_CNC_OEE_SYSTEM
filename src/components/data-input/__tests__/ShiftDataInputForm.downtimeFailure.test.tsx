@@ -181,14 +181,16 @@ describe('ShiftDataInputForm - 비가동 조회 실패 (#1)', () => {
       expect(savePosted(fetchMock)).toBe(true);
     });
 
-    // 화면의 0분을 확인된 무중단으로 승격하지 않는다. 서버가 원본 사건을 직접 집계한다.
+    // 조회에 실패한 화면의 0분을 서버로 보내지 않는다. 서버가 원본 사건을 직접
+    // 재집계하고, 서버 조회마저 실패하면 0 으로 단정하지 않고 NULL 을 유지한다
+    // (daily/downtimeCalculation.ts resolveConfirmedDowntimeMinutes).
     expect(screen.queryByText('downtime.confirmZeroTitle')).toBeNull();
     const dailyCall = fetchMock.mock.calls.find(
       ([url, init]) => String(url).includes('/api/production-records/daily') && init?.method === 'POST'
     );
     const payload = JSON.parse(String(dailyCall?.[1]?.body));
-    expect(payload.day_shift).toHaveProperty('downtime_confirmed', false);
     expect(payload.day_shift).not.toHaveProperty('total_downtime_minutes');
+    expect(payload.day_shift).not.toHaveProperty('downtime_confirmed');
   });
 
   it('조회에 성공하면 저장이 정상 진행된다 (차단이 과하게 걸리지 않는다)', async () => {

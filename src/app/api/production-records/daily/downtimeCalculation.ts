@@ -6,15 +6,23 @@ export interface DowntimeSourceInterval {
   is_planned?: boolean;
 }
 
-/** Empty rows prove only that no event was saved, not that the operator checked
- * the whole shift. Keep runtime unknown until zero downtime is confirmed. */
+/**
+ * 비가동 항목이 0건이면 실제로 비가동이 없었던 것으로 본다.
+ *
+ * 현장은 비가동이 발생했을 때만 기록한다. "비가동이 없었음"을 매 교대마다 별도로
+ * 확인/체크하도록 요구하면 지켜지지 않고, 정상 가동한 설비가 계산 보류(NULL)로
+ * 남는다. 2026-07-16 실제로 396건(전체 10.3%)이 이 이유로 OEE 미계산 상태였고
+ * 화면에는 0.0% 로 표시됐다.
+ *
+ * 단, `measuredMinutes === null` 은 다른 종류의 모름이다 — 비가동 조회 자체가
+ * 실패했다는 뜻이므로 0 으로 단정하지 않고 NULL 을 유지한다. "0건 조회됨"과
+ * "조회 못함"을 섞으면 안 된다.
+ */
 export function resolveConfirmedDowntimeMinutes(
-  measuredMinutes: number | null,
-  zeroDowntimeConfirmed: boolean
+  measuredMinutes: number | null
 ): number | null {
   if (measuredMinutes === null) return null;
-  if (measuredMinutes > 0) return measuredMinutes;
-  return zeroDowntimeConfirmed ? 0 : null;
+  return measuredMinutes > 0 ? measuredMinutes : 0;
 }
 
 /**

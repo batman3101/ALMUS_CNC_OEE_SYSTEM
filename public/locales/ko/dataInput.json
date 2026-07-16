@@ -181,7 +181,8 @@
     "checkingExistingRecords": "기존 생산 기록 확인 중...",
     "loadFailedTitle": "기존 생산 기록을 불러오지 못했습니다",
     "loadFailedDescription": "기록 없음으로 처리하면 기존 교대 데이터가 삭제될 수 있어 저장을 차단했습니다. 설비 또는 날짜를 다시 선택해 조회를 재시도하세요.",
-    "loadFailedBlockSave": "기존 생산 기록 조회에 실패해 저장할 수 없습니다. 다시 조회해 주세요."
+    "loadFailedBlockSave": "기존 생산 기록 조회에 실패해 저장할 수 없습니다. 다시 조회해 주세요.",
+    "oeeUnreported": "미보고"
   },
   "common": {
     "off": "휴무",

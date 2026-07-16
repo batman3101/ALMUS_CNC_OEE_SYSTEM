@@ -42,12 +42,14 @@ interface ProductionRecord {
   shift: 'A' | 'B';
   output_qty: number;
   defect_qty: number;
-  planned_runtime?: number;
-  actual_runtime?: number;
-  availability?: number;
-  performance?: number;
-  quality?: number;
-  oee?: number;
+  // 비가동/실가동이 확인되지 않은 기록은 서버가 NULL 로 남긴다(0 으로 추정하지 않는다).
+  // null 을 표현할 수 있어야 "미보고"와 "실제 0%"를 구분할 수 있다.
+  planned_runtime?: number | null;
+  actual_runtime?: number | null;
+  availability?: number | null;
+  performance?: number | null;
+  quality?: number | null;
+  oee?: number | null;
   created_at?: string;
   machine?: {
     id: string;
@@ -310,8 +312,14 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       key: 'oee',
       width: 80,
       align: 'right' as const,
-      render: (oee: number) => {
-        const oeePercent = (oee || 0) * 100;
+      render: (oee: number | null | undefined) => {
+        // OEE 가 NULL 인 기록은 "0%"가 아니라 "미보고"다. 비가동/실가동이 확인되지
+        // 않아 서버가 계산을 보류한 상태이며, 0 으로 뭉개면 정상 가동 중인 설비가
+        // 완전 정지처럼 빨갛게 보인다 (EngineerDashboard 의 oeeUnavailable 과 동일 규약).
+        if (oee === null || oee === undefined) {
+          return <Tag>{t('recordList.oeeUnreported')}</Tag>;
+        }
+        const oeePercent = oee * 100;
         let color = 'green';
         if (oeePercent < 60) color = 'red';
         else if (oeePercent < 80) color = 'orange';
