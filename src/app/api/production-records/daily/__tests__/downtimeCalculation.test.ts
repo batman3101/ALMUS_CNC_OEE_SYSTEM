@@ -36,21 +36,20 @@ describe('daily production downtime calculation', () => {
   });
 });
 
-describe('daily production zero-downtime confirmation', () => {
-  it('keeps an empty unconfirmed shift unknown', () => {
-    expect(resolveConfirmedDowntimeMinutes(0, false)).toBeNull();
+describe('daily production zero-downtime resolution', () => {
+  // 현장은 비가동이 발생했을 때만 기록한다. "없었음"을 매 교대 확인하게 하면
+  // 지켜지지 않고, 정상 가동 설비가 OEE 미계산(NULL)으로 남는다.
+  it('treats an empty shift as genuinely zero downtime', () => {
+    expect(resolveConfirmedDowntimeMinutes(0)).toBe(0);
   });
 
-  it('accepts an explicitly confirmed zero-downtime shift', () => {
-    expect(resolveConfirmedDowntimeMinutes(0, true)).toBe(0);
+  it('passes measured downtime through', () => {
+    expect(resolveConfirmedDowntimeMinutes(35)).toBe(35);
   });
 
-  it('accepts measured downtime without a separate zero confirmation', () => {
-    expect(resolveConfirmedDowntimeMinutes(35, false)).toBe(35);
-  });
-
-  it('never converts a failed source read into confirmed zero', () => {
-    expect(resolveConfirmedDowntimeMinutes(null, true)).toBeNull();
+  // "0건 조회됨"과 "조회 못함"은 다르다. 후자를 0 으로 단정하면 데이터 조작이다.
+  it('never converts a failed source read into zero', () => {
+    expect(resolveConfirmedDowntimeMinutes(null)).toBeNull();
   });
 });
 

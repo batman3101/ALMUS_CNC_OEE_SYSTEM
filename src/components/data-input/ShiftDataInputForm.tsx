@@ -84,7 +84,6 @@ interface ShiftSavePayload {
   actual_production: number;
   defect_quantity: number;
   operating_minutes: number;
-  downtime_confirmed: boolean;
 }
 
 // day_shift / night_shift 를 생략하면(undefined) 서버는 그 교대를 저장하지도, 삭제하지도 않는다.
@@ -187,8 +186,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
   const [nightShiftOff, setNightShiftOff] = useState<boolean>(false);
   const [dayShiftWorkingConfirmed, setDayShiftWorkingConfirmed] = useState(false);
   const [nightShiftWorkingConfirmed, setNightShiftWorkingConfirmed] = useState(false);
-  const [dayZeroDowntimeConfirmed, setDayZeroDowntimeConfirmed] = useState(false);
-  const [nightZeroDowntimeConfirmed, setNightZeroDowntimeConfirmed] = useState(false);
   const initialClockAppliedRef = useRef(false);
 
   React.useEffect(() => {
@@ -321,8 +318,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
         setExistingNightRecord(nightRecord || null);
         setDayShiftWorkingConfirmed(Boolean(dayRecord) || dayState?.status === 'WORKING');
         setNightShiftWorkingConfirmed(Boolean(nightRecord) || nightState?.status === 'WORKING');
-        setDayZeroDowntimeConfirmed(dayRecord?.downtime_minutes === 0);
-        setNightZeroDowntimeConfirmed(nightRecord?.downtime_minutes === 0);
 
         // 기존 데이터가 있으면 폼에 반영, 없으면 이전 설비/날짜의 값이 남아있지 않도록 0으로 초기화 (F1)
         if (dayRecord) {
@@ -368,8 +363,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
         setExistingNightRecord(null);
         setDayShiftWorkingConfirmed(dayState?.status === 'WORKING');
         setNightShiftWorkingConfirmed(nightState?.status === 'WORKING');
-        setDayZeroDowntimeConfirmed(false);
-        setNightZeroDowntimeConfirmed(false);
         setDayShiftData(prev => ({
           ...prev,
           actual_production: 0,
@@ -388,8 +381,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       console.error('Error loading existing production records:', error);
       setExistingDayRecord(null);
       setExistingNightRecord(null);
-      setDayZeroDowntimeConfirmed(false);
-      setNightZeroDowntimeConfirmed(false);
       setProductionRecordsLoadFailed(true);
     } finally {
       if (!isStale()) {
@@ -472,8 +463,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     setNightShiftOff(false);
     setDayShiftWorkingConfirmed(false);
     setNightShiftWorkingConfirmed(false);
-    setDayZeroDowntimeConfirmed(false);
-    setNightZeroDowntimeConfirmed(false);
     setDayShiftOperatingMinutes(DEFAULT_OPERATING_MINUTES);
     setNightShiftOperatingMinutes(DEFAULT_OPERATING_MINUTES);
     setDayShiftData(prev => ({
@@ -905,10 +894,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       };
       if (activeShift === 'DAY') {
         setDayShiftData(appendEntry);
-        setDayZeroDowntimeConfirmed(false);
       } else {
         setNightShiftData(appendEntry);
-        setNightZeroDowntimeConfirmed(false);
       }
 
       message.success(t('messages.downtimeAdded'));
@@ -987,8 +974,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       };
       setDayShiftData(previous => removeEntry(previous, 'DAY'));
       setNightShiftData(previous => removeEntry(previous, 'NIGHT'));
-      setDayZeroDowntimeConfirmed(false);
-      setNightZeroDowntimeConfirmed(false);
       message.success(t('messages.downtimeDeleted'));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1157,7 +1142,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
             actual_production: dayShiftData.actual_production,
             defect_quantity: dayShiftData.defect_quantity,
             operating_minutes: dayShiftOperatingMinutes,
-            downtime_confirmed: dayShiftData.total_downtime_minutes > 0 || dayZeroDowntimeConfirmed,
           }
         }),
         ...(shouldSubmitShift(nightShiftData, nightShiftOff, existingNightRecord, nightShiftWorkingConfirmed) && {
@@ -1165,7 +1149,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
             actual_production: nightShiftData.actual_production,
             defect_quantity: nightShiftData.defect_quantity,
             operating_minutes: nightShiftOperatingMinutes,
-            downtime_confirmed: nightShiftData.total_downtime_minutes > 0 || nightZeroDowntimeConfirmed,
           }
         })
       };
@@ -1206,8 +1189,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       setNightShiftOff(false);
       setDayShiftWorkingConfirmed(false);
       setNightShiftWorkingConfirmed(false);
-      setDayZeroDowntimeConfirmed(false);
-      setNightZeroDowntimeConfirmed(false);
       setDayShiftOperatingMinutes(720);
       setNightShiftOperatingMinutes(720);
       setDayShiftData({
@@ -1410,7 +1391,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                       setDayShiftOff(e.target.checked);
                       if (e.target.checked) {
                         setDayShiftWorkingConfirmed(false);
-                        setDayZeroDowntimeConfirmed(false);
                       }
                     }}
                   >
@@ -1423,15 +1403,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                   >
                     {t('shift.workingZeroConfirmed')}
                   </Checkbox>
-                  {!dayShiftOff && dayShiftData.total_downtime_minutes === 0 && (
-                    <Checkbox
-                      checked={dayZeroDowntimeConfirmed}
-                      disabled={downtimeLoadFailed.DAY}
-                      onChange={(event) => setDayZeroDowntimeConfirmed(event.target.checked)}
-                    >
-                      {t('downtime.confirmZeroOk')}
-                    </Checkbox>
-                  )}
                 </Space>
                 {!dayShiftOff && (
                   <div>
@@ -1478,7 +1449,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                       setNightShiftOff(e.target.checked);
                       if (e.target.checked) {
                         setNightShiftWorkingConfirmed(false);
-                        setNightZeroDowntimeConfirmed(false);
                       }
                     }}
                   >
@@ -1491,15 +1461,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                   >
                     {t('shift.workingZeroConfirmed')}
                   </Checkbox>
-                  {!nightShiftOff && nightShiftData.total_downtime_minutes === 0 && (
-                    <Checkbox
-                      checked={nightZeroDowntimeConfirmed}
-                      disabled={downtimeLoadFailed.NIGHT}
-                      onChange={(event) => setNightZeroDowntimeConfirmed(event.target.checked)}
-                    >
-                      {t('downtime.confirmZeroOk')}
-                    </Checkbox>
-                  )}
                 </Space>
                 {!nightShiftOff && (
                   <div>

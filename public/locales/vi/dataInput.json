@@ -181,7 +181,8 @@
     "checkingExistingRecords": "Đang kiểm tra bản ghi sản xuất hiện có...",
     "loadFailedTitle": "Không thể tải bản ghi sản xuất hiện có",
     "loadFailedDescription": "Việc coi lỗi tải là không có dữ liệu có thể xóa dữ liệu ca hiện có, vì vậy thao tác lưu đã bị chặn. Hãy chọn lại máy hoặc ngày để tải lại.",
-    "loadFailedBlockSave": "Không thể lưu vì tải bản ghi sản xuất hiện có thất bại. Vui lòng tải lại."
+    "loadFailedBlockSave": "Không thể lưu vì tải bản ghi sản xuất hiện có thất bại. Vui lòng tải lại.",
+    "oeeUnreported": "Chưa báo cáo"
   },
   "common": {
     "off": "Nghỉ",

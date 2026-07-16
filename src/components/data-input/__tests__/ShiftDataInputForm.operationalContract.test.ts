@@ -36,10 +36,13 @@ describe('ShiftDataInputForm operational contract', () => {
     expect(source).toMatch(/\.tz\(businessTimezone, true\)/);
   });
 
-  it('sends explicit zero-downtime confirmation instead of assuming empty means zero', () => {
-    expect(source).toMatch(/dayZeroDowntimeConfirmed/);
-    expect(source).toMatch(/nightZeroDowntimeConfirmed/);
-    expect(source).toMatch(/downtime_confirmed:\s*dayShiftData\.total_downtime_minutes > 0 \|\| dayZeroDowntimeConfirmed/);
-    expect(source).toMatch(/downtime_confirmed:\s*nightShiftData\.total_downtime_minutes > 0 \|\| nightZeroDowntimeConfirmed/);
+  it('does not ask the operator to confirm that no downtime happened', () => {
+    // 현장은 비가동이 발생했을 때만 기록한다. 별도 확인을 요구하면 지켜지지 않고
+    // 정상 가동 설비가 OEE 미계산으로 남는다 (2026-07-16: 396건 / 10.3%).
+    // 서버가 "비가동 0건 = 비가동 없음"으로 판단한다
+    // (daily/downtimeCalculation.ts resolveConfirmedDowntimeMinutes).
+    expect(source).not.toMatch(/ZeroDowntimeConfirmed/);
+    expect(source).not.toMatch(/downtime_confirmed/);
+    expect(source).not.toMatch(/downtime\.confirmZeroOk/);
   });
 });

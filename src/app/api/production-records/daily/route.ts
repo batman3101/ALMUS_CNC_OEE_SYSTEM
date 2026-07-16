@@ -25,7 +25,6 @@ interface ShiftInputData {
   actual_production: number;
   defect_quantity: number;
   operating_minutes: number;
-  downtime_confirmed?: boolean;
 }
 
 interface DailyProductionRequest {
@@ -357,10 +356,7 @@ export async function POST(request: NextRequest) {
       const metrics = calculateShiftMetrics({
         operatingMinutes: toNumber(shiftData.operating_minutes),
         breakMinutes,
-        downtimeMinutes: resolveConfirmedDowntimeMinutes(
-          downtimeMinutes,
-          shiftData.downtime_confirmed === true
-        ),
+        downtimeMinutes: resolveConfirmedDowntimeMinutes(downtimeMinutes),
         outputQty,
         defectQty,
         tactSeconds: parameters.minutesPerUnit * 60,
