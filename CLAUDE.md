@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CNC OEE Monitoring System - A real-time web application for monitoring and managing Overall Equipment Effectiveness (OEE) of CNC machines. Built with Next.js 14, TypeScript, Ant Design, and Supabase.
+CNC OEE Monitoring System - A real-time web application for monitoring and managing Overall Equipment Effectiveness (OEE) of CNC machines. Built with Next.js 16, React 19, TypeScript, Ant Design, and Supabase.
 
 ## Development Commands
 
@@ -36,7 +36,8 @@ npm run clean               # Clean cache directories
 ## Architecture
 
 ### Tech Stack
-- **Framework**: Next.js 14 (App Router)
+- **Runtime**: Node.js 24.18 LTS
+- **Framework**: Next.js 16 (App Router) with React 19
 - **Language**: TypeScript 5
 - **UI Library**: Ant Design 5.27+
 - **Database**: Supabase (PostgreSQL + Realtime)
@@ -85,7 +86,7 @@ src/
 │   ├── oeeCalculator.ts    # OEE calculation engine
 │   ├── dateTimeUtils.ts    # Date/time helpers
 │   └── notificationDetector.ts # Notification logic
-└── middleware.ts          # Next.js middleware (cache control)
+└── proxy.ts               # Next.js proxy (cache control)
 ```
 
 ## Key Architectural Patterns
@@ -178,7 +179,7 @@ Routes are organized by feature and follow RESTful conventions:
 API Route Patterns:
 - **Client-side**: Use `supabase` client from `src/lib/supabase.ts`
 - **Server-side**: Import Service Role client from `src/lib/supabase-admin.ts` for admin operations
-- **Authentication**: Middleware checks for valid session on protected routes (see `src/middleware.ts`)
+- **Request cache control**: Proxy adds development cache headers to non-API routes (see `src/proxy.ts`)
 - **RLS Bypass**: Service Role Key bypasses RLS for admin operations in API routes
 
 #### ⚠️ PostgREST silently truncates large queries

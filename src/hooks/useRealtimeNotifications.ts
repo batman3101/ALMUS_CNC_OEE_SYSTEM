@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { notification, message } from 'antd';
+import { App } from 'antd';
 import type { ProductionRecord, Machine } from '@/types';
 
 interface NotificationRule {
@@ -93,6 +93,7 @@ export const useRealtimeNotifications = ({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _machines = []
 }: UseRealtimeNotificationsProps = {}) => {
+  const { notification, message } = App.useApp();
   const [alerts, setAlerts] = useState<ProductionAlert[]>([]);
   const [rules, setRules] = useState<NotificationRule[]>(DEFAULT_NOTIFICATION_RULES);
   const [lastCheckTimestamp, setLastCheckTimestamp] = useState<number>(Date.now());
@@ -146,7 +147,7 @@ export const useRealtimeNotifications = ({
         });
       }
     }
-  }, []);
+  }, [notification]);
 
   // 알림 규칙 확인 및 알림 생성
   const checkNotificationRules = useCallback(() => {
@@ -304,7 +305,7 @@ export const useRealtimeNotifications = ({
       return permission;
     }
     return 'denied';
-  }, []);
+  }, [message]);
 
   // 알림 확인 처리
   const acknowledgeAlert = useCallback((alertId: string) => {

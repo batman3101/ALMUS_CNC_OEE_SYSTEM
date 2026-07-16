@@ -94,7 +94,7 @@ describe('service-role read route guards', () => {
     ['system settings', () => systemSettings.GET(request('/api/system-settings') as never)],
     ['system setting category', () => systemSettingCategory.GET(
       request('/api/system-settings/shift') as never,
-      { params: { category: 'shift' } }
+      { params: Promise.resolve({ category: 'shift' }) }
     )],
   ])('returns 401 before querying %s', async (_name, invoke) => {
     const response = await invoke() as unknown as { status: number };
@@ -160,11 +160,11 @@ describe('service-role read route guards', () => {
     ['settings DELETE', () => systemSettings.DELETE(request('/api/system-settings') as never)],
     ['category PUT', () => systemSettingCategory.PUT(
       request('/api/system-settings/shift') as never,
-      { params: { category: 'shift' } }
+      { params: Promise.resolve({ category: 'shift' }) }
     )],
     ['category DELETE', () => systemSettingCategory.DELETE(
       request('/api/system-settings/shift') as never,
-      { params: { category: 'shift' } }
+      { params: Promise.resolve({ category: 'shift' }) }
     )],
   ])('protects %s before parsing or writing', async (_name, invoke) => {
     const response = await invoke() as unknown as { status: number };

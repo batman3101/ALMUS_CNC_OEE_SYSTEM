@@ -71,11 +71,11 @@ async function findEntry(id: string): Promise<ExistingDowntimeEntry | null> {
 // DELETE /api/downtime-entries/[id] - 담당 설비의 본인 사건 또는 관리자/엔지니어 사건 삭제
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    const { id } = params;
+    const { id } = await params;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Downtime entry ID is required' }, { status: 400 });
     }
@@ -120,11 +120,11 @@ export async function DELETE(
 // PATCH /api/downtime-entries/[id] - 동일 사건 ID를 version 조건으로 수정/종료한다.
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    const { id } = params;
+    const { id } = await params;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Downtime entry ID is required' }, { status: 400 });
     }

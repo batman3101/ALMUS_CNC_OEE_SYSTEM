@@ -8,7 +8,7 @@ import {
 } from '@/lib/machineUpdate';
 
 /**
- * 이 라우트는 서비스 롤(RLS 우회)로 동작하는데, src/middleware.ts 가 `/api` 를 matcher 에서
+ * 이 라우트는 서비스 롤(RLS 우회)로 동작하는데, src/proxy.ts 가 `/api` 를 matcher 에서
  * 제외하므로 프레임워크 차원의 인증이 전혀 걸리지 않는다. 따라서 라우트가 직접 세션과
  * 역할을 검사해야 한다. 검사하지 않으면 누구나 설비 테이블을 쓸 수 있다.
  */
@@ -23,9 +23,10 @@ function authErrorResponse(error: unknown): NextResponse | null {
 // PUT /api/admin/machines/[machineId] - 설비 정보 수정 (관리자 전용)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { machineId: string } }
+  { params }: { params: Promise<{ machineId: string }> }
 ) {
   try {
+    const { machineId } = await params;
     const { userId } = await requireUser(request, ['admin']);
 
     const body = await request.json();
@@ -44,7 +45,7 @@ export async function PUT(
     // 상태 변경 시 machine_logs / machine_status_history 기록까지 단일 트랜잭션으로 처리된다.
     // (이전 구현은 machines 테이블만 직접 UPDATE 하여 상태 이력이 남지 않았다)
     const result = await applyMachineUpdate(
-      params.machineId,
+      machineId,
       updates,
       typeof body.change_reason === 'string' ? body.change_reason : null,
       userId
@@ -67,16 +68,17 @@ export async function PUT(
 // DELETE /api/admin/machines/[machineId] - 설비 비활성화 (관리자 전용)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { machineId: string } }
+  { params }: { params: Promise<{ machineId: string }> }
 ) {
   try {
+    const { machineId } = await params;
     await requireUser(request, ['admin']);
 
     // 생산·비가동·상태 이력 보존을 위해 물리 삭제하지 않는다.
     const { data: deleted, error } = await supabaseAdmin
       .from('machines')
       .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', params.machineId)
+      .eq('id', machineId)
       .select('id')
       .maybeSingle();
 

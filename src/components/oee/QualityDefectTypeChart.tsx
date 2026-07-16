@@ -47,7 +47,10 @@ const COLORS = [
 ];
 
 // 커스텀 툴팁 컴포넌트
-const CustomTooltip: React.FC<TooltipContentProps<number, string>> = ({ active, payload }) => {
+const CustomTooltip = ({
+  active,
+  payload,
+}: TooltipContentProps<number, string>): React.ReactElement | null => {
   const { t } = useDashboardTranslation();
   if (active && payload && payload.length) {
     const data = payload[0].payload as QualityDefectTypeData;

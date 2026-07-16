@@ -1,5 +1,6 @@
 'use client';
 
+import '@ant-design/v5-patch-for-react-19';
 import React, { useMemo } from 'react';
 import { ConfigProvider, App, theme } from 'antd';
 import koKR from 'antd/locale/ko_KR';
@@ -48,7 +49,14 @@ const AntdConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       locale={locale}
       theme={themeConfig}
     >
-      <App>
+      <App
+        notification={{
+          placement: 'topRight',
+          duration: 4.5,
+          maxCount: 5,
+          rtl: false,
+        }}
+      >
         {children}
       </App>
     </ConfigProvider>
@@ -65,15 +73,15 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
           <UserPreferencesProvider>
             <LanguageProvider>
               <DateRangeProvider>
-                <NotificationProvider>
-                  <ToastNotificationProvider>
-                    <ThemeProvider>
-                      <AntdConfigProvider>
+                <ThemeProvider>
+                  <AntdConfigProvider>
+                    <ToastNotificationProvider>
+                      <NotificationProvider>
                         {children}
-                      </AntdConfigProvider>
-                    </ThemeProvider>
-                  </ToastNotificationProvider>
-                </NotificationProvider>
+                      </NotificationProvider>
+                    </ToastNotificationProvider>
+                  </AntdConfigProvider>
+                </ThemeProvider>
               </DateRangeProvider>
             </LanguageProvider>
           </UserPreferencesProvider>

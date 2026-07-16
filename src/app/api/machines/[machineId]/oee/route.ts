@@ -54,11 +54,11 @@ const round3 = (value: number | null): number | null =>
 // GET /api/machines/[machineId]/oee - 특정 설비의 OEE 데이터 조회
 export async function GET(
   request: NextRequest,
-  { params }: { params: { machineId: string } }
+  { params }: { params: Promise<{ machineId: string }> }
 ) {
   try {
+    const { machineId } = await params;
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    const { machineId } = params;
     assertMachineAccess(authenticatedUser, machineId);
 
     const { searchParams } = new URL(request.url);

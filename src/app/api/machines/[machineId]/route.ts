@@ -14,12 +14,13 @@ import {
 // GET /api/machines/[machineId] - 특정 설비 상세 정보 조회
 export async function GET(
   request: NextRequest,
-  { params }: { params: { machineId: string } }
+  { params }: { params: Promise<{ machineId: string }> }
 ) {
   try {
+    const { machineId } = await params;
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    assertMachineAccess(authenticatedUser, params.machineId);
-    console.log('GET /api/machines/[machineId] called with id:', params.machineId);
+    assertMachineAccess(authenticatedUser, machineId);
+    console.log('GET /api/machines/[machineId] called with id:', machineId);
 
     const { data: machine, error } = await supabaseAdmin
       .from('machines')
@@ -46,7 +47,7 @@ export async function GET(
           tact_time_seconds
         )
       `)
-      .eq('id', params.machineId)
+      .eq('id', machineId)
       .single();
 
     if (error) {
@@ -88,11 +89,12 @@ export async function GET(
 // PUT /api/machines/[machineId] - 설비 정보 수정
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { machineId: string } }
+  { params }: { params: Promise<{ machineId: string }> }
 ) {
   try {
+    const { machineId } = await params;
     const authenticatedUser = await requireUser(request, ['admin']);
-    console.log('PUT /api/machines/[machineId] called with id:', params.machineId);
+    console.log('PUT /api/machines/[machineId] called with id:', machineId);
 
     const body = await request.json();
     const {
@@ -134,7 +136,7 @@ export async function PUT(
 
     // 상태 변경에 따른 로그/이력 기록까지 RPC 안에서 원자적으로 처리된다
     const result = await applyMachineUpdate(
-      params.machineId,
+      machineId,
       updates,
       body.change_reason || null,
       authenticatedUser.userId
@@ -173,17 +175,18 @@ export async function PUT(
 // PATCH /api/machines/[machineId] - 설비 운영 정보 업데이트
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { machineId: string } }
+  { params }: { params: Promise<{ machineId: string }> }
 ) {
   try {
+    const { machineId } = await params;
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    assertMachineAccess(authenticatedUser, params.machineId);
-    console.log('PATCH /api/machines/[machineId] called with id:', params.machineId);
+    assertMachineAccess(authenticatedUser, machineId);
+    console.log('PATCH /api/machines/[machineId] called with id:', machineId);
 
     const { data: machineState, error: machineStateError } = await supabaseAdmin
       .from('machines')
       .select('is_active')
-      .eq('id', params.machineId)
+      .eq('id', machineId)
       .single();
     if (machineStateError || !machineState) {
       return NextResponse.json({ success: false, error: 'Machine not found' }, { status: 404 });
@@ -221,7 +224,7 @@ export async function PATCH(
 
     // 상태 변경에 따른 로그/이력 기록까지 RPC 안에서 원자적으로 처리된다
     const result = await applyMachineUpdate(
-      params.machineId,
+      machineId,
       updates,
       body.change_reason || null,
       authenticatedUser.userId

@@ -5,11 +5,12 @@ import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 // GET /api/product-models/[id] - 특정 생산 모델 조회
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await requireUser(request, ['admin', 'engineer', 'operator']);
-    console.log('GET /api/product-models/[id] called with id:', params.id);
+    console.log('GET /api/product-models/[id] called with id:', id);
 
     const { data: model, error } = await supabaseAdmin
       .from('product_models')
@@ -21,7 +22,7 @@ export async function GET(
         created_at,
         updated_at
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error) {

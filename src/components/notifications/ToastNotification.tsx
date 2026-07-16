@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { notification } from 'antd';
+import { App } from 'antd';
 import { 
   CheckCircleOutlined,
   ExclamationCircleOutlined,
@@ -10,15 +10,15 @@ import {
 } from '@ant-design/icons';
 import { ToastNotificationOptions } from '@/types/notifications';
 
-// Toast 알림 시스템을 위한 전역 설정
-notification.config({
-  placement: 'topRight',
-  duration: 4.5,
-  maxCount: 5,
-});
+type NotificationInstance = ReturnType<typeof App.useApp>['notification'];
+
+let notificationApi: NotificationInstance | null = null;
 
 // Toast 알림 표시 함수
 export const showToast = (options: ToastNotificationOptions) => {
+  const api = notificationApi;
+  if (!api) return;
+
   const { type, title, message, duration, action } = options;
 
   const getIcon = () => {
@@ -45,7 +45,7 @@ export const showToast = (options: ToastNotificationOptions) => {
         <button
           onClick={() => {
             action.onClick();
-            notification.destroy();
+            api.destroy();
           }}
           style={{
             background: 'transparent',
@@ -64,36 +64,37 @@ export const showToast = (options: ToastNotificationOptions) => {
 
   switch (type) {
     case 'success':
-      notification.success(notificationConfig);
+      api.success(notificationConfig);
       break;
     case 'error':
-      notification.error(notificationConfig);
+      api.error(notificationConfig);
       break;
     case 'warning':
-      notification.warning(notificationConfig);
+      api.warning(notificationConfig);
       break;
     case 'info':
     default:
-      notification.info(notificationConfig);
+      api.info(notificationConfig);
       break;
   }
 };
 
-// Toast 알림 컴포넌트 (전역 설정용)
 interface ToastNotificationProviderProps {
   children: React.ReactNode;
 }
 
 export const ToastNotificationProvider: React.FC<ToastNotificationProviderProps> = ({ children }) => {
+  const { notification } = App.useApp();
+
   useEffect(() => {
-    // 전역 Toast 설정 초기화
-    notification.config({
-      placement: 'topRight',
-      duration: 4.5,
-      maxCount: 5,
-      rtl: false,
-    });
-  }, []);
+    notificationApi = notification;
+
+    return () => {
+      if (notificationApi === notification) {
+        notificationApi = null;
+      }
+    };
+  }, [notification]);
 
   return <>{children}</>;
 };
@@ -117,5 +118,5 @@ export const toastInfo = (title: string, message: string, options?: Partial<Toas
 
 // 모든 Toast 알림 제거
 export const clearAllToasts = () => {
-  notification.destroy();
+  notificationApi?.destroy();
 };

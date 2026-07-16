@@ -98,22 +98,22 @@ describe('service-role mutation route guards', () => {
   it.each([
     ['downtime POST', () => downtimeCollection.POST(request() as never)],
     ['downtime GET', () => downtimeCollection.GET(request() as never)],
-    ['downtime DELETE', () => downtimeItem.DELETE(request() as never, { params: { id: '' } })],
-    ['downtime PATCH', () => downtimeItem.PATCH(request() as never, { params: { id: '' } })],
+    ['downtime DELETE', () => downtimeItem.DELETE(request() as never, { params: Promise.resolve({ id: '' }) })],
+    ['downtime PATCH', () => downtimeItem.PATCH(request() as never, { params: Promise.resolve({ id: '' }) })],
     ['daily production POST', () => dailyProduction.POST(request() as never)],
-    ['production PUT', () => productionItem.PUT(request() as never, { params: { recordId: 'record-1' } })],
-    ['production DELETE', () => productionItem.DELETE(request() as never, { params: { recordId: 'record-1' } })],
-    ['production PATCH', () => productionItem.PATCH(request() as never, { params: { recordId: 'record-1' } })],
-    ['machine PUT', () => machineItem.PUT(request() as never, { params: { machineId: 'machine-1' } })],
-    ['machine PATCH', () => machineItem.PATCH(request() as never, { params: { machineId: 'machine-1' } })],
+    ['production PUT', () => productionItem.PUT(request() as never, { params: Promise.resolve({ recordId: 'record-1' }) })],
+    ['production DELETE', () => productionItem.DELETE(request() as never, { params: Promise.resolve({ recordId: 'record-1' }) })],
+    ['production PATCH', () => productionItem.PATCH(request() as never, { params: Promise.resolve({ recordId: 'record-1' }) })],
+    ['machine PUT', () => machineItem.PUT(request() as never, { params: Promise.resolve({ machineId: 'machine-1' }) })],
+    ['machine PATCH', () => machineItem.PATCH(request() as never, { params: Promise.resolve({ machineId: 'machine-1' }) })],
   ])('returns 401 before processing %s', async (_name, invoke) => {
     const response = await invoke() as unknown as { status: number };
     expect(response.status).toBe(401);
   });
 
   it.each([
-    ['production DELETE', () => productionItem.DELETE(request() as never, { params: { recordId: 'record-1' } })],
-    ['machine PUT', () => machineItem.PUT(request() as never, { params: { machineId: 'machine-1' } })],
+    ['production DELETE', () => productionItem.DELETE(request() as never, { params: Promise.resolve({ recordId: 'record-1' }) })],
+    ['machine PUT', () => machineItem.PUT(request() as never, { params: Promise.resolve({ machineId: 'machine-1' }) })],
   ])('requires admin role for destructive/configuration operation: %s', async (_name, invoke) => {
     mockRequireUser.mockResolvedValue({
       userId: 'admin-1', role: 'admin', assignedMachineIds: [],
@@ -134,7 +134,7 @@ describe('service-role mutation route guards', () => {
 
     const response = await machineItem.PATCH(
       request({ current_state: 'NORMAL_OPERATION' }) as never,
-      { params: { machineId: 'machine-1' } }
+      { params: Promise.resolve({ machineId: 'machine-1' }) }
     ) as unknown as { status: number };
 
     expect(response.status).toBe(403);
@@ -158,16 +158,16 @@ describe('service-role mutation route guards', () => {
       date: '2026-07-14',
     }) as never)],
     ['downtime PATCH', () => downtimeItem.PATCH(request({ description: 'update', expected_version: 1 }) as never, {
-      params: { id: 'downtime-1' },
+      params: Promise.resolve({ id: 'downtime-1' }),
     })],
     ['downtime DELETE', () => downtimeItem.DELETE(request({ expected_version: 1 }) as never, {
-      params: { id: 'downtime-1' },
+      params: Promise.resolve({ id: 'downtime-1' }),
     })],
     ['production PUT', () => productionItem.PUT(request({ output_qty: 10 }) as never, {
-      params: { recordId: 'record-1' },
+      params: Promise.resolve({ recordId: 'record-1' }),
     })],
     ['production PATCH', () => productionItem.PATCH(request({ output_qty: 10 }) as never, {
-      params: { recordId: 'record-1' },
+      params: Promise.resolve({ recordId: 'record-1' }),
     })],
   ])('rejects an operator mutating an unassigned machine through %s', async (_name, invoke) => {
     mockRequireUser.mockResolvedValue({
@@ -289,7 +289,7 @@ describe('service-role mutation route guards', () => {
 
     const response = await downtimeItem.DELETE(
       request({ expected_version: 3 }) as never,
-      { params: { id: 'downtime-1' } }
+      { params: Promise.resolve({ id: 'downtime-1' }) }
     ) as unknown as { status: number };
 
     expect(response.status).toBe(200);
@@ -320,7 +320,7 @@ describe('service-role mutation route guards', () => {
 
     const response = await downtimeItem.PATCH(
       request({ end_time: '2026-07-15T01:00:00.000Z', expected_version: 3 }) as never,
-      { params: { id: 'downtime-1' } }
+      { params: Promise.resolve({ id: 'downtime-1' }) }
     ) as unknown as { status: number };
 
     expect(response.status).toBe(200);
@@ -350,7 +350,7 @@ describe('service-role mutation route guards', () => {
 
     const response = await downtimeItem.PATCH(
       request({ reason: 'plannedStop', expected_version: 3 }) as never,
-      { params: { id: 'downtime-1' } }
+      { params: Promise.resolve({ id: 'downtime-1' }) }
     ) as unknown as { status: number };
 
     expect(response.status).toBe(403);
@@ -375,7 +375,7 @@ describe('service-role mutation route guards', () => {
 
     const response = await productionItem.PUT(
       request({ output_qty: 20, defect_qty: 1 }) as never,
-      { params: { recordId: 'record-1' } }
+      { params: Promise.resolve({ recordId: 'record-1' }) }
     ) as unknown as { status: number };
 
     expect(response.status).toBe(200);
@@ -411,7 +411,7 @@ describe('service-role mutation route guards', () => {
 
     const response = await productionItem.PATCH(
       request({ output_qty: 5, defect_qty: 0 }) as never,
-      { params: { recordId: 'record-2' } }
+      { params: Promise.resolve({ recordId: 'record-2' }) }
     ) as unknown as { status: number };
 
     expect(response.status).toBe(200);
@@ -445,7 +445,7 @@ describe('service-role mutation route guards', () => {
 
     const response = await productionItem.PATCH(
       request({ output_qty: 5, defect_qty: 0, actual_runtime: 100 }) as never,
-      { params: { recordId: 'record-3' } }
+      { params: Promise.resolve({ recordId: 'record-3' }) }
     ) as unknown as { status: number };
 
     expect(response.status).toBe(200);

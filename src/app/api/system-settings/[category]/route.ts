@@ -27,11 +27,12 @@ const errorResponse = (error: unknown) => {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { category: string } }
+  { params }: { params: Promise<{ category: string }> }
 ) {
   try {
+    const { category: categoryParam } = await params;
     await requireUser(request, ['admin', 'engineer', 'operator']);
-    const category = parseCategory(params.category);
+    const category = parseCategory(categoryParam);
     if (!category) {
       return NextResponse.json({ success: false, error: 'Invalid category' }, { status: 400 });
     }
@@ -49,11 +50,12 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { category: string } }
+  { params }: { params: Promise<{ category: string }> }
 ) {
   try {
+    const { category: categoryParam } = await params;
     await requireUser(request, ['admin']);
-    const category = parseCategory(params.category);
+    const category = parseCategory(categoryParam);
     const body: unknown = await request.json();
     if (!category || !body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ success: false, error: 'Invalid settings data' }, { status: 400 });
@@ -81,11 +83,12 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { category: string } }
+  { params }: { params: Promise<{ category: string }> }
 ) {
   try {
+    const { category: categoryParam } = await params;
     await requireUser(request, ['admin']);
-    const category = parseCategory(params.category);
+    const category = parseCategory(categoryParam);
     if (!category) {
       return NextResponse.json({ success: false, error: 'Invalid category' }, { status: 400 });
     }

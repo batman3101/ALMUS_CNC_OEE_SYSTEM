@@ -93,9 +93,10 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
   const { user, loading: authLoading } = useAuth();
   const { getSetting, isLoading: settingsLoading } = useSystemSettings();
 
-  // localStorage 값으로 먼저 그려서 첫 페인트의 깜빡임을 줄인다.
-  const [language, setLanguageState] = useState<LanguageCode>(() => getStoredLanguage() ?? 'ko');
-  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => getStoredTheme() ?? 'light');
+  // SSR과 hydration의 첫 렌더는 반드시 동일해야 한다. localStorage는 브라우저에만
+  // 존재하므로 초기화 함수에서 읽지 않고, 아래 effect에서 마운트 후 복원한다.
+  const [language, setLanguageState] = useState<LanguageCode>('ko');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
   const [isResolved, setIsResolved] = useState(false);
 
   // 초기값은 "사용자 신원당 한 번"만 확정한다.

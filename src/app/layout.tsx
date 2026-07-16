@@ -32,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <head>
         {/* 로그인 페이지 prefetch - 로그아웃 시 빠른 로딩을 위해 */}
         <link rel="prefetch" href="/login" />
@@ -72,7 +72,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.className} ${notoSansKR.className} antialiased`}>
+      <body
+        className={`${inter.className} ${notoSansKR.className} antialiased`}
+        suppressHydrationWarning
+      >
         <Providers>
           <AppLayout>
             {children}

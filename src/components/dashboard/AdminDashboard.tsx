@@ -965,15 +965,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         onClose={() => setShowNotificationPanel(false)}
         open={showNotificationPanel}
         className="dark-drawer"
-        headerStyle={{
-          backgroundColor: '#1f1f1f',
-          color: '#ffffff',
-          borderBottom: '1px solid #333333'
-        }}
-        bodyStyle={{
-          backgroundColor: '#1f1f1f',
-          color: '#ffffff'
-        }}
         styles={{
           header: {
             backgroundColor: '#1f1f1f !important',

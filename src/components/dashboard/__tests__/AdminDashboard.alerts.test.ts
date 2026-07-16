@@ -59,4 +59,17 @@ describe('AdminDashboard alert eligibility', () => {
     expect(source).not.toMatch(/location:\s*'Production Floor'/);
     expect(source).not.toMatch(/current_state:\s*machine\.avg_oee\s*>\s*0\.7/);
   });
+
+  it('uses Drawer semantic styles instead of deprecated headerStyle and bodyStyle props', () => {
+    const source = fs.readFileSync(
+      path.join(process.cwd(), 'src/components/dashboard/AdminDashboard.tsx'),
+      'utf8'
+    );
+
+    expect(source).not.toMatch(/\bheaderStyle=/);
+    expect(source).not.toMatch(/\bbodyStyle=/);
+    expect(source).toMatch(
+      /<Drawer[\s\S]*?styles=\{\{[\s\S]*?header:\s*\{[\s\S]*?body:\s*\{/
+    );
+  });
 });
