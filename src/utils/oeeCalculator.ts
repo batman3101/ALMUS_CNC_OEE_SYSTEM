@@ -153,22 +153,22 @@ export class OEECalculator {
 
   /**
    * 이론 생산시간 계산
-   * @param outputQty 생산 수량
-   * @param tactTime 택트 타임 (초)
-   * @param cavityCount Cavity 수량 (기본값: 1)
+   *
+   * tactTime 은 **개당(1 piece) 가공시간**이다. JIG 의 cavity 수는 이미 개당 t/t 에
+   * 반영되어 있으므로(사이클 1,152초 / 2 cavity = 개당 576초) 여기서 cavity 로 나누면
+   * 이중 반영이 되어 이론시간이 절반으로 줄고 성능이 1/cavity 로 왜곡된다.
+   *
+   * @param outputQty 생산 수량 (개)
+   * @param tactTime 개당 택트 타임 (초)
    * @returns 이론 생산시간 (분)
    */
-  static calculateIdealRuntime(outputQty: number, tactTime: number, cavityCount: number = 1): number {
+  static calculateIdealRuntime(outputQty: number, tactTime: number): number {
     if (tactTime <= 0) {
       throw new Error(`${ErrorCodes.OEE_CALCULATION_ERROR}: 택트 타임은 0보다 커야 합니다.`);
     }
 
-    // Cavity 수량을 고려한 사이클 수 계산
-    const cavity = Math.max(1, cavityCount);
-    const cycles = outputQty / cavity;
-
-    // 이론 생산시간 = 사이클 수 × Tact Time (분 단위로 변환)
-    return (cycles * tactTime) / 60;
+    // 이론 생산시간 = 생산 수량 × 개당 Tact Time (분 단위로 변환)
+    return (outputQty * tactTime) / 60;
   }
 
   /**

@@ -577,17 +577,20 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
   const calculatePlannedRuntime = (operatingMinutes: number): number =>
     Math.max(0, operatingMinutes - breakTimeMinutes);
 
-  // 기준 생산량(CAPA) 계산 (분 단위 입력, 휴식 시간 차감 적용, 캐비티 수 반영) (F2)
+  // 기준 생산량(CAPA) = 계획 가동시간 / 개당 t/t
+  //
+  // tact_time_seconds 는 개당(1 piece) 가공시간이다. JIG 의 cavity 수는 이미 개당
+  // t/t 에 반영되어 있으므로 여기서 다시 곱하지 않는다 (이중 반영 방지).
+  // 서버(src/app/api/production-records/oeeRules.ts)의 minutesPerUnit 과 동일한 정의.
   const calculateCapacity = (
     tactTimeSeconds: number,
     operatingMinutes: number,
-    breakMinutes: number = 0,
-    cavityCount: number = 1
+    breakMinutes: number = 0
   ) => {
     if (!tactTimeSeconds || !operatingMinutes) return 0;
     // 실제 작업 가능 시간 = 가동시간 - 휴식시간
     const actualOperatingMinutes = Math.max(0, operatingMinutes - breakMinutes);
-    return Math.floor((actualOperatingMinutes * 60) / tactTimeSeconds) * Math.max(1, cavityCount);
+    return Math.floor((actualOperatingMinutes * 60) / tactTimeSeconds);
   };
 
   // 설비 선택 핸들러
@@ -1012,16 +1015,15 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       (!dayShiftOff ? dayShiftData.total_downtime_minutes : 0) + 
       (!nightShiftOff ? nightShiftData.total_downtime_minutes : 0);
 
-    // 기준 생산량(CAPA) = Tact Time * 교대조별 가동시간 (휴식 시간 차감, 캐비티 수 반영) (F2)
+    // 기준 생산량(CAPA) = 교대조별 계획 가동시간 / 개당 t/t (휴식 시간 차감) (F2)
     const tactTimeSeconds = machineDetails.currentProcess?.tact_time_seconds;
-    const cavityCount = machineDetails.currentProcess?.cavity_count || 1;
     // 화면에 표시되는 교대별 CAPA(공정 미설정 시 0으로 표시되는 것 포함)를 각각 계산 후 합산하여,
     // 일일 합계 CAPA 표시값과 항상 일치시킨다 (F3)
     const dayCapacity = !dayShiftOff && tactTimeSeconds
-      ? calculateCapacity(tactTimeSeconds, dayShiftOperatingMinutes, breakTimeMinutes, cavityCount)
+      ? calculateCapacity(tactTimeSeconds, dayShiftOperatingMinutes, breakTimeMinutes)
       : 0;
     const nightCapacity = !nightShiftOff && tactTimeSeconds
-      ? calculateCapacity(tactTimeSeconds, nightShiftOperatingMinutes, breakTimeMinutes, cavityCount)
+      ? calculateCapacity(tactTimeSeconds, nightShiftOperatingMinutes, breakTimeMinutes)
       : 0;
     const plannedCapacity = dayCapacity + nightCapacity;
 
@@ -1043,7 +1045,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     const plannedOperatingTime = dayPlannedRuntime + nightPlannedRuntime; // 분 단위
     const actualOperatingTime = dayActualRuntime + nightActualRuntime;
     const idealRuntime = tactTimeSeconds
-      ? (totalProduction / Math.max(1, cavityCount)) * tactTimeSeconds / 60
+      ? totalProduction * tactTimeSeconds / 60
       : 0;
 
     const availability = plannedOperatingTime > 0 ? actualOperatingTime / plannedOperatingTime : 0;
@@ -1438,7 +1440,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds
-                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes, breakTimeMinutes, machineDetails.currentProcess.cavity_count || 1)
+                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, dayShiftOperatingMinutes, breakTimeMinutes)
                         : 0
                       }{t('common.pieces')}
                     </Text>
@@ -1506,7 +1508,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                     </Text>
                     <Text strong style={{ color: '#1890ff', marginLeft: 8 }}>
                       CAPA: {machineDetails.currentProcess?.tact_time_seconds
-                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes, breakTimeMinutes, machineDetails.currentProcess.cavity_count || 1)
+                        ? calculateCapacity(machineDetails.currentProcess.tact_time_seconds, nightShiftOperatingMinutes, breakTimeMinutes)
                         : 0
                       }{t('common.pieces')}
                     </Text>

@@ -76,21 +76,19 @@ export const useProductionRecords = () => {
   }, []);
 
   // Tact Time 기반 추정 생산량 계산
+  //
+  // tactTime 은 개당(1 piece) 가공시간이다. JIG 의 cavity 수는 이미 개당 t/t 에
+  // 반영되어 있으므로 여기서 다시 곱하지 않는다 (이중 반영 방지).
   const calculateEstimatedOutput = useCallback((
-    tactTime: number, // 초 단위
-    actualRuntime: number, // 분 단위
-    cavityCount: number = 1 // Cavity 수량 (기본값: 1)
+    tactTime: number, // 개당 가공시간, 초 단위
+    actualRuntime: number // 분 단위
   ): number => {
     if (tactTime <= 0 || actualRuntime <= 0) return 0;
 
-    // 실제 가동 시간(분)을 초로 변환하고 Tact Time으로 나누어 사이클 수 계산
+    // 추정 생산량 = 실제 가동 시간(초) / 개당 Tact Time
     const runtimeInSeconds = actualRuntime * 60;
-    const cycles = Math.floor(runtimeInSeconds / tactTime);
 
-    // 사이클 수에 cavity 수를 곱하여 추정 생산량 계산
-    const estimatedOutput = cycles * Math.max(1, cavityCount);
-
-    return estimatedOutput;
+    return Math.floor(runtimeInSeconds / tactTime);
   }, []);
 
   return {

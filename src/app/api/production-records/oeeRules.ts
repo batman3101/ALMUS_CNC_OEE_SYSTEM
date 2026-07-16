@@ -1,3 +1,17 @@
+/**
+ * tact_time_seconds 는 **개당(1 piece) 가공시간**이다. 사이클당 시간이 아니다.
+ *
+ * JIG 에 2 cavity 가 올라가 한 사이클에 2개가 나오는 설비라면, 그 사실은 이미
+ * 개당 t/t 안에 반영되어 있다 (사이클 1,152초 / 2개 = 개당 576초). 따라서
+ * cavity_count 로 다시 나누거나 곱하면 이중 반영이 된다.
+ *
+ * cavity_count 는 **참고용**이다 (사이클 수 환산·JIG 구성 기록). OEE·CAPA 계산에
+ * 절대 사용하지 않는다:
+ *
+ *   minutes_per_unit = tact_time_seconds / 60
+ *   ideal_runtime    = output_qty × minutes_per_unit
+ *   CAPA             = 계획가동시간 / minutes_per_unit
+ */
 export const DEFAULT_TACT_SECONDS = 120;
 export const DEFAULT_CAVITY = 1;
 
@@ -59,7 +73,7 @@ export function resolveHistoricalProductionParameters(
     return {
       tactSeconds: existing.tact_time_seconds,
       cavity,
-      minutesPerUnit: existing.tact_time_seconds / 60 / cavity,
+      minutesPerUnit: existing.tact_time_seconds / 60,
     };
   }
 
@@ -76,7 +90,7 @@ export function resolveHistoricalProductionParameters(
   return {
     tactSeconds: safeCurrentTact,
     cavity: safeCurrentCavity,
-    minutesPerUnit: safeCurrentTact / 60 / safeCurrentCavity,
+    minutesPerUnit: safeCurrentTact / 60,
   };
 }
 
