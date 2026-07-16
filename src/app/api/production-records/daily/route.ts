@@ -113,7 +113,8 @@ function calculateShiftMetrics(params: {
       actualRuntime: 0,
       outputQty: params.outputQty,
       defectQty: params.defectQty,
-      minutesPerUnit: params.tactSeconds / 60 / Math.max(1, params.cavity),
+      // tact 는 개당(1 piece) 가공시간이므로 cavity 로 나누지 않는다 (oeeRules.ts 참고).
+      minutesPerUnit: params.tactSeconds / 60,
     });
     return {
       ...metrics,
@@ -133,7 +134,8 @@ function calculateShiftMetrics(params: {
       actualRuntime,
       outputQty: params.outputQty,
       defectQty: params.defectQty,
-      minutesPerUnit: params.tactSeconds / 60 / Math.max(1, params.cavity),
+      // tact 는 개당(1 piece) 가공시간이므로 cavity 로 나누지 않는다 (oeeRules.ts 참고).
+      minutesPerUnit: params.tactSeconds / 60,
     }),
     downtime,
   };

@@ -131,6 +131,36 @@ describe('POST /api/production-records', () => {
     }));
   });
 
+  it('never divides ideal_runtime by cavity — tact is already per-piece', async () => {
+    // 회귀 방지: tact 는 개당 가공시간이므로 JIG cavity 수와 무관하게
+    // ideal_runtime = output × tact/60 이어야 한다. cavity 로 나누면 이론시간이
+    // 1/cavity 로 줄어 성능이 그만큼 왜곡된다(현장 관측: 48.8% / 24.5%).
+    for (const current_cavity_count of [1, 2, 4]) {
+      jest.clearAllMocks();
+      insertSingle.mockResolvedValue({ data: { record_id: 'record-1' }, error: null });
+      productionInfo = { current_tact_time: 600, current_cavity_count };
+
+      const response = await POST({
+        json: async () => ({
+          machine_id: 'machine-1',
+          date: '2026-07-15',
+          shift: 'A',
+          output_qty: 60,
+          defect_qty: 0,
+          actual_runtime: 600,
+          planned_runtime: 660,
+        }),
+      } as never);
+
+      expect(response.status).toBe(200);
+      // 60개 × 600초/60 = 600분. cavity 가 몇이든 동일해야 한다.
+      expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+        ideal_runtime: 600,
+        performance: 1,
+      }));
+    }
+  });
+
   it('rejects new production records for a deactivated machine', async () => {
     machineActive = false;
 

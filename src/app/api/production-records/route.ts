@@ -41,7 +41,9 @@ function calculateOEEMetrics(params: {
     actualRuntime: actualRuntime ?? 0,
     outputQty: params.outputQty,
     defectQty: params.defectQty,
-    minutesPerUnit: params.tactSeconds / 60 / Math.max(1, params.cavity),
+    // tact 는 개당(1 piece) 가공시간이다. JIG 의 cavity 수는 이미 개당 t/t 에
+    // 반영돼 있으므로 여기서 나누면 이중 반영이 된다 (oeeRules.ts 주석 참고).
+    minutesPerUnit: params.tactSeconds / 60,
   });
 
   if (actualRuntime === null) {
