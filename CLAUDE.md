@@ -125,10 +125,58 @@ The dashboard adapts based on user role via `DashboardRouter` component:
   - `Availability` = Actual Runtime / Planned Runtime
   - `Performance` = Ideal Runtime / Actual Runtime
   - `Quality` = Good Qty / Total Output Qty
-  - `OEE` = Availability × Performance × Quality
+  - `OEE` = Availability × Performance × Quality (internal values are all 0..1)
 - **RealTimeOEECalculator**: Calculates OEE from machine logs in real-time
 - **OEECache**: 5-minute in-memory cache for calculated OEE metrics
 - **Shift Logic**: Supports 12-hour shifts (A: 08:00-20:00, B: 20:00-08:00)
+
+#### ⚠️ `tact_time_seconds` is PER-PIECE. Never divide by `cavity_count`.
+
+`model_processes.tact_time_seconds` is the time to produce **one piece**, not one cycle.
+A JIG holding 2 cavities yields 2 pieces per cycle, and **that is already baked into the
+per-piece value** (cycle 1,152s ÷ 2 cavities = 576s per piece).
+
+```
+ideal_runtime = output_qty × tact_time_seconds / 60
+CAPA          = planned_runtime / (tact_time_seconds / 60)
+```
+
+`cavity_count` is **reference-only** — cycle-count conversion (`output_qty / cavity`) and
+JIG configuration record. Using it in OEE/CAPA math double-counts and skews performance to
+exactly `1/cavity` (48.8% at cavity=2, 24.5% at cavity=4). This shipped as a real bug on
+2026-07-16 and hit every machine.
+
+**Five write paths compute this — change them together:**
+`api/production-records/oeeRules.ts`, `api/production-records/route.ts`,
+`api/production-records/daily/route.ts`, `api/production-records/[recordId]/route.ts`,
+`components/data-input/ShiftDataInputForm.tsx`.
+`src/app/api/production-records/__tests__/perPieceTactContract.test.ts` pins all of them.
+
+#### ⚠️ No downtime entry means no downtime
+
+Operators log downtime **only when it happens**; they never confirm that nothing broke.
+`resolveConfirmedDowntimeMinutes(measured)` → `measured > 0 ? measured : 0`.
+
+But `measured === null` (the downtime **query failed**) stays `NULL`. "Queried, found 0"
+and "couldn't query" are different kinds of unknown — asserting 0 for the latter fabricates
+data.
+
+#### ⚠️ A NULL metric is not 0%
+
+`NULL` means "not computable", not "0%". Coercing it (`oee || 0`) makes a healthy machine
+look dead — it rendered 396 rows as a red 0.0%. Type nullable metrics as `number | null`,
+never `number?`; the optional type cannot express "unknown" and is what enabled the bug.
+
+#### Units and shift boundaries
+- Time fields (`planned_runtime`, `actual_runtime`, `ideal_runtime`) are **minutes**; tact time is **seconds**.
+- `planned_runtime` = `max(0, operating_minutes − break_minutes)`; break comes from `system_settings(category='shift')`. See `src/lib/plannedRuntime.ts`.
+- **B shift crosses midnight.** Verify both shifts when touching date ranges, daily aggregation, or timezone logic.
+
+#### Snapshot preservation
+`production_records` stores `tact_time_seconds`, `cavity_count`, `ideal_runtime`,
+`performance`, and `oee` as **save-time snapshots**, so a later process change cannot
+rewrite a past shift's history. Consequence: **fixing calculation logic does not change
+existing rows** — they need an explicit recompute.
 
 ### State Management
 - **Context Providers** wrap the app in `src/app/providers.tsx` and `src/app/layout.tsx`:
@@ -138,7 +186,8 @@ The dashboard adapts based on user role via `DashboardRouter` component:
   - `LanguageProvider`: i18n language switching (Korean/Vietnamese)
   - `NotificationProvider`: Real-time notifications and alerts
   - `SystemSettingsProvider`: Global settings (shift times, break times, OEE thresholds)
-- **Provider Order**: AntdConfigProvider → ThemeProvider → AuthProvider → LanguageProvider → NotificationProvider → SystemSettingsProvider
+- **Provider Order** (actual, from `src/app/providers.tsx`): ConfigProvider → I18nextProvider → AuthProvider → SystemSettingsProvider → UserPreferencesProvider → LanguageProvider → DateRangeProvider → ThemeProvider → AntdConfigProvider → ToastNotificationProvider → NotificationProvider
+  - Inner providers consume outer contexts — verify dependencies before reordering.
 - **Local State**: Use `useState` for component-specific state
 - **Server State**: Fetched via Supabase queries, cached in React Query-like patterns
 
@@ -147,11 +196,18 @@ The dashboard adapts based on user role via `DashboardRouter` component:
 - `machine_logs`: Time-series state changes (NORMAL_OPERATION, ERROR, MAINTENANCE, etc.)
 - `production_records`: Production output, defects, and timestamps per shift
 - `user_profiles`: User info with role and assigned_machines (array of machine IDs)
-- `notifications`: System notifications with read/unread status
 - `system_settings`: Global configuration (shift_start_time, break_duration, oee_thresholds, etc.)
-- `product_models`: Product model definitions with tact times
-- `model_processes`: Process steps for each product model
-- `oee_aggregation_log`: Daily OEE aggregation execution logs
+- `product_models`: Product model definitions
+- `model_processes`: Process steps per model — holds `tact_time_seconds` (**per piece**) and `cavity_count` (**reference-only**)
+- `production_shift_states`: Persistent schedule/entry state. `MISSING` is distinct from `OFF`/`HOLIDAY` and from a `WORKING` production record.
+- `downtime_entries`: Downtime logged independently, before production entry
+- `machine_status_history`, `machine_status_descriptions`: Status change history and labels
+- `alert_acknowledgements`: Alert keys acknowledged/dismissed per admin/engineer
+- `system_settings_audit`, `audit_log`: Change history
+
+Verified against the live DB on 2026-07-16. **There is no `notifications` table and no
+`oee_aggregation_log` table** despite earlier docs claiming both — confirm table existence
+before writing queries against it.
 
 ### API Routes Structure (src/app/api/)
 Routes are organized by feature and follow RESTful conventions:
@@ -223,7 +279,7 @@ Critical hooks for feature development:
 - **useRealtimeMachines**: Real-time machine status updates
 - **useRealtimeNotifications**: Live notification system
 - **useSystemSettings**: Access global settings (shift times, OEE thresholds, break durations)
-- **useShiftTime**: Current shift calculation and time utilities
+- (Shift/time helpers live in `src/utils/shiftUtils.ts`, not a hook — there is no `useShiftTime`)
 - **useShiftNotification**: Shift end notification triggers (15 min before shift end)
 - **useOEEThresholds**: OEE status color coding (good/warning/poor)
 - **useTranslation**: i18n translation function with language context
