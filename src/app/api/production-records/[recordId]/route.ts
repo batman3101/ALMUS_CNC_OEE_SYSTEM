@@ -12,7 +12,8 @@ import {
   requireUser,
 } from '@/lib/apiAuth';
 
-const DEFAULT_CAVITY = 1;
+// cavity_count 는 참고용(사이클 수 환산·JIG 구성 기록)으로 스냅샷에만 보존하고
+// OEE 계산에는 사용하지 않는다. tact_time_seconds 가 이미 개당 가공시간이다.
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
@@ -53,11 +54,13 @@ interface ExistingRecord {
 const EXISTING_RECORD_COLUMNS =
   'record_id, machine_id, date, shift, planned_runtime, actual_runtime, ideal_runtime, output_qty, defect_qty, tact_time_seconds, cavity_count, downtime_minutes, availability, performance, quality, oee';
 
-// 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
+// 설비의 현재 공정 기준 Tact Time 조회 (서버 기준값).
+// current_tact_time 은 개당(1 piece) 가공시간이다. cavity 는 계산에 쓰지 않으므로
+// 조회하지 않는다.
 async function getMachineTactInfo(machineId: string) {
   const { data } = await supabaseAdmin
     .from('machines_with_production_info')
-    .select('current_tact_time, current_cavity_count')
+    .select('current_tact_time')
     .eq('id', machineId)
     .maybeSingle();
 
@@ -65,11 +68,7 @@ async function getMachineTactInfo(machineId: string) {
     tactSeconds:
       data?.current_tact_time && data.current_tact_time > 0
         ? data.current_tact_time
-        : null,
-    cavity:
-      data?.current_cavity_count && data.current_cavity_count > 0
-        ? data.current_cavity_count
-        : DEFAULT_CAVITY
+        : null
   };
 }
 
@@ -81,20 +80,20 @@ async function getMachineTactInfo(machineId: string) {
  * ideal_runtime, performance, oee 가 전부 달라지고 원래 값은 복구할 수 없다.
  *
  * 그래서 다음 순서로 "그때의 조건"을 우선한다:
- *   1. 기록에 저장된 tact/cavity 스냅샷 (2026-07-14 이후 저장분)
+ *   1. 기록에 저장된 tact 스냅샷 (2026-07-14 이후 저장분). tact 는 개당(1 piece)
+ *      가공시간이므로 cavity 로 나누지 않는다 — JIG 의 cavity 수는 이미 개당 t/t 에
+ *      반영돼 있어 다시 나누면 이중 반영이 된다.
+ *      (src/app/api/production-records/oeeRules.ts 의 minutesPerUnit 과 동일한 정의)
  *   2. 스냅샷이 없는 레거시 기록이면, 저장된 ideal_runtime / output_qty 에서 역산한다.
- *      ideal_runtime = (output / cavity) * tact / 60 이므로 그 몫이 곧 단위당 생산시간이고,
- *      cavity 를 몰라도 값이 나온다. 수량만 바뀌면 비율은 그대로 유지된다.
+ *      그 몫이 곧 단위당 생산시간이므로 수량만 바뀌면 비율은 그대로 유지된다.
  *   3. 둘 다 불가능하면(생산 0 등 역산 불가) 현재 공정 값으로 계산한다. 이 경우엔 보존할
  *      역사 자체가 없다.
  */
 function resolveSavedMinutesPerUnit(existing: ExistingRecord): number | null {
   const snapshotTact = existing.tact_time_seconds;
-  const snapshotCavity = existing.cavity_count;
 
   if (snapshotTact && snapshotTact > 0) {
-    const cavity = snapshotCavity && snapshotCavity > 0 ? snapshotCavity : DEFAULT_CAVITY;
-    return snapshotTact / 60 / cavity;
+    return snapshotTact / 60;
   }
 
   const storedIdeal = existing.ideal_runtime ?? 0;
@@ -109,9 +108,9 @@ async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number |
   const savedMinutesPerUnit = resolveSavedMinutesPerUnit(existing);
   if (savedMinutesPerUnit !== null) return savedMinutesPerUnit;
 
-  const { tactSeconds, cavity } = await getMachineTactInfo(existing.machine_id);
+  const { tactSeconds } = await getMachineTactInfo(existing.machine_id);
   if (tactSeconds === null) return null;
-  return tactSeconds / 60 / Math.max(1, cavity);
+  return tactSeconds / 60;
 }
 
 /**
