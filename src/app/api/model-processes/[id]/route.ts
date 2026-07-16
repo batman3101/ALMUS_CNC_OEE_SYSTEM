@@ -5,11 +5,12 @@ import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 // GET /api/model-processes/[id] - 특정 공정 정보 조회
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await requireUser(request, ['admin', 'engineer', 'operator']);
-    console.log('GET /api/model-processes/[id] called with id:', params.id);
+    console.log('GET /api/model-processes/[id] called with id:', id);
 
     const { data: process, error } = await supabaseAdmin
       .from('model_processes')
@@ -27,7 +28,7 @@ export async function GET(
           description
         )
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error) {

@@ -5,12 +5,12 @@ import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 // PUT /api/admin/users/[userId] - 사용자 정보 수정
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     await requireUser(request, ['admin']);
 
-    const { userId } = params;
+    const { userId } = await params;
     const body = await request.json();
     const { email, name, role, assigned_machines, currentEmail } = body;
 
@@ -85,12 +85,12 @@ export async function PUT(
 // DELETE /api/admin/users/[userId] - 특정 사용자 삭제
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     await requireUser(request, ['admin']);
 
-    const { userId } = params;
+    const { userId } = await params;
     let profileDeleted = false;
     let authDeleted = false;
 

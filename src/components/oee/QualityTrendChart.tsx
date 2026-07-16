@@ -33,7 +33,11 @@ interface QualityTrendChartProps {
 }
 
 // 커스텀 툴팁 컴포넌트
-const CustomTooltip: React.FC<TooltipContentProps<number, string>> = ({ active, payload, label }) => {
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: TooltipContentProps<number, string>): React.ReactElement | null => {
   const { t } = useDashboardTranslation();
   if (active && payload && payload.length) {
     const data = payload[0].payload as QualityTrendData;

@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 /**
  * API Route 인증/인가 헬퍼 (서버 전용).
  *
- * src/middleware.ts 는 matcher 에서 `/api` 를 명시적으로 제외하므로 API 라우트에는
+ * src/proxy.ts 는 matcher 에서 `/api` 를 명시적으로 제외하므로 API 라우트에는
  * 어떤 인증도 자동 적용되지 않는다. 서비스 롤(RLS 우회) 클라이언트를 쓰는 라우트가
  * 세션을 직접 검사하지 않으면 그 라우트는 사실상 공개 엔드포인트가 된다.
  *

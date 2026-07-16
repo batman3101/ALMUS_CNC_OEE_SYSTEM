@@ -46,7 +46,10 @@ describe('DELETE /api/admin/machines/[machineId]', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('soft-deactivates the machine so historical records remain intact', async () => {
-    const response = await DELETE({} as never, { params: { machineId: 'machine-1' } });
+    const response = await DELETE(
+      {} as never,
+      { params: Promise.resolve({ machineId: 'machine-1' }) }
+    );
 
     expect(response.status).toBe(200);
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ is_active: false }));

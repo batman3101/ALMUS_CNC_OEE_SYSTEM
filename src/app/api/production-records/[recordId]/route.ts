@@ -222,11 +222,12 @@ async function buildUpdateData(
 // GET /api/production-records/[recordId] - 특정 생산 기록 조회
 export async function GET(
   request: NextRequest,
-  { params }: { params: { recordId: string } }
+  { params }: { params: Promise<{ recordId: string }> }
 ) {
   try {
+    const { recordId } = await params;
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    console.log('GET /api/production-records/[recordId] called with id:', params.recordId);
+    console.log('GET /api/production-records/[recordId] called with id:', recordId);
 
     const { data: record, error } = await supabaseAdmin
       .from('production_records')
@@ -252,7 +253,7 @@ export async function GET(
           equipment_type
         )
       `)
-      .eq('record_id', params.recordId)
+      .eq('record_id', recordId)
       .single();
 
     if (error) {
@@ -296,11 +297,12 @@ export async function GET(
 // PUT /api/production-records/[recordId] - 생산 기록 수정
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { recordId: string } }
+  { params }: { params: Promise<{ recordId: string }> }
 ) {
   try {
+    const { recordId } = await params;
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    console.log('PUT /api/production-records/[recordId] called with id:', params.recordId);
+    console.log('PUT /api/production-records/[recordId] called with id:', recordId);
 
     const body = await request.json();
     console.log('PUT request body:', JSON.stringify(body, null, 2));
@@ -309,7 +311,7 @@ export async function PUT(
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
       .select(EXISTING_RECORD_COLUMNS)
-      .eq('record_id', params.recordId)
+      .eq('record_id', recordId)
       .single();
 
     if (checkError || !existingRecord) {
@@ -335,7 +337,7 @@ export async function PUT(
     const { data: updatedRecord, error: updateError } = await supabaseAdmin
       .from('production_records')
       .update(updateData)
-      .eq('record_id', params.recordId)
+      .eq('record_id', recordId)
       .select()
       .single();
 
@@ -373,17 +375,18 @@ export async function PUT(
 // DELETE /api/production-records/[recordId] - 생산 기록 삭제
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { recordId: string } }
+  { params }: { params: Promise<{ recordId: string }> }
 ) {
   try {
+    const { recordId } = await params;
     await requireUser(request, ['admin']);
-    console.log('DELETE /api/production-records/[recordId] called with id:', params.recordId);
+    console.log('DELETE /api/production-records/[recordId] called with id:', recordId);
 
     // 생산실적만 삭제하고 해당 교대 상태를 MISSING으로 기록한다.
     // 비가동은 생산실적 유무와 무관한 현장 사건이므로 삭제하거나 롤백하지 않는다.
     const { data: deleted, error: deleteError } = await supabaseAdmin.rpc(
       'delete_production_record',
-      { p_record_id: params.recordId }
+      { p_record_id: recordId }
     );
 
     if (deleteError) {
@@ -397,7 +400,7 @@ export async function DELETE(
       throw deleteError;
     }
 
-    console.log(`Successfully deleted production record: ${params.recordId}`);
+    console.log(`Successfully deleted production record: ${recordId}`);
 
     return NextResponse.json({
       success: true,
@@ -426,11 +429,12 @@ export async function DELETE(
 // PATCH /api/production-records/[recordId] - 생산 기록 부분 수정
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { recordId: string } }
+  { params }: { params: Promise<{ recordId: string }> }
 ) {
   try {
+    const { recordId } = await params;
     const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    console.log('PATCH /api/production-records/[recordId] called with id:', params.recordId);
+    console.log('PATCH /api/production-records/[recordId] called with id:', recordId);
 
     const body = await request.json();
     console.log('PATCH request body:', JSON.stringify(body, null, 2));
@@ -439,7 +443,7 @@ export async function PATCH(
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
       .select(EXISTING_RECORD_COLUMNS)
-      .eq('record_id', params.recordId)
+      .eq('record_id', recordId)
       .single();
 
     if (checkError || !existingRecord) {
@@ -465,7 +469,7 @@ export async function PATCH(
     const { data: updatedRecord, error: updateError } = await supabaseAdmin
       .from('production_records')
       .update(updateData)
-      .eq('record_id', params.recordId)
+      .eq('record_id', recordId)
       .select()
       .single();
 
