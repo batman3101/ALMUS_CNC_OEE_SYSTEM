@@ -72,6 +72,7 @@
     "clearAll": "Xác nhận tất cả thông báo",
     "clearAllCount": "Xác nhận tất cả thông báo ({{count}})",
     "allowBrowserNotifications": "Cho phép thông báo trình duyệt",
+    "loadError": "Không thể tải cảnh báo vận hành",
     "machineStatusDetails": "Chi tiết trạng thái thiết bị",
     "maintenance": "Bảo trì",
     "stopOther": "Dừng/Khác",
@@ -277,6 +278,7 @@
     "averageAvailability": "Tỷ lệ khả dụng trung bình",
     "averagePerformance": "Hiệu suất trung bình",
     "averageQuality": "Chất lượng trung bình",
+    "dataLoadError": "Không thể tải dữ liệu phân tích",
     "analysis": {
       "collision": "Phân tích va chạm",
       "performance": "Phân tích hiệu suất",
@@ -411,9 +413,10 @@
     "performanceSpread": "Độ lệch hiệu suất"
   },
   "downtimeReporting": {
-    "title": "{{count}} bản ghi sản xuất ({{ratio}}%) chưa nhập thời gian dừng máy",
-    "description": "Ca chưa nhập thời gian dừng máy được tính tỷ lệ vận hành 100%, nên OEE bên dưới cao hơn thực tế. Chỉ tính {{reportedCount}} bản ghi đã xác nhận, OEE trung bình là {{reportedOee}}%.",
-    "descriptionNone": "Ca chưa nhập thời gian dừng máy được tính tỷ lệ vận hành 100%, nên OEE bên dưới cao hơn thực tế. Trong kỳ này không có bản ghi nào đã xác nhận nên không thể tin cậy OEE."
+    "title": "{{count}} bản ghi sản xuất ({{ratio}}%) chưa đủ điều kiện tính OEE",
+    "description": "OEE chỉ được tính từ {{reportedCount}} bản ghi có đủ thời gian dừng máy, thời gian kế hoạch/thực tế và tiêu chuẩn công đoạn (thời gian lý tưởng). {{unreportedCount}} bản ghi chưa đủ và {{invalidCount}} bản ghi cũ không hợp lệ vẫn được giữ trong tổng sản lượng nhưng bị loại khỏi OEE.",
+    "descriptionNone": "Không có bản ghi nào đủ điều kiện tính OEE. Chỉ có thể xem tổng sản lượng của {{unreportedCount}} bản ghi chưa đủ và {{invalidCount}} bản ghi cũ không hợp lệ.",
+    "oeeUnavailable": "Không thể tính OEE vì chưa có bản ghi nào được báo cáo đầy đủ"
   },
   "legacyDataWarning": {
     "title": "Bao gồm {{count}} bản ghi cũ không thể xác minh ({{ratio}}%)",

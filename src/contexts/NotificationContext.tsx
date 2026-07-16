@@ -94,7 +94,13 @@ const notificationReducer = (state: NotificationState, action: NotificationActio
 };
 
 // 알림 컨텍스트 생성
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+type NotificationContextValue = NotificationContextType & {
+  loading: boolean;
+  error: string | null;
+  stale: boolean;
+};
+
+const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
 // 알림 컨텍스트 프로바이더
 interface NotificationProviderProps {
@@ -242,7 +248,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       return notifications;
     } catch (error) {
       console.error('❌ generateRealNotifications 오류:', error);
-      return [];
+      // 조회 실패와 실제 알림 0건은 의미가 다르다. 실패를 []로 바꾸면 기존 활성 알림을
+      // 정상적인 빈 결과로 덮어써 장애 중에 경보가 사라진다.
+      throw error;
     }
   }, [user?.id, getAcknowledgedNotifications, writeAcknowledgedNotifications]);
 
@@ -507,7 +515,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
   // context value를 메모이제이션한다.
   // 매 렌더마다 새 객체를 만들면 useNotifications()를 쓰는 모든 소비자가 불필요하게 리렌더된다.
-  const contextValue: NotificationContextType = useMemo(() => ({
+  const contextValue: NotificationContextValue = useMemo(() => ({
     notifications: state.notifications,
     unreadCount,
     addNotification,
@@ -516,6 +524,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     clearNotification,
     clearAllNotifications,
     refreshNotifications,
+    loading: state.loading,
+    error: state.error,
+    stale: state.error !== null,
   }), [
     state.notifications,
     unreadCount,
@@ -525,6 +536,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     clearNotification,
     clearAllNotifications,
     refreshNotifications,
+    state.loading,
+    state.error,
   ]);
 
   return (
@@ -535,7 +548,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 };
 
 // 알림 컨텍스트 훅
-export const useNotifications = (): NotificationContextType => {
+export const useNotifications = (): NotificationContextValue => {
   const context = useContext(NotificationContext);
   if (context === undefined) {
     throw new Error('useNotifications must be used within a NotificationProvider');

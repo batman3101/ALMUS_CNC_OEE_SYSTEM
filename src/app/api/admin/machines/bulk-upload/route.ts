@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 import { 
   parseMachineExcel, 
   convertToMachineData, 
@@ -30,6 +31,8 @@ interface BulkUploadResult {
 // POST /api/admin/machines/bulk-upload - Excel 파일로 설비 일괄 등록
 export async function POST(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     console.log('Content-Type:', request.headers.get('content-type'));
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -249,6 +252,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in bulk upload:', error);
     return NextResponse.json(
       { error: `파일 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}` },

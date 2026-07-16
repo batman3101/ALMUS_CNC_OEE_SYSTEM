@@ -3,12 +3,14 @@ import { systemSettingsService } from '@/lib/systemSettings';
 import type {
   SettingCategory
 } from '@/types/systemSettings';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
 // GET /api/system-settings - 모든 시스템 설정 조회
 export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category') as SettingCategory | null;
 
@@ -41,12 +43,13 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error fetching system settings:', error);
     return NextResponse.json(
       { 
         success: false,
-        error: 'Failed to fetch system settings',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to fetch system settings'
       },
       { status: 500 }
     );
@@ -56,6 +59,7 @@ export async function GET(request: NextRequest) {
 // PUT /api/system-settings - 시스템 설정 업데이트
 export async function PUT(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
     const body = await request.json();
     const { category, settings, change_reason } = body;
 
@@ -102,12 +106,13 @@ export async function PUT(request: NextRequest) {
     });
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error updating system settings:', error);
     return NextResponse.json(
       { 
         success: false,
-        error: 'Failed to update system settings',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to update system settings'
       },
       { status: 500 }
     );
@@ -117,6 +122,7 @@ export async function PUT(request: NextRequest) {
 // POST /api/system-settings - 새로운 설정 생성 (단일 설정)
 export async function POST(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
     const body = await request.json();
     const { category, setting_key, setting_value, change_reason } = body;
 
@@ -161,12 +167,13 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error creating system setting:', error);
     return NextResponse.json(
       { 
         success: false,
-        error: 'Failed to create system setting',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to create system setting'
       },
       { status: 500 }
     );
@@ -176,6 +183,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/system-settings - 설정 비활성화
 export async function DELETE(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category') as SettingCategory | null;
     const setting_key = searchParams.get('key');
@@ -202,12 +210,13 @@ export async function DELETE(request: NextRequest) {
     );
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error deleting system setting:', error);
     return NextResponse.json(
       { 
         success: false,
-        error: 'Failed to delete system setting',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Failed to delete system setting'
       },
       { status: 500 }
     );

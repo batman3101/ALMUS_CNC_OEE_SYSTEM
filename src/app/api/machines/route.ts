@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MACHINE_STATES, isMachineState } from '@/types';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // 입력값 검증 및 보안 함수들
 const VALID_LOCATIONS = ['라인1', '라인2', '라인3', '라인4', 'A동', 'B동', 'C동', '조립라인', '검사라인', '포장라인'];
@@ -50,6 +51,7 @@ function validateCurrentState(state: string | null): string | null {
 // GET /api/machines - 모든 설비 목록 조회 (인증된 사용자용)
 export async function GET(request: NextRequest) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/machines called');
     
     const { searchParams } = new URL(request.url);
@@ -80,62 +82,69 @@ export async function GET(request: NextRequest) {
 
     console.log('Validated params:', { isActive, location: validatedLocation, currentState: validatedCurrentState });
 
-    let query = supabaseAdmin
-      .from('machines')
-      .select(`
-        id,
-        name,
-        location,
-        equipment_type,
-        is_active,
-        current_state,
-        production_model_id,
-        current_process_id,
-        created_at,
-        updated_at,
-        product_models:production_model_id (
+    if (authenticatedUser.role === 'operator' && authenticatedUser.assignedMachineIds.length === 0) {
+      return NextResponse.json({ success: true, machines: [], count: 0 });
+    }
+
+    const pageSize = 1000;
+    const machines: unknown[] = [];
+    for (let from = 0; ; from += pageSize) {
+      let query = supabaseAdmin
+        .from('machines')
+        .select(`
           id,
-          model_name,
-          description
-        ),
-        model_processes:current_process_id (
-          id,
-          process_name,
-          process_order,
-          tact_time_seconds
-        )
-      `)
-      .order('name', { ascending: true });
+          name,
+          location,
+          equipment_type,
+          is_active,
+          current_state,
+          production_model_id,
+          current_process_id,
+          created_at,
+          updated_at,
+          product_models:production_model_id (
+            id,
+            model_name,
+            description
+          ),
+          model_processes:current_process_id (
+            id,
+            process_name,
+            process_order,
+            tact_time_seconds
+          )
+        `)
+        .order('name', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1);
 
-    // 기본적으로 활성화된 설비만 조회
-    if (isActive !== 'false') {
-      query = query.eq('is_active', true);
+      if (isActive !== 'false') query = query.eq('is_active', true);
+      if (validatedLocation) query = query.eq('location', validatedLocation);
+      if (validatedCurrentState) query = query.eq('current_state', validatedCurrentState);
+      if (authenticatedUser.role === 'operator') {
+        query = query.in('id', authenticatedUser.assignedMachineIds);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error('Supabase query error:', error);
+        throw error;
+      }
+      machines.push(...(data || []));
+      if (!data || data.length < pageSize) break;
     }
 
-    if (validatedLocation) {
-      query = query.eq('location', validatedLocation);
-    }
-
-    if (validatedCurrentState) {
-      query = query.eq('current_state', validatedCurrentState);
-    }
-
-    console.log('Executing query...');
-    const { data: machines, error } = await query;
-
-    if (error) {
-      console.error('Supabase query error:', error);
-      throw error;
-    }
-
-    console.log(`Successfully fetched ${machines?.length || 0} machines`);
+    console.log(`Successfully fetched ${machines.length} machines`);
 
     return NextResponse.json({ 
       success: true,
-      machines: machines || [],
-      count: machines?.length || 0
+      machines,
+      count: machines.length
     });
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in GET /api/machines:', error);
     return NextResponse.json(
       { 
@@ -152,6 +161,7 @@ export async function GET(request: NextRequest) {
 // POST /api/machines - 새 설비 추가
 export async function POST(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
     console.log('POST /api/machines called');
     
     const body = await request.json();
@@ -277,6 +287,9 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in POST /api/machines:', error);
     return NextResponse.json(
       { 
@@ -293,6 +306,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/machines - 설비 삭제 (여러 개 동시 삭제 가능)
 export async function DELETE(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
     console.log('DELETE /api/machines called');
     
     const body = await request.json();
@@ -309,24 +323,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 삭제 전 관련 데이터 확인 (생산 기록, 로그 등)
-    const { data: relatedRecords } = await supabaseAdmin
-      .from('production_records')
-      .select('machine_id')
-      .in('machine_id', machineIds)
-      .limit(1);
-
-    if (relatedRecords && relatedRecords.length > 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: '생산 기록이 있는 설비는 삭제할 수 없습니다. 먼저 관련 데이터를 정리해주세요.' 
-        },
-        { status: 409 }
-      );
-    }
-
-    // 설비 삭제 (소프트 삭제: is_active를 false로 변경)
+    // 생산·비가동 이력은 보존하고 설비 마스터만 비활성화한다.
     const { data: deletedMachines, error: deleteError } = await supabaseAdmin
       .from('machines')
       .update({ 
@@ -350,6 +347,9 @@ export async function DELETE(request: NextRequest) {
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in DELETE /api/machines:', error);
     return NextResponse.json(
       { 

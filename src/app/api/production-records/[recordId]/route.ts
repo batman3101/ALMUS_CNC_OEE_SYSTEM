@@ -5,8 +5,13 @@ import {
   getBreakTimeMinutes,
   resolvePlannedRuntime
 } from '@/lib/plannedRuntime';
+import { synchronizeDowntime } from '../oeeRules';
+import {
+  apiAuthErrorResponse,
+  assertMachineAccess,
+  requireUser,
+} from '@/lib/apiAuth';
 
-const DEFAULT_TACT_SECONDS = 120;
 const DEFAULT_CAVITY = 1;
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -38,10 +43,15 @@ interface ExistingRecord {
   defect_qty: number;
   tact_time_seconds: number | null;
   cavity_count: number | null;
+  downtime_minutes: number | null;
+  availability: number | null;
+  performance: number | null;
+  quality: number | null;
+  oee: number | null;
 }
 
 const EXISTING_RECORD_COLUMNS =
-  'record_id, machine_id, date, shift, planned_runtime, actual_runtime, ideal_runtime, output_qty, defect_qty, tact_time_seconds, cavity_count';
+  'record_id, machine_id, date, shift, planned_runtime, actual_runtime, ideal_runtime, output_qty, defect_qty, tact_time_seconds, cavity_count, downtime_minutes, availability, performance, quality, oee';
 
 // 설비의 현재 공정 기준 Tact Time / Cavity 조회 (서버 기준값)
 async function getMachineTactInfo(machineId: string) {
@@ -55,7 +65,7 @@ async function getMachineTactInfo(machineId: string) {
     tactSeconds:
       data?.current_tact_time && data.current_tact_time > 0
         ? data.current_tact_time
-        : DEFAULT_TACT_SECONDS,
+        : null,
     cavity:
       data?.current_cavity_count && data.current_cavity_count > 0
         ? data.current_cavity_count
@@ -78,7 +88,7 @@ async function getMachineTactInfo(machineId: string) {
  *   3. 둘 다 불가능하면(생산 0 등 역산 불가) 현재 공정 값으로 계산한다. 이 경우엔 보존할
  *      역사 자체가 없다.
  */
-async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number> {
+function resolveSavedMinutesPerUnit(existing: ExistingRecord): number | null {
   const snapshotTact = existing.tact_time_seconds;
   const snapshotCavity = existing.cavity_count;
 
@@ -92,7 +102,15 @@ async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number> 
     return storedIdeal / existing.output_qty;
   }
 
+  return null;
+}
+
+async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number | null> {
+  const savedMinutesPerUnit = resolveSavedMinutesPerUnit(existing);
+  if (savedMinutesPerUnit !== null) return savedMinutesPerUnit;
+
   const { tactSeconds, cavity } = await getMachineTactInfo(existing.machine_id);
+  if (tactSeconds === null) return null;
   return tactSeconds / 60 / Math.max(1, cavity);
 }
 
@@ -104,7 +122,7 @@ async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number> 
 async function buildUpdateData(
   body: Record<string, unknown>,
   existing: ExistingRecord
-): Promise<{ updateData?: Record<string, number>; error?: string }> {
+): Promise<{ updateData?: Record<string, number | null>; error?: string }> {
   const baseFields = ['output_qty', 'defect_qty', 'actual_runtime', 'planned_runtime'] as const;
   const hasBaseField = baseFields.some(field => body[field] !== undefined);
 
@@ -124,51 +142,79 @@ async function buildUpdateData(
   // - body.planned_runtime 이 오면 교대 가동시간(분)으로 해석하여 휴식시간을 차감한다.
   // - 오지 않으면 이미 저장된 planned_runtime(차감이 끝난 값)을 그대로 유지한다. (중복 차감 방지)
   // - 저장된 값도 없으면 기본 가동시간(720분)에서 휴식시간을 차감한 값을 사용한다.
-  const breakMinutes = await getBreakTimeMinutes();
+  const runtimeWasEdited = body.actual_runtime !== undefined || body.planned_runtime !== undefined;
 
-  const storedPlannedRuntime = existing.planned_runtime ?? 0;
-  const plannedRuntime =
-    body.planned_runtime !== undefined
-      ? resolvePlannedRuntime(Number(body.planned_runtime), breakMinutes)
-      : storedPlannedRuntime > 0
-        ? storedPlannedRuntime
-        : resolvePlannedRuntime(DEFAULT_OPERATING_MINUTES, breakMinutes);
+  let plannedRuntime: number | null = existing.planned_runtime;
+  if (runtimeWasEdited) {
+    if (body.planned_runtime === null) {
+      plannedRuntime = null;
+    } else if (body.planned_runtime !== undefined) {
+      const breakMinutes = await getBreakTimeMinutes();
+      plannedRuntime = resolvePlannedRuntime(Number(body.planned_runtime), breakMinutes);
+    } else if (plannedRuntime === null) {
+      const breakMinutes = await getBreakTimeMinutes();
+      plannedRuntime = resolvePlannedRuntime(DEFAULT_OPERATING_MINUTES, breakMinutes);
+    }
+  }
 
-  const actualRuntimeInput =
-    body.actual_runtime !== undefined
-      ? Number(body.actual_runtime)
-      : existing.actual_runtime ?? 0;
+  let actualRuntime: number | null = existing.actual_runtime;
+  if (body.actual_runtime === null) {
+    actualRuntime = null;
+  } else if (body.actual_runtime !== undefined && plannedRuntime !== null) {
+    const actualRuntimeInput = Number(body.actual_runtime);
+    actualRuntime = clamp(Number.isFinite(actualRuntimeInput) ? actualRuntimeInput : 0, 0, plannedRuntime);
+  } else if (runtimeWasEdited && actualRuntime !== null && plannedRuntime !== null) {
+    actualRuntime = clamp(actualRuntime, 0, plannedRuntime);
+  }
 
-  const actualRuntime = clamp(
-    Number.isFinite(actualRuntimeInput) ? actualRuntimeInput : 0,
-    0,
-    plannedRuntime
-  );
+  const downtimeMinutes =
+    runtimeWasEdited && plannedRuntime !== null && actualRuntime !== null
+      ? synchronizeDowntime(plannedRuntime, actualRuntime, true, existing.downtime_minutes)
+      : existing.downtime_minutes;
 
   // 현재 공정이 아니라 "이 기록이 만들어질 때의 조건"으로 계산한다 (역사 덮어쓰기 방지)
-  const minutesPerUnit = await resolveMinutesPerUnit(existing);
+  // 수량만 수정하는 경우 저장 당시 조건을 증명할 수 없으면 현재 공정/기본값을 끌어오지 않는다.
+  const minutesPerUnit = runtimeWasEdited
+    ? await resolveMinutesPerUnit(existing)
+    : resolveSavedMinutesPerUnit(existing);
 
   const outputQtyValue = outputQty as number;
   const defectQtyValue = defectQty as number;
 
-  const idealRuntime = outputQtyValue * minutesPerUnit;
-  const availability = plannedRuntime > 0 ? clamp(actualRuntime / plannedRuntime, 0, 1) : 0;
-  const performance = actualRuntime > 0 ? clamp(idealRuntime / actualRuntime, 0, 1) : 0;
+  const idealRuntime = minutesPerUnit === null ? null : outputQtyValue * minutesPerUnit;
+  const availability =
+    plannedRuntime === null || actualRuntime === null
+      ? null
+      : plannedRuntime > 0
+        ? clamp(actualRuntime / plannedRuntime, 0, 1)
+        : 0;
+  const performance =
+    actualRuntime === null || idealRuntime === null
+      ? null
+      : actualRuntime > 0
+        ? clamp(idealRuntime / actualRuntime, 0, 1)
+        : 0;
   const quality =
     outputQtyValue > 0 ? clamp((outputQtyValue - defectQtyValue) / outputQtyValue, 0, 1) : 0;
-  const oee = availability * performance * quality;
+  const oee = availability === null || performance === null
+    ? null
+    : availability * performance * quality;
+
+  const roundMetric = (value: number | null): number | null =>
+    value === null ? null : Math.round(value * 10000) / 10000;
 
   return {
     updateData: {
       output_qty: outputQtyValue,
       defect_qty: defectQtyValue,
-      planned_runtime: Math.round(plannedRuntime),
-      actual_runtime: Math.round(actualRuntime),
-      ideal_runtime: Math.round(idealRuntime),
-      availability: Math.round(availability * 10000) / 10000, // 소수점 4자리
-      performance: Math.round(performance * 10000) / 10000,
-      quality: Math.round(quality * 10000) / 10000,
-      oee: Math.round(oee * 10000) / 10000
+      planned_runtime: plannedRuntime === null ? null : Math.round(plannedRuntime),
+      actual_runtime: actualRuntime === null ? null : Math.round(actualRuntime),
+      downtime_minutes: downtimeMinutes,
+      ideal_runtime: idealRuntime === null ? null : Math.round(idealRuntime),
+      availability: roundMetric(availability),
+      performance: roundMetric(performance),
+      quality: roundMetric(quality),
+      oee: roundMetric(oee)
     }
   };
 }
@@ -179,6 +225,7 @@ export async function GET(
   { params }: { params: { recordId: string } }
 ) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/production-records/[recordId] called with id:', params.recordId);
 
     const { data: record, error } = await supabaseAdmin
@@ -219,6 +266,8 @@ export async function GET(
       throw error;
     }
 
+    assertMachineAccess(authenticatedUser, record.machine_id);
+
     console.log('Successfully fetched production record:', record?.record_id);
 
     return NextResponse.json({
@@ -227,6 +276,9 @@ export async function GET(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in GET /api/production-records/[recordId]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
@@ -247,6 +299,7 @@ export async function PUT(
   { params }: { params: { recordId: string } }
 ) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
     console.log('PUT /api/production-records/[recordId] called with id:', params.recordId);
 
     const body = await request.json();
@@ -265,6 +318,8 @@ export async function PUT(
         { status: 404 }
       );
     }
+
+    assertMachineAccess(authenticatedUser, existingRecord.machine_id);
 
     // 업데이트할 데이터 구성 (파생 지표는 서버에서 재계산)
     const { updateData, error: buildError } = await buildUpdateData(body, existingRecord);
@@ -298,6 +353,9 @@ export async function PUT(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in PUT /api/production-records/[recordId]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
@@ -318,14 +376,11 @@ export async function DELETE(
   { params }: { params: { recordId: string } }
 ) {
   try {
+    await requireUser(request, ['admin']);
     console.log('DELETE /api/production-records/[recordId] called with id:', params.recordId);
 
-    // 생산 기록과 그 교대의 비가동 입력을 하나의 트랜잭션에서 함께 삭제한다.
-    //
-    // 이전에는 production_records 만 지웠다. 남은 downtime_entries 는 같은
-    // (machine_id, date, shift) 로 폼에 다시 로드되고, shouldSubmitShift 가 "비가동이 있으니
-    // 가동한 교대"로 판단해 재저장하면서 생산 0짜리 레코드를 되살렸다.
-    // (실측: 고아 비가동 225건, 생산 0 + 비가동>0 레코드 4,840건)
+    // 생산실적만 삭제하고 해당 교대 상태를 MISSING으로 기록한다.
+    // 비가동은 생산실적 유무와 무관한 현장 사건이므로 삭제하거나 롤백하지 않는다.
     const { data: deleted, error: deleteError } = await supabaseAdmin.rpc(
       'delete_production_record',
       { p_record_id: params.recordId }
@@ -342,15 +397,7 @@ export async function DELETE(
       throw deleteError;
     }
 
-    const deletedRecord = deleted as {
-      record_id: string;
-      deleted_downtime_entries: number;
-    };
-
-    console.log(
-      `Successfully deleted production record: ${params.recordId} ` +
-        `(+${deletedRecord?.deleted_downtime_entries ?? 0} downtime entries)`
-    );
+    console.log(`Successfully deleted production record: ${params.recordId}`);
 
     return NextResponse.json({
       success: true,
@@ -359,6 +406,9 @@ export async function DELETE(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in DELETE /api/production-records/[recordId]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
@@ -379,6 +429,7 @@ export async function PATCH(
   { params }: { params: { recordId: string } }
 ) {
   try {
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
     console.log('PATCH /api/production-records/[recordId] called with id:', params.recordId);
 
     const body = await request.json();
@@ -397,6 +448,8 @@ export async function PATCH(
         { status: 404 }
       );
     }
+
+    assertMachineAccess(authenticatedUser, existingRecord.machine_id);
 
     // 업데이트할 데이터 구성 (파생 지표는 서버에서 재계산)
     const { updateData, error: buildError } = await buildUpdateData(body, existingRecord);
@@ -431,6 +484,9 @@ export async function PATCH(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in PATCH /api/production-records/[recordId]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(

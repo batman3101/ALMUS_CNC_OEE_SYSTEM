@@ -23,7 +23,7 @@ export const useAdminOperations = () => {
   const createUser = async (userData: CreateUserData) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/users', {
+      const response = await authFetch('/api/admin/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ export const useAdminOperations = () => {
   const updateUser = async (userId: string, userData: UpdateUserData, currentEmail: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await authFetch(`/api/admin/users/${userId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ export const useAdminOperations = () => {
   const deleteUser = async (userId: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await authFetch(`/api/admin/users/${userId}`, {
         method: 'DELETE',
       });
 
@@ -97,7 +97,7 @@ export const useAdminOperations = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/users');
+      const response = await authFetch('/api/admin/users');
       if (!response.ok) {
         throw new Error('Failed to fetch users');
       }
@@ -114,7 +114,7 @@ export const useAdminOperations = () => {
   const fetchMachines = async (): Promise<Machine[]> => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/machines');
+      const response = await authFetch('/api/admin/machines');
       if (!response.ok) {
         throw new Error('Failed to fetch machines');
       }

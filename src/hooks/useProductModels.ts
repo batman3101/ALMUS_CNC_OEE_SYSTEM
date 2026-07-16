@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Database } from '@/types/database';
+import { authFetch } from '@/lib/authFetch';
 
 type ProductModel = Database['public']['Tables']['product_models']['Row'];
 
@@ -20,7 +21,7 @@ export const useProductModels = (): UseProductModelsResult => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/product-models');
+      const response = await authFetch('/api/product-models');
       
       if (!response.ok) {
         const errorData = await response.json();

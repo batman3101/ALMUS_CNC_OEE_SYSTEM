@@ -27,6 +27,7 @@ import {
 } from '@ant-design/icons';
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface';
 import { useAdminTranslation } from '@/hooks/useTranslation';
+import { authFetch } from '@/lib/authFetch';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -77,7 +78,7 @@ const MachinesBulkUpload: React.FC = () => {
   // 템플릿 다운로드
   const handleDownloadTemplate = async () => {
     try {
-      const response = await fetch('/api/admin/machines/template');
+      const response = await authFetch('/api/admin/machines/template');
       
       if (!response.ok) {
         throw new Error('템플릿 다운로드에 실패했습니다.');
@@ -123,7 +124,7 @@ const MachinesBulkUpload: React.FC = () => {
     setValidationErrors([]);
 
     try {
-      const response = await fetch('/api/admin/machines/bulk-upload', {
+      const response = await authFetch('/api/admin/machines/bulk-upload', {
         method: 'POST',
         body: formData,
       });
@@ -164,7 +165,7 @@ const MachinesBulkUpload: React.FC = () => {
     setUploadResult(null);
 
     try {
-      const response = await fetch('/api/admin/machines/bulk-upload', {
+      const response = await authFetch('/api/admin/machines/bulk-upload', {
         method: 'POST',
         body: formData,
       });

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // GET /api/admin/users - 모든 사용자 목록 조회
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     // Get user profiles
     const { data: profiles, error: profileError } = await supabaseAdmin
       .from('user_profiles')
@@ -36,6 +39,9 @@ export async function GET() {
 
     return NextResponse.json({ users: usersWithEmail });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error fetching users:', error);
     return NextResponse.json(
       { error: 'Failed to fetch users' },
@@ -47,6 +53,8 @@ export async function GET() {
 // POST /api/admin/users - 새 사용자 생성
 export async function POST(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     const body = await request.json();
     console.log('🔍 받은 요청 데이터:', JSON.stringify(body, null, 2));
     const { email, password, name, role, assigned_machines } = body;
@@ -115,6 +123,9 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error creating user:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create user';
     return NextResponse.json(
@@ -127,6 +138,8 @@ export async function POST(request: NextRequest) {
 // DELETE /api/admin/users - 사용자 삭제
 export async function DELETE(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
 
@@ -156,6 +169,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error deleting user:', error);
     return NextResponse.json(
       { error: 'Failed to delete user' },

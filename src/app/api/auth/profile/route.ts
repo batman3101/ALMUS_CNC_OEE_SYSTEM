@@ -41,6 +41,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    if (!profile || profile.is_active !== true) {
+      return NextResponse.json(
+        { error: 'Account is inactive' },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -83,6 +90,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
+      );
+    }
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('is_active')
+      .eq('user_id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: 'User profile not found' },
+        { status: 404 }
+      );
+    }
+
+    if (profile.is_active !== true) {
+      return NextResponse.json(
+        { error: 'Account is inactive' },
+        { status: 403 }
       );
     }
 

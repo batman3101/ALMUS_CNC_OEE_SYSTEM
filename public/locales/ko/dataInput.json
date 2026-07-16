@@ -65,7 +65,8 @@
     "nightShiftOff": "야간조 휴무",
     "dayShiftOffDescription": "주간조가 휴무로 설정되어 있습니다. 설비 정보에서 휴무를 해제하면 데이터를 입력할 수 있습니다.",
     "nightShiftOffDescription": "야간조가 휴무로 설정되어 있습니다. 설비 정보에서 휴무를 해제하면 데이터를 입력할 수 있습니다.",
-    "breakTime": "휴식"
+    "breakTime": "휴식",
+    "workingZeroConfirmed": "근무·생산 0 확인"
   },
   "downtime": {
     "addDowntime": "비가동 시간 추가",
@@ -84,7 +85,7 @@
     "startTimeLabel": "시작 시간",
     "endTimeLabel": "종료 시간",
     "confirmZeroTitle": "비가동 시간이 0분입니다",
-    "confirmZeroContent": "{{shifts}}의 비가동 시간이 입력되지 않았습니다. 확인하지 않고 저장하면 가동률이 100%로 기록되어 OEE가 실제보다 높게 나옵니다.",
+    "confirmZeroContent": "{{shifts}}의 비가동 시간이 입력되지 않았습니다. 무중단을 확인하지 않으면 런타임과 OEE는 미확정으로 저장됩니다.",
     "confirmZeroOk": "무중단이 맞습니다",
     "confirmZeroCancel": "비가동 입력하기",
     "loadFailed": "비가동 시간을 불러오지 못했습니다",
@@ -177,7 +178,10 @@
       "cancel": "취소",
       "save": "저장"
     },
-    "checkingExistingRecords": "기존 생산 기록 확인 중..."
+    "checkingExistingRecords": "기존 생산 기록 확인 중...",
+    "loadFailedTitle": "기존 생산 기록을 불러오지 못했습니다",
+    "loadFailedDescription": "기록 없음으로 처리하면 기존 교대 데이터가 삭제될 수 있어 저장을 차단했습니다. 설비 또는 날짜를 다시 선택해 조회를 재시도하세요.",
+    "loadFailedBlockSave": "기존 생산 기록 조회에 실패해 저장할 수 없습니다. 다시 조회해 주세요."
   },
   "common": {
     "off": "휴무",

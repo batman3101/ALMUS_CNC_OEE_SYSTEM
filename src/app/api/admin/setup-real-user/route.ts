@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // POST /api/admin/setup-real-user - 실제 사용자를 user_profiles에 등록
 export async function POST(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     const body = await request.json();
     const { email, name, role = 'admin' } = body;
 
@@ -72,6 +75,9 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in setup-real-user:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -81,8 +87,10 @@ export async function POST(request: NextRequest) {
 }
 
 // GET /api/admin/setup-real-user - Authentication 사용자 목록 조회
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     // Authentication 테이블에서 모든 사용자 조회
     const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
     
@@ -124,6 +132,9 @@ export async function GET() {
     });
 
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in setup-real-user GET:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

@@ -51,6 +51,11 @@ next-env.d.ts
 .mcp.json
 .claude/
 
+# Agent tooling state (session logs, checkpoints, HUD state — not source)
+.omc/
+.omx/
+AGENTS.md
+
 # IDE and Editor
 .vscode/
 .idea/

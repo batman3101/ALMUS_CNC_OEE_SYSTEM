@@ -1,9 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+
+export const dynamic = 'force-dynamic';
 
 // GET /api/user-profiles - 모든 사용자 프로필 조회
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
     console.log('GET /api/user-profiles called');
 
     const { data: profiles, error } = await supabaseAdmin
@@ -26,6 +30,9 @@ export async function GET() {
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in GET /api/user-profiles:', error);
     return NextResponse.json(
       {

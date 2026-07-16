@@ -72,11 +72,11 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await serviceClient
       .from('user_profiles')
-      .select('role')
+      .select('role, is_active')
       .eq('user_id', authData.user.id)
       .single();
 
-    if (profileError || profile?.role !== 'admin') {
+    if (profileError || profile?.role !== 'admin' || profile.is_active !== true) {
       return NextResponse.json(
         { success: false, error: '시스템 설정은 관리자만 변경할 수 있습니다.' },
         { status: 403 }

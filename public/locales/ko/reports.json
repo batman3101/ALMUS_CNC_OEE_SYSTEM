@@ -49,6 +49,10 @@
     "endDate": "종료 날짜"
   },
   "refreshData": "데이터 새로고침",
+  "coverage": {
+    "title": "OEE 계산 가능 기록 {{reported}} / {{total}}건",
+    "description": "런타임 또는 공정 기준이 확인되지 않은 기록은 OEE에서 제외하고 생산 수량 합계에는 포함했습니다."
+  },
   "metrics": {
     "averageOEE": "평균 OEE",
     "averageAvailability": "평균 가동률",

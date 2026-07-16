@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // GET /api/product-models/[id] - 특정 생산 모델 조회
 export async function GET(
@@ -7,6 +8,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    await requireUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/product-models/[id] called with id:', params.id);
 
     const { data: model, error } = await supabaseAdmin
@@ -41,6 +43,9 @@ export async function GET(
     });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in GET /api/product-models/[id]:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(

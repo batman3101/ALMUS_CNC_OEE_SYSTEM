@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Machine, MachineLog, ProductionRecord, OEEMetrics, User } from '@/types';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { authFetch } from '@/lib/authFetch';
 
 // 생산 실적 조회 기간 (초기 조회와 실시간 반영이 동일한 윈도우를 사용해야 배열이 무한히 커지지 않는다)
 const PRODUCTION_WINDOW_DAYS = 7;
@@ -27,6 +28,81 @@ const MAX_LOGS = 5000;
 
 const getLogWindowStart = (): string =>
   new Date(Date.now() - LOG_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+/** 최근 N건은 제한하되, 제한 밖의 열린 로그는 설비 현재 상태 근거이므로 모두 보존한다. */
+export const retainRecentAndOpenMachineLogs = (
+  logs: MachineLog[],
+  recentLimit: number = MAX_LOGS
+): MachineLog[] => {
+  const seen = new Set<string>();
+  const unique = logs.filter(log => {
+    if (seen.has(log.log_id)) return false;
+    seen.add(log.log_id);
+    return true;
+  });
+  const recent = unique.slice(0, recentLimit);
+  const recentIds = new Set(recent.map(log => log.log_id));
+  return [...recent, ...unique.filter(log => !log.end_time && !recentIds.has(log.log_id))];
+};
+
+export const applyRealtimeMachineLog = (
+  logs: MachineLog[],
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE',
+  next?: MachineLog,
+  previousId?: string
+): MachineLog[] => {
+  if (eventType === 'DELETE') {
+    return logs.filter(log => log.log_id !== previousId);
+  }
+  if (!next) return logs;
+  const merged = [next, ...logs.filter(log => log.log_id !== next.log_id)];
+  return retainRecentAndOpenMachineLogs(merged);
+};
+
+interface OeeDataPage {
+  oee_data: ProductionRecord[];
+  pagination: { offset: number; returned: number; total: number; has_more: boolean };
+}
+
+/** API의 명시적 페이지 계약을 끝까지 따라가 Supabase max_rows 절삭을 피한다. */
+export const fetchAllRecentProductionRecords = async (machineIds?: string[]): Promise<ProductionRecord[]> => {
+  const pageLimit = 5000;
+  const records: ProductionRecord[] = [];
+
+  // undefined는 관리자/엔지니어의 전체 조회, []는 담당 설비가 없는 운영자의 빈 결과다.
+  // 운영자는 각 담당 설비를 단일 machine_id로 조회해야 서버의 assigned-machine 검사를
+  // 우회하지 않으면서 여러 담당 설비를 모두 볼 수 있다.
+  const scopes: Array<string | undefined> = machineIds === undefined
+    ? [undefined]
+    : [...new Set(machineIds)];
+
+  for (const machineId of scopes) {
+    let offset = 0;
+    let knownTotal = 0;
+
+    while (true) {
+      const params = new URLSearchParams({
+        start_date: getProductionWindowStart(),
+        end_date: new Date().toISOString().split('T')[0],
+        limit: String(pageLimit),
+        offset: String(offset),
+        include_statistics: offset === 0 ? 'true' : 'false',
+        ...(machineId ? { machine_id: machineId } : {}),
+        ...(offset > 0 ? { known_total: String(knownTotal) } : {})
+      });
+      const response = await authFetch(`/api/oee-data?${params}`);
+      if (!response.ok) throw new Error(`OEE data HTTP ${response.status}`);
+      const page = await response.json() as OeeDataPage;
+      records.push(...(page.oee_data || []));
+      knownTotal = page.pagination?.total ?? records.length;
+      if (!page.pagination?.has_more) break;
+      if (!page.pagination.returned) throw new Error('OEE data pagination made no progress');
+      offset += page.pagination.returned;
+    }
+  }
+
+  return records;
+};
 
 // 같은 날짜에서는 B(야간, 20:00~08:00)조가 A(주간)조보다 나중이다.
 // 초기 조회 정렬(date desc, shift desc)과 동일한 기준으로 "최신" 실적을 정의한다.
@@ -147,10 +223,32 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         return profileError ? null : profile;
       };
 
-      // 설비 / 설비 로그 / 생산 실적 쿼리는 서로 의존성이 없으므로 병렬로 조회한다.
+      const fetchRecentMachineLogs = async (): Promise<MachineLog[]> => {
+        const pageSize = 1000;
+        const recent: MachineLog[] = [];
+        for (let offset = 0; offset < MAX_LOGS; offset += pageSize) {
+          const { data, error } = await supabase
+            .from('machine_logs')
+            .select('*')
+            .not('end_time', 'is', null)
+            .gte('start_time', getLogWindowStart())
+            .order('start_time', { ascending: false })
+            .range(offset, Math.min(offset + pageSize - 1, MAX_LOGS - 1));
+          if (error) throw error;
+          recent.push(...((data || []) as MachineLog[]));
+          if (!data || data.length < pageSize) break;
+        }
+        return recent;
+      };
+
+      // 열린 로그는 최근 N 제한과 분리한다. 오래 열린 설비도 현재 상태 계산에서 누락되지 않는다.
       // (기존에는 4개 쿼리를 순차적으로 await 하여 첫 화면 렌더링까지 불필요하게 오래 걸렸음)
-      const [userProfile, machinesResult, machineLogsResult, productionRecordsResult] = await Promise.all([
-        fetchUserProfile(),
+      const userProfile = await fetchUserProfile();
+      const assignedMachineIds = userRole === 'operator'
+        ? (userProfile?.assigned_machines || [])
+        : undefined;
+
+      const [machinesResult, openLogsResult, recentMachineLogs, productionRecords] = await Promise.all([
         supabase
           .from('machines')
           .select('*')
@@ -158,18 +256,10 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         supabase
           .from('machine_logs')
           .select('*')
-          // 열린 로그(현재 상태)는 오래됐어도 반드시 포함한다. 설비별 지속시간 계산의 근거다.
-          .or(`end_time.is.null,start_time.gte.${getLogWindowStart()}`)
-          .order('start_time', { ascending: false })
-          .limit(MAX_LOGS),
-        supabase
-          .from('production_records')
-          .select('*')
-          .gte('date', getProductionWindowStart())
-          // date만으로 정렬하면 같은 날짜에 A/B 교대 행이 함께 있을 때 첫 행이 비결정적이다.
-          // shift 내림차순을 2차 정렬로 추가해 B(야간)조가 A(주간)조보다 앞(=최신)에 오게 한다.
-          .order('date', { ascending: false })
-          .order('shift', { ascending: false })
+          .is('end_time', null)
+          .order('start_time', { ascending: false }),
+        fetchRecentMachineLogs(),
+        fetchAllRecentProductionRecords(assignedMachineIds)
       ]);
 
       // 설비 데이터
@@ -177,19 +267,19 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
       if (machinesError) throw machinesError;
 
       // 최근 설비 로그
-      const { data: machineLogs, error: logsError } = machineLogsResult;
-      if (logsError) throw logsError;
-
-      // 최근 생산 실적
-      const { data: productionRecords, error: productionError } = productionRecordsResult;
-      if (productionError) throw productionError;
+      const { data: openLogs, error: openLogsError } = openLogsResult;
+      if (openLogsError) throw openLogsError;
+      const machineLogs = retainRecentAndOpenMachineLogs([
+        ...recentMachineLogs,
+        ...((openLogs || []) as MachineLog[])
+      ]);
 
       // OEE 지표 계산 (개선된 로직)
       const oeeMetrics: Record<string, OEEMetrics> = {};
       if (machines) {
         machines.forEach(machine => {
           // 생산 실적 기반 OEE 데이터 찾기
-          const machineRecords = productionRecords?.filter(r => r.machine_id === machine.id) || [];
+          const machineRecords = productionRecords.filter(r => r.machine_id === machine.id);
 
           const latestRecord = findLatestRecord(machineRecords);
 
@@ -246,7 +336,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         ...prev,
         machines: machines || [],
         machineLogs: machineLogs || [],
-        productionRecords: productionRecords || [],
+        productionRecords,
         oeeMetrics,
         userProfile,
         loading: false,
@@ -258,7 +348,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
       console.info('✅ 초기 데이터 로드 완료:', {
         machines: machines?.length || 0,
         machineLogs: machineLogs?.length || 0,
-        productionRecords: productionRecords?.length || 0,
+        productionRecords: productionRecords.length,
         oeeMetrics: Object.keys(oeeMetrics).length
       });
 
@@ -321,18 +411,12 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           if (!isMountedRef.current) return;
 
           setState(prev => {
-            let newLogs = [...prev.machineLogs];
-
-            if (payload.eventType === 'INSERT') {
-              newLogs = [payload.new as MachineLog, ...newLogs.slice(0, 99)];
-            } else if (payload.eventType === 'UPDATE') {
-              const index = newLogs.findIndex(log => log.log_id === payload.new.log_id);
-              if (index !== -1) {
-                newLogs[index] = payload.new as MachineLog;
-              }
-            } else if (payload.eventType === 'DELETE') {
-              newLogs = newLogs.filter(log => log.log_id !== payload.old.log_id);
-            }
+            const newLogs = applyRealtimeMachineLog(
+              prev.machineLogs,
+              payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+              payload.eventType === 'DELETE' ? undefined : payload.new as MachineLog,
+              (payload.old as Partial<MachineLog>).log_id
+            );
 
             return {
               ...prev,

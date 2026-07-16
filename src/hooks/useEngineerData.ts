@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { format } from 'date-fns';
+import { getInclusiveDateRange } from '@/utils/engineerDateRange';
 import { DowntimeData, ProductionData, isMachineState } from '@/types';
 import { fetchJsonDeduped } from '@/lib/requestCache';
+import { authFetch } from '@/lib/authFetch';
 
 interface OEETrendData {
   date: string;
@@ -14,11 +15,20 @@ interface OEETrendData {
 
 interface ProductivityAnalysisResponse {
   summary: {
+    reporting_coverage: {
+      total_records: number;
+      reported_records: number;
+      unreported_records: number;
+      invalid_records: number;
+      excluded_records: number;
+      reporting_rate: number;
+      incomplete: boolean;
+    };
     overall_performance: {
-      avg_oee: number;
-      avg_availability: number;
-      avg_performance: number;
-      avg_quality: number;
+      avg_oee: number | null;
+      avg_availability: number | null;
+      avg_performance: number | null;
+      avg_quality: number | null;
       total_output_qty: number;
       total_good_qty: number;
       total_defect_qty: number;
@@ -27,16 +37,19 @@ interface ProductivityAnalysisResponse {
   trends: {
     daily: Array<{
       date: string;
-      avg_oee: number;
-      avg_availability: number;
-      avg_performance: number;
-      avg_quality: number;
+      avg_oee: number | null;
+      avg_availability: number | null;
+      avg_performance: number | null;
+      avg_quality: number | null;
       total_output: number;
       total_good_qty: number;
       defect_rate: number;
     }>;
   };
 }
+
+type OverallPerformance = ProductivityAnalysisResponse['summary']['overall_performance'];
+export type ReportingCoverage = ProductivityAnalysisResponse['summary']['reporting_coverage'];
 
 interface DowntimeAnalysisResponse {
   downtime_by_cause: Array<{
@@ -79,6 +92,8 @@ export const useEngineerData = (
   const [downtimeData, setDowntimeData] = useState<DowntimeData[]>([]);
   const [productionData, setProductionData] = useState<ProductionData[]>([]);
   const [machineDowntime, setMachineDowntime] = useState<MachineDowntimeMap>({});
+  const [overallPerformance, setOverallPerformance] = useState<OverallPerformance | null>(null);
+  const [reportingCoverage, setReportingCoverage] = useState<ReportingCoverage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,27 +112,7 @@ export const useEngineerData = (
     }
 
     // 기본 기간별 계산
-    const endDate = new Date();
-    const startDate = new Date();
-
-    switch (period) {
-      case 'week':
-        startDate.setDate(endDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setDate(endDate.getDate() - 30);
-        break;
-      case 'quarter':
-        startDate.setDate(endDate.getDate() - 90);
-        break;
-    }
-
-    return {
-      // toISOString()은 UTC 기준으로 변환되어 KST 새벽 시간대(B조 근무 중)에 날짜가 하루 밀리는 문제가 있었음.
-      // 로컬 달력 날짜를 그대로 사용하도록 date-fns format으로 변경.
-      start_date: format(startDate, 'yyyy-MM-dd'),
-      end_date: format(endDate, 'yyyy-MM-dd')
-    };
+    return getInclusiveDateRange(period === 'week' ? 7 : period === 'month' ? 30 : 90);
   }, [customDateRange]);
 
   // OEE 추이 데이터 API 호출 (requestId가 최신이 아니면 결과를 버린다)
@@ -140,18 +135,30 @@ export const useEngineerData = (
       );
       
       // API 응답을 차트용 데이터로 변환 (API는 이미 0-1 범위 소수점으로 반환)
-      const trendData: OEETrendData[] = data.trends.daily.map(item => ({
-        date: item.date,
-        availability: item.avg_availability, // API는 이미 0-1 범위로 반환
-        performance: item.avg_performance,
-        quality: item.avg_quality,
-        oee: item.avg_oee,
-        shift: 'A' as const // 기본값, 실제로는 교대별 데이터 필요시 별도 처리
-      }));
+      const trendData: OEETrendData[] = data.trends.daily.flatMap(item => {
+        if (
+          item.avg_availability === null
+          || item.avg_performance === null
+          || item.avg_quality === null
+          || item.avg_oee === null
+        ) {
+          return [];
+        }
+        return [{
+          date: item.date,
+          availability: item.avg_availability, // API는 이미 0-1 범위로 반환
+          performance: item.avg_performance,
+          quality: item.avg_quality,
+          oee: item.avg_oee,
+          shift: 'A' as const // 기본값, 실제로는 교대별 데이터 필요시 별도 처리
+        }];
+      });
 
       console.log('OEE 트렌드 데이터:', { sampleData: trendData.slice(0, 3), totalCount: trendData.length });
 
       if (requestId !== requestIdRef.current) return; // 오래된 응답은 반영하지 않음
+      setOverallPerformance(data.summary.overall_performance);
+      setReportingCoverage(data.summary.reporting_coverage);
       setOeeData(trendData);
     } catch (error) {
       console.error('Error fetching OEE trend data:', error);
@@ -174,7 +181,7 @@ export const useEngineerData = (
         })
       });
 
-      const response = await fetch(`/api/downtime-analysis?${params}`);
+      const response = await authFetch(`/api/downtime-analysis?${params}`);
       if (!response.ok) throw new Error('Failed to fetch downtime data');
 
       const data: DowntimeAnalysisResponse = await response.json();
@@ -226,7 +233,7 @@ export const useEngineerData = (
         })
       });
 
-      const response = await fetch(`/api/quality-analysis?${params}`);
+      const response = await authFetch(`/api/quality-analysis?${params}`);
       if (!response.ok) throw new Error('Failed to fetch production data');
 
       const data: QualityAnalysisResponse = await response.json();
@@ -262,6 +269,13 @@ export const useEngineerData = (
     console.log(`🔄 엔지니어 데이터 새로고침 시작 - ${dateRangeInfo}, 설비: ${machineId || 'all'}, 교대: ${shiftInfo}`);
     setLoading(true);
     setError(null);
+    // 새 필터 요청이 실패해도 이전 필터의 데이터가 현재 결과처럼 남지 않도록 즉시 비운다.
+    setOeeData([]);
+    setDowntimeData([]);
+    setProductionData([]);
+    setMachineDowntime({});
+    setOverallPerformance(null);
+    setReportingCoverage(null);
 
     try {
       await Promise.all([
@@ -297,6 +311,8 @@ export const useEngineerData = (
     downtimeData,
     productionData,
     machineDowntime,
+    overallPerformance,
+    reportingCoverage,
     loading,
     error,
     refreshData

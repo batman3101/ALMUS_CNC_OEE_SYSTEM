@@ -20,13 +20,17 @@ interface ReportGeneratorProps {
   oeeData?: OEEMetrics[];
   productionData?: ProductionRecord[];
   className?: string;
+  loadedDateRange: [string, string];
+  isDataComplete?: boolean;
 }
 
 export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
   machines = [],
   oeeData = [],
   productionData = [],
-  className
+  className,
+  loadedDateRange,
+  isDataComplete = true
 }) => {
   const { t } = useReportsTranslation();
   const { message } = App.useApp();
@@ -44,7 +48,9 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
     try {
       // jsPDF/xlsx/html2canvas는 실제로 내보내기 버튼을 클릭한 시점에만 필요하므로
       // 초기 번들에 포함되지 않도록 클릭 시점에 동적으로 로드한다.
-      const { ReportTemplates } = await import('./ReportTemplates');
+      const { ReportTemplates, assertReportExportReady, getProductionDateRange } = await import('./ReportTemplates');
+      const dataRange = getProductionDateRange(productionData);
+      assertReportExportReady({ loadedRange: loadedDateRange, requestedRange: dataRange, isComplete: isDataComplete });
 
       // 차트 요소들 수집 시도
       const chartElements: { [key: string]: HTMLCanvasElement | HTMLElement } = {};
@@ -68,15 +74,11 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
           oeeData,
           productionData,
           reportType: 'summary' as const,
-          dateRange: [
-            new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            new Date().toISOString().split('T')[0]
-          ] as [string, string],
+          dateRange: dataRange,
           selectedMachines: machines.map(m => m.id),
           includeCharts: true,
           includeOEE: true,
           includeProduction: true,
-          includeDowntime: true,
           groupBy: 'machine' as const
         };
         
@@ -148,6 +150,8 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
         machines={machines}
         oeeData={oeeData}
         productionData={productionData}
+        loadedDateRange={loadedDateRange}
+        isDataComplete={isDataComplete}
       />
     </div>
   );

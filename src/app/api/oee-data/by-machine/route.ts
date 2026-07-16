@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin', 'engineer']);
+
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
@@ -64,6 +67,9 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in GET /api/oee-data/by-machine:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },

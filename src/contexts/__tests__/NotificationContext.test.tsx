@@ -64,10 +64,19 @@ const mockMachines = (machines: ReturnType<typeof machine>[]) => {
 
 /** 현재 알림 목록을 테스트에서 직접 들여다보기 위한 프로브 */
 const renderProvider = () => {
-  const seen: { current: Notification[] } = { current: [] };
+  const seen: { current: Notification[]; error: string | null; stale: boolean } = {
+    current: [],
+    error: null,
+    stale: false
+  };
+  const controls: { refresh: () => Promise<void> } = { refresh: async () => undefined };
 
   const Probe: React.FC = () => {
-    seen.current = useNotifications().notifications;
+    const context = useNotifications();
+    seen.current = context.notifications;
+    seen.error = context.error;
+    seen.stale = context.stale;
+    controls.refresh = context.refreshNotifications;
     return null;
   };
 
@@ -77,7 +86,7 @@ const renderProvider = () => {
     </NotificationProvider>
   );
 
-  return { ...utils, seen };
+  return { ...utils, seen, controls };
 };
 
 describe('NotificationContext', () => {
@@ -166,5 +175,28 @@ describe('NotificationContext', () => {
 
     unmount();
     expect(unsubscribeMock).toHaveBeenCalled();
+  });
+
+  it('조회 실패는 기존 활성 알림을 보존하고 다음 성공에서 회복한다', async () => {
+    mockMachines([machine(1, 'BREAKDOWN_REPAIR')]);
+    const { seen, controls } = renderProvider();
+    await waitFor(() => expect(seen.current).toHaveLength(1));
+
+    (fetchMachines as jest.Mock).mockRejectedValueOnce(new Error('network down'));
+    await act(async () => {
+      await controls.refresh();
+    });
+    expect(seen.current).toHaveLength(1);
+    expect(seen.current[0].machine_name).toBe('CNC-001');
+    expect(seen.error).toBe('Failed to fetch notifications');
+    expect(seen.stale).toBe(true);
+
+    mockMachines([machine(2, 'TEMPORARY_STOP')]);
+    await act(async () => {
+      await controls.refresh();
+    });
+    await waitFor(() => expect(seen.current.map(item => item.machine_name)).toEqual(['CNC-002']));
+    expect(seen.error).toBeNull();
+    expect(seen.stale).toBe(false);
   });
 });

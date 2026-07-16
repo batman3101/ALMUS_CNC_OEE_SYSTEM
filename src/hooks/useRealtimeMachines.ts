@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Machine } from '@/types';
+import { authFetch } from '@/lib/authFetch';
 
 interface UseRealtimeMachinesProps {
   initialData?: Machine[];
@@ -312,7 +313,7 @@ export const useRealtimeMachines = ({
     try {
       console.log(`Updating machine ${machineId} status to ${status}`);
 
-      const response = await fetch(`/api/machines/${machineId}`, {
+      const response = await authFetch(`/api/machines/${machineId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -346,7 +347,7 @@ export const useRealtimeMachines = ({
     updateData: Partial<Machine>
   ) => {
     try {
-      const response = await fetch(`/api/machines/${machineId}`, {
+      const response = await authFetch(`/api/machines/${machineId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

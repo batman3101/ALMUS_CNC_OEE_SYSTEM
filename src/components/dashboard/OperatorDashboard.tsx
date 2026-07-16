@@ -12,7 +12,6 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import { MachineStatusInput } from '@/components/machines';
 import { OEEGauge } from '@/components/oee';
 import { ProductionRecordInput } from '@/components/production';
@@ -22,7 +21,10 @@ import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useProductionRecords } from '@/hooks/useProductionRecords';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
-import { getCurrentShiftInfo } from '@/utils/shiftUtils';
+import { getCurrentShiftInfo, shouldShowShiftEndNotification, type ShiftTimeConfig } from '@/utils/shiftUtils';
+import { getBusinessDateAt } from '@/utils/downtimeIntervals';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { authFetch } from '@/lib/authFetch';
 
 // Removed deprecated TabPane import
 
@@ -92,6 +94,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   } = useRealtimeData(user?.id, user?.role);
 
   const { createProductionRecord } = useProductionRecords();
+  const { getCompanyInfo, getShiftTimes } = useSystemSettings();
 
 
   // 에러 핸들링
@@ -171,7 +174,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       console.log(`설비 ${machineId} 상태를 ${newState}로 변경 중...`);
       
       // API 호출하여 설비 상태 변경
-      const response = await fetch(`/api/machines/${machineId}`, {
+      const response = await authFetch(`/api/machines/${machineId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -202,14 +205,25 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     }
   };
 
-  // 교대 종료 알림 체크
-  const currentHour = new Date().getHours();
-  const isShiftEnd = currentHour === 8 || currentHour === 20;
+  // 교대 정보·업무일자는 시스템 설정의 시간대·교대 시간을 기준으로 계산한다
+  // (하드코딩된 08:00/20:00·브라우저 로컬 시계 대신 downtimeIntervals 단일 소스에 위임)
+  const shiftTimes = getShiftTimes();
+  const shiftConfig: ShiftTimeConfig = {
+    timezone: getCompanyInfo().timezone,
+    shiftAStart: shiftTimes.shiftA.start,
+    shiftAEnd: shiftTimes.shiftA.end,
+    shiftBStart: shiftTimes.shiftB.start,
+    shiftBEnd: shiftTimes.shiftB.end
+  };
+  const now = new Date();
 
-  // 생산 실적 입력에 사용할 업무일자: 로컬(UTC 아님) 기준이며, 자정을 넘어 진행 중인 B조는
-  // 교대 시작일(전날)을 업무일자로 사용한다 (ShiftDataInputForm과 동일하게 야간 교대는 시작일 기준)
-  const currentShiftInfo = getCurrentShiftInfo();
-  const productionBusinessDate = dayjs(currentShiftInfo.startTime).format('YYYY-MM-DD');
+  // 교대 종료 알림 체크 (설정 기준 종료 15분 전)
+  const isShiftEnd = shouldShowShiftEndNotification(now, shiftConfig);
+
+  // 생산 실적 입력에 사용할 업무일자: 설정된 시간대 기준이며, 자정을 넘어 진행 중인 B조는
+  // 교대 시작일(전날)을 업무일자로 사용한다 (ShiftDataInputForm과 동일한 단일 소스)
+  const currentShiftInfo = getCurrentShiftInfo(now, shiftConfig);
+  const productionBusinessDate = getBusinessDateAt(now, shiftConfig.timezone, shiftConfig.shiftAStart);
 
   // 페이지네이션된 설비 목록
   const paginatedMachines = useMemo(() => {

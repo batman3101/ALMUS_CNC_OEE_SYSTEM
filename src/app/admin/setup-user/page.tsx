@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import { UserAddOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useAdminTranslation } from '@/hooks/useTranslation';
+import { authFetch } from '@/lib/authFetch';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -52,7 +53,7 @@ const SetupUserPage: React.FC = () => {
   const fetchAuthUsers = async () => {
     setFetchingUsers(true);
     try {
-      const response = await fetch('/api/admin/setup-real-user');
+      const response = await authFetch('/api/admin/setup-real-user');
       const data = await response.json();
       
       if (data.authUsers) {
@@ -73,7 +74,7 @@ const SetupUserPage: React.FC = () => {
   const handleSetupUser = async (values: SetupUserData) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/setup-real-user', {
+      const response = await authFetch('/api/admin/setup-real-user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

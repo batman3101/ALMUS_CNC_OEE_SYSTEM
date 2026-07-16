@@ -29,6 +29,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { useMachines } from '@/hooks/useMachines';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
 import { formatMachineLocation } from '@/utils/machineLocation';
+import { authFetch } from '@/lib/authFetch';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -109,7 +110,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
         params.append('shift', selectedShift);
       }
 
-      const response = await fetch(`/api/production-records?${params.toString()}`);
+      const response = await authFetch(`/api/production-records?${params.toString()}`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -170,19 +171,14 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
     try {
       setSaving(true);
 
-      // 양품 수량 계산
-      const goodQty = Math.max(0, values.output_qty - values.defect_qty);
-      const quality = values.output_qty > 0 ? goodQty / values.output_qty : 0;
-
-      const response = await fetch(`/api/production-records/${editingRecord.record_id}`, {
+      const response = await authFetch(`/api/production-records/${editingRecord.record_id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           output_qty: values.output_qty,
-          defect_qty: values.defect_qty,
-          quality: Math.round(quality * 10000) / 10000
+          defect_qty: values.defect_qty
         })
       });
 
@@ -214,7 +210,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
     try {
       setLoading(true);
 
-      const response = await fetch(`/api/production-records/${recordId}`, {
+      const response = await authFetch(`/api/production-records/${recordId}`, {
         method: 'DELETE'
       });
 

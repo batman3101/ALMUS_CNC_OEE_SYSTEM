@@ -77,14 +77,20 @@ export class OEECalculator {
    * @param productionRecord 생산 실적 데이터
    * @returns OEE 지표
    */
-  static calculateOEEFromRecord(productionRecord: ProductionRecord): OEEMetrics {
+  static calculateOEEFromRecord(productionRecord: ProductionRecord): OEEMetrics | null {
     const {
-      planned_runtime = 0,
-      actual_runtime = 0,
-      ideal_runtime = 0,
+      planned_runtime,
+      actual_runtime,
+      ideal_runtime,
       output_qty,
       defect_qty
     } = productionRecord;
+
+    // 런타임이 보고되지 않은 기록은 실제 0분 기록이 아니다. 완전한 입력이
+    // 들어오기 전에는 계산값을 만들지 않아 호출자가 "미확인"으로 표시하게 한다.
+    if (planned_runtime == null || actual_runtime == null || ideal_runtime == null) {
+      return null;
+    }
 
     const availability = this.calculateAvailability(actual_runtime, planned_runtime);
     const performance = this.calculatePerformance(ideal_runtime, actual_runtime);
@@ -242,107 +248,5 @@ export class OEECache {
         this.cache.delete(key);
       }
     }
-  }
-}
-
-/**
- * 실시간 OEE 계산을 위한 헬퍼 함수들
- */
-export class RealTimeOEECalculator {
-  /**
-   * 설비별 실시간 OEE 계산
-   * @param machineId 설비 ID
-   * @param machineLogs 설비 로그 배열
-   * @param productionRecord 생산 실적 (선택사항)
-   * @param tactTime 택트 타임 (초)
-   * @param cavityCount Cavity 수량 (기본값: 1)
-   * @returns 실시간 OEE 지표
-   */
-  static calculateRealTimeOEE(
-    machineId: string,
-    machineLogs: MachineLog[],
-    productionRecord?: Partial<ProductionRecord>,
-    tactTime: number = 30,
-    cavityCount: number = 1
-  ): OEEMetrics {
-    const cacheKey = `realtime_${machineId}_${Date.now().toString().slice(0, -4)}0000`; // 10초 단위로 캐싱
-    
-    // 캐시에서 먼저 확인
-    const cached = OEECache.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    // 현재 교대 시간 계산
-    const now = new Date();
-    const shiftStart = this.getCurrentShiftStart(now);
-    // shiftEnd는 향후 확장을 위해 계산 가능 (현재 미사용)
-
-    // 실제 가동시간 계산
-    const actualRuntime = OEECalculator.calculateActualRuntimeFromLogs(
-      machineLogs,
-      shiftStart,
-      now
-    );
-
-    // 계획 가동시간 계산 (현재 시간까지)
-    const elapsedMinutes = (now.getTime() - shiftStart.getTime()) / (1000 * 60);
-    const plannedRuntime = Math.min(elapsedMinutes, OEECalculator.calculatePlannedRuntime());
-
-    // 생산 실적 데이터
-    const outputQty = productionRecord?.output_qty || 0;
-    const defectQty = productionRecord?.defect_qty || 0;
-
-    // 이론 생산시간 계산 (Cavity 수량 반영)
-    const idealRuntime = OEECalculator.calculateIdealRuntime(outputQty, tactTime, cavityCount);
-
-    // OEE 계산
-    const availability = OEECalculator.calculateAvailability(actualRuntime, plannedRuntime);
-    const performance = OEECalculator.calculatePerformance(idealRuntime, actualRuntime);
-    const quality = OEECalculator.calculateQuality(outputQty, defectQty);
-    const oee = OEECalculator.calculateOEE(availability, performance, quality);
-
-    const result: OEEMetrics = {
-      availability,
-      performance,
-      quality,
-      oee,
-      actual_runtime: actualRuntime,
-      planned_runtime: plannedRuntime,
-      ideal_runtime: idealRuntime,
-      output_qty: outputQty,
-      defect_qty: defectQty
-    };
-
-    // 결과 캐싱
-    OEECache.set(cacheKey, result);
-
-    return result;
-  }
-
-  /**
-   * 현재 교대 시작 시간 계산
-   * @param currentTime 현재 시간
-   * @returns 교대 시작 시간
-   */
-  private static getCurrentShiftStart(currentTime: Date): Date {
-    const hour = currentTime.getHours();
-    const shiftStart = new Date(currentTime);
-    
-    if (hour >= 8 && hour < 20) {
-      // A교대 (08:00-20:00)
-      shiftStart.setHours(8, 0, 0, 0);
-    } else {
-      // B교대 (20:00-08:00)
-      if (hour >= 20) {
-        shiftStart.setHours(20, 0, 0, 0);
-      } else {
-        // 다음날 새벽인 경우 전날 20:00으로 설정
-        shiftStart.setDate(shiftStart.getDate() - 1);
-        shiftStart.setHours(20, 0, 0, 0);
-      }
-    }
-    
-    return shiftStart;
   }
 }

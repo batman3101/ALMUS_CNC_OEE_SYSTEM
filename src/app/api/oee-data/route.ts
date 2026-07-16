@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { format } from 'date-fns';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
@@ -22,22 +23,30 @@ export const dynamic = 'force-dynamic';
 /** analytics_oee_records_summary RPC 가 돌려주는 전체 집합 기준 통계 */
 interface OeeRecordsSummary {
   total_records: number;
-  avg_availability: number;
-  avg_performance: number;
-  avg_quality: number;
-  avg_oee: number;
+  avg_availability: number | null;
+  avg_performance: number | null;
+  avg_quality: number | null;
+  avg_oee: number | null;
+  total_output: number;
+  total_defect: number;
+  total_good: number;
+  total_planned_runtime: number;
+  total_actual_runtime: number;
+  total_ideal_runtime: number;
   /**
    * 비가동 신뢰도 지표.
    *
-   * 비가동은 작업자가 직접 입력한다. 입력하지 않으면 actual_runtime = planned_runtime 이 되어
-   * 가동률이 100% 로 집계되고 OEE 가 부풀려진다. downtime_minutes IS NULL 인 기록이 그 경우다.
-   * 평균값만 내려주면 이 왜곡이 보이지 않으므로, 미확인 규모와
-   * "비가동이 확인된 기록만의 지표"를 함께 내려보내 호출부가 신뢰도를 표시할 수 있게 한다.
+   * 비가동은 작업자가 직접 입력한다. downtime_minutes IS NULL 인 기록은 OEE에서 제외하고
+   * 생산량 합계에는 유지한다. 평균만 내려주면 계산 커버리지가 보이지 않으므로 미확인 규모와
+   * 확인된 기록 수를 함께 내려보내 호출부가 신뢰도를 표시할 수 있게 한다.
    */
   unreported_records: number;
   reported_records: number;
-  avg_availability_reported: number;
-  avg_oee_reported: number;
+  avg_availability_reported: number | null;
+  avg_oee_reported: number | null;
+  impossible_records: number;
+  avg_oee_excluding_impossible: number | null;
+  avg_quality_excluding_impossible: number | null;
 }
 
 /** 기본 조회 창(일). start_date/end_date 가 없을 때만 사용한다. */
@@ -56,6 +65,16 @@ function defaultWindowDays(aggregation: string): number {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const round3 = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric * 1000) / 1000 : null;
+};
+const toNullableNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
 
 /**
  * 잘못된 machine_id/날짜는 DB 까지 내려가면 타입 캐스팅 오류로 500 이 된다.
@@ -84,12 +103,20 @@ function validateFilters(
 // GET /api/oee-data - OEE 원시 행 조회 (페이지네이션) + 전체 집합 기준 통계
 export async function GET(request: NextRequest) {
   try {
+    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
     const shift = searchParams.get('shift');
     const aggregation = searchParams.get('aggregation') || 'daily'; // 기본 조회 창 선택에만 사용
+    const includeStatistics = searchParams.get('include_statistics') !== 'false';
+    const knownTotal = parseIntParam(
+      searchParams.get('known_total'),
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER
+    );
 
     const limit = parseIntParam(searchParams.get('limit'), DEFAULT_PAGE_LIMIT, 1, MAX_PAGE_LIMIT);
     const offset = parseIntParam(searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER);
@@ -97,6 +124,12 @@ export async function GET(request: NextRequest) {
     const validationError = validateFilters(machineId, startDate, endDate);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
+    if (user.role === 'operator') {
+      // 운영자 화면은 담당 설비별로 이 API를 호출한다. 필터 없는 원시 전체 조회는
+      // 클라이언트에서 나중에 걸러도 이미 다른 설비 데이터가 노출되므로 허용하지 않는다.
+      assertMachineAccess(user, machineId || '');
     }
 
     // 실제 적용되는 날짜 범위를 먼저 확정한다.
@@ -116,23 +149,24 @@ export async function GET(request: NextRequest) {
 
     // 통계는 전체 집합 위에서 DB 가 계산한다.
     // 행을 전송하지 않으므로 max-rows 한도의 영향을 받지 않는다.
-    const { data: summaryRows, error: summaryError } = await supabaseAdmin.rpc(
-      'analytics_oee_records_summary',
-      {
-        p_start_date: effectiveStartDate,
-        p_end_date: effectiveEndDate,
-        p_machine_id: machineId,
-        p_shift: shift,
-      }
-    );
+    const summaryResult = includeStatistics
+      ? await supabaseAdmin.rpc('analytics_oee_records_summary', {
+          p_start_date: effectiveStartDate,
+          p_end_date: effectiveEndDate,
+          p_machine_id: machineId,
+          p_shift: shift,
+        })
+      : { data: null, error: null };
 
-    if (summaryError) {
-      console.error('Database error (oee summary):', summaryError);
+    if (summaryResult.error) {
+      console.error('Database error (oee summary):', summaryResult.error);
       return NextResponse.json(
         { error: 'Failed to fetch OEE statistics' },
         { status: 500 }
       );
     }
+
+    const summaryRows = summaryResult.data;
 
     const summary = (summaryRows as OeeRecordsSummary[] | null)?.[0] ?? {
       total_records: 0,
@@ -140,12 +174,23 @@ export async function GET(request: NextRequest) {
       avg_performance: 0,
       avg_quality: 0,
       avg_oee: 0,
+      total_output: 0,
+      total_defect: 0,
+      total_good: 0,
+      total_planned_runtime: 0,
+      total_actual_runtime: 0,
+      total_ideal_runtime: 0,
       unreported_records: 0,
       reported_records: 0,
       avg_availability_reported: 0,
       avg_oee_reported: 0,
+      impossible_records: 0,
+      avg_oee_excluding_impossible: 0,
+      avg_quality_excluding_impossible: 0,
     };
-    const totalRecords = Number(summary.total_records) || 0;
+    const totalRecords = includeStatistics
+      ? Number(summary.total_records) || 0
+      : knownTotal;
 
     // 원시 행은 요청한 페이지만 가져온다.
     let query = supabaseAdmin
@@ -164,6 +209,7 @@ export async function GET(request: NextRequest) {
         ideal_runtime,
         output_qty,
         defect_qty,
+        downtime_minutes,
         created_at,
         machines!inner(name)
       `)
@@ -197,37 +243,49 @@ export async function GET(request: NextRequest) {
 
     const oeeData = (productionData || []).map(record => ({
       id: record.record_id,
+      record_id: record.record_id,
       machine_id: record.machine_id,
       machine_name: unwrapJoin(record.machines)?.name || 'Unknown',
       date: record.date,
       shift: record.shift,
-      availability: Number(record.availability || 0),
-      performance: Number(record.performance || 0),
-      quality: Number(record.quality || 0),
-      oee: Number(record.oee || 0),
-      actual_runtime: record.actual_runtime || 0,
-      planned_runtime: record.planned_runtime || 480,
-      ideal_runtime: record.ideal_runtime || 0,
+      availability: toNullableNumber(record.availability),
+      performance: toNullableNumber(record.performance),
+      quality: toNullableNumber(record.quality),
+      oee: toNullableNumber(record.oee),
+      actual_runtime: toNullableNumber(record.actual_runtime),
+      planned_runtime: toNullableNumber(record.planned_runtime),
+      ideal_runtime: toNullableNumber(record.ideal_runtime),
       output_qty: record.output_qty || 0,
       defect_qty: record.defect_qty || 0,
+      downtime_minutes: record.downtime_minutes,
       created_at: record.created_at,
       updated_at: record.created_at
     }));
 
     return NextResponse.json({
       oee_data: oeeData,
-      statistics: {
+      statistics: includeStatistics ? {
         // 전체 집합 기준. oee_data 에 담긴 페이지가 아니라 필터에 해당하는 모든 행의 평균이다.
         total_records: totalRecords,
-        avg_oee: Math.round(summary.avg_oee * 1000) / 1000,
-        avg_availability: Math.round(summary.avg_availability * 1000) / 1000,
-        avg_performance: Math.round(summary.avg_performance * 1000) / 1000,
-        avg_quality: Math.round(summary.avg_quality * 1000) / 1000,
+        avg_oee: round3(summary.avg_oee),
+        avg_availability: round3(summary.avg_availability),
+        avg_performance: round3(summary.avg_performance),
+        avg_quality: round3(summary.avg_quality),
+        total_output: Number(summary.total_output) || 0,
+        total_defect: Number(summary.total_defect) || 0,
+        total_good: Number(summary.total_good) || 0,
+        total_planned_runtime: Number(summary.total_planned_runtime) || 0,
+        total_actual_runtime: Number(summary.total_actual_runtime) || 0,
+        total_ideal_runtime: Number(summary.total_ideal_runtime) || 0,
+        aggregation_method: 'runtime_output_weighted',
+        data_quality: {
+          impossible_records: Number(summary.impossible_records) || 0,
+          avg_oee_excluding_impossible: round3(summary.avg_oee_excluding_impossible),
+          avg_quality_excluding_impossible: round3(summary.avg_quality_excluding_impossible),
+        },
 
-        // 위 평균을 얼마나 믿을 수 있는지 나타내는 지표.
-        // 비가동이 확인되지 않은 기록은 가동률이 100% 로 잡혀 OEE 를 끌어올린다.
-        // 호출부는 unreported_records 비율이 높으면 평균을 그대로 신뢰하지 말고
-        // *_reported 값(비가동이 확인된 기록만의 지표)을 함께 보여줘야 한다.
+        // 위 OEE가 전체 생산기록 중 몇 건을 근거로 계산됐는지 나타내는 지표.
+        // 비가동 미확인 기록은 생산량 합계에는 포함되지만 OEE 계산에서는 제외된다.
         downtime_reporting: {
           unreported_records: Number(summary.unreported_records) || 0,
           reported_records: Number(summary.reported_records) || 0,
@@ -235,11 +293,10 @@ export async function GET(request: NextRequest) {
             totalRecords > 0
               ? Math.round(((Number(summary.unreported_records) || 0) / totalRecords) * 1000) / 1000
               : 0,
-          avg_availability_reported:
-            Math.round(summary.avg_availability_reported * 1000) / 1000,
-          avg_oee_reported: Math.round(summary.avg_oee_reported * 1000) / 1000,
+          avg_availability_reported: round3(summary.avg_availability_reported),
+          avg_oee_reported: round3(summary.avg_oee_reported),
         },
-      },
+      } : null,
       pagination: buildPaginationMeta(limit, offset, oeeData.length, totalRecords),
       filters: {
         machine_id: machineId,
@@ -253,6 +310,9 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error fetching OEE data:', error);
     return NextResponse.json(
       { error: 'Failed to fetch OEE data' },

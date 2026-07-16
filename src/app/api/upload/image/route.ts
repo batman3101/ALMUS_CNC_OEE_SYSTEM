@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // 이미지 업로드 제한 설정
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -68,6 +69,7 @@ function validateFileSize(size: number): boolean {
 // POST /api/upload/image - 이미지 업로드
 export async function POST(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
     console.log('POST /api/upload/image called');
 
     // FormData로부터 파일 추출
@@ -175,6 +177,9 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error in POST /api/upload/image:', error);
     
     return NextResponse.json(

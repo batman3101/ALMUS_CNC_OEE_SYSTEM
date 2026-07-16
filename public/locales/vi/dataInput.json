@@ -65,7 +65,8 @@
     "nightShiftOff": "Nghỉ ca đêm",
     "dayShiftOffDescription": "Ca ngày đang được đặt nghỉ. Bạn có thể nhập dữ liệu sau khi hủy nghỉ trong thông tin thiết bị.",
     "nightShiftOffDescription": "Ca đêm đang được đặt nghỉ. Bạn có thể nhập dữ liệu sau khi hủy nghỉ trong thông tin thiết bị.",
-    "breakTime": "Nghỉ"
+    "breakTime": "Nghỉ",
+    "workingZeroConfirmed": "Xác nhận làm việc, sản lượng 0"
   },
   "downtime": {
     "addDowntime": "Thêm thời gian ngừng hoạt động", 
@@ -82,7 +83,7 @@
     "noDowntimeRecords": "Không có thời gian ngừng hoạt động nào được đăng ký",
     "modalTitle": "Thêm thời gian ngừng hoạt động",
     "confirmZeroTitle": "Thời gian dừng máy là 0 phút",
-    "confirmZeroContent": "Chưa nhập thời gian dừng máy cho {{shifts}}. Nếu lưu mà không xác nhận, tỷ lệ vận hành sẽ được ghi là 100% và OEE sẽ cao hơn thực tế.",
+    "confirmZeroContent": "Chưa nhập thời gian dừng máy cho {{shifts}}. Nếu không xác nhận máy chạy liên tục, thời gian chạy và OEE sẽ được lưu ở trạng thái chưa xác định.",
     "confirmZeroOk": "Đúng, máy chạy liên tục",
     "confirmZeroCancel": "Nhập thời gian dừng",
     "loadFailed": "Không tải được thời gian dừng máy",
@@ -177,7 +178,10 @@
       "cancel": "Hủy",
       "save": "Lưu"
     },
-    "checkingExistingRecords": "Đang kiểm tra bản ghi sản xuất hiện có..."
+    "checkingExistingRecords": "Đang kiểm tra bản ghi sản xuất hiện có...",
+    "loadFailedTitle": "Không thể tải bản ghi sản xuất hiện có",
+    "loadFailedDescription": "Việc coi lỗi tải là không có dữ liệu có thể xóa dữ liệu ca hiện có, vì vậy thao tác lưu đã bị chặn. Hãy chọn lại máy hoặc ngày để tải lại.",
+    "loadFailedBlockSave": "Không thể lưu vì tải bản ghi sản xuất hiện có thất bại. Vui lòng tải lại."
   },
   "common": {
     "off": "Nghỉ",

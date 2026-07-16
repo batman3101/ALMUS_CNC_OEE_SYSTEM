@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Tabs, Select, DatePicker, Button, Space, Table, Statistic, Dropdown, Tag, Badge } from 'antd';
+import { Alert, Row, Col, Card, Tabs, Select, DatePicker, Button, Space, Table, Statistic, Dropdown, Tag, Badge, Empty } from 'antd';
 import { 
   BarChartOutlined, 
   DownloadOutlined,
@@ -61,6 +61,12 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     if (oee >= 0.75) return 'good';       // 양호 (75-85%)
     if (oee >= 0.65) return 'fair';       // 보통 (65-75%)
     return 'poor';                        // 미흡 (65% 미만)
+  };
+
+  const compareNullable = (left: number | null, right: number | null): number => {
+    if (left === null) return right === null ? 0 : 1;
+    if (right === null) return -1;
+    return left - right;
   };
 
   const oeeGradeLabels = {
@@ -125,7 +131,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     }
 
     const matching = Object.values(machineStats)
-      .filter(stat => stat.total_records > 0 && selectedOEEGrades.includes(getOEEGrade(stat.avg_oee)))
+      .filter(stat =>
+        stat.reported_records > 0
+        && stat.avg_oee !== null
+        && selectedOEEGrades.includes(getOEEGrade(stat.avg_oee))
+      )
       .map(stat => stat.machine_id);
 
     if (matching.length === 0) return NO_MATCHING_MACHINE_ID;
@@ -161,7 +171,9 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     // 이전에는 개수는 "설비별 최신 실적 1건"으로 세고 필터는 날짜별 추세 행에 걸어, 둘이
     // 서로 다른 것을 세고 있었다.
     const machineOeeValues = Object.values(machineStats)
-      .filter(stat => stat.total_records > 0)
+      .filter((stat): stat is typeof stat & { avg_oee: number } =>
+        stat.reported_records > 0 && stat.avg_oee !== null
+      )
       .map(stat => stat.avg_oee);
 
     const oeeGrades = {
@@ -371,6 +383,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     downtimeData,
     productionData,
     machineDowntime,
+    overallPerformance,
+    reportingCoverage,
     loading: engineerDataLoading,
     error: engineerDataError,
     refreshData: refreshEngineerData
@@ -401,17 +415,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
   // 기본 빈 데이터 구조
   const getEmptyData = () => ({
-    overallMetrics: {
-      availability: 0,
-      performance: 0,
-      quality: 0,
-      oee: 0,
-      actual_runtime: 0,
-      planned_runtime: 0,
-      ideal_runtime: 0,
-      output_qty: 0,
-      defect_qty: 0
-    },
+    overallMetrics: null as OEEMetrics | null,
     analysisData: [],
     trendData: [],
     downtimeData: [],
@@ -435,9 +439,27 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const processedData = React.useMemo(() => {
     try {
       // 기간별 API 데이터가 있을 때는 API 데이터를 우선 사용
-      let overallMetrics: OEEMetrics;
+      let overallMetrics: OEEMetrics | null;
 
-      if (oeeData.length > 0) {
+      if (
+        overallPerformance
+        && overallPerformance.avg_availability !== null
+        && overallPerformance.avg_performance !== null
+        && overallPerformance.avg_quality !== null
+        && overallPerformance.avg_oee !== null
+      ) {
+        overallMetrics = {
+          availability: overallPerformance.avg_availability,
+          performance: overallPerformance.avg_performance,
+          quality: overallPerformance.avg_quality,
+          oee: overallPerformance.avg_oee,
+          actual_runtime: 0,
+          planned_runtime: 0,
+          ideal_runtime: 0,
+          output_qty: overallPerformance.total_output_qty,
+          defect_qty: overallPerformance.total_defect_qty
+        };
+      } else if (oeeData.length > 0) {
         const totalRecords = oeeData.length;
         const avgOEE = oeeData.reduce((sum, item) => sum + item.oee, 0) / totalRecords;
         const avgAvailability = oeeData.reduce((sum, item) => sum + item.availability, 0) / totalRecords;
@@ -456,10 +478,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           defect_qty: 0
         };
       } else {
-        // 조건에 맞는 데이터가 없으면 빈 값을 보여준다.
-        // (예전에는 여기서 "설비별 최신 실적"으로 폴백해, 필터를 걸었는데도 필터가 적용되지 않은
-        //  평균이 카드에 표시됐다)
-        return getEmptyData();
+        overallMetrics = null;
       }
 
       // 설비별 분석 데이터.
@@ -474,18 +493,27 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         .map(machine => {
           const stat = machineStats[machine.id];
           const downtime = machineDowntime[machine.id];
-          const hasData = Boolean(stat && stat.total_records > 0);
+          const hasData = Boolean(
+            stat
+            && stat.reported_records > 0
+            && stat.avg_oee !== null
+            && stat.avg_availability !== null
+            && stat.avg_performance !== null
+            && stat.avg_quality !== null
+          );
+          const hasProductionData = Boolean(stat && stat.total_records > 0);
 
           return {
             key: machine.id,
             machine: machine.name,
             location: machine.location,
             hasData,
+            hasProductionData,
             recordCount: stat?.total_records ?? 0,
-            avgOEE: stat?.avg_oee ?? 0,
-            availability: stat?.avg_availability ?? 0,
-            performance: stat?.avg_performance ?? 0,
-            quality: stat?.avg_quality ?? 0,
+            avgOEE: stat?.avg_oee ?? null,
+            availability: stat?.avg_availability ?? null,
+            performance: stat?.avg_performance ?? null,
+            quality: stat?.avg_quality ?? null,
             downtimeHours: Math.round(((downtime?.totalDowntime ?? 0) / 60) * 10) / 10,
             defectRate: stat && stat.total_output > 0 ? stat.total_defect / stat.total_output : 0,
             trend: 'neutral' as const,
@@ -507,7 +535,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       }
       return getEmptyData();
     }
-  }, [machines, machineStats, machineDowntime, effectiveMachineIds, oeeData, downtimeData, productionData, onError]);
+  }, [machines, machineStats, machineDowntime, effectiveMachineIds, overallPerformance, oeeData, downtimeData, productionData, onError]);
 
   // 등급 필터가 걸리면 그 등급의 설비만 표에 남긴다 (카드·추세와 같은 설비 집합).
   const filteredAnalysisData = React.useMemo(() => {
@@ -515,9 +543,32 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       return processedData.analysisData;
     }
     return processedData.analysisData.filter(
-      item => item.hasData && selectedOEEGrades.includes(getOEEGrade(item.avgOEE))
+      item => item.hasData
+        && item.avgOEE !== null
+        && selectedOEEGrades.includes(getOEEGrade(item.avgOEE))
     );
   }, [processedData.analysisData, selectedOEEGrades]);
+
+  // 비교 차트는 숫자 OEE가 있는 설비만 그린다. 미보고 설비는 표와 coverage에는
+  // 그대로 남기되, 차트에 0점으로 투입해 저성과 설비처럼 보이게 하지 않는다.
+  const comparisonData = React.useMemo(() => filteredAnalysisData.flatMap(item => {
+    if (
+      !item.hasData
+      || item.avgOEE === null
+      || item.availability === null
+      || item.performance === null
+      || item.quality === null
+    ) {
+      return [];
+    }
+    return [{
+      ...item,
+      avgOEE: item.avgOEE,
+      availability: item.availability,
+      performance: item.performance,
+      quality: item.quality,
+    }];
+  }), [filteredAnalysisData]);
 
   // 실제 설비 목록 옵션 생성 (Supabase 데이터만 사용)
   const machineOptions = React.useMemo(() => {
@@ -579,45 +630,49 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       width: 100,
       // 선택한 기간에 실적이 없는 설비는 0%가 아니라 "데이터 없음"이다.
       // 0%로 표시하면 "이 설비는 완전히 멈춰 있었다"로 읽혀 실제와 다르다.
-      render: (value: number, record: { hasData: boolean }) =>
+      render: (value: number | null, record: { hasData: boolean }) =>
         record.hasData ? (
           <span style={{
-            color: value >= 0.85 ? '#52c41a' : value >= 0.65 ? '#faad14' : '#ff4d4f',
+            color: (value ?? 0) >= 0.85 ? '#52c41a' : (value ?? 0) >= 0.65 ? '#faad14' : '#ff4d4f',
             fontWeight: 'bold'
           }}>
-            {(value * 100).toFixed(1)}%
+            {((value ?? 0) * 100).toFixed(1)}%
           </span>
         ) : (
           <span style={{ color: '#8c8c8c' }}>—</span>
         ),
-      sorter: (a: { avgOEE: number }, b: { avgOEE: number }) => a.avgOEE - b.avgOEE,
+      sorter: (a: { avgOEE: number | null }, b: { avgOEE: number | null }) =>
+        compareNullable(a.avgOEE, b.avgOEE),
     },
     {
       title: t('dashboard:table.availability'),
       dataIndex: 'availability',
       key: 'availability',
       width: 100,
-      render: (value: number, record: { hasData: boolean }) =>
-        record.hasData ? `${(value * 100).toFixed(1)}%` : '—',
-      sorter: (a: { availability: number }, b: { availability: number }) => a.availability - b.availability,
+      render: (value: number | null, record: { hasData: boolean }) =>
+        record.hasData ? `${((value ?? 0) * 100).toFixed(1)}%` : '—',
+      sorter: (a: { availability: number | null }, b: { availability: number | null }) =>
+        compareNullable(a.availability, b.availability),
     },
     {
       title: t('dashboard:table.performance'),
       dataIndex: 'performance',
       key: 'performance',
       width: 100,
-      render: (value: number, record: { hasData: boolean }) =>
-        record.hasData ? `${(value * 100).toFixed(1)}%` : '—',
-      sorter: (a: { performance: number }, b: { performance: number }) => a.performance - b.performance,
+      render: (value: number | null, record: { hasData: boolean }) =>
+        record.hasData ? `${((value ?? 0) * 100).toFixed(1)}%` : '—',
+      sorter: (a: { performance: number | null }, b: { performance: number | null }) =>
+        compareNullable(a.performance, b.performance),
     },
     {
       title: t('dashboard:table.quality'),
       dataIndex: 'quality',
       key: 'quality',
       width: 100,
-      render: (value: number, record: { hasData: boolean }) =>
-        record.hasData ? `${(value * 100).toFixed(1)}%` : '—',
-      sorter: (a: { quality: number }, b: { quality: number }) => a.quality - b.quality,
+      render: (value: number | null, record: { hasData: boolean }) =>
+        record.hasData ? `${((value ?? 0) * 100).toFixed(1)}%` : '—',
+      sorter: (a: { quality: number | null }, b: { quality: number | null }) =>
+        compareNullable(a.quality, b.quality),
     },
     {
       title: t('dashboard:table.downtimeHours'),
@@ -632,8 +687,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       dataIndex: 'defectRate',
       key: 'defectRate',
       width: 100,
-      render: (value: number, record: { hasData: boolean }) =>
-        record.hasData ? `${(value * 100).toFixed(2)}%` : '—',
+      render: (value: number, record: { hasProductionData: boolean }) =>
+        record.hasProductionData ? `${(value * 100).toFixed(2)}%` : '—',
       sorter: (a: { defectRate: number }, b: { defectRate: number }) => a.defectRate - b.defectRate,
     },
     {
@@ -744,17 +799,57 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         </Space>
       </div>
 
+      {reportingCoverage?.incomplete && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('dashboard:downtimeReporting.title', {
+            count: reportingCoverage.excluded_records,
+            ratio: Math.round((1 - reportingCoverage.reporting_rate) * 100),
+          })}
+          description={reportingCoverage.reported_records > 0
+            ? t('dashboard:downtimeReporting.description', {
+                reportedCount: reportingCoverage.reported_records,
+                unreportedCount: reportingCoverage.unreported_records,
+                invalidCount: reportingCoverage.invalid_records,
+              })
+            : t('dashboard:downtimeReporting.descriptionNone', {
+                unreportedCount: reportingCoverage.unreported_records,
+                invalidCount: reportingCoverage.invalid_records,
+              })}
+        />
+      )}
+
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          message={t('dashboard:engineerDashboard.dataLoadError')}
+          description={error}
+          style={{ marginBottom: 24 }}
+          action={
+            <Button size="small" onClick={() => refreshEngineerData()}>
+              {t('common:common.retry')}
+            </Button>
+          }
+        />
+      )}
+
       {/* 주요 지표 요약 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title={t('dashboard:engineerDashboard.averageOee')}
-              value={(processedData.overallMetrics.oee * 100).toFixed(1)}
-              suffix="%"
+              value={processedData.overallMetrics
+                ? (processedData.overallMetrics.oee * 100).toFixed(1)
+                : '—'}
+              suffix={processedData.overallMetrics ? '%' : undefined}
               valueStyle={{ 
-                color: processedData.overallMetrics.oee >= 0.85 ? '#52c41a' : 
-                       processedData.overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f' 
+                color: !processedData.overallMetrics ? '#8c8c8c'
+                  : processedData.overallMetrics.oee >= 0.85 ? '#52c41a'
+                  : processedData.overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f'
               }}
             />
           </Card>
@@ -763,8 +858,10 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           <Card>
             <Statistic
               title={t('dashboard:engineerDashboard.averageAvailability')}
-              value={(processedData.overallMetrics.availability * 100).toFixed(1)}
-              suffix="%"
+              value={processedData.overallMetrics
+                ? (processedData.overallMetrics.availability * 100).toFixed(1)
+                : '—'}
+              suffix={processedData.overallMetrics ? '%' : undefined}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
@@ -773,8 +870,10 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           <Card>
             <Statistic
               title={t('dashboard:engineerDashboard.averagePerformance')}
-              value={(processedData.overallMetrics.performance * 100).toFixed(1)}
-              suffix="%"
+              value={processedData.overallMetrics
+                ? (processedData.overallMetrics.performance * 100).toFixed(1)
+                : '—'}
+              suffix={processedData.overallMetrics ? '%' : undefined}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
@@ -783,8 +882,10 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           <Card>
             <Statistic
               title={t('dashboard:engineerDashboard.averageQuality')}
-              value={(processedData.overallMetrics.quality * 100).toFixed(1)}
-              suffix="%"
+              value={processedData.overallMetrics
+                ? (processedData.overallMetrics.quality * 100).toFixed(1)
+                : '—'}
+              suffix={processedData.overallMetrics ? '%' : undefined}
               valueStyle={{ color: '#faad14' }}
             />
           </Card>
@@ -802,12 +903,18 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={8}>
-                  <OEEGauge
-                    metrics={processedData.overallMetrics}
-                    title={t('dashboard:engineerDashboard.charts.overallOeeStatus')}
-                    size="large"
-                    showDetails={true}
-                  />
+                  {processedData.overallMetrics ? (
+                    <OEEGauge
+                      metrics={processedData.overallMetrics}
+                      title={t('dashboard:engineerDashboard.charts.overallOeeStatus')}
+                      size="large"
+                      showDetails={true}
+                    />
+                  ) : (
+                    <Card title={t('dashboard:engineerDashboard.charts.overallOeeStatus')}>
+                      <Empty description={t('dashboard:downtimeReporting.oeeUnavailable')} />
+                    </Card>
+                  )}
                 </Col>
                 <Col xs={24} lg={16}>
                   <IndependentOEETrendChart
@@ -946,7 +1053,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                     </Space>
                   }>
                     <MachineComparisonChart
-                      data={filteredAnalysisData}
+                      data={comparisonData}
                       height={550}
                       chartType={chartType}
                       onChartTypeChange={setChartType}

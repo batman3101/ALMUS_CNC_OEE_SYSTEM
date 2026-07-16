@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // GET /api/product-models - 활성화된 제품 모델 목록 조회
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerClient();
+    await requireUser(request, ['admin', 'engineer', 'operator']);
     
-    const { data: models, error } = await supabase
+    const { data: models, error } = await supabaseAdmin
       .from('product_models')
       .select('*')
       .eq('is_active', true)
@@ -21,7 +22,10 @@ export async function GET() {
     }
 
     return NextResponse.json(models || []);
-  } catch (error) {
+  } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Unexpected error in product models API:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
@@ -33,7 +37,7 @@ export async function GET() {
 // POST /api/product-models - 새로운 제품 모델 생성 (관리자용)
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerClient();
+    await requireUser(request, ['admin']);
     const body = await request.json();
     
     const { model_name, description, is_active = true } = body;
@@ -45,7 +49,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: newModel, error } = await supabase
+    const { data: newModel, error } = await supabaseAdmin
       .from('product_models')
       .insert({
         model_name,
@@ -64,7 +68,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(newModel, { status: 201 });
-  } catch (error) {
+  } catch (error: unknown) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Unexpected error in product models POST API:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },

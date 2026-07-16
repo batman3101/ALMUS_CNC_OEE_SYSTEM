@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { ApiAuthError, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 
 // GET /api/admin/machines - 모든 설비 목록 조회 (활성/비활성 모두)
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin']);
+
     // JOIN 쿼리를 사용한 단일 쿼리로 최적화 (N+1 쿼리 문제 해결)
     const { data: machines, error } = await supabaseAdmin
       .from('machines')
@@ -45,6 +47,9 @@ export async function GET() {
 
     return NextResponse.json({ machines: transformedMachines });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error fetching machines:', error);
     return NextResponse.json(
       { error: 'Failed to fetch machines' },
@@ -86,9 +91,9 @@ export async function POST(request: NextRequest) {
       machine
     });
   } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('Error creating machine:', error);
     return NextResponse.json(
       { error: 'Failed to create machine' },

@@ -1,3 +1,5 @@
+import { authFetch } from '@/lib/authFetch';
+
 /**
  * GET 요청 중복 제거 유틸.
  *
@@ -20,7 +22,7 @@ const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<unknown>>();
 
 async function requestJson(url: string): Promise<unknown> {
-  const response = await fetch(url);
+  const response = await authFetch(url);
   if (!response.ok) {
     throw new Error(`Request failed: ${url} (${response.status})`);
   }

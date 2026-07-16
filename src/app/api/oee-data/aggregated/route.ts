@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { calculateWeightedOEE } from '@/utils/weightedOee';
+import {
+  calculateChronologicalTrend,
+  isoWeek,
+  isValidDateOnly,
+  sortPeriodsChronologically,
+  type AggregationPeriod,
+} from './aggregationRules';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,99 +24,134 @@ export const dynamic = 'force-dynamic';
 interface DailyAggregateRow {
   date: string;
   records_count: number;
-  sum_availability: number;
-  sum_performance: number;
-  sum_quality: number;
-  sum_oee: number;
+  reported_records: number;
+  unreported_records: number;
+  invalid_records: number;
+  total_planned_runtime: number;
+  total_actual_runtime: number;
+  total_ideal_runtime: number;
+  metric_output: number;
+  metric_defects: number;
   total_output: number;
   total_defects: number;
-  total_runtime: number;
-  planned_runtime: number;
 }
 
 /** 기간(일/주/월/년) 단위로 누적한 합계 */
 interface PeriodBucket {
   records_count: number;
-  sum_availability: number;
-  sum_performance: number;
-  sum_quality: number;
-  sum_oee: number;
+  reported_records: number;
+  unreported_records: number;
+  invalid_records: number;
+  total_planned_runtime: number;
+  total_actual_runtime: number;
+  total_ideal_runtime: number;
+  metric_output: number;
+  metric_defects: number;
   total_output: number;
   total_defects: number;
-  total_runtime: number;
-  planned_runtime: number;
 }
 
 interface AggregatedPeriod {
   period: string;
   label: string;
   machine_id: string;
-  availability: number;
-  performance: number;
-  quality: number;
-  oee: number;
+  availability: number | null;
+  performance: number | null;
+  quality: number | null;
+  oee: number | null;
   total_output: number;
   total_defects: number;
   total_runtime: number;
   planned_runtime: number;
+  ideal_runtime: number;
+  metric_output: number;
+  metric_defects: number;
+  records_count: number;
+  reported_records: number;
+  unreported_records: number;
+  invalid_records: number;
 }
 
-type TrendKey = 'oee' | 'availability' | 'performance' | 'quality';
+const round3 = (value: number | null): number | null =>
+  value === null ? null : Math.round(value * 1000) / 1000;
+
+const PERIODS: AggregationPeriod[] = ['daily', 'weekly', 'monthly', 'yearly'];
 
 const emptyBucket = (): PeriodBucket => ({
   records_count: 0,
-  sum_availability: 0,
-  sum_performance: 0,
-  sum_quality: 0,
-  sum_oee: 0,
+  reported_records: 0,
+  unreported_records: 0,
+  invalid_records: 0,
+  total_planned_runtime: 0,
+  total_actual_runtime: 0,
+  total_ideal_runtime: 0,
+  metric_output: 0,
+  metric_defects: 0,
   total_output: 0,
   total_defects: 0,
-  total_runtime: 0,
-  planned_runtime: 0,
 });
 
 // GET /api/oee-data/aggregated - 집계된 OEE 데이터 조회
 export async function GET(request: NextRequest) {
   try {
+    await requireUser(request, ['admin', 'engineer']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
-    const period = searchParams.get('period') || 'daily'; // daily, weekly, monthly, yearly
-    const startDate = searchParams.get('start_date');
-    const endDate = searchParams.get('end_date');
+    const requestedPeriod = searchParams.get('period') || 'daily';
+    const requestedStartDate = searchParams.get('start_date');
+    const requestedEndDate = searchParams.get('end_date');
+
+    if (!PERIODS.includes(requestedPeriod as AggregationPeriod)) {
+      return NextResponse.json({ error: 'Invalid period' }, { status: 400 });
+    }
+    if ((requestedStartDate === null) !== (requestedEndDate === null)) {
+      return NextResponse.json({ error: 'start_date and end_date must be provided together' }, { status: 400 });
+    }
+    if (requestedStartDate && requestedEndDate && (
+      !isValidDateOnly(requestedStartDate)
+      || !isValidDateOnly(requestedEndDate)
+      || requestedStartDate > requestedEndDate
+    )) {
+      return NextResponse.json({ error: 'Invalid date range' }, { status: 400 });
+    }
+    const period = requestedPeriod as AggregationPeriod;
 
     // 실제 production_records에서 집계 데이터 조회
-    const generateRealAggregatedData = async (period: string, machineId: string | null) => {
-      // 날짜 필터 설정 (start_date/end_date 파라미터는 기존과 동일하게 메타데이터에만 반영된다)
+    const generateRealAggregatedData = async (period: AggregationPeriod, machineId: string | null) => {
+      // 사용자 지정 범위가 있으면 그 범위를 그대로 사용한다.
       const now = new Date();
-      const startDate = new Date();
+      const defaultStart = new Date();
 
       switch (period) {
         case 'daily':
-          startDate.setDate(now.getDate() - 30);
+          defaultStart.setDate(now.getDate() - 30);
           break;
         case 'weekly':
-          startDate.setDate(now.getDate() - (12 * 7));
+          defaultStart.setDate(now.getDate() - (12 * 7));
           break;
         case 'monthly':
-          startDate.setMonth(now.getMonth() - 12);
+          defaultStart.setMonth(now.getMonth() - 12);
           break;
         case 'yearly':
-          startDate.setFullYear(now.getFullYear() - 5);
+          defaultStart.setFullYear(now.getFullYear() - 5);
           break;
       }
+      const effectiveStartDate = requestedStartDate ?? defaultStart.toISOString().split('T')[0];
+      const effectiveEndDate = requestedEndDate ?? now.toISOString().split('T')[0];
 
       // 집계는 DB에서 수행한다.
       const { data, error } = await supabaseAdmin.rpc('analytics_oee_daily', {
-        p_start_date: startDate.toISOString().split('T')[0],
+        p_start_date: effectiveStartDate,
         p_machine_id: machineId,
       });
 
       if (error) {
         console.error('Error fetching production records for aggregation:', error);
-        return [];
+        throw new Error(`Failed to aggregate OEE: ${error.message}`);
       }
 
-      const dailyRows = (data ?? []) as DailyAggregateRow[];
+      const dailyRows = ((data ?? []) as DailyAggregateRow[])
+        .filter(row => row.date >= effectiveStartDate && row.date <= effectiveEndDate);
 
       // 일 단위 집계를 기간별로 그룹핑
       const groupedData = new Map<string, PeriodBucket>();
@@ -121,9 +165,7 @@ export async function GET(request: NextRequest) {
             periodKey = row.date;
             break;
           case 'weekly':
-            const weekStart = new Date(recordDate);
-            weekStart.setDate(recordDate.getDate() - recordDate.getDay());
-            periodKey = weekStart.toISOString().split('T')[0];
+            periodKey = isoWeek(row.date).key;
             break;
           case 'monthly':
             periodKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
@@ -137,25 +179,29 @@ export async function GET(request: NextRequest) {
 
         const bucket = groupedData.get(periodKey) ?? emptyBucket();
         bucket.records_count += row.records_count;
-        bucket.sum_availability += row.sum_availability;
-        bucket.sum_performance += row.sum_performance;
-        bucket.sum_quality += row.sum_quality;
-        bucket.sum_oee += row.sum_oee;
+        bucket.reported_records += row.reported_records;
+        bucket.unreported_records += row.unreported_records;
+        bucket.invalid_records += row.invalid_records;
+        bucket.total_planned_runtime += row.total_planned_runtime;
+        bucket.total_actual_runtime += row.total_actual_runtime;
+        bucket.total_ideal_runtime += row.total_ideal_runtime;
+        bucket.metric_output += row.metric_output;
+        bucket.metric_defects += row.metric_defects;
         bucket.total_output += row.total_output;
         bucket.total_defects += row.total_defects;
-        bucket.total_runtime += row.total_runtime;
-        bucket.planned_runtime += row.planned_runtime;
         groupedData.set(periodKey, bucket);
       });
 
       // 집계 계산
       const aggregatedResults: AggregatedPeriod[] = Array.from(groupedData.entries()).map(([periodKey, bucket]) => {
-        const totalRecords = bucket.records_count;
-
-        const avgAvailability = bucket.sum_availability / totalRecords;
-        const avgPerformance = bucket.sum_performance / totalRecords;
-        const avgQuality = bucket.sum_quality / totalRecords;
-        const avgOEE = bucket.sum_oee / totalRecords;
+        const weighted = calculateWeightedOEE({
+          reportedRecords: bucket.reported_records,
+          totalPlannedRuntime: bucket.total_planned_runtime,
+          totalActualRuntime: bucket.total_actual_runtime,
+          totalIdealRuntime: bucket.total_ideal_runtime,
+          totalOutput: bucket.metric_output,
+          totalDefects: bucket.metric_defects,
+        });
 
         // 라벨 생성
         let label: string;
@@ -164,8 +210,8 @@ export async function GET(request: NextRequest) {
             label = new Date(periodKey).toLocaleDateString('ko-KR');
             break;
           case 'weekly':
-            const weekDate = new Date(periodKey);
-            label = `${weekDate.getFullYear()}년 ${Math.floor(weekDate.getMonth() / 3) + 1}분기`;
+            const [isoYear, isoWeekNumber] = periodKey.split('-W');
+            label = `${isoYear}년 ${Number(isoWeekNumber)}주`;
             break;
           case 'monthly':
             const [year, month] = periodKey.split('-');
@@ -182,64 +228,85 @@ export async function GET(request: NextRequest) {
           period: periodKey,
           label,
           machine_id: machineId || 'all',
-          availability: Math.round(avgAvailability * 1000) / 1000,
-          performance: Math.round(avgPerformance * 1000) / 1000,
-          quality: Math.round(avgQuality * 1000) / 1000,
-          oee: Math.round(avgOEE * 1000) / 1000,
+          availability: round3(weighted.availability),
+          performance: round3(weighted.performance),
+          quality: round3(weighted.quality),
+          oee: round3(weighted.oee),
           total_output: bucket.total_output,
           total_defects: bucket.total_defects,
-          total_runtime: bucket.total_runtime,
-          planned_runtime: bucket.planned_runtime,
+          total_runtime: bucket.total_actual_runtime,
+          planned_runtime: bucket.total_planned_runtime,
+          ideal_runtime: bucket.total_ideal_runtime,
+          metric_output: bucket.metric_output,
+          metric_defects: bucket.metric_defects,
+          records_count: bucket.records_count,
+          reported_records: bucket.reported_records,
+          unreported_records: bucket.unreported_records,
+          invalid_records: bucket.invalid_records,
         };
       });
 
       // 시간순 정렬
-      return aggregatedResults.sort((a, b) => {
-        if (period === 'yearly') {
-          return parseInt(a.period) - parseInt(b.period);
-        }
-        return a.period.localeCompare(b.period);
-      });
+      return sortPeriodsChronologically(aggregatedResults);
     };
 
     const aggregatedData = await generateRealAggregatedData(period, machineId);
 
     // 트렌드 분석
-    const calculateTrend = (data: AggregatedPeriod[], key: TrendKey) => {
-      if (data.length < 2) return 0;
-
-      const recent = data.slice(0, Math.ceil(data.length / 2));
-      const older = data.slice(Math.ceil(data.length / 2));
-
-      const recentAvg = recent.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / recent.length;
-      const olderAvg = older.reduce((sum, item) => sum + (typeof item[key] === 'number' ? item[key] : 0), 0) / older.length;
-
-      return ((recentAvg - olderAvg) / olderAvg) * 100;
-    };
-
     const trends = {
-      oee: calculateTrend(aggregatedData, 'oee'),
-      availability: calculateTrend(aggregatedData, 'availability'),
-      performance: calculateTrend(aggregatedData, 'performance'),
-      quality: calculateTrend(aggregatedData, 'quality'),
+      oee: calculateChronologicalTrend(aggregatedData, 'oee'),
+      availability: calculateChronologicalTrend(aggregatedData, 'availability'),
+      performance: calculateChronologicalTrend(aggregatedData, 'performance'),
+      quality: calculateChronologicalTrend(aggregatedData, 'quality'),
     };
 
     // 전체 통계
+    const totals = aggregatedData.reduce((sum, data) => ({
+      records: sum.records + data.records_count,
+      reported: sum.reported + data.reported_records,
+      unreported: sum.unreported + data.unreported_records,
+      invalid: sum.invalid + data.invalid_records,
+      planned: sum.planned + data.planned_runtime,
+      actual: sum.actual + data.total_runtime,
+      ideal: sum.ideal + data.ideal_runtime,
+      metricOutput: sum.metricOutput + data.metric_output,
+      metricDefects: sum.metricDefects + data.metric_defects,
+      output: sum.output + data.total_output,
+      defects: sum.defects + data.total_defects,
+    }), {
+      records: 0, reported: 0, unreported: 0, invalid: 0, planned: 0, actual: 0,
+      ideal: 0, metricOutput: 0, metricDefects: 0, output: 0, defects: 0,
+    });
+    const overall = calculateWeightedOEE({
+      reportedRecords: totals.reported,
+      totalPlannedRuntime: totals.planned,
+      totalActualRuntime: totals.actual,
+      totalIdealRuntime: totals.ideal,
+      totalOutput: totals.metricOutput,
+      totalDefects: totals.metricDefects,
+    });
     const totalRecords = aggregatedData.length;
     const overallStats = {
-      avg_oee: aggregatedData.reduce((sum, data) => sum + data.oee, 0) / totalRecords,
-      avg_availability: aggregatedData.reduce((sum, data) => sum + data.availability, 0) / totalRecords,
-      avg_performance: aggregatedData.reduce((sum, data) => sum + data.performance, 0) / totalRecords,
-      avg_quality: aggregatedData.reduce((sum, data) => sum + data.quality, 0) / totalRecords,
-      total_output: aggregatedData.reduce((sum, data) => sum + data.total_output, 0),
-      total_defects: aggregatedData.reduce((sum, data) => sum + data.total_defects, 0),
-      total_runtime: aggregatedData.reduce((sum, data) => sum + data.total_runtime, 0),
+      avg_oee: overall.oee,
+      avg_availability: overall.availability,
+      avg_performance: overall.performance,
+      avg_quality: overall.quality,
+      total_output: totals.output,
+      total_defects: totals.defects,
+      total_runtime: totals.actual,
+      records_count: totals.records,
+      reported_records: totals.reported,
+      unreported_records: totals.unreported,
+      invalid_records: totals.invalid,
     };
 
     return NextResponse.json({
-      aggregated_data: aggregatedData.reverse(), // 시간순 정렬
+      aggregated_data: aggregatedData,
       trends: Object.fromEntries(
-        Object.entries(trends).map(([key, value]) => [key, Math.round(value * 100) / 100])
+        Object.entries(trends).map(([key, value]) => [
+          key,
+          value === null ? null : Math.round(value * 100) / 100,
+        ])
       ),
       statistics: {
         ...Object.fromEntries(
@@ -252,12 +319,14 @@ export async function GET(request: NextRequest) {
       metadata: {
         period,
         machine_id: machineId || 'all',
-        start_date: startDate,
-        end_date: endDate,
+        start_date: requestedStartDate,
+        end_date: requestedEndDate,
         generated_at: new Date().toISOString(),
       }
     });
   } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
     console.error('Error fetching aggregated OEE data:', error);
     return NextResponse.json(
       { error: 'Failed to fetch aggregated OEE data' },

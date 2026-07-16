@@ -49,11 +49,12 @@ export async function getBreakTimeMinutes(): Promise<number> {
 
 /**
  * 계획 가동시간 계산: max(0, operatingMinutes - breakMinutes)
- * operatingMinutes 가 없거나 0 이하이면 기본 가동시간(720분)을 사용한다.
+ * operatingMinutes 가 없을 때만 기본 가동시간(720분)을 사용한다. 명시적인 0분은
+ * 계획 가동이 없는 교대로 보존한다.
  */
 export function resolvePlannedRuntime(operatingMinutes: unknown, breakMinutes: number): number {
   const operating =
-    typeof operatingMinutes === 'number' && Number.isFinite(operatingMinutes) && operatingMinutes > 0
+    typeof operatingMinutes === 'number' && Number.isFinite(operatingMinutes) && operatingMinutes >= 0
       ? operatingMinutes
       : DEFAULT_OPERATING_MINUTES;
 

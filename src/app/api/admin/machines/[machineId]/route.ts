@@ -64,7 +64,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/admin/machines/[machineId] - 설비 삭제 (관리자 전용)
+// DELETE /api/admin/machines/[machineId] - 설비 비활성화 (관리자 전용)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { machineId: string } }
@@ -72,10 +72,10 @@ export async function DELETE(
   try {
     await requireUser(request, ['admin']);
 
-    // 삭제 대상이 실제로 존재하는지 먼저 확인한다 (없는 ID 를 성공으로 응답하지 않기 위해)
+    // 생산·비가동·상태 이력 보존을 위해 물리 삭제하지 않는다.
     const { data: deleted, error } = await supabaseAdmin
       .from('machines')
-      .delete()
+      .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', params.machineId)
       .select('id')
       .maybeSingle();
