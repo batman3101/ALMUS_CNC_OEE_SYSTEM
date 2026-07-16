@@ -93,12 +93,12 @@ export const ShiftEndNotification: React.FC<ShiftEndNotificationProps> = ({
       const shiftTimes = getShiftTimes();
       const estimatedRuntime = Math.max(0, SHIFT_DURATION_MINUTES - Number(shiftTimes.breakTime)); // 분
       machines.forEach(machine => {
-        const cavityCount = machine.current_cavity_count || 1;
         // machines 테이블에는 tact time 컬럼이 없다.
         // Tact Time은 machines_with_production_info 뷰의 current_tact_time
         // 또는 조인된 current_process.tact_time_seconds에서 읽어야 한다.
+        // 이 값은 개당(1 piece) 가공시간이므로 cavity 를 곱하지 않는다.
         const tactTime = machine.current_tact_time ?? machine.current_process?.tact_time_seconds ?? 0;
-        estimates[machine.id] = calculateEstimatedOutput(tactTime, estimatedRuntime, cavityCount);
+        estimates[machine.id] = calculateEstimatedOutput(tactTime, estimatedRuntime);
       });
       setEstimatedOutputs(estimates);
 
