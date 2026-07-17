@@ -29,6 +29,10 @@ interface ProductivityAnalysisResponse {
       avg_availability: number | null;
       avg_performance: number | null;
       avg_quality: number | null;
+      // 분 단위 합계. 모집단은 reporting_coverage.reported_records 와 같다.
+      total_planned_runtime: number;
+      total_actual_runtime: number;
+      total_ideal_runtime: number;
       total_output_qty: number;
       total_good_qty: number;
       total_defect_qty: number;
