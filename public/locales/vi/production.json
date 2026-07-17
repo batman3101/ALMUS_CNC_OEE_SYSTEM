@@ -33,5 +33,14 @@
       "defectNote": "Số lượng lỗi là số sản phẩm được xác định là lỗi trong số sản phẩm đã sản xuất",
       "limitNote": "Số lượng lỗi không thể lớn hơn sản lượng"
     }
+  },
+  "progressInput": {
+    "title": "Nhập số lượng sản xuất",
+    "label": "Tổng số đã sản xuất trong ca này",
+    "hint": "Đọc bộ đếm hay tự đếm đều được — nhập tổng lũy kế từ đầu ca",
+    "decreasedError": "Nhỏ hơn báo cáo trước ({{last}} cái). Số lũy kế không thể giảm. Vui lòng kiểm tra.",
+    "saveFailed": "Không lưu được. Vui lòng thử lại hoặc báo cho quản trị viên.",
+    "downtimeLocked": "Đang dừng máy từ {{since}} đến hiện tại. Hãy chuyển sang vận hành bình thường trước khi nhập.",
+    "submit": "Lưu"
   }
 }
