@@ -437,6 +437,15 @@ export async function GET(request: NextRequest) {
           avg_availability: roundNullable(overallMetrics.availability, 4),
           avg_performance: roundNullable(overallMetrics.performance, 4),
           avg_quality: roundNullable(overallMetrics.quality, 4),
+          // 위 avg_availability/avg_performance 를 만들어낸 바로 그 분자·분모다.
+          // 내보내지 않으면 클라이언트는 "가동률 99.5%" 를 그리면서 그 근거인
+          // 가동시간을 0 분이라고 단정하게 된다 (2026-07-17 실제 발생).
+          // 모집단은 reporting_coverage.reported_records 와 같다 (RPC 가
+          // oee_reported AND NOT invalid 로 필터해 합산) — 수량 합계와 모집단이 다르므로
+          // 교대당 평균을 낼 때 records_count 로 나누면 안 된다.
+          total_planned_runtime: totalPlannedRuntime,
+          total_actual_runtime: totalActualRuntime,
+          total_ideal_runtime: totalIdealRuntime,
           total_output_qty: totalOutputQty,
           total_good_qty: totalGoodQty,
           total_defect_qty: totalDefectQty,

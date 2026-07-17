@@ -136,7 +136,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             ...machine,
             // 담당 설비는 항상 실제 상태값을 가지고 있다는 것이 이 화면의 전제(카드뷰에서도 machine.current_state! 로 취급)
             current_state: machine.current_state as MachineState,
-            oee: oeeMetrics[machine.id]?.oee || 0,
+            // null = OEE 계산 불가(실적 미입력 또는 비가동 미보고). 0% 가 아니다.
+            // `|| 0` 이던 시절에는 실적을 아직 안 넣은 설비가 빨간 0.0% 로 표시됐다.
+            oee: oeeMetrics?.[machine.id]?.oee ?? null,
             currentDuration
           };
         })
@@ -231,8 +233,15 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     return processedData.assignedMachines.slice(startIndex, startIndex + pageSize);
   }, [processedData.assignedMachines, currentPage, pageSize]);
 
+  // 선택한 설비의 OEE 지표. null 이면 계산 불가(실적 미입력 또는 비가동 미보고)이며,
+  // OEE 탭은 게이지 대신 "생산 실적을 입력하세요" 빈 상태를 보여준다.
+  const selectedMachineMetrics = selectedMachine
+    ? (oeeMetrics?.[selectedMachine] ?? null)
+    : null;
+
   // 테이블 컬럼 정의
-  type MachineRowData = { id: string; name: string; current_state: MachineState; currentDuration: number; oee: number };
+  // oee 는 null 을 허용해야 한다 (number? 로 두면 "모름"을 표현하지 못한다).
+  type MachineRowData = { id: string; name: string; current_state: MachineState; currentDuration: number; oee: number | null };
   const tableColumns = [
     {
       title: machinesT('labels.machineName'),
@@ -272,12 +281,17 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       title: 'OEE',
       dataIndex: 'oee',
       key: 'oee',
-      render: (oee: number) => (
+      // null 을 number 로 받던 시절에는 `(null * 100).toFixed(1)` 이 조용히 "0.0" 이 되어
+      // 계산 불가인 설비가 빨간 0.0% 로 찍혔다. antd 의 render 타입이 느슨해
+      // 컴파일러도 잡지 못했다.
+      render: (oee: number | null) => (
         <span style={{
           fontWeight: 'bold',
-          color: oee >= 0.85 ? '#52c41a' : oee >= 0.65 ? '#faad14' : '#ff4d4f'
+          color: oee === null ? '#8c8c8c'
+            : oee >= 0.85 ? '#52c41a'
+            : oee >= 0.65 ? '#faad14' : '#ff4d4f'
         }}>
-          {(oee * 100).toFixed(1)}%
+          {oee === null ? '—' : `${(oee * 100).toFixed(1)}%`}
         </span>
       )
     }
@@ -394,10 +408,13 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
 
                         <div style={{ fontSize: 14, fontWeight: 'bold' }}>
                           OEE: <span style={{
-                            color: machine.oee >= 0.85 ? '#52c41a' :
-                                   machine.oee >= 0.65 ? '#faad14' : '#ff4d4f'
+                            // 계산 불가는 등급을 매기지 않는다. 회색 "—" 로 두어야
+                            // "아직 모름"과 "정말 나쁨"이 구분된다.
+                            color: machine.oee === null ? '#8c8c8c'
+                              : machine.oee >= 0.85 ? '#52c41a'
+                              : machine.oee >= 0.65 ? '#faad14' : '#ff4d4f'
                           }}>
-                            {(machine.oee * 100).toFixed(1)}%
+                            {machine.oee === null ? '—' : `${(machine.oee * 100).toFixed(1)}%`}
                           </span>
                         </div>
                       </div>
@@ -507,16 +524,19 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                 label: machinesT('operator.oeeStatus'),
                 children: (
                   <>
-                    {selectedMachine && oeeMetrics[selectedMachine] ? (
+                    {/* 항목이 없으면 OEE 계산 불가다. 예전에는 훅이 모든 설비에 0% 기본
+                        지표를 넣어줘서 이 조건이 항상 참이었고, 아래 "실적을 입력하세요"
+                        빈 상태는 도달할 수 없는 죽은 코드였다. */}
+                    {selectedMachineMetrics ? (
                       <Card size="small">
                         <OEEGauge
-                          metrics={oeeMetrics[selectedMachine]}
+                          metrics={selectedMachineMetrics}
                           title={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name}
                           size="small"
                           showDetails={true}
                         />
-                        {/* OEE가 0인 경우 안내 메시지 추가 */}
-                        {oeeMetrics[selectedMachine].oee === 0 && (
+                        {/* 여기 도달했다면 지표가 실재한다 = 확인된 진짜 0% 다 (미보고 아님) */}
+                        {selectedMachineMetrics.oee === 0 && (
                           <Alert
                             message={machinesT('operator.oeeDataCollecting')}
                             description={machinesT('operator.oeeDataCollectingDesc')}

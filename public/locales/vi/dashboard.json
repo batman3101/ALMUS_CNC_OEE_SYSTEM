@@ -29,6 +29,7 @@
     },
     "actualRuntime": "Thời gian vận hành thực tế",
     "plannedRuntime": "Thời gian vận hành kế hoạch",
+    "perShiftRuntimeNote": "※ Thời gian vận hành là trung bình mỗi ca ({{n}} ca), số lượng là tổng của kỳ",
     "outputQuantity": "Số lượng sản xuất",
     "defectQuantity": "Số lượng lỗi",
     "units": {

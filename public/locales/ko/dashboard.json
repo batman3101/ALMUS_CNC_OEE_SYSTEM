@@ -29,6 +29,7 @@
     },
     "actualRuntime": "실제 가동시간",
     "plannedRuntime": "계획 가동시간",
+    "perShiftRuntimeNote": "※ 가동시간은 교대 1회 평균({{n}}개 교대), 수량은 기간 합계입니다",
     "outputQuantity": "생산 수량",
     "defectQuantity": "불량 수량",
     "units": {

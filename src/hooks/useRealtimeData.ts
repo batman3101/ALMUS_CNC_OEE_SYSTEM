@@ -119,36 +119,69 @@ const findLatestRecord = (records: ProductionRecord[]): ProductionRecord | null 
   );
 
 // 생산 실적 1건을 OEE 지표로 변환
-const toOeeMetrics = (record: ProductionRecord): OEEMetrics => ({
-  availability: record.availability || 0,
-  performance: record.performance || 0,
-  quality: record.quality || 0,
-  oee: record.oee || 0,
-  actual_runtime: record.actual_runtime || 0,
-  planned_runtime: record.planned_runtime || 480,
-  ideal_runtime: record.ideal_runtime || 0,
-  output_qty: record.output_qty || 0,
-  defect_qty: record.defect_qty || 0
-});
+/**
+ * 저장된 실적을 게이지용 지표로 옮긴다. 계산할 수 없으면 null 을 돌려준다.
+ *
+ * 예전에는 `record.oee || 0`, `record.planned_runtime || 480` 로 NULL 을 뭉갰다.
+ * `/api/oee-data` 는 toNullableNumber 로 "미보고(NULL)"와 "확인된 0"을 구분해
+ * 내려주는데(oee-data/__tests__/completenessContract.test.ts 가 고정),
+ * 그 구분이 여기서 한 겹 위에 올라오자마자 사라지고 있었다. 그 결과 미보고 설비가
+ * 멀쩡한데도 빨간 0.0% 로 표시됐다.
+ *
+ * 480 은 근거가 없는 숫자이기도 했다 — 교대 기본 계획시간은 660분(12시간 − 휴식 60분)이다.
+ *
+ * 하나라도 NULL 이면 게이지의 어느 칸도 정직하게 채울 수 없으므로 지표 자체를 만들지 않는다.
+ * 호출부는 "항목 없음"을 이미 빈 상태로 처리한다(OperatorDashboard 의 OEE 탭).
+ */
+export const toOeeMetrics = (record: ProductionRecord): OEEMetrics | null => {
+  const { availability, performance, quality, oee } = record;
+  const { planned_runtime, actual_runtime, ideal_runtime } = record;
 
-// 생산 실적이 하나도 남지 않은 설비의 기본 지표
-const createEmptyOeeMetrics = (): OEEMetrics => ({
-  availability: 0,
-  performance: 0,
-  quality: 0,
-  oee: 0,
-  actual_runtime: 0,
-  planned_runtime: 480,
-  ideal_runtime: 0,
-  output_qty: 0,
-  defect_qty: 0
-});
+  // == null 은 null 과 undefined 를 함께 거른다. 0 은 통과시켜야 한다 —
+  // 확인된 무생산 교대의 0 은 진짜 측정값이다.
+  if (
+    availability == null || performance == null || quality == null || oee == null
+    || planned_runtime == null || actual_runtime == null || ideal_runtime == null
+  ) {
+    return null;
+  }
+
+  return {
+    availability,
+    performance,
+    quality,
+    oee,
+    actual_runtime,
+    planned_runtime,
+    ideal_runtime,
+    output_qty: record.output_qty ?? 0,
+    defect_qty: record.defect_qty ?? 0
+  };
+};
+
+export interface UseRealtimeDataOptions {
+  /**
+   * 생산 실적을 조회해 설비별 OEE 지표를 계산할지 (기본 true).
+   *
+   * false 면 `/api/oee-data` 를 호출하지 않고 `oeeMetrics` 는 null 이 된다.
+   * 엔지니어 화면은 이 훅에서 machines 만 쓰면서도 7일치 전체 실적
+   * (2026-07-17 실측 4,052행 / 1.9MB)을 받아 전부 버렸고, 그 요청 하나가
+   * 3~4초 동안 loading 을 붙잡아 "새로고침이 끝나지 않는" 증상을 만들었다.
+   * 설비별 지표가 필요한 화면은 useMachineOEEStats 처럼 서버 집계를 쓴다.
+   */
+  includeProductionRecords?: boolean;
+}
 
 interface RealtimeDataState {
   machines: Machine[];
   machineLogs: MachineLog[];
   productionRecords: ProductionRecord[];
-  oeeMetrics: Record<string, OEEMetrics>;
+  /**
+   * 설비별 지표. null 은 "계산하지 않음"(includeProductionRecords: false 이거나 아직 조회 전)이다.
+   * {} 는 "설비가 하나도 없음"이라는 뜻이므로 둘을 섞으면 안 된다 — 섞는 순간 다시 0% 표시가 된다.
+   * 개별 설비의 항목이 없으면 그 설비는 "OEE 계산 불가"다.
+   */
+  oeeMetrics: Record<string, OEEMetrics> | null;
   userProfile: User | null;
   loading: boolean;
   error: string | null;
@@ -156,12 +189,18 @@ interface RealtimeDataState {
   lastUpdated: number;
 }
 
-export const useRealtimeData = (userId?: string, userRole?: string) => {
+export const useRealtimeData = (
+  userId?: string,
+  userRole?: string,
+  options?: UseRealtimeDataOptions
+) => {
+  const includeProductionRecords = options?.includeProductionRecords !== false;
   const [state, setState] = useState<RealtimeDataState>({
     machines: [],
     machineLogs: [],
     productionRecords: [],
-    oeeMetrics: {},
+    // 조회 전에는 "지표 없음"이 아니라 "아직 모름"이다.
+    oeeMetrics: null,
     userProfile: null,
     loading: true,
     error: null,
@@ -259,7 +298,10 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
           .is('end_time', null)
           .order('start_time', { ascending: false }),
         fetchRecentMachineLogs(),
-        fetchAllRecentProductionRecords(assignedMachineIds)
+        // 쓰지 않을 데이터는 받지 않는다. 가장 빠른 조회는 실행하지 않는 조회다.
+        includeProductionRecords
+          ? fetchAllRecentProductionRecords(assignedMachineIds)
+          : Promise.resolve([] as ProductionRecord[])
       ]);
 
       // 설비 데이터
@@ -274,58 +316,29 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         ...((openLogs || []) as MachineLog[])
       ]);
 
-      // OEE 지표 계산 (개선된 로직)
-      const oeeMetrics: Record<string, OEEMetrics> = {};
-      if (machines) {
+      // 설비별 OEE 지표.
+      //
+      // 계산 가능한 설비만 항목을 만든다. 예전에는 실적이 없는 설비에도 항목을 만들어
+      // performance/quality/oee 를 0 으로, planned_runtime 을 480 으로 채워 넣었다.
+      // 그 결과 (a) 아직 실적을 입력하지 않은 설비가 OEE 0.0% 인 것처럼 보였고,
+      // (b) OperatorDashboard 의 OEE 탭에 이미 구현돼 있던 정직한 빈 상태
+      //     ("생산 실적을 입력하면 OEE를 볼 수 있습니다")가 영원히 도달 불가능했다 —
+      //     항목이 항상 존재해서 게이지가 늘 0% 로 그려졌기 때문이다.
+      // 항목이 없으면 그 화면들이 알아서 빈 상태를 보여준다.
+      //
+      // 로그 기반으로 가용성만 따로 추정하던 코드도 함께 지웠다. 그 값은 하루 계획시간을
+      // 480분으로 가정했는데 실제 교대 계획시간은 660분이라 근거가 없었고, 나머지 세 항목이
+      // 0 인 지표에 섞여 들어가 결국 OEE 0% 를 만들 뿐이었다.
+      const oeeMetrics: Record<string, OEEMetrics> | null = includeProductionRecords
+        ? {}
+        : null;
+      if (machines && oeeMetrics) {
         machines.forEach(machine => {
-          // 생산 실적 기반 OEE 데이터 찾기
           const machineRecords = productionRecords.filter(r => r.machine_id === machine.id);
-
           const latestRecord = findLatestRecord(machineRecords);
-
-          if (latestRecord) {
-            // 생산 실적이 있는 경우: 최신 데이터 사용 (date, shift 기준 최신)
-            oeeMetrics[machine.id] = toOeeMetrics(latestRecord);
-          } else {
-            // 생산 실적이 없는 경우: 기본값 또는 실시간 계산
-            // machine_logs 기반으로 가용성만이라도 계산
-            const todayLogs = machineLogs?.filter(log =>
-              log.machine_id === machine.id &&
-              new Date(log.start_time).toDateString() === new Date().toDateString()
-            ) || [];
-
-            let availability = 0;
-            if (todayLogs.length > 0) {
-              // 정상 작동 시간 계산
-              const normalOperationTime = todayLogs
-                .filter(log => log.state === 'NORMAL_OPERATION')
-                .reduce((acc, log) => {
-                  const start = new Date(log.start_time).getTime();
-                  const end = log.end_time ? new Date(log.end_time).getTime() : Date.now();
-                  return acc + (end - start) / (1000 * 60); // 분 단위
-                }, 0);
-
-              // 계획된 작동 시간 (현재까지의 시간)
-              const now = new Date();
-              const todayStart = new Date(now);
-              todayStart.setHours(0, 0, 0, 0);
-              const plannedTime = Math.min((now.getTime() - todayStart.getTime()) / (1000 * 60), 480);
-
-              availability = plannedTime > 0 ? normalOperationTime / plannedTime : 0;
-            }
-
-            // 기본 OEE 메트릭 설정 (데이터 없는 경우)
-            oeeMetrics[machine.id] = {
-              availability: availability,
-              performance: 0, // 생산 데이터 없으면 0
-              quality: 0, // 품질 데이터 없으면 0
-              oee: 0, // OEE는 모든 요소가 있어야 계산 가능
-              actual_runtime: 0,
-              planned_runtime: 480,
-              ideal_runtime: 0,
-              output_qty: 0,
-              defect_qty: 0
-            };
+          const metrics = latestRecord ? toOeeMetrics(latestRecord) : null;
+          if (metrics) {
+            oeeMetrics[machine.id] = metrics;
           }
         });
       }
@@ -349,7 +362,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         machines: machines?.length || 0,
         machineLogs: machineLogs?.length || 0,
         productionRecords: productionRecords.length,
-        oeeMetrics: Object.keys(oeeMetrics).length
+        oeeMetrics: oeeMetrics ? Object.keys(oeeMetrics).length : '미조회'
       });
 
     } catch (error) {
@@ -367,7 +380,7 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
       // 에러 발생시 자동 재연결 스케줄
       scheduleReconnect();
     }
-  }, [scheduleReconnect]);
+  }, [scheduleReconnect, includeProductionRecords]);
 
   // 채널 정리 함수
   const cleanupChannels = useCallback(() => {
@@ -441,8 +454,11 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         }
       });
 
-    // 생산 실적 실시간 구독
-    const productionChannel = supabase
+    // 생산 실적 실시간 구독.
+    // 초기 조회를 건너뛴 경우(includeProductionRecords: false) 구독도 하지 않는다.
+    // 구독만 살려두면 이벤트가 올 때마다 oeeMetrics 가 null(미조회)에서 부분 맵으로
+    // 바뀌어, 조회한 적도 없는 지표가 생긴 것처럼 보인다.
+    const productionChannel = !includeProductionRecords ? null : supabase
       .channel('production_records_changes')
       .on(
         'postgres_changes',
@@ -496,9 +512,14 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
             // 남은 실적 중 가장 최신(date, shift) 건으로 지표를 다시 계산한다.
             const machineRecords = newRecords.filter(r => r.machine_id === affectedMachineId);
             const latestRecord = findLatestRecord(machineRecords);
-            newOeeMetrics[affectedMachineId] = latestRecord
-              ? toOeeMetrics(latestRecord)
-              : createEmptyOeeMetrics();
+            const metrics = latestRecord ? toOeeMetrics(latestRecord) : null;
+            // 마지막 실적이 지워졌거나 미보고로 바뀌면 지표는 "계산 불가"가 된다.
+            // 0% 로 남겨두면 설비가 멈춘 것처럼 보인다.
+            if (metrics) {
+              newOeeMetrics[affectedMachineId] = metrics;
+            } else {
+              delete newOeeMetrics[affectedMachineId];
+            }
 
             return {
               ...prev,
@@ -570,11 +591,17 @@ export const useRealtimeData = (userId?: string, userRole?: string) => {
         }
       });
 
-    // 채널 참조 저장
-    channelsRef.current = [machineLogsChannel, productionChannel, machinesChannel];
+    // 채널 참조 저장 (생산 실적 구독은 옵션에 따라 없을 수 있다)
+    const openedChannels: Array<RealtimeChannel | null> = [
+      machineLogsChannel,
+      productionChannel,
+      machinesChannel
+    ];
+    channelsRef.current = openedChannels
+      .filter((channel): channel is RealtimeChannel => channel !== null);
 
     console.log('🔗 실시간 구독 설정 완료');
-  }, [cleanupChannels, updateConnectionStatus, scheduleReconnect]);
+  }, [cleanupChannels, updateConnectionStatus, scheduleReconnect, includeProductionRecords]);
 
   // 실시간 구독 설정
   useEffect(() => {

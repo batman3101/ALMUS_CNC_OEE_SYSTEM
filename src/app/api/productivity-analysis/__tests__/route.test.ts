@@ -99,6 +99,36 @@ describe('GET /api/productivity-analysis reporting quality', () => {
     expect(body.trends.daily[0].reporting_coverage.invalid_records).toBe(1);
   });
 
+  // avg_availability 는 total_actual_runtime / total_planned_runtime 이다. 이 분자·분모를
+  // 응답에 싣지 않으면 클라이언트는 비율만 받고 근거를 못 받아, 가동시간을 0 으로 지어내게
+  // 된다. 실제로 엔지니어 대시보드가 "가동률 99.5% / 실제 가동시간 0분" 을 함께 띄웠다.
+  it('exposes the runtime sums that the displayed availability is derived from', async () => {
+    const response = await GET({
+      url: 'http://localhost/api/productivity-analysis?start_date=2026-07-15&end_date=2026-07-15',
+    } as never);
+    const body = await response.json() as {
+      summary: {
+        overall_performance: {
+          avg_availability: number | null;
+          total_planned_runtime: number;
+          total_actual_runtime: number;
+          total_ideal_runtime: number;
+        };
+      };
+    };
+    const perf = body.summary.overall_performance;
+
+    expect(perf.total_planned_runtime).toBe(600);
+    expect(perf.total_actual_runtime).toBe(500);
+    expect(perf.total_ideal_runtime).toBe(400);
+
+    // 노출한 값이 표시 비율과 같은 출처임을 고정한다. 다른 모수를 실으면 여기서 깨진다.
+    expect(perf.avg_availability).toBeCloseTo(
+      perf.total_actual_runtime / perf.total_planned_runtime,
+      4
+    );
+  });
+
   it('keeps invalid-row quantities out of administrator production and defect totals', async () => {
     const validTotals = {
       records_count: 2,

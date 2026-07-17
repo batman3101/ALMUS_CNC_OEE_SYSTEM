@@ -78,13 +78,18 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
   // 실시간 데이터 훅 사용 (설비 목록과 연결 상태용.
   // 설비별 지표는 아래 useMachineOEEStats 가 기간·교대 필터를 적용해 서버에서 집계한다)
+  //
+  // 이 화면은 위 주석대로 machines 만 쓰는데도 7일치 생산 실적 전체를 받아왔다.
+  // 실측(2026-07-17): 4,052행 / 1.9MB / 3~4초. 그 응답은 oeeMetrics 계산에만 쓰이고
+  // 이 화면은 oeeMetrics 를 한 번도 참조하지 않아 전부 버려졌다. 게다가 그 요청이
+  // realtimeLoading 을 붙잡아(아래 loading 조합) "새로고침이 끝나지 않는" 증상을 만들었다.
   const {
     machines,
     loading: realtimeLoading,
     error: realtimeError,
     refresh,
     isConnected
-  } = useRealtimeData(user?.id, user?.role);
+  } = useRealtimeData(user?.id, user?.role, { includeProductionRecords: false });
 
   // 위치 필터에 해당하는 설비 ID 목록 (전체 선택 시 null = 위치 필터 없음)
   const locationMachineIds = React.useMemo(() => {
@@ -453,30 +458,22 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           performance: overallPerformance.avg_performance,
           quality: overallPerformance.avg_quality,
           oee: overallPerformance.avg_oee,
-          actual_runtime: 0,
-          planned_runtime: 0,
-          ideal_runtime: 0,
+          // 기간 합계(분). 표시는 OEEGauge 가 shiftCount 로 교대 평균 환산한다.
+          actual_runtime: overallPerformance.total_actual_runtime,
+          planned_runtime: overallPerformance.total_planned_runtime,
+          ideal_runtime: overallPerformance.total_ideal_runtime,
           output_qty: overallPerformance.total_output_qty,
           defect_qty: overallPerformance.total_defect_qty
         };
-      } else if (oeeData.length > 0) {
-        const totalRecords = oeeData.length;
-        const avgOEE = oeeData.reduce((sum, item) => sum + item.oee, 0) / totalRecords;
-        const avgAvailability = oeeData.reduce((sum, item) => sum + item.availability, 0) / totalRecords;
-        const avgPerformance = oeeData.reduce((sum, item) => sum + item.performance, 0) / totalRecords;
-        const avgQuality = oeeData.reduce((sum, item) => sum + item.quality, 0) / totalRecords;
-
-        overallMetrics = {
-          availability: avgAvailability,
-          performance: avgPerformance,
-          quality: avgQuality,
-          oee: avgOEE,
-          actual_runtime: 0, // API 데이터에서는 집계값 없음
-          planned_runtime: 0,
-          ideal_runtime: 0,
-          output_qty: 0,
-          defect_qty: 0
-        };
+      // 예전에는 여기서 oeeData(일별 추이)를 다시 평균내는 폴백이 있었다. 그 경로는
+      // 두 가지 이유로 삭제했다.
+      //   1) 도달할 수 없다 — avg_* 가 null 이 되는 경우(보고 기록 0건, 계획시간 0)에는
+      //      일별 행도 모두 null 이라 useEngineerData 에서 걸러져 oeeData 가 빈 배열이 된다.
+      //      두 값은 같은 응답에서 함께 설정되고 함께 비워지므로 어긋날 수 없다.
+      //   2) 도달하더라도 거짓말만 한다 — OEETrendData 에는 runtime·수량 필드가 없어
+      //      가동시간과 생산량을 0 으로 지어낼 수밖에 없었다. 실제로 그 0 이 화면에
+      //      "실제 가동시간 0분" 으로 찍혔다.
+      // 집계는 overall_performance 하나만 신뢰한다. 없으면 없다고 말한다.
       } else {
         overallMetrics = null;
       }
@@ -760,7 +757,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             style={{ width: 260 }}
           />
           <Dropdown
-            overlay={filterMenu}
+            // antd 5 에서 `overlay` 는 deprecated 다. 다만 권장 대체재인 `menu={{items}}` 는
+            // 여기에 맞지 않는다 — filterMenu 는 Menu 가 아니라 Tag 로 만든 커스텀 필터
+            // 패널이라 items 구조로 표현할 수 없다. 임의 콘텐츠용 API 가 popupRender 다.
+            // (antd 5.27 기준 dropdownRender 도 deprecated → popupRender)
+            popupRender={() => filterMenu}
             trigger={['click']}
             open={filterDropdownVisible}
             onOpenChange={setFilterDropdownVisible}
@@ -915,6 +916,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                       title={t('dashboard:engineerDashboard.charts.overallOeeStatus')}
                       size="large"
                       showDetails={true}
+                      // 전사 게이지의 runtime 은 전체 설비 × 전체 일자 합계라 수백만 분이
+                      // 된다. 교대 1회 평균으로 환산해야 계획 660분과 비교가 된다.
+                      // 분모는 반드시 reported_records 다 — runtime 합계가 RPC 에서
+                      // oee_reported 로 필터돼 있어 records_count 로 나누면 평균이 작아진다.
+                      shiftCount={reportingCoverage?.reported_records}
                     />
                   ) : (
                     // 조회 중에는 "기록이 없다"고 단정하지 않는다. 아직 모르는 것과
