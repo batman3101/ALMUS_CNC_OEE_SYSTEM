@@ -138,9 +138,16 @@ describe('calculateRealtimeProgress', () => {
   // tact 72 초에서는 508.33 이라 floor 와 round 가 같아 구분되지 않는다. 갈리는 값으로 고정한다.
   it('CAPA 는 반올림이 아니라 내림이다 (도달 가능한 수만 목표로 내건다)', () => {
     // 610 / (70/60) = 522.86 → floor 522, round 523
+    const tactTimeSeconds = 70;
+    const exactCapa = 610 / (tactTimeSeconds / 60);   // 522.857…
+
+    // 이 테스트는 floor 와 round 가 갈리는 tact 에서만 의미가 있다. 픽스처를 현실값 72 로
+    // "정리"하면 508 === 508 이 되어 통과하면서 검증력을 잃는다. 그 순간 여기서 죽는다.
+    expect(Math.floor(exactCapa)).not.toBe(Math.round(exactCapa));
+
     const r = calculateRealtimeProgress({
       ...base,
-      tactTimeSeconds: 70,
+      tactTimeSeconds,
       now: new Date('2026-07-17T10:00:00+07:00'),
     });
     expect(r.capaQty).toBe(522);
@@ -155,6 +162,42 @@ describe('calculateRealtimeProgress', () => {
     });
     expect(r.performance).toBeNull();
     expect(r.capaQty).toBeNull();
+  });
+
+  // 720분 교대를 전제로 한 시간대이므로, 더 짧은 교대는 애초에 계산할 수 없다.
+  // 480분이면 경과 기준 400 vs 총량 기준 370 으로 어긋나 진척 바가 108% 가 된다.
+  it.each([480, 300, 120, 0])('교대가 %p 분이면 휴식 시간대를 담지 못하므로 거부한다', (operatingMinutes) => {
+    expect(() => calculateRealtimeProgress({
+      ...base, operatingMinutes, now: new Date('2026-07-17T10:00:00+07:00'),
+    })).toThrow();
+  });
+
+  it('시간대가 딱 들어가는 600분 교대는 받는다', () => {
+    const r = calculateRealtimeProgress({
+      ...base, operatingMinutes: 600, now: new Date('2026-07-17T18:00:00+07:00'),
+    });
+    // 경과 600 − 휴식 110 = 490 = 600 − 110. 두 식이 일치하는 경계.
+    expect(r.elapsedPlannedMinutes).toBe(490);
+    expect(r.plannedRuntimeMinutes).toBe(490);
+    expect(r.elapsedRatio).toBeCloseTo(1, 5);
+  });
+
+  // Math.max(0, NaN) 은 0 이 아니라 NaN 이다. 비유한값은 상류의 버그이므로 거부한다.
+  it('downtimeMinutes 가 유효한 수가 아니면 거부한다', () => {
+    expect(() => calculateRealtimeProgress({
+      ...base, downtimeMinutes: Number.NaN, now: new Date('2026-07-17T10:00:00+07:00'),
+    })).toThrow();
+  });
+
+  it('shiftOutputQty 가 NaN 이면 거부한다 (null 은 정상 — 아직 보고 없음)', () => {
+    expect(() => calculateRealtimeProgress({
+      ...base, shiftOutputQty: Number.NaN, now: new Date('2026-07-17T10:00:00+07:00'),
+    })).toThrow();
+
+    // null 은 던지지 않는다 — 보고가 없는 것은 오류가 아니다.
+    expect(() => calculateRealtimeProgress({
+      ...base, shiftOutputQty: null, now: new Date('2026-07-17T10:00:00+07:00'),
+    })).not.toThrow();
   });
 
   // B 교대는 자정을 넘는다. 이 프로젝트에서 자정 경계는 반복된 함정이다.

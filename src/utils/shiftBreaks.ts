@@ -45,6 +45,14 @@ export const SHIFT_BREAK_WINDOWS: Record<'A' | 'B', readonly BreakWindow[]> = {
 };
 
 /**
+ * 마지막 휴식 시간대가 끝나는 지점 (교대 시작 후 분).
+ *
+ * 시간대는 720분 교대를 전제로 하드코딩돼 있다. 교대가 이보다 짧으면 시간대가 교대 밖으로
+ * 나가 "경과 기준 휴식"과 "총량 110분" 이 어긋난다 — 즉 이 표 자체가 그 교대에는 맞지 않는다.
+ */
+export const BREAK_WINDOWS_END_OFFSET_MINUTES = 600;
+
+/**
  * 교대 시작부터 now 까지 지나간 휴식(분). 진행 중인 휴식은 지난 만큼만 센다.
  * now 를 인자로 받아 결정론적으로 테스트한다 — 시각 의존은 flaky 의 원흉이다.
  */
