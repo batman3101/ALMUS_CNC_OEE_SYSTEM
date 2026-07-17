@@ -508,11 +508,17 @@ CREATE POLICY progress_reports_insert ON public.production_progress_reports
 Run: `npm test -- --testPathPatterns="progressReportsMigration"`
 Expected: PASS — 5 tests
 
-- [ ] **Step 5: 운영 DB 에 적용**
+- [ ] **Step 5: 운영 DB 적용은 여기서 하지 않는다 — 보류 (2026-07-17 결정)**
 
-`supabase db push` 는 이 프로젝트에서 안전하지 않다 (버전 불일치). MCP `apply_migration` 을 쓴다.
+**이 단계를 실행하지 말 것.** 마이그레이션 파일과 계약 테스트만 커밋하고 DB 는 건드리지 않는다.
 
-적용 후 확인:
+Task 4~8 은 전부 mock 기반이라 테이블 없이도 구현·테스트가 된다. 실제 테이블이 필요한 것은
+**Task 9(브라우저 검증)** 뿐이다. 그 시점에 사용자에게 다시 확인을 받고 적용한다.
+
+적용할 때가 되면:
+
+- `supabase db push` 는 이 프로젝트에서 **안전하지 않다** (CLI 버전 불일치). MCP `apply_migration` 을 쓴다.
+- 적용 후 반드시 확인:
 
 ```sql
 SELECT column_name, data_type, is_nullable
@@ -525,6 +531,9 @@ Expected: 8개 컬럼
 SELECT policyname, cmd FROM pg_policies WHERE tablename = 'production_progress_reports';
 ```
 Expected: `progress_reports_select`(SELECT), `progress_reports_insert`(INSERT) 만. UPDATE/DELETE 없음.
+
+- 롤백은 `DROP TABLE public.production_progress_reports;` 한 줄. 기존 테이블·데이터를 건드리지
+  않으므로 되돌리기 쉽다.
 
 - [ ] **Step 6: 커밋**
 
@@ -1720,6 +1729,11 @@ git commit -m "feat(realtime): 태블릿에 실시간 가동×성능·진척 표
 ## Task 9: 브라우저 검증
 
 **Files:** 없음 (검증만)
+
+> ⚠️ **선행 조건: 운영 DB 마이그레이션 적용.** Task 3 Step 5 에서 보류했으므로
+> `production_progress_reports` 테이블이 아직 없다. 이 Task 는 실제 테이블 없이는 불가능하다.
+> **적용 전에 사용자에게 확인을 받을 것** (2026-07-17 결정: "마이그레이션 파일만 쓰고 적용은 보류").
+> Task 3 Step 5 에 적용 절차와 롤백이 적혀 있다.
 
 - [ ] **Step 1: dev 서버에서 확인**
 
