@@ -137,3 +137,24 @@
 - 신규 테이블(`alert_acknowledgements`, `production_shift_states`): DROP.
 - 신규 컬럼(`version`·`updated_at`), 신규 트리거: DROP.
 - backfill(닫힌 로그/비가동): 되돌리기 비권장 — 무한 열림 정리이므로 유지가 정상.
+
+---
+
+## 6. 롤백
+
+- **1차 안전망:** 적용 전 백업/PITR 복원 지점.
+- 함수: 직전 버전(`codex_round2_fixes`·`downtime_reporting_visibility` 파일 본문) 재적용으로 복원 가능.
+- 신규 테이블(`alert_acknowledgements`, `production_shift_states`): DROP.
+- 신규 컬럼(`version`·`updated_at`), 신규 트리거: DROP.
+- backfill(닫힌 로그/비가동): 되돌리기 비권장 — 무한 열림 정리이므로 유지가 정상.
+
+---
+
+## 6. 롤백
+
+- **1차 안전망:** 적용 전 백업/PITR 복원 지점.
+- 함수: 직전 버전(`codex_round2_fixes`·`downtime_reporting_visibility` 파일 본문) 재적용으로 복원 가능.
+- 신규 테이블(`alert_acknowledgements`, `production_shift_states`): DROP.
+- 신규 컬럼(`version`·`updated_at`), 신규 트리거: DROP.
+- backfill(닫힌 로그/비가동): 되돌리기 비권장 — 무한 열림 정리이므로 유지가 정상.
+
