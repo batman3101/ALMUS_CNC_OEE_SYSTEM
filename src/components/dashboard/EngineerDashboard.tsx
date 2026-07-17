@@ -78,13 +78,18 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
 
   // 실시간 데이터 훅 사용 (설비 목록과 연결 상태용.
   // 설비별 지표는 아래 useMachineOEEStats 가 기간·교대 필터를 적용해 서버에서 집계한다)
+  //
+  // 이 화면은 위 주석대로 machines 만 쓰는데도 7일치 생산 실적 전체를 받아왔다.
+  // 실측(2026-07-17): 4,052행 / 1.9MB / 3~4초. 그 응답은 oeeMetrics 계산에만 쓰이고
+  // 이 화면은 oeeMetrics 를 한 번도 참조하지 않아 전부 버려졌다. 게다가 그 요청이
+  // realtimeLoading 을 붙잡아(아래 loading 조합) "새로고침이 끝나지 않는" 증상을 만들었다.
   const {
     machines,
     loading: realtimeLoading,
     error: realtimeError,
     refresh,
     isConnected
-  } = useRealtimeData(user?.id, user?.role);
+  } = useRealtimeData(user?.id, user?.role, { includeProductionRecords: false });
 
   // 위치 필터에 해당하는 설비 ID 목록 (전체 선택 시 null = 위치 필터 없음)
   const locationMachineIds = React.useMemo(() => {
