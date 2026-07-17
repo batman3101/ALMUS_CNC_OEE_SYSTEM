@@ -757,7 +757,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             style={{ width: 260 }}
           />
           <Dropdown
-            overlay={filterMenu}
+            // antd 5 에서 `overlay` 는 deprecated 다. 다만 권장 대체재인 `menu={{items}}` 는
+            // 여기에 맞지 않는다 — filterMenu 는 Menu 가 아니라 Tag 로 만든 커스텀 필터
+            // 패널이라 items 구조로 표현할 수 없다. 임의 콘텐츠용 API 가 popupRender 다.
+            // (antd 5.27 기준 dropdownRender 도 deprecated → popupRender)
+            popupRender={() => filterMenu}
             trigger={['click']}
             open={filterDropdownVisible}
             onOpenChange={setFilterDropdownVisible}

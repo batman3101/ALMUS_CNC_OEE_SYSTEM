@@ -135,6 +135,13 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
             icon: <LineChartOutlined />,
             label: t('nav.analytics'),
           },
+          // 관리자는 엔지니어 화면(/analytics)은 볼 수 있지만 운영자 화면은 볼 수 없었다.
+          // DashboardRouter 가 역할로만 분기해 도달할 URL 이 없었기 때문이다.
+          {
+            key: '/operator-view',
+            icon: <DesktopOutlined />,
+            label: t('nav.operatorView'),
+          },
           {
             key: '/admin',
             icon: <UserOutlined />,
