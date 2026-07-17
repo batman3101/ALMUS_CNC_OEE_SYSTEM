@@ -692,6 +692,8 @@ Expected: FAIL — `Cannot find module '../route'`
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
+import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 
 export const dynamic = 'force-dynamic';
 
@@ -836,6 +838,7 @@ jest.mock('next/server', () => ({
 
 const mockRequireUser = jest.fn();
 const mockFrom = jest.fn();
+const mockGetBreakTimeMinutes = jest.fn();
 
 jest.mock('@/lib/apiAuth', () => ({
   requireUser: (...a: unknown[]) => mockRequireUser(...a),
@@ -845,8 +848,12 @@ jest.mock('@/lib/apiAuth', () => ({
 jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { from: (...a: unknown[]) => mockFrom(...a) },
 }));
+jest.mock('@/lib/plannedRuntime', () => ({
+  getBreakTimeMinutes: () => mockGetBreakTimeMinutes(),
+}));
 
 import { GET } from '../route';
+import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 
 const MACHINE = '11111111-1111-4111-8111-111111111111';
 
@@ -854,6 +861,7 @@ describe('GET /api/production-progress', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
+    mockGetBreakTimeMinutes.mockResolvedValue(TOTAL_BREAK_MINUTES);
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'production_progress_reports') {
@@ -926,6 +934,28 @@ describe('GET /api/production-progress', () => {
     const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
     const body = await res.json() as { tact_time_seconds: number | null };
     expect(body.tact_time_seconds).toBeNull();
+  });
+
+  // shiftBreaks 의 휴식 시간대 합계는 코드 상수인데 break_time_minutes 는 관리자가 UI 에서
+  // 바꿀 수 있다. 순수 모듈은 설정을 못 읽으므로 어긋남 검출은 여기서만 가능하다.
+  // 이 방어선이 없으면 관리자가 휴식 총량을 바꾼 순간부터 실시간 화면과 확정 OEE 가
+  // 영구히 다른 말을 하면서도 모든 테스트가 초록으로 남는다.
+  it('설정된 휴식 총량이 코드 상수와 같으면 정상으로 알린다', async () => {
+    const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
+    const body = await res.json() as { break_config_matches: boolean };
+    expect(body.break_config_matches).toBe(true);
+  });
+
+  it('관리자가 휴식 총량을 바꿔 코드 상수와 어긋나면 계산 불가로 알린다', async () => {
+    mockGetBreakTimeMinutes.mockResolvedValue(TOTAL_BREAK_MINUTES + 20);
+
+    const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
+    const body = await res.json() as {
+      break_config_matches: boolean;
+      configured_break_minutes: number;
+    };
+    expect(body.break_config_matches).toBe(false);
+    expect(body.configured_break_minutes).toBe(TOTAL_BREAK_MINUTES + 20);
   });
 });
 ```
@@ -1012,10 +1042,28 @@ export async function GET(request: NextRequest) {
     const tactTimeSeconds =
       tactRow?.current_tact_time && tactRow.current_tact_time > 0 ? tactRow.current_tact_time : null;
 
+    // shiftBreaks 의 휴식 시간대 합계(TOTAL_BREAK_MINUTES)는 코드 상수이고,
+    // break_time_minutes 는 관리자가 UI 에서 바꿀 수 있다(ShiftSettingsTab). 둘이 어긋나면
+    // 실시간 화면과 확정 OEE 가 영구히 다른 말을 한다. 순수 모듈은 설정을 읽을 수 없으므로
+    // 검출은 여기서만 가능하다. 어긋나면 그럴듯한 숫자를 만들지 말고 계산 불가로 알린다.
+    const configuredBreakMinutes = await getBreakTimeMinutes();
+    const breakConfigMatches = configuredBreakMinutes === TOTAL_BREAK_MINUTES;
+
+    if (!breakConfigMatches) {
+      console.error(
+        `휴식 설정 불일치: system_settings=${configuredBreakMinutes}분, ` +
+        `shiftBreaks.TOTAL_BREAK_MINUTES=${TOTAL_BREAK_MINUTES}분. ` +
+        `실시간 계산을 중단한다 (틀린 숫자보다 없는 숫자가 낫다).`
+      );
+    }
+
     return NextResponse.json({
       last_report: lastReport ?? null,
       downtime_minutes: Math.round(downtimeMinutes),
       tact_time_seconds: tactTimeSeconds,
+      // false 면 클라이언트는 실시간 지표를 계산하지 않고 "설정 확인 필요"를 보여준다.
+      break_config_matches: breakConfigMatches,
+      configured_break_minutes: configuredBreakMinutes,
     });
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
@@ -1303,6 +1351,7 @@ describe('useRealtimeProgress', () => {
         last_report: { shift_output_qty: 60, reported_at: '2026-07-17T09:30:00+07:00' },
         downtime_minutes: 0,
         tact_time_seconds: 72,
+        break_config_matches: true,
       }),
     });
   });
@@ -1315,7 +1364,27 @@ describe('useRealtimeProgress', () => {
     await waitFor(() => expect(result.current.lastReportedQty).toBe(60));
     expect(result.current.downtimeMinutes).toBe(0);
     expect(result.current.tactTimeSeconds).toBe(72);
+    expect(result.current.breakConfigMatches).toBe(true);
     expect(result.current.error).toBeNull();
+  });
+
+  // 서버가 휴식 설정 불일치를 알리면 그대로 전달해야 한다. 훅이 이걸 삼키면
+  // 화면이 틀린 가동률을 그럴듯하게 띄운다.
+  it('휴식 설정 불일치 신호를 그대로 전달한다', async () => {
+    mockAuthFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        last_report: null, downtime_minutes: 0, tact_time_seconds: 72,
+        break_config_matches: false,
+      }),
+    });
+
+    const { result } = renderHook(() =>
+      useRealtimeProgress({ machineId: 'm1', date: '2026-07-17', shift: 'A' })
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.breakConfigMatches).toBe(false);
   });
 
   // 조회 실패를 0 으로 채우면 "비가동 없음"으로 읽힌다. 모르는 것은 null 로 둔다.
@@ -1330,6 +1399,8 @@ describe('useRealtimeProgress', () => {
     expect(result.current.lastReportedQty).toBeNull();
     expect(result.current.downtimeMinutes).toBeNull();
     expect(result.current.tactTimeSeconds).toBeNull();
+    // 조회에 실패했으면 휴식 설정이 맞는지도 모른다. 일치를 가정하면 안 된다.
+    expect(result.current.breakConfigMatches).toBe(false);
   });
 
   it('machineId 가 없으면 조회하지 않는다', () => {
@@ -1368,6 +1439,11 @@ interface UseRealtimeProgressResult {
   downtimeMinutes: number | null;
   /** 개당 가공시간(초). null 이면 성능률을 계산할 수 없다. 서버가 뷰에서 해결해 준다. */
   tactTimeSeconds: number | null;
+  /**
+   * 관리자가 설정한 휴식 총량이 shiftBreaks 의 시간대 합계와 일치하는지.
+   * false 면 실시간 지표를 계산하면 안 된다 — 틀린 숫자보다 없는 숫자가 낫다.
+   */
+  breakConfigMatches: boolean;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -1384,6 +1460,8 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
   const [lastReportedAt, setLastReportedAt] = useState<string | null>(null);
   const [downtimeMinutes, setDowntimeMinutes] = useState<number | null>(null);
   const [tactTimeSeconds, setTactTimeSeconds] = useState<number | null>(null);
+  // 조회 전에는 일치를 가정하지 않는다. false 로 시작해 서버가 확인해 줄 때만 켠다.
+  const [breakConfigMatches, setBreakConfigMatches] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1400,18 +1478,21 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
         last_report: { shift_output_qty: number; reported_at: string } | null;
         downtime_minutes: number;
         tact_time_seconds: number | null;
+        break_config_matches: boolean;
       };
 
       setLastReportedQty(body.last_report?.shift_output_qty ?? null);
       setLastReportedAt(body.last_report?.reported_at ?? null);
       setDowntimeMinutes(body.downtime_minutes);
       setTactTimeSeconds(body.tact_time_seconds);
+      setBreakConfigMatches(body.break_config_matches);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
       setLastReportedQty(null);
       setLastReportedAt(null);
       setDowntimeMinutes(null);
       setTactTimeSeconds(null);
+      setBreakConfigMatches(false);
     } finally {
       setLoading(false);
     }
@@ -1420,7 +1501,7 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
   useEffect(() => { void fetchProgress(); }, [fetchProgress]);
 
   return {
-    lastReportedQty, lastReportedAt, downtimeMinutes, tactTimeSeconds,
+    lastReportedQty, lastReportedAt, downtimeMinutes, tactTimeSeconds, breakConfigMatches,
     loading, error, refresh: fetchProgress,
   };
 }
@@ -1534,6 +1615,9 @@ import { calculateRealtimeProgress } from '@/utils/realtimeProgress';
   const realtime = React.useMemo(() => {
     // 비가동이나 tact 를 모르면 계산하지 않는다. 0 으로 채우면 가동률 100% 로 보인다.
     if (progress.downtimeMinutes === null || progress.tactTimeSeconds === null) return null;
+    // 관리자가 휴식 총량을 바꿔 코드 상수와 어긋나면 경과 계획시간이 틀린다.
+    // 틀린 숫자를 그럴듯하게 띄우느니 아무 숫자도 내지 않는다.
+    if (!progress.breakConfigMatches) return null;
 
     return calculateRealtimeProgress({
       shift: currentShiftInfo.shift,
@@ -1546,7 +1630,7 @@ import { calculateRealtimeProgress } from '@/utils/realtimeProgress';
     });
   }, [
     progress.downtimeMinutes, progress.tactTimeSeconds, progress.lastReportedQty,
-    currentShiftInfo.shift, currentShiftInfo.startTime, now,
+    progress.breakConfigMatches, currentShiftInfo.shift, currentShiftInfo.startTime, now,
   ]);
 ```
 
@@ -1684,6 +1768,16 @@ Expected: 이 기능을 쓰기 전과 동일 (진행 보고는 production_record
 | §8.1 태블릿 입력·표시 | Task 6, 8 |
 | §9 권한 (담당 설비만) | Task 3 (RLS), Task 4 (`assertMachineAccess`) |
 | §9 B교대 자정 넘김 | Task 1 (자정 넘는 휴식 2건) |
+| §6.3 휴식 총량 드리프트 검출 | Task 5 (`break_config_matches`), Task 7·8 (전달·차단) |
+
+**§6.3 의 "테스트로 고정" 은 스펙의 오류였다.** Task 1 코드 품질 검토에서 드러났다:
+`break_time_minutes` 는 관리자가 UI 에서 바꿀 수 있는데(`ShiftSettingsTab.tsx:256`),
+단위 테스트는 DB 를 볼 수 없어 리터럴끼리 비교할 뿐이다. 관리자가 총량을 90 으로 바꾸면
+실시간 화면과 확정 OEE 가 교대당 20분씩 영구히 어긋나면서도 모든 테스트가 초록으로 남는다.
+
+→ 검출은 설정을 읽을 수 있는 **API 에서만** 가능하다. Task 5 가 `getBreakTimeMinutes()` 와
+`TOTAL_BREAK_MINUTES` 를 비교해 `break_config_matches` 로 알리고, 어긋나면 Task 8 이
+실시간 지표를 **아예 계산하지 않는다** (틀린 숫자보다 없는 숫자가 낫다).
 
 **B 계획으로 미룬 것** (스펙 §10 의 B): 미완료 3종 분류, 관리자 요약, 다음날 자동 채움.
 
