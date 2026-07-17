@@ -755,7 +755,9 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
             }}
             format="YYYY-MM-DD"
             placeholder={[t('dashboard:time.startDate'), t('dashboard:time.endDate')]}
-            style={{ width: 200 }}
+            // 200px 은 "YYYY-MM-DD → YYYY-MM-DD" 를 담지 못해 끝자리가 잘렸다
+            // (입력칸 63px vs 필요 72px). 측정 기준 240px 부터 여유가 생긴다.
+            style={{ width: 260 }}
           />
           <Dropdown
             overlay={filterMenu}
@@ -836,10 +838,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         />
       )}
 
-      {/* 주요 지표 요약 */}
+      {/* 주요 지표 요약
+       *
+       * 아직 안 온 데이터를 "없음(—)"으로 그리면 안 된다. 조회가 10초 가까이 걸리는
+       * 구간이 있어 사용자에게는 "기록이 없다"로 읽힌다. 첫 로딩(값이 아직 없음)에는
+       * 스켈레톤을 띄우고, 갱신 중(값이 이미 있음)에는 이전 값을 유지한다. */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={12} sm={6}>
-          <Card>
+          <Card loading={loading && !processedData.overallMetrics}>
             <Statistic
               title={t('dashboard:engineerDashboard.averageOee')}
               value={processedData.overallMetrics
@@ -855,7 +861,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card>
+          <Card loading={loading && !processedData.overallMetrics}>
             <Statistic
               title={t('dashboard:engineerDashboard.averageAvailability')}
               value={processedData.overallMetrics
@@ -867,7 +873,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card>
+          <Card loading={loading && !processedData.overallMetrics}>
             <Statistic
               title={t('dashboard:engineerDashboard.averagePerformance')}
               value={processedData.overallMetrics
@@ -879,7 +885,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card>
+          <Card loading={loading && !processedData.overallMetrics}>
             <Statistic
               title={t('dashboard:engineerDashboard.averageQuality')}
               value={processedData.overallMetrics
@@ -911,7 +917,12 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                       showDetails={true}
                     />
                   ) : (
-                    <Card title={t('dashboard:engineerDashboard.charts.overallOeeStatus')}>
+                    // 조회 중에는 "기록이 없다"고 단정하지 않는다. 아직 모르는 것과
+                    // 없는 것은 다르다 — loading=true 면 Card 가 스켈레톤을 그린다.
+                    <Card
+                      title={t('dashboard:engineerDashboard.charts.overallOeeStatus')}
+                      loading={loading}
+                    >
                       <Empty description={t('dashboard:downtimeReporting.oeeUnavailable')} />
                     </Card>
                   )}
