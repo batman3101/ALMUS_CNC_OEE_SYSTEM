@@ -4,6 +4,10 @@ import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/ap
 
 export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// 백로그는 최근 창으로 바운드한다 — 비바운드 스캔(PostgREST 10만행 무음 절단 + Node 집계) 방지.
+// 종이 전사는 며칠 내가 현실이라 90일은 넉넉하다. 더 오래 미마감된 교대는 관리자 백필 대상이며,
+// 콘솔이 대상 교대를 직접 선택해 마감하는 경로를 이미 제공한다(백로그는 nudge, 유일 경로 아님).
+const BACKLOG_WINDOW_DAYS = 90;
 
 /**
  * GET /api/production-records/pending?machine_id= — 마감/불량 백로그.
@@ -18,18 +22,20 @@ export async function GET(request: NextRequest) {
     if (!UUID.test(machineId)) return NextResponse.json({ error: 'machine_id is required' }, { status: 400 });
     assertMachineAccess(user, machineId);
 
+    const cutoff = new Date(Date.now() - BACKLOG_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+
     // 마감대기: 진척 보고(작업 증거)가 있는 교대 중 확정 record 없는 것. progress_reports 기반이라
     // 자동 바운드된다(과거 전체가 뜨지 않음). production_shift_states.status='WORKING' 은 수천 행이라
     // 마감대기 도출에 쓰면 안 된다(실측). 종이값만 있는(진척 미입력) 교대는 콘솔에서 작업자가
     // 대상 교대를 직접 골라 마감한다(Plan 2 — 백로그는 nudge, 유일 경로 아님).
     const { data: progressed, error: pErr } = await supabaseAdmin
       .from('production_progress_reports')
-      .select('date, shift').eq('machine_id', machineId);
+      .select('date, shift').eq('machine_id', machineId).gte('date', cutoff);
     if (pErr) return NextResponse.json({ error: 'Failed to read progress' }, { status: 500 });
 
     const { data: records, error: rErr } = await supabaseAdmin
       .from('production_records')
-      .select('date, shift, record_id, defect_qty').eq('machine_id', machineId);
+      .select('date, shift, record_id, defect_qty').eq('machine_id', machineId).gte('date', cutoff);
     if (rErr) return NextResponse.json({ error: 'Failed to read records' }, { status: 500 });
 
     const recKeys = new Set((records ?? []).map(r => `${r.date}|${r.shift}`));

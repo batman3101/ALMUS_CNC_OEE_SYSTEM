@@ -56,15 +56,24 @@ export async function POST(request: NextRequest) {
       .from('machines_with_production_info').select('current_tact_time').eq('id', machineId).maybeSingle();
     const tactSeconds = tactRow?.current_tact_time && tactRow.current_tact_time > 0 ? tactRow.current_tact_time : 120;
 
+    // F2: 이미 다음날 불량이 확정된 교대를 재마감하는 경우 그 확정 불량을 보존한다.
+    // null 로 덮으면 파생된 quality/oee 까지 소실되므로, 기존 defect 를 읽어 스냅샷에 넘겨 재파생한다.
+    const { data: existingRec } = await supabaseAdmin
+      .from('production_records')
+      .select('defect_qty')
+      .eq('machine_id', machineId).eq('date', date).eq('shift', shift)
+      .maybeSingle();
+    const preservedDefect = existingRec?.defect_qty ?? null;
+
     const snap = computeShiftSnapshot({
-      operatingMinutes, breakMinutes, downtimeMinutes, outputQty, defectQty: null, tactSeconds,
+      operatingMinutes, breakMinutes, downtimeMinutes, outputQty, defectQty: preservedDefect, tactSeconds,
     });
 
     const { error: upsertError } = await supabaseAdmin
       .from('production_records')
       .upsert({
         machine_id: machineId, date, shift,
-        output_qty: outputQty, defect_qty: null,           // 미검사
+        output_qty: outputQty, defect_qty: preservedDefect,  // 미검사면 NULL, 확정 불량 있으면 보존
         // 정수 컬럼(runtime)·소수 4자리(비율)로 반올림해 저장한다(daily 라우트와 동일 규율).
         planned_runtime: Math.round(snap.plannedRuntime),
         actual_runtime: snap.actualRuntime === null ? null : Math.round(snap.actualRuntime),
