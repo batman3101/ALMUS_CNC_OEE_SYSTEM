@@ -24,6 +24,10 @@ import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { getCurrentShiftInfo, shouldShowShiftEndNotification, type ShiftTimeConfig } from '@/utils/shiftUtils';
 import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { ProgressInputModal } from '@/components/production/ProgressInputModal';
+import { useRealtimeProgress } from '@/hooks/useRealtimeProgress';
+import { calculateRealtimeProgress } from '@/utils/realtimeProgress';
 import { authFetch } from '@/lib/authFetch';
 
 // Removed deprecated TabPane import
@@ -81,6 +85,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
+  // 현재 시각을 state 로 둔다. 주기 자동갱신이 setNow(new Date()) 로 전진시키면
+  // 경과시간 기반 지표(교대 진행·가동×성능)가 흐른다. `const now = new Date()` 를
+  // 매 렌더 새로 만드는 대신 state 로 두는 이유: (1) 틱 사이에 참조가 안정적이라
+  // 아래 realtime useMemo 가 실제로 메모되고, (2) exhaustive-deps 가 "매 렌더 객체 생성"
+  // 경고를 내지 않는다. 초기값은 lazy 로 한 번만 계산.
+  const [now, setNow] = useState<Date>(() => new Date());
 
   // 실시간 데이터 훅 사용
   const { 
@@ -139,7 +149,11 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             // null = OEE 계산 불가(실적 미입력 또는 비가동 미보고). 0% 가 아니다.
             // `|| 0` 이던 시절에는 실적을 아직 안 넣은 설비가 빨간 0.0% 로 표시됐다.
             oee: oeeMetrics?.[machine.id]?.oee ?? null,
-            currentDuration
+            currentDuration,
+            // 열린 로그가 정상가동이 아니면 그때부터 지금까지 비가동 중이다.
+            // 도색처럼 며칠에 걸친 정지도 같은 방식으로 잡힌다 (machine_logs 는 여러 날을 다룬다).
+            downtimeSince:
+              currentLog && currentLog.state !== 'NORMAL_OPERATION' ? currentLog.start_time : null,
           };
         })
         // 설비 번호 기준 정렬
@@ -217,7 +231,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     shiftBStart: shiftTimes.shiftB.start,
     shiftBEnd: shiftTimes.shiftB.end
   };
-  const now = new Date();
 
   // 교대 종료 알림 체크 (설정 기준 종료 15분 전)
   const isShiftEnd = shouldShowShiftEndNotification(now, shiftConfig);
@@ -239,9 +252,52 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     ? (oeeMetrics?.[selectedMachine] ?? null)
     : null;
 
+  // 교대 중 실시간 진행. OEE 는 만들지 않는다 — 불량은 다음날 검사하므로 품질을 모른다.
+  const [progressModalOpen, setProgressModalOpen] = useState(false);
+
+  const progress = useRealtimeProgress({
+    machineId: selectedMachine,
+    date: productionBusinessDate,
+    shift: currentShiftInfo.shift,
+  });
+
+  const selectedMachineRow = processedData.assignedMachines.find(m => m.id === selectedMachine);
+
+  const realtime = useMemo(() => {
+    // 비가동이나 tact 를 모르면 계산하지 않는다. 0 으로 채우면 가동률 100% 로 보인다.
+    if (progress.downtimeMinutes === null || progress.tactTimeSeconds === null) return null;
+    // 관리자가 휴식 총량을 바꿔 코드 상수와 어긋나면 경과 계획시간이 틀린다.
+    // 틀린 숫자를 그럴듯하게 띄우느니 아무 숫자도 내지 않는다.
+    if (!progress.breakConfigMatches) return null;
+
+    return calculateRealtimeProgress({
+      shift: currentShiftInfo.shift,
+      shiftStart: currentShiftInfo.startTime,
+      now,
+      operatingMinutes: 720,
+      tactTimeSeconds: progress.tactTimeSeconds,
+      downtimeMinutes: progress.downtimeMinutes,
+      shiftOutputQty: progress.lastReportedQty,
+    });
+  }, [
+    progress.downtimeMinutes, progress.tactTimeSeconds, progress.lastReportedQty,
+    progress.breakConfigMatches, currentShiftInfo.shift, currentShiftInfo.startTime, now,
+  ]);
+
+  // 주기 자동갱신. 원안은 열 때·저장할 때만 갱신돼 그 사이 경과시간 지표가 얼어붙고,
+  // 다른 곳에서 기록된 비가동도 저장 전엔 안 보였다. 간격은 하드코딩하지 않고
+  // 시스템 설정의 displaySettings.refreshInterval 을 그대로 상속한다(useAutoRefresh 내부).
+  //  - setNow: 현재 시각 전진 → 교대 진행·경과 지표가 흐른다 (selectedMachine 유무와 무관)
+  //  - progress.refresh: 비가동·마지막 보고 재조회. selectedMachine 이 null 이면 훅 내부
+  //    가드로 no-op 이므로 항상 켜도 안전하다. 언마운트 clearInterval 은 useAutoRefresh 가 처리.
+  useAutoRefresh(() => {
+    setNow(new Date());
+    progress.refresh();
+  }, true);
+
   // 테이블 컬럼 정의
   // oee 는 null 을 허용해야 한다 (number? 로 두면 "모름"을 표현하지 못한다).
-  type MachineRowData = { id: string; name: string; current_state: MachineState; currentDuration: number; oee: number | null };
+  type MachineRowData = { id: string; name: string; current_state: MachineState; currentDuration: number; oee: number | null; downtimeSince: string | null };
   const tableColumns = [
     {
       title: machinesT('labels.machineName'),
@@ -535,6 +591,30 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                           size="small"
                           showDetails={true}
                         />
+                        {/* 교대 중 실시간 가동×성능·진척. 품질(불량)은 검사 전이라 여기 없다. */}
+                        {realtime && (
+                          <Card size="small" style={{ marginTop: 16 }}>
+                            <Space direction="vertical" style={{ width: '100%' }}>
+                              <div>
+                                {machinesT('operator.realtimeAvailabilityTimesPerformance')}:{' '}
+                                <strong>
+                                  {realtime.availabilityTimesPerformance === null
+                                    ? '—'
+                                    : `${(realtime.availabilityTimesPerformance * 100).toFixed(1)}%`}
+                                </strong>
+                              </div>
+                              <div>
+                                {machinesT('operator.shiftProgress')}:{' '}
+                                <strong>
+                                  {realtime.progressQty ?? '—'} / {realtime.capaQty ?? '—'}
+                                </strong>
+                              </div>
+                              <Button type="primary" block onClick={() => setProgressModalOpen(true)}>
+                                {machinesT('operator.inputProduction')}
+                              </Button>
+                            </Space>
+                          </Card>
+                        )}
                         {/* 여기 도달했다면 지표가 실재한다 = 확인된 진짜 0% 다 (미보고 아님) */}
                         {selectedMachineMetrics.oee === 0 && (
                           <Alert
@@ -608,6 +688,21 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             });
             refresh();
           }}
+        />
+      )}
+
+      {/* 진행 보고 입력 모달 (교대 중 실시간). 비가동 중이면 모달이 입력을 잠근다. */}
+      {selectedMachine && selectedMachineRow && (
+        <ProgressInputModal
+          open={progressModalOpen}
+          machineId={selectedMachine}
+          machineName={selectedMachineRow.name}
+          date={productionBusinessDate}
+          shift={currentShiftInfo.shift}
+          lastReportedQty={progress.lastReportedQty}
+          downtimeSince={selectedMachineRow.downtimeSince}
+          onClose={() => setProgressModalOpen(false)}
+          onSaved={progress.refresh}
         />
       )}
     </div>
