@@ -42,6 +42,7 @@
     "saveFailed": "Không lưu được. Vui lòng thử lại hoặc báo cho quản trị viên.",
     "downtimeLocked": "Đang dừng máy từ {{since}} đến hiện tại. Hãy chuyển sang vận hành bình thường trước khi nhập.",
     "downtimeServerRejected": "Máy đang dừng nên không thể lưu. Hãy chuyển sang vận hành bình thường rồi thử lại.",
+    "shiftChanged": "Ca làm việc đã thay đổi. Hãy đóng và mở lại để nhập cho ca hiện tại.",
     "submit": "Lưu"
   }
 }

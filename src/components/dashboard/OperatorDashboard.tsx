@@ -263,35 +263,37 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
 
   const selectedMachineRow = processedData.assignedMachines.find(m => m.id === selectedMachine);
 
-  // 교대 길이를 설정에서 도출한다 (하드코딩 720 제거). shiftBreaks 의 휴식 시간대는 720분
-  // 교대를 전제로 authored 되어 있어, 720 이 아닌 교대(8·10시간 등)에서는 경과 계획시간과
-  // CAPA 가 틀어진다. 그런 구성은 계산하지 않고 fail-closed 한다 — breakConfigMatches 와 같은
-  // 규율(틀린 숫자보다 없는 숫자). 임의 길이 완전 지원은 shiftBreaks 재작업이 선행돼야 한다.
-  const operatingMinutes = Math.round(
-    (currentShiftInfo.endTime.getTime() - currentShiftInfo.startTime.getTime()) / 60_000
-  );
-  const shiftModelSupported = operatingMinutes === 720;
+  // 교대 창(길이·시작)은 서버가 준다 (progress.operatingMinutes/shiftStart). 프런트가 endTime 으로
+  // 길이를 따로 계산하면 서버·확정 OEE 창(buildShiftWindows, 시작→시작)과 어긋나므로, 단일
+  // 소스인 서버 값을 그대로 쓴다. shiftBreaks 의 휴식 시간대는 720분 교대 전제라, 720 이 아니면
+  // 계산하지 않고 fail-closed 한다 — breakConfigMatches 와 같은 규율(틀린 숫자보다 없는 숫자).
+  const shiftModelSupported = progress.operatingMinutes === 720;
 
   const realtime = useMemo(() => {
-    // 비가동이나 tact 를 모르면 계산하지 않는다. 0 으로 채우면 가동률 100% 로 보인다.
-    if (progress.downtimeMinutes === null || progress.tactTimeSeconds === null) return null;
-    // 관리자가 휴식 총량을 바꿔 코드 상수와 어긋나거나, 교대 길이가 720분 모델이 아니면
-    // 경과 계획시간이 틀린다. 틀린 숫자를 그럴듯하게 띄우느니 아무 숫자도 내지 않는다.
+    // 비가동·tact·서버 교대창 중 하나라도 모르면 계산하지 않는다. 0 으로 채우면 가동률 100% 로 보인다.
+    if (
+      progress.downtimeMinutes === null ||
+      progress.tactTimeSeconds === null ||
+      progress.operatingMinutes === null ||
+      progress.shiftStart === null
+    ) return null;
+    // 휴식 총량이 코드 상수와 어긋나거나 교대 길이가 720분 모델이 아니면 경과 계획시간이 틀린다.
+    // 틀린 숫자를 그럴듯하게 띄우느니 아무 숫자도 내지 않는다.
     if (!progress.breakConfigMatches || !shiftModelSupported) return null;
 
     return calculateRealtimeProgress({
       shift: currentShiftInfo.shift,
-      shiftStart: currentShiftInfo.startTime,
+      shiftStart: new Date(progress.shiftStart),
       now,
-      operatingMinutes,
+      operatingMinutes: progress.operatingMinutes,
       tactTimeSeconds: progress.tactTimeSeconds,
       downtimeMinutes: progress.downtimeMinutes,
       shiftOutputQty: progress.lastReportedQty,
     });
   }, [
     progress.downtimeMinutes, progress.tactTimeSeconds, progress.lastReportedQty,
-    progress.breakConfigMatches, currentShiftInfo.shift, currentShiftInfo.startTime, now,
-    operatingMinutes, shiftModelSupported,
+    progress.breakConfigMatches, progress.operatingMinutes, progress.shiftStart,
+    currentShiftInfo.shift, now, shiftModelSupported,
   ]);
 
   // 주기 자동갱신. 원안은 열 때·저장할 때만 갱신돼 그 사이 경과시간 지표가 얼어붙고,

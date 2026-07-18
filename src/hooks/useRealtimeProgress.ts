@@ -22,6 +22,10 @@ interface UseRealtimeProgressResult {
    * false 면 실시간 지표를 계산하면 안 된다 — 틀린 숫자보다 없는 숫자가 낫다.
    */
   breakConfigMatches: boolean;
+  /** 서버 교대 창 시작(ISO). null = 조회 전/실패. 프런트가 endTime 으로 따로 계산하지 않게 서버가 준다. */
+  shiftStart: string | null;
+  /** 서버 교대 창 길이(분). null = 조회 전/실패. 720 이 아니면 실시간 계산을 하지 않는다. */
+  operatingMinutes: number | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -47,6 +51,8 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
   const [tactTimeSeconds, setTactTimeSeconds] = useState<number | null>(null);
   // 조회 전에는 일치를 가정하지 않는다. false 로 시작해 서버가 확인해 줄 때만 켠다.
   const [breakConfigMatches, setBreakConfigMatches] = useState(false);
+  const [shiftStart, setShiftStart] = useState<string | null>(null);
+  const [operatingMinutes, setOperatingMinutes] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +77,8 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
         downtime_minutes: number | null;
         tact_time_seconds: number | null;
         break_config_matches: boolean;
+        shift_start: string | null;
+        operating_minutes: number | null;
       };
       if (reqId !== reqRef.current) return;
 
@@ -79,6 +87,8 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
       setDowntimeMinutes(body.downtime_minutes);
       setTactTimeSeconds(body.tact_time_seconds);
       setBreakConfigMatches(body.break_config_matches);
+      setShiftStart(body.shift_start);
+      setOperatingMinutes(body.operating_minutes);
     } catch (e) {
       if (reqId !== reqRef.current) return;
       setError(e instanceof Error ? e.message : 'Unknown error');
@@ -89,6 +99,8 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
       setDowntimeMinutes(null);
       setTactTimeSeconds(null);
       setBreakConfigMatches(false);
+      setShiftStart(null);
+      setOperatingMinutes(null);
     } finally {
       if (reqId === reqRef.current) setLoading(false);
     }
@@ -107,6 +119,8 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
     setDowntimeMinutes(null);
     setTactTimeSeconds(null);
     setBreakConfigMatches(false);
+    setShiftStart(null);
+    setOperatingMinutes(null);
     setError(null);
   }, [machineId, date, shift]);
 
@@ -115,6 +129,6 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
 
   return {
     lastReportedQty, lastReportedAt, downtimeMinutes, tactTimeSeconds, breakConfigMatches,
-    loading, error, refresh: fetchProgress,
+    shiftStart, operatingMinutes, loading, error, refresh: fetchProgress,
   };
 }

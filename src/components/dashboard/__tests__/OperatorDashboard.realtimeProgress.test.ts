@@ -51,10 +51,13 @@ describe('OperatorDashboard 실시간 진행 계약', () => {
     expect(source).toMatch(/realtime\.elapsedRatio/);
   });
 
-  // Finding 4: 교대 길이를 하드코딩 720 이 아니라 설정에서 도출하고, 720 모델이 아니면
-  // fail-closed 한다. 하드코딩 리터럴이 되살아나면 8·10시간 교대에서 CAPA·경과율이 틀린다.
-  it('교대 길이를 설정에서 도출하고 미지원 구성은 fail-closed 한다', () => {
-    expect(source).not.toMatch(/operatingMinutes:\s*720/);
+  // Finding 4: 교대 길이를 하드코딩 720 으로 두지 않고, 720 모델이 아니면 fail-closed 한다.
+  // Finding 2: 교대 창(길이·시작)은 프런트의 endTime−startTime 이 아니라 서버가 준
+  // progress.operatingMinutes / progress.shiftStart 를 써야 서버·확정 OEE 창과 어긋나지 않는다.
+  it('교대 창을 서버값(progress)에서 받고 미지원 구성은 fail-closed 한다', () => {
+    expect(source).not.toMatch(/operatingMinutes:\s*720/);      // 하드코딩 리터럴 금지
     expect(source).toMatch(/shiftModelSupported/);
+    expect(source).toMatch(/progress\.operatingMinutes/);
+    expect(source).toMatch(/progress\.shiftStart/);
   });
 });

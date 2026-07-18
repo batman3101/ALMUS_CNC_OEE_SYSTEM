@@ -9,7 +9,7 @@ jest.mock('next/server', () => ({
 
 const mockRequireUser = jest.fn();
 const mockAssertMachineAccess = jest.fn();
-const mockFrom = jest.fn();
+const mockRpc = jest.fn();
 
 jest.mock('@/lib/apiAuth', () => ({
   requireUser: (...a: unknown[]) => mockRequireUser(...a),
@@ -18,7 +18,7 @@ jest.mock('@/lib/apiAuth', () => ({
 }));
 
 jest.mock('@/lib/supabase-admin', () => ({
-  supabaseAdmin: { from: (...a: unknown[]) => mockFrom(...a) },
+  supabaseAdmin: { rpc: (...a: unknown[]) => mockRpc(...a) },
 }));
 
 import { POST } from '../route';
@@ -30,151 +30,80 @@ const request = (body: unknown) => ({
   json: async () => body,
 }) as never;
 
-/** 열린 상태 로그 조회(비가동 잠금) → 마지막 보고 조회 → insert 를 순서대로 흉내낸다.
- *  openLog 기본값은 정상가동이라 저장이 진행된다. */
-const mockChain = (
-  lastReport: { shift_output_qty: number } | null,
-  opts: { openLog?: { state: string } | null; insertResult?: { error: unknown } } = {},
-) => {
-  const { openLog = { state: 'NORMAL_OPERATION' }, insertResult = { error: null } } = opts;
-  const insert = jest.fn().mockResolvedValue(insertResult);
-  mockFrom.mockImplementation((table: string) => {
-    if (table === 'machine_logs') {
-      return {
-        select: () => ({ eq: () => ({ is: () => ({ order: () => ({ limit: () => ({
-          maybeSingle: async () => ({ data: openLog, error: null }),
-        }) }) }) }) }),
-      };
-    }
-    if (table === 'production_progress_reports') {
-      return {
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              eq: () => ({
-                order: () => ({
-                  limit: () => ({ maybeSingle: async () => ({ data: lastReport, error: null }) }),
-                }),
-              }),
-            }),
-          }),
-        }),
-        insert,
-      };
-    }
-    throw new Error(`unexpected table ${table}`);
-  });
-  return { insert };
-};
+const okBody = { machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 150 };
 
 describe('POST /api/production-progress', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
     mockAssertMachineAccess.mockReturnValue(undefined);
+    mockRpc.mockResolvedValue({ data: { ok: true }, error: null });
   });
 
-  it('보고를 저장한다', async () => {
-    const { insert } = mockChain({ shift_output_qty: 60 });
-
-    const res = await POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 150,
-    }));
+  // 저장·검사·감소·비가동은 이제 하나의 원자 RPC(report_shift_progress) 안에서 처리된다.
+  // 이 테스트는 API 가 그 RPC 를 올바른 인자로 부르고, 결과를 올바른 HTTP 로 매핑하는지 본다.
+  it('원자 RPC 를 올바른 인자로 부르고 저장하면 201', async () => {
+    const res = await POST(request(okBody));
 
     expect(res.status).toBe(201);
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A',
-      shift_output_qty: 150, operator_id: 'op-1',
+    expect(mockRpc).toHaveBeenCalledWith('report_shift_progress', expect.objectContaining({
+      p_machine_id: MACHINE, p_date: '2026-07-17', p_shift: 'A',
+      p_qty: 150, p_operator_id: 'op-1',
     }));
-    // 인가 검사는 "호출됐다"로는 부족하다 — 엉뚱한 설비를 물어보면 담당자 검사가 무의미해진다.
-    // 요청 본문의 설비와 인증된 사용자로 물었는지 인자까지 고정한다.
+    // 인가는 "호출됨"으로 부족하다 — 요청 본문 설비와 인증 사용자로 물었는지 인자까지 고정한다.
     expect(mockAssertMachineAccess).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'op-1' }),
       MACHINE,
     );
   });
 
-  // 값의 의미가 "교대 누적"이므로 감소는 불가능하다. 조용히 받으면 90개가 증발한다.
-  it('보고값이 줄어들면 거부하고 되묻는다', async () => {
-    const { insert } = mockChain({ shift_output_qty: 150 });
+  // 값의 의미가 "교대 누적"이므로 감소는 불가능하다. RPC 가 현재 최댓값과 함께 거부하면,
+  // API 는 last_reported_qty 를 실어 409 로 되묻는다 (모달이 일반 실패가 아닌 감소 안내를 띄우게).
+  it('RPC 가 감소를 거부하면 409 + last_reported_qty', async () => {
+    mockRpc.mockResolvedValue({ data: { ok: false, reason: 'decreased', last_reported_qty: 150 }, error: null });
 
-    const res = await POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 60,
-    }));
+    const res = await POST(request({ ...okBody, shift_output_qty: 60 }));
 
     expect(res.status).toBe(409);
-    expect(insert).not.toHaveBeenCalled();
     const body = await res.json() as { error: string; last_reported_qty: number };
+    expect(body.error).toBe('shift_output_qty decreased');
     expect(body.last_reported_qty).toBe(150);
   });
 
-  it('같은 값 재보고는 허용한다 (변화 없음은 감소가 아니다)', async () => {
-    const { insert } = mockChain({ shift_output_qty: 150 });
+  // 비가동 판단은 machine_logs + downtime_entries 두 소스를 RPC 안에서 원자적으로 본다.
+  it('RPC 가 비가동으로 거부하면 409 machine_in_downtime', async () => {
+    mockRpc.mockResolvedValue({ data: { ok: false, reason: 'machine_in_downtime', state: 'BREAKDOWN_REPAIR' }, error: null });
 
-    const res = await POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 150,
-    }));
+    const res = await POST(request(okBody));
 
-    expect(res.status).toBe(201);
-    expect(insert).toHaveBeenCalled();
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string; state: string };
+    expect(body.error).toBe('machine_in_downtime');
+    expect(body.state).toBe('BREAKDOWN_REPAIR');
   });
 
-  it('첫 보고는 이전 값이 없어도 저장된다', async () => {
-    const { insert } = mockChain(null);
-
-    const res = await POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 30,
-    }));
-
+  it('같은 값 재보고 등 RPC 가 ok 면 201', async () => {
+    mockRpc.mockResolvedValue({ data: { ok: true }, error: null });
+    const res = await POST(request({ ...okBody, shift_output_qty: 150 }));
     expect(res.status).toBe(201);
-    expect(insert).toHaveBeenCalled();
   });
 
-  it('담당이 아닌 설비는 거부한다', async () => {
-    mockChain(null);
+  it('담당이 아닌 설비는 RPC 이전에 거부한다', async () => {
     mockAssertMachineAccess.mockImplementation(() => { throw new Error('forbidden'); });
 
-    await expect(POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 30,
-    }))).rejects.toThrow();
+    await expect(POST(request(okBody))).rejects.toThrow();
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('음수는 400 으로 거부한다', async () => {
-    mockChain(null);
-    const res = await POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: -1,
-    }));
+  it('음수는 400 으로 거부한다 (RPC 호출 안 함)', async () => {
+    const res = await POST(request({ ...okBody, shift_output_qty: -1 }));
     expect(res.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  // 비가동 잠금은 클라이언트뿐 아니라 서버에서도 강제한다 (모달 오픈 후 비가동 경쟁·직접 호출).
-  it('열린 비정상 상태(비가동 중)면 저장을 거부한다', async () => {
-    const { insert } = mockChain({ shift_output_qty: 60 }, { openLog: { state: 'BREAKDOWN_REPAIR' } });
-
-    const res = await POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 150,
-    }));
-
-    expect(res.status).toBe(409);
-    expect(insert).not.toHaveBeenCalled();
-    const body = await res.json() as { error: string };
-    expect(body.error).toBe('machine_in_downtime');
-  });
-
-  // 동시 요청 경쟁: 앱 사전검사는 통과했지만 DB 감소방지 트리거(23514)가 막은 경우.
-  it('감소 방지 트리거 위반(23514)을 409 로 매핑한다', async () => {
-    const { insert } = mockChain(
-      { shift_output_qty: 60 },
-      { insertResult: { error: { code: '23514' } } },
-    );
-
-    const res = await POST(request({
-      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 150,
-    }));
-
-    expect(res.status).toBe(409);
-    expect(insert).toHaveBeenCalled();
-    const body = await res.json() as { error: string };
-    expect(body.error).toBe('shift_output_qty decreased');
+  it('RPC 오류는 500', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'boom' } });
+    const res = await POST(request(okBody));
+    expect(res.status).toBe(500);
   });
 });

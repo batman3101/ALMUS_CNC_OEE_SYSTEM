@@ -38,3 +38,70 @@ drop trigger if exists progress_reports_monotonic on public.production_progress_
 create trigger progress_reports_monotonic
   before insert on public.production_progress_reports
   for each row execute function public.enforce_progress_monotonic();
+
+-- 원자 저장 경로. 앱 레벨은 machine_logs 읽기 → last 읽기 → INSERT 가 분리돼 ① 검사 직후
+-- 비가동 전환, ② 동시 요청 경쟁을 못 막았다. 통합 비가동 확인(machine_logs 열린 비정상 +
+-- downtime_entries 열린 항목 — 가동률 계산과 같은 두 소스) + 단조증가 + INSERT 를 한
+-- 트랜잭션(advisory lock)으로 묶는다. 감소 거부 시 현재 최댓값을 함께 돌려줘 API 가 친절한
+-- 감소 안내를 만들 수 있게 한다.
+create or replace function public.report_shift_progress(
+  p_machine_id uuid,
+  p_date date,
+  p_shift text,
+  p_qty integer,
+  p_operator_id uuid
+)
+returns jsonb
+language plpgsql
+as $$
+declare
+  prev integer;
+  down_state text;
+begin
+  perform pg_advisory_xact_lock(
+    hashtextextended(p_machine_id::text || p_date::text || p_shift, 0)
+  );
+
+  -- 통합 비가동 확인. "지금 열려 있으면 비가동".
+  select ml.state into down_state
+  from public.machine_logs ml
+  where ml.machine_id = p_machine_id
+    and ml.end_time is null
+    and ml.state <> 'NORMAL_OPERATION'
+  order by ml.start_time desc
+  limit 1;
+
+  if down_state is not null then
+    return jsonb_build_object('ok', false, 'reason', 'machine_in_downtime', 'state', down_state);
+  end if;
+
+  if exists (
+    select 1 from public.downtime_entries de
+    where de.machine_id = p_machine_id and de.end_time is null
+  ) then
+    return jsonb_build_object('ok', false, 'reason', 'machine_in_downtime', 'state', 'downtime_entry');
+  end if;
+
+  -- 단조 증가 (advisory lock 아래라 원자적). 거부 시 현재 최댓값을 함께 돌려준다.
+  select max(shift_output_qty) into prev
+  from public.production_progress_reports
+  where machine_id = p_machine_id
+    and date = p_date
+    and shift = p_shift;
+
+  if prev is not null and p_qty < prev then
+    return jsonb_build_object('ok', false, 'reason', 'decreased', 'last_reported_qty', prev);
+  end if;
+
+  insert into public.production_progress_reports(machine_id, date, shift, shift_output_qty, operator_id)
+  values (p_machine_id, p_date, p_shift, p_qty, p_operator_id);
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- 신규 public 함수는 기본 ACL 이 PUBLIC 에 EXECUTE 를 주므로, 좁히려면 먼저 REVOKE 해야 한다.
+revoke all on function public.report_shift_progress(uuid, date, text, integer, uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.report_shift_progress(uuid, date, text, integer, uuid)
+  to service_role;

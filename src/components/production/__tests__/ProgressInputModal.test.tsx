@@ -90,6 +90,35 @@ describe('ProgressInputModal', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
+  // Finding 3: 모달을 연 뒤 주기 자동갱신으로 shift props 가 A→B 로 바뀌면(편집값은 유지),
+  // A조 값이 B조 첫 보고로 새지 않게 저장을 잠그고 경고한다.
+  it('열린 뒤 교대가 바뀌면 저장을 잠그고 경고한다', async () => {
+    const { rerender } = render(<ProgressInputModal {...baseProps} shift="A" />);
+    fireEvent.change(input(), { target: { value: '50' } });
+
+    rerender(<ProgressInputModal {...baseProps} shift="B" />); // 20:00 경계 넘어 교대 전환
+
+    expect(document.body.textContent).toContain('progressInput.shiftChanged');
+    fireEvent.click(submitButton());
+    await flush();
+
+    expect(mockAuthFetch).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  // 정상 경로: 저장 body 는 라이브 props 가 아니라 연 시점 스냅샷 교대로 나간다.
+  it('저장은 연 시점 교대로 나간다', async () => {
+    render(<ProgressInputModal {...baseProps} shift="A" />);
+    fireEvent.change(input(), { target: { value: '50' } });
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(mockAuthFetch).toHaveBeenCalled());
+    const [, init] = mockAuthFetch.mock.calls[0];
+    expect(JSON.parse((init as { body: string }).body)).toEqual(
+      expect.objectContaining({ shift: 'A', date: '2026-07-17' })
+    );
+  });
+
   it('서버가 감소를 거부하면 그 사실을 보여준다', async () => {
     mockAuthFetch.mockResolvedValue({
       ok: false, status: 409,

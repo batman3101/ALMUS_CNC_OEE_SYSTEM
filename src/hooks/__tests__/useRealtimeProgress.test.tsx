@@ -21,6 +21,8 @@ describe('useRealtimeProgress', () => {
       downtime_minutes: 0,
       tact_time_seconds: 72,
       break_config_matches: true,
+      shift_start: '2026-07-17T08:00:00+07:00',
+      operating_minutes: 720,
     }));
   });
 
@@ -34,6 +36,9 @@ describe('useRealtimeProgress', () => {
     expect(result.current.downtimeMinutes).toBe(0);
     expect(result.current.tactTimeSeconds).toBe(72);
     expect(result.current.breakConfigMatches).toBe(true);
+    // 서버 교대 창을 그대로 노출한다 (프런트가 endTime 으로 따로 계산하지 않게 — F2).
+    expect(result.current.shiftStart).toBe('2026-07-17T08:00:00+07:00');
+    expect(result.current.operatingMinutes).toBe(720);
     expect(result.current.error).toBeNull();
   });
 
@@ -112,18 +117,21 @@ describe('useRealtimeProgress', () => {
       d1.resolve(okResponse({
         last_report: { shift_output_qty: 55, reported_at: '2026-07-17T09:00:00+07:00' },
         downtime_minutes: 3, tact_time_seconds: 72, break_config_matches: true,
+        shift_start: '2026-07-17T08:00:00+07:00', operating_minutes: 720,
       }));
       await d1.promise;
     });
     await waitFor(() => expect(result.current.lastReportedQty).toBe(55));
 
-    // m2 로 전환. d2 는 아직 미해결(in-flight). 이 순간 m1 의 55 가 남아 있으면 안 된다.
+    // m2 로 전환. d2 는 아직 미해결(in-flight). 이 순간 m1 의 값이 남아 있으면 안 된다.
     rerender({ machineId: 'm2' });
     expect(result.current.lastReportedQty).toBeNull();
     expect(result.current.lastReportedAt).toBeNull();
     expect(result.current.downtimeMinutes).toBeNull();
     expect(result.current.tactTimeSeconds).toBeNull();
     expect(result.current.breakConfigMatches).toBe(false);
+    expect(result.current.shiftStart).toBeNull();
+    expect(result.current.operatingMinutes).toBeNull();
   });
 
   // 정정 1(경쟁): machineId 가 빠르게 바뀌면 두 조회가 경쟁한다. 오래된(m1) 응답이

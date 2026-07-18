@@ -121,6 +121,15 @@ describe('GET /api/production-progress', () => {
     expect(body.tact_time_seconds).toBe(72);
   });
 
+  // 프런트가 교대 길이를 endTime−startTime 으로 따로 계산하면 서버 창과 어긋난다(F2).
+  // 서버가 창(시작·길이)을 실어 보내 프런트가 그대로 쓰게 한다.
+  it('서버 교대 창(shift_start·operating_minutes)을 실어 보낸다', async () => {
+    const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
+    const body = await res.json() as { shift_start: string; operating_minutes: number };
+    expect(body.operating_minutes).toBe(720);
+    expect(body.shift_start).toBe(new Date(WINDOW.start).toISOString());
+  });
+
   it('확정 OEE 와 같은 창·같은 사용자로 비가동 원천을 로드한다', async () => {
     await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
     expect(mockGetShiftWindow).toHaveBeenCalledWith('2026-07-17', 'A');

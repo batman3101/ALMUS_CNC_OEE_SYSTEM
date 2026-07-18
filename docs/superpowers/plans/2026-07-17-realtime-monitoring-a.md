@@ -544,6 +544,44 @@ git commit -m "feat(realtime): 진행 보고 테이블 (append-only) + RLS"
 
 ---
 
+## 마이그레이션 `20260718000001` — 원자 저장(RPC + 단조 트리거)
+
+코드 리뷰(2차) 대응으로 추가. POST 를 하나의 원자 RPC `report_shift_progress` 로 바꿔
+통합 비가동(machine_logs + downtime_entries) + 단조증가 + INSERT 를 advisory lock 아래 한
+트랜잭션으로 처리한다. 트리거 `enforce_progress_monotonic` 은 RPC 밖 직접 INSERT 방어 백스톱.
+
+- [ ] **계약 테스트**: `npm test -- --testPathPatterns="progressRpcMigration"`
+  Expected: PASS — advisory lock · 두 비가동 소스 · 감소 시 last_reported_qty · service_role EXECUTE 만 · 트리거 유지.
+  (API 테스트 `route.test.ts` 는 `report_shift_progress` 를 mock 하므로 실제 SQL 은 이 계약 테스트가 pin 한다.)
+
+- [ ] **적용 (사용자 명시 지시 시에만 — 보류)**: `supabase db push` 금지, MCP `apply_migration` 사용.
+
+- [ ] **적용 후 확인**:
+```sql
+-- 함수 존재 + 권한 (service_role 만 EXECUTE)
+SELECT has_function_privilege('service_role',
+  'public.report_shift_progress(uuid,date,text,integer,uuid)', 'EXECUTE') AS service_role_exec,
+  has_function_privilege('authenticated',
+  'public.report_shift_progress(uuid,date,text,integer,uuid)', 'EXECUTE') AS authenticated_exec;
+-- Expected: service_role_exec = true, authenticated_exec = false
+
+-- 트리거 존재
+SELECT tgname FROM pg_trigger WHERE tgrelid = 'public.production_progress_reports'::regclass
+  AND NOT tgisinternal;
+-- Expected: progress_reports_monotonic
+```
+
+- [ ] **롤백**:
+```sql
+DROP TRIGGER IF EXISTS progress_reports_monotonic ON public.production_progress_reports;
+DROP FUNCTION IF EXISTS public.enforce_progress_monotonic();
+DROP FUNCTION IF EXISTS public.report_shift_progress(uuid,date,text,integer,uuid);
+```
+테이블·데이터는 건드리지 않으므로 되돌리기 안전. 롤백 후 API 는 500(RPC 없음)을 내므로
+반드시 이 마이그레이션과 API 변경(`route.ts`)을 함께 적용/롤백한다.
+
+---
+
 ## Task 4: API — 보고 저장 (POST)
 
 **Files:**

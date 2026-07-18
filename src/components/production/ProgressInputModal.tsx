@@ -42,6 +42,16 @@ export const ProgressInputModal: React.FC<ProgressInputModalProps> = ({
 
   const locked = downtimeSince !== null;
 
+  // 열 때 date/shift 를 스냅샷한다. 열린 채 주기 자동갱신으로 교대가 A→B 로 바뀌어도 저장은
+  // 연 시점 교대로 나간다 — A조 누적값이 B조 첫 보고로 새는 것을 막는다. 열린 뒤 교대가
+  // 바뀌면(shiftChanged) 저장을 잠그고 경고해, 작업자가 닫았다 다시 열어 새 교대에서 재확인하게 한다.
+  const [opened, setOpened] = useState<{ date: string; shift: 'A' | 'B' } | null>(null);
+  useEffect(() => {
+    if (open) setOpened(prev => prev ?? { date, shift });
+    else setOpened(null);
+  }, [open, date, shift]);
+  const shiftChanged = opened !== null && (opened.shift !== shift || opened.date !== date);
+
   // Modal 은 닫혀도 언마운트되지 않으므로 useState 초기값은 첫 마운트에서 한 번만 쓰인다.
   // 동기화하지 않으면 재오픈 시 옛 값이 고여 있고, 작업자가 그대로 저장하면 409 를 맞는다.
   // 아직 손대지 않은 입력칸만 최신 보고값을 따라간다 — 작업자가 친 숫자를 폴링이 덮으면
@@ -65,14 +75,15 @@ export const ProgressInputModal: React.FC<ProgressInputModalProps> = ({
   };
 
   const submit = async () => {
-    if (qty === null) return;
+    if (qty === null || opened === null) return;
     setSaving(true);
     setError(null);
     try {
       const res = await authFetch('/api/production-progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ machine_id: machineId, date, shift, shift_output_qty: qty }),
+        // 라이브 props(date/shift)가 아니라 연 시점 스냅샷으로 저장한다 (교대 경계 오저장 방지).
+        body: JSON.stringify({ machine_id: machineId, date: opened.date, shift: opened.shift, shift_output_qty: qty }),
       });
 
       if (res.status === 409) {
@@ -112,7 +123,7 @@ export const ProgressInputModal: React.FC<ProgressInputModalProps> = ({
       onCancel={onClose}
       onOk={submit}
       okText={t('progressInput.submit')}
-      okButtonProps={{ disabled: locked || qty === null, loading: saving }}
+      okButtonProps={{ disabled: locked || shiftChanged || qty === null, loading: saving }}
     >
       {downtimeSince !== null ? (
         <Alert
@@ -124,6 +135,9 @@ export const ProgressInputModal: React.FC<ProgressInputModalProps> = ({
         />
       ) : (
         <Space direction="vertical" style={{ width: '100%' }}>
+          {shiftChanged && (
+            <Alert type="warning" showIcon message={t('progressInput.shiftChanged')} />
+          )}
           <Text>{t('progressInput.label')}</Text>
           <InputNumber
             value={qty}
