@@ -41,4 +41,20 @@ describe('OperatorDashboard 실시간 진행 계약', () => {
     // 여기서 하드코딩된 간격을 검사하지 않는다.
     expect(source).toMatch(/useAutoRefresh\([\s\S]{0,200}progress\.refresh/);
   });
+
+  // Finding 2: 진행 보고 버튼은 확정 OEE(selectedMachineMetrics) 종속에서 벗어나야 한다.
+  // Finding 7: 경과율(elapsedRatio)을 화면에 띄운다.
+  it('진행 보고 버튼과 경과율을 배선한다', () => {
+    expect(source).toMatch(/operator\.reportProgress/);
+    expect(source).toMatch(/setProgressModalOpen\(true\)/);
+    expect(source).toMatch(/operator\.elapsedRatio/);
+    expect(source).toMatch(/realtime\.elapsedRatio/);
+  });
+
+  // Finding 4: 교대 길이를 하드코딩 720 이 아니라 설정에서 도출하고, 720 모델이 아니면
+  // fail-closed 한다. 하드코딩 리터럴이 되살아나면 8·10시간 교대에서 CAPA·경과율이 틀린다.
+  it('교대 길이를 설정에서 도출하고 미지원 구성은 fail-closed 한다', () => {
+    expect(source).not.toMatch(/operatingMinutes:\s*720/);
+    expect(source).toMatch(/shiftModelSupported/);
+  });
 });

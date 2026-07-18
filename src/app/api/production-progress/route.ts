@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
 import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
 import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
+import { calculateVerifiedDowntimeMinutesForWindow } from '@/app/api/production-records/daily/downtimeCalculation';
+import { getShiftWindow, loadDowntimeSourceRows } from '@/lib/shiftDowntime';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +50,30 @@ export async function POST(request: NextRequest) {
 
     assertMachineAccess(user, machineId);
 
+    // 비가동 중 입력 금지를 서버에서도 강제한다. 클라이언트 잠금(ProgressInputModal)만으로는
+    // ① 모달을 연 뒤 비가동이 시작되는 경쟁, ② API 직접 호출을 막지 못한다. 잠금의 정의는
+    // 대시보드·실시간 가동률과 동일하게 machine_logs 의 "열린 비정상 상태"를 쓴다.
+    const { data: openLog, error: openLogError } = await supabaseAdmin
+      .from('machine_logs')
+      .select('state')
+      .eq('machine_id', machineId)
+      .is('end_time', null)
+      .order('start_time', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (openLogError) {
+      console.error('설비 상태 조회 오류:', openLogError);
+      return NextResponse.json({ error: 'Failed to read machine state' }, { status: 500 });
+    }
+
+    if (openLog && openLog.state !== 'NORMAL_OPERATION') {
+      return NextResponse.json(
+        { error: 'machine_in_downtime', state: openLog.state },
+        { status: 409 }
+      );
+    }
+
     const { data: last, error: lastError } = await supabaseAdmin
       .from('production_progress_reports')
       .select('shift_output_qty')
@@ -85,6 +111,12 @@ export async function POST(request: NextRequest) {
       });
 
     if (insertError) {
+      // 감소 방지 트리거(enforce_progress_monotonic)가 동시 요청 경쟁을 DB 레벨에서 막는다.
+      // 앱 레벨 사전검사는 last 조회와 insert 가 분리돼 두 요청이 같은 값을 읽으면 통과하므로,
+      // 트리거가 올리는 check_violation(23514)을 감소 409 로 매핑한다.
+      if (insertError.code === '23514') {
+        return NextResponse.json({ error: 'shift_output_qty decreased' }, { status: 409 });
+      }
       console.error('진행 보고 저장 오류:', insertError);
       return NextResponse.json({ error: 'Failed to save report' }, { status: 500 });
     }
@@ -97,38 +129,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-interface DowntimeRow {
-  start_time: string;
-  end_time: string | null;
-  duration_minutes: number | null;
-}
-
-/**
- * 비가동 한 건의 길이(분).
- *
- * end_time 과 duration_minutes 는 서로 독립적으로 nullable 이므로 세 경우가 있다.
- *
- * 1. 둘 다 있다 → 기록된 duration_minutes 를 쓴다.
- * 2. end_time 이 없다 → 지금 이 순간에도 멈춰 있다. now 까지 센다.
- * 3. end_time 은 있는데 duration_minutes 만 없다 → 길이가 기록되지 않았을 뿐이다.
- *    0 으로 세면 그 비가동이 통째로 사라져 가동률이 실제보다 높아 보인다
- *    (CLAUDE.md: "A NULL metric is not 0%"). 두 타임스탬프가 다 있으므로 추측할
- *    필요 없이 계산된다.
- *
- * 시작 전(시계 오차 등)으로 음수가 나오면 0 으로 본다.
- */
-function downtimeRowMinutes(row: DowntimeRow, now: number): number {
-  if (row.end_time !== null && row.duration_minutes !== null) {
-    return row.duration_minutes;
-  }
-
-  const endedAt = row.end_time !== null ? new Date(row.end_time).getTime() : now;
-  return Math.max(0, (endedAt - new Date(row.start_time).getTime()) / 60_000);
-}
-
 /**
  * GET /api/production-progress?machine_id=&date=&shift=
  * 마지막 진행 보고 + 지금까지의 비가동 합계 + 개당 tact.
+ *
+ * 비가동은 확정 OEE(production-records/daily)와 **같은 소스·같은 함수**로 계산한다:
+ * downtime_entries + machine_logs 를 병합해 교대 시간창에 클립·유니온한다. 손으로 행을
+ * 합산하면 겹친 수동/자동 비가동을 이중 계산하고 machine_logs 비가동을 통째로 놓쳐,
+ * 실시간 가동률이 확정 OEE 와 다른 말을 하게 된다.
  *
  * tact 는 machines 테이블이 아니라 machines_with_production_info 뷰에 있다. 그 사실을
  * 서버가 흡수해 클라이언트는 출처를 몰라도 되게 한다 (기존 getMachineTactInfo 와 동일한 출처).
@@ -165,23 +173,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to read progress' }, { status: 500 });
     }
 
-    const { data: downtimes, error: downtimeError } = await supabaseAdmin
-      .from('downtime_entries')
-      .select('start_time, end_time, duration_minutes')
-      .eq('machine_id', machineId)
-      .eq('date', date)
-      .eq('shift', shift);
+    // 휴식 총량은 비가동 계산(계획정지·휴식 겹침 판정)과 아래 설정 일치 검사에 함께 쓰므로
+    // 한 번만 읽는다.
+    const configuredBreakMinutes = await getBreakTimeMinutes();
 
-    if (downtimeError) {
-      console.error('비가동 조회 오류:', downtimeError);
+    // 비가동을 확정 OEE 와 동일 계약으로 계산한다. calculateVerifiedDowntimeMinutesForWindow 는
+    // 계획정지가 휴식과 겹쳐 이중 차감이 우려되면 null(계산 보류)을 돌려준다 — 그 null 을
+    // 0 으로 뭉개지 않고 그대로 전달한다.
+    let downtimeMinutes: number | null;
+    try {
+      const window = await getShiftWindow(date, shift);
+      if (!window) {
+        return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
+      }
+      const rows = await loadDowntimeSourceRows(
+        machineId,
+        new Date(window.start).toISOString(),
+        new Date(window.end).toISOString(),
+      );
+      downtimeMinutes = calculateVerifiedDowntimeMinutesForWindow(
+        rows,
+        window,
+        configuredBreakMinutes,
+        Date.now(),
+      );
+    } catch (e) {
+      console.error('비가동 계산 오류:', e);
       return NextResponse.json({ error: 'Failed to read downtime' }, { status: 500 });
     }
-
-    const now = Date.now();
-    const downtimeMinutes = ((downtimes ?? []) as DowntimeRow[]).reduce(
-      (total, row) => total + downtimeRowMinutes(row, now),
-      0
-    );
 
     // tact 가 없으면 성능률을 계산할 수 없다. 0 이나 임의값으로 채우지 않고 null 로 알린다.
     const { data: tactRow } = await supabaseAdmin
@@ -197,7 +216,6 @@ export async function GET(request: NextRequest) {
     // break_time_minutes 는 관리자가 UI 에서 바꿀 수 있다(ShiftSettingsTab). 둘이 어긋나면
     // 실시간 화면과 확정 OEE 가 영구히 다른 말을 한다. 순수 모듈은 설정을 읽을 수 없으므로
     // 검출은 여기서만 가능하다. 어긋나면 그럴듯한 숫자를 만들지 말고 계산 불가로 알린다.
-    const configuredBreakMinutes = await getBreakTimeMinutes();
     const breakConfigMatches = configuredBreakMinutes === TOTAL_BREAK_MINUTES;
 
     if (!breakConfigMatches) {
@@ -210,7 +228,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       last_report: lastReport ?? null,
-      downtime_minutes: Math.round(downtimeMinutes),
+      // number | null. null = 계획정지·휴식 겹침으로 계산 보류. 0 과 구분해 전달한다.
+      downtime_minutes: downtimeMinutes,
       tact_time_seconds: tactTimeSeconds,
       // false 면 클라이언트는 실시간 지표를 계산하지 않고 "설정 확인 필요"를 보여준다.
       break_config_matches: breakConfigMatches,

@@ -11,6 +11,8 @@ const mockRequireUser = jest.fn();
 const mockAssertMachineAccess = jest.fn();
 const mockFrom = jest.fn();
 const mockGetBreakTimeMinutes = jest.fn();
+const mockGetShiftWindow = jest.fn();
+const mockLoadRows = jest.fn();
 
 jest.mock('@/lib/apiAuth', () => ({
   requireUser: (...a: unknown[]) => mockRequireUser(...a),
@@ -23,39 +25,50 @@ jest.mock('@/lib/supabase-admin', () => ({
 jest.mock('@/lib/plannedRuntime', () => ({
   getBreakTimeMinutes: () => mockGetBreakTimeMinutes(),
 }));
+// 비가동 계산은 확정 OEE(daily/route)와 같은 함수(calculateVerifiedDowntimeMinutesForWindow)를
+// 그대로 쓴다 — 그 함수는 REAL 로 두어 클립·유니온을 실제로 검증한다. 창(window)과 원천 행
+// 로딩만 모킹한다.
+jest.mock('@/lib/shiftDowntime', () => ({
+  getShiftWindow: (...a: unknown[]) => mockGetShiftWindow(...a),
+  loadDowntimeSourceRows: (...a: unknown[]) => mockLoadRows(...a),
+}));
 
 import { GET } from '../route';
 import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 
 const MACHINE = '11111111-1111-4111-8111-111111111111';
 
-interface DowntimeMockRow {
-  start_time: string;
-  end_time: string | null;
-  duration_minutes: number | null;
-}
-
-/** 09:00~09:11 에 끝난 비가동. 길이가 기록돼 있다. */
-const CLOSED_11_MIN: DowntimeMockRow = {
-  start_time: '2026-07-17T09:00:00+07:00',
-  end_time: '2026-07-17T09:11:00+07:00',
-  duration_minutes: 11,
+// 2026-07-17 A교대 시간창 (08:00~20:00 +07).
+const WINDOW = {
+  start: new Date('2026-07-17T08:00:00+07:00').getTime(),
+  end: new Date('2026-07-17T20:00:00+07:00').getTime(),
 };
 
-/** 09:00 에 시작해 아직 끝나지 않은 비가동 (end_time IS NULL). */
-const OPEN_FROM_0900: DowntimeMockRow = {
+interface SourceRow {
+  start_time: string;
+  end_time: string | null;
+  is_planned: boolean;
+}
+
+/** 09:00~09:11 에 끝난 비가동. */
+const CLOSED_11_MIN: SourceRow = {
+  start_time: '2026-07-17T09:00:00+07:00',
+  end_time: '2026-07-17T09:11:00+07:00',
+  is_planned: false,
+};
+
+/** 09:00 에 시작해 아직 끝나지 않은 비가동. */
+const OPEN_FROM_0900: SourceRow = {
   start_time: '2026-07-17T09:00:00+07:00',
   end_time: null,
-  duration_minutes: null,
+  is_planned: false,
 };
 
 const mockTables = ({
   lastReport = { shift_output_qty: 60, reported_at: '2026-07-17T09:30:00+07:00' },
-  downtimes = [CLOSED_11_MIN],
   tact = 72,
 }: {
   lastReport?: { shift_output_qty: number; reported_at: string } | null;
-  downtimes?: DowntimeMockRow[];
   tact?: number | null;
 } = {}) => {
   mockFrom.mockImplementation((table: string) => {
@@ -66,12 +79,6 @@ const mockTables = ({
         }) }) }) }),
       };
     }
-    if (table === 'downtime_entries') {
-      return {
-        select: () => ({ eq: () => ({ eq: () => ({ eq: async () => ({ data: downtimes, error: null }) }) }) }),
-      };
-    }
-    // tact 는 machines 테이블이 아니라 이 뷰에 있다 (machines 에는 tact 컬럼이 없다).
     if (table === 'machines_with_production_info') {
       return {
         select: () => ({ eq: () => ({ maybeSingle: async () => ({
@@ -89,6 +96,8 @@ describe('GET /api/production-progress', () => {
     mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
     mockAssertMachineAccess.mockReturnValue(undefined);
     mockGetBreakTimeMinutes.mockResolvedValue(TOTAL_BREAK_MINUTES);
+    mockGetShiftWindow.mockResolvedValue(WINDOW);
+    mockLoadRows.mockResolvedValue([CLOSED_11_MIN]);
     mockTables();
   });
 
@@ -104,13 +113,22 @@ describe('GET /api/production-progress', () => {
 
     const body = await res.json() as {
       last_report: { shift_output_qty: number } | null;
-      downtime_minutes: number;
+      downtime_minutes: number | null;
       tact_time_seconds: number | null;
     };
     expect(body.last_report?.shift_output_qty).toBe(60);
     expect(body.downtime_minutes).toBe(11);
-    // 클라이언트가 tact 의 출처(뷰)를 알 필요가 없도록 서버가 해결해 실어준다.
     expect(body.tact_time_seconds).toBe(72);
+  });
+
+  it('확정 OEE 와 같은 창·같은 사용자로 비가동 원천을 로드한다', async () => {
+    await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
+    expect(mockGetShiftWindow).toHaveBeenCalledWith('2026-07-17', 'A');
+    expect(mockLoadRows).toHaveBeenCalledWith(
+      MACHINE,
+      new Date(WINDOW.start).toISOString(),
+      new Date(WINDOW.end).toISOString(),
+    );
   });
 
   it('필수 파라미터가 없으면 400', async () => {
@@ -118,21 +136,23 @@ describe('GET /api/production-progress', () => {
     expect(res.status).toBe(400);
   });
 
-  // tact 를 모르면 성능률을 계산할 수 없다. 0 이나 임의값으로 채우지 않는다.
+  it('교대 시간창 설정이 유효하지 않으면 500', async () => {
+    mockGetShiftWindow.mockResolvedValue(null);
+    const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
+    expect(res.status).toBe(500);
+  });
+
   it('tact 가 없으면 null 로 돌려준다', async () => {
-    mockTables({ lastReport: null, downtimes: [], tact: null });
+    mockLoadRows.mockResolvedValue([]);
+    mockTables({ lastReport: null, tact: null });
 
     const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
     const body = await res.json() as { tact_time_seconds: number | null };
     expect(body.tact_time_seconds).toBeNull();
   });
 
-  // 읽기에도 담당 설비 검사를 건다. 같은 파일의 POST 와, 다른 읽기 라우트
-  // (machines/[machineId]/oee, machines/[machineId]/production) 의 선례와 같은 기준이다.
-  // "호출됐다"로는 부족하다 — 엉뚱한 설비를 물어보면 담당자 검사가 무의미해진다.
   it('요청한 설비와 인증된 사용자로 담당 여부를 검사한다', async () => {
     await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
-
     expect(mockAssertMachineAccess).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'op-1' }),
       MACHINE,
@@ -141,47 +161,45 @@ describe('GET /api/production-progress', () => {
 
   it('담당이 아닌 설비는 조회도 거부한다', async () => {
     mockAssertMachineAccess.mockImplementation(() => { throw new Error('forbidden'); });
-
     await expect(call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`)).rejects.toThrow();
   });
 
-  // 사용자가 명시적으로 요구한 기능이다: "현재까지 비가동 중입니다".
-  // Date.now() 를 라우트가 직접 부르므로 시각을 고정해야 결정론적이다.
   it('아직 끝나지 않은 비가동은 지금까지로 센다', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-17T09:25:00+07:00'));
-    mockTables({ downtimes: [OPEN_FROM_0900] });
+    mockLoadRows.mockResolvedValue([OPEN_FROM_0900]);
 
     const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
-    const body = await res.json() as { downtime_minutes: number };
+    const body = await res.json() as { downtime_minutes: number | null };
     expect(body.downtime_minutes).toBe(25);
   });
 
-  it('닫힌 비가동과 열린 비가동이 섞여도 합산한다', async () => {
+  // 확정 OEE 계약의 핵심: 겹친 비가동은 유니온으로 한 번만 센다. 예전 실시간 경로는
+  // 행을 손으로 더해 11 + 25 = 36 으로 이중 계산했다. 이제 [09:00~09:11]∪[09:00~09:25]=25.
+  it('겹친 닫힌/열린 비가동은 유니온으로 한 번만 센다 (이중계산 금지)', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-17T09:25:00+07:00'));
-    mockTables({ downtimes: [CLOSED_11_MIN, OPEN_FROM_0900] });
+    mockLoadRows.mockResolvedValue([CLOSED_11_MIN, OPEN_FROM_0900]);
 
     const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
-    const body = await res.json() as { downtime_minutes: number };
-    expect(body.downtime_minutes).toBe(36);
+    const body = await res.json() as { downtime_minutes: number | null };
+    expect(body.downtime_minutes).toBe(25);
   });
 
-  // duration_minutes 와 end_time 은 서로 독립적으로 nullable 이다. 길이가 기록되지 않았다고
-  // 0 분으로 세면 그 비가동이 통째로 사라져 가동률이 실제보다 높아 보인다. 두 타임스탬프가
-  // 다 있으므로 추측할 필요 없이 계산된다.
-  it('닫혔는데 duration_minutes 가 NULL 이면 타임스탬프로 계산한다', async () => {
-    mockTables({
-      downtimes: [{ ...CLOSED_11_MIN, duration_minutes: null }],
-    });
+  // 계획정지가 휴식과 겹쳐 이중 차감이 우려되면 확정 함수가 null(계산 보류)을 돌려준다.
+  // 그 null 을 0 으로 뭉개지 않고 그대로 전달해야 한다 (NULL ≠ 0%).
+  it('계획정지·휴식 겹침으로 계산 보류면 downtime_minutes 를 null 로 전달한다', async () => {
+    mockLoadRows.mockResolvedValue([{
+      start_time: '2026-07-17T12:00:00+07:00',
+      end_time: '2026-07-17T12:30:00+07:00',
+      is_planned: true,
+    }]);
+    // 휴식 총량 > 0 이어야 계획정지 null 규칙이 발동한다.
+    mockGetBreakTimeMinutes.mockResolvedValue(TOTAL_BREAK_MINUTES);
 
     const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
-    const body = await res.json() as { downtime_minutes: number };
-    expect(body.downtime_minutes).toBe(11);
+    const body = await res.json() as { downtime_minutes: number | null };
+    expect(body.downtime_minutes).toBeNull();
   });
 
-  // shiftBreaks 의 휴식 시간대 합계는 코드 상수인데 break_time_minutes 는 관리자가 UI 에서
-  // 바꿀 수 있다. 순수 모듈은 설정을 못 읽으므로 어긋남 검출은 여기서만 가능하다.
-  // 이 방어선이 없으면 관리자가 휴식 총량을 바꾼 순간부터 실시간 화면과 확정 OEE 가
-  // 영구히 다른 말을 하면서도 모든 테스트가 초록으로 남는다.
   it('설정된 휴식 총량이 코드 상수와 같으면 정상으로 알린다', async () => {
     const res = await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
     const body = await res.json() as { break_config_matches: boolean };

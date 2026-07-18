@@ -76,7 +76,12 @@ export const ProgressInputModal: React.FC<ProgressInputModalProps> = ({
       });
 
       if (res.status === 409) {
-        const body = (await res.json()) as { last_reported_qty?: unknown };
+        const body = (await res.json()) as { error?: unknown; last_reported_qty?: unknown };
+        // 모달을 연 뒤 비가동이 시작된 경쟁: 서버가 잠금을 강제해 거부한다.
+        if (body.error === 'machine_in_downtime') {
+          setError(t('progressInput.downtimeServerRejected'));
+          return;
+        }
         // 감소했다고 말하려면 무엇보다 적은지를 알아야 한다. 모르면 아래 일반 실패로 떨어진다.
         if (typeof body.last_reported_qty === 'number') {
           setError(t('progressInput.decreasedError', { last: body.last_reported_qty }));

@@ -67,7 +67,8 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
 
       const body = await res.json() as {
         last_report: { shift_output_qty: number; reported_at: string } | null;
-        downtime_minutes: number;
+        // null = 계획정지·휴식 겹침으로 계산 보류 (확정 OEE 와 동일 계약). 0 과 구분한다.
+        downtime_minutes: number | null;
         tact_time_seconds: number | null;
         break_config_matches: boolean;
       };
@@ -94,6 +95,20 @@ export function useRealtimeProgress({ machineId, date, shift }: UseRealtimeProgr
   }, [machineId, date, shift]);
 
   useEffect(() => { void fetchProgress(); }, [fetchProgress]);
+
+  // 설비/일자/교대가 바뀌면 이전 설비의 값이 새 응답 도착 전까지 창에 남지 않게 즉시 비운다.
+  // reqRef 는 뒤늦게 온 stale 응답의 덮어쓰기만 막을 뿐 "빈 창"을 만들지는 못한다. 이 초기화가
+  // 없으면 A 설비의 누적 보고값이 B 설비 모달의 초기값으로 새어 B 에 잘못 저장될 수 있다.
+  // deps 를 [machineId, date, shift] 로 좁혀 폴링 refresh(같은 인자)에는 걸리지 않게 한다 —
+  // 안 그러면 매 틱 null 로 깜빡인다.
+  useEffect(() => {
+    setLastReportedQty(null);
+    setLastReportedAt(null);
+    setDowntimeMinutes(null);
+    setTactTimeSeconds(null);
+    setBreakConfigMatches(false);
+    setError(null);
+  }, [machineId, date, shift]);
 
   // 언마운트 시 진행 중 요청을 모두 무효화한다 (마운트 해제 후 setState 금지).
   useEffect(() => () => { reqRef.current++; }, []);

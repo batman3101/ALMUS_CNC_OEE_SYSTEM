@@ -93,6 +93,39 @@ describe('useRealtimeProgress', () => {
     expect(mockAuthFetch).not.toHaveBeenCalled();
   });
 
+  // Finding 5: 설비를 바꾸면 새 응답이 도착하기 전까지 이전 설비의 값이 창에 남아선 안 된다.
+  // reqRef 는 뒤늦은 stale 응답의 덮어쓰기만 막을 뿐 "빈 창"을 만들지 못한다. 이 리셋이 없으면
+  // A 설비의 55 가 남아 B 설비 모달의 초기값으로 새어 B 에 잘못 저장될 수 있다.
+  it('설비가 바뀌면 새 응답 도착 전 이전 값을 즉시 비운다 (교차 오염 방지)', async () => {
+    const d1 = deferred<Response>();
+    const d2 = deferred<Response>();
+    mockAuthFetch.mockReset();
+    mockAuthFetch.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise);
+
+    const { result, rerender } = renderHook(
+      ({ machineId }) => useRealtimeProgress({ machineId, date: '2026-07-17', shift: 'A' }),
+      { initialProps: { machineId: 'm1' } }
+    );
+
+    // m1 응답 도착 → 값이 채워진다.
+    await act(async () => {
+      d1.resolve(okResponse({
+        last_report: { shift_output_qty: 55, reported_at: '2026-07-17T09:00:00+07:00' },
+        downtime_minutes: 3, tact_time_seconds: 72, break_config_matches: true,
+      }));
+      await d1.promise;
+    });
+    await waitFor(() => expect(result.current.lastReportedQty).toBe(55));
+
+    // m2 로 전환. d2 는 아직 미해결(in-flight). 이 순간 m1 의 55 가 남아 있으면 안 된다.
+    rerender({ machineId: 'm2' });
+    expect(result.current.lastReportedQty).toBeNull();
+    expect(result.current.lastReportedAt).toBeNull();
+    expect(result.current.downtimeMinutes).toBeNull();
+    expect(result.current.tactTimeSeconds).toBeNull();
+    expect(result.current.breakConfigMatches).toBe(false);
+  });
+
   // 정정 1(경쟁): machineId 가 빠르게 바뀌면 두 조회가 경쟁한다. 오래된(m1) 응답이
   // 나중에 도착하더라도 최신(m2) 화면을 덮으면 안 된다 — 나중 요청이 이긴다.
   it('오래된 응답이 나중에 도착해도 최신 요청 결과를 덮지 않는다', async () => {

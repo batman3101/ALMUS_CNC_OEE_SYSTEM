@@ -104,6 +104,23 @@ describe('ProgressInputModal', () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
+  // Finding 6: 모달을 연 뒤 비가동이 시작되면 서버가 409 machine_in_downtime 으로 막는다.
+  // 이걸 감소로 오진하면 작업자가 맞는 숫자를 의심한다 — 전용 메시지로 안내한다.
+  it('서버가 비가동으로 거부하면(409 machine_in_downtime) 전용 메시지를 보여준다', async () => {
+    mockAuthFetch.mockResolvedValue({
+      ok: false, status: 409,
+      json: async () => ({ error: 'machine_in_downtime', state: 'BREAKDOWN_REPAIR' }),
+    });
+
+    render(<ProgressInputModal {...baseProps} />);
+    fireEvent.change(input(), { target: { value: '150' } });
+    fireEvent.click(submitButton());
+
+    await waitFor(() => expect(document.body.textContent).toContain('progressInput.downtimeServerRejected'));
+    expect(document.body.textContent).not.toContain('progressInput.decreasedError');
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   // 500 은 서버가 터진 것이지 작업자가 틀린 게 아니다. 감소라고 말하면 작업자는 맞는 숫자를
   // 고친다.
   it('저장이 실패하면 감소라고 말하지 않는다', async () => {

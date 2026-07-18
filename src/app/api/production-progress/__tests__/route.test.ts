@@ -30,10 +30,22 @@ const request = (body: unknown) => ({
   json: async () => body,
 }) as never;
 
-/** 마지막 보고 조회 → insert 를 순서대로 흉내낸다. */
-const mockChain = (lastReport: { shift_output_qty: number } | null) => {
-  const insert = jest.fn().mockResolvedValue({ error: null });
+/** 열린 상태 로그 조회(비가동 잠금) → 마지막 보고 조회 → insert 를 순서대로 흉내낸다.
+ *  openLog 기본값은 정상가동이라 저장이 진행된다. */
+const mockChain = (
+  lastReport: { shift_output_qty: number } | null,
+  opts: { openLog?: { state: string } | null; insertResult?: { error: unknown } } = {},
+) => {
+  const { openLog = { state: 'NORMAL_OPERATION' }, insertResult = { error: null } } = opts;
+  const insert = jest.fn().mockResolvedValue(insertResult);
   mockFrom.mockImplementation((table: string) => {
+    if (table === 'machine_logs') {
+      return {
+        select: () => ({ eq: () => ({ is: () => ({ order: () => ({ limit: () => ({
+          maybeSingle: async () => ({ data: openLog, error: null }),
+        }) }) }) }) }),
+      };
+    }
     if (table === 'production_progress_reports') {
       return {
         select: () => ({
@@ -133,5 +145,36 @@ describe('POST /api/production-progress', () => {
       machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: -1,
     }));
     expect(res.status).toBe(400);
+  });
+
+  // 비가동 잠금은 클라이언트뿐 아니라 서버에서도 강제한다 (모달 오픈 후 비가동 경쟁·직접 호출).
+  it('열린 비정상 상태(비가동 중)면 저장을 거부한다', async () => {
+    const { insert } = mockChain({ shift_output_qty: 60 }, { openLog: { state: 'BREAKDOWN_REPAIR' } });
+
+    const res = await POST(request({
+      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 150,
+    }));
+
+    expect(res.status).toBe(409);
+    expect(insert).not.toHaveBeenCalled();
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('machine_in_downtime');
+  });
+
+  // 동시 요청 경쟁: 앱 사전검사는 통과했지만 DB 감소방지 트리거(23514)가 막은 경우.
+  it('감소 방지 트리거 위반(23514)을 409 로 매핑한다', async () => {
+    const { insert } = mockChain(
+      { shift_output_qty: 60 },
+      { insertResult: { error: { code: '23514' } } },
+    );
+
+    const res = await POST(request({
+      machine_id: MACHINE, date: '2026-07-17', shift: 'A', shift_output_qty: 150,
+    }));
+
+    expect(res.status).toBe(409);
+    expect(insert).toHaveBeenCalled();
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('shift_output_qty decreased');
   });
 });

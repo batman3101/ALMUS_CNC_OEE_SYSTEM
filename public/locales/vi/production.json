@@ -41,6 +41,7 @@
     "decreasedError": "Nhỏ hơn báo cáo trước ({{last}} cái). Số lũy kế không thể giảm. Vui lòng kiểm tra.",
     "saveFailed": "Không lưu được. Vui lòng thử lại hoặc báo cho quản trị viên.",
     "downtimeLocked": "Đang dừng máy từ {{since}} đến hiện tại. Hãy chuyển sang vận hành bình thường trước khi nhập.",
+    "downtimeServerRejected": "Máy đang dừng nên không thể lưu. Hãy chuyển sang vận hành bình thường rồi thử lại.",
     "submit": "Lưu"
   }
 }

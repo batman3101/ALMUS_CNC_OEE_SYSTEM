@@ -157,6 +157,8 @@
     "inputProduction": "Nhập kết quả sản xuất",
     "realtimeAvailabilityTimesPerformance": "Vận hành×Hiệu suất thời gian thực",
     "shiftProgress": "Tiến độ ca",
+    "elapsedRatio": "Thời gian ca đã trôi",
+    "reportProgress": "Báo cáo tiến độ",
     "selectMachine": "Vui lòng chọn thiết bị",
     "shiftEndAlert": "Đã đến giờ kết thúc ca làm việc",
     "shiftEndDescription": "Vui lòng nhập kết quả sản xuất.",

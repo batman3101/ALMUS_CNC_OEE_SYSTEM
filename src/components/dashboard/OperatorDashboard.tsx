@@ -263,18 +263,27 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
 
   const selectedMachineRow = processedData.assignedMachines.find(m => m.id === selectedMachine);
 
+  // 교대 길이를 설정에서 도출한다 (하드코딩 720 제거). shiftBreaks 의 휴식 시간대는 720분
+  // 교대를 전제로 authored 되어 있어, 720 이 아닌 교대(8·10시간 등)에서는 경과 계획시간과
+  // CAPA 가 틀어진다. 그런 구성은 계산하지 않고 fail-closed 한다 — breakConfigMatches 와 같은
+  // 규율(틀린 숫자보다 없는 숫자). 임의 길이 완전 지원은 shiftBreaks 재작업이 선행돼야 한다.
+  const operatingMinutes = Math.round(
+    (currentShiftInfo.endTime.getTime() - currentShiftInfo.startTime.getTime()) / 60_000
+  );
+  const shiftModelSupported = operatingMinutes === 720;
+
   const realtime = useMemo(() => {
     // 비가동이나 tact 를 모르면 계산하지 않는다. 0 으로 채우면 가동률 100% 로 보인다.
     if (progress.downtimeMinutes === null || progress.tactTimeSeconds === null) return null;
-    // 관리자가 휴식 총량을 바꿔 코드 상수와 어긋나면 경과 계획시간이 틀린다.
-    // 틀린 숫자를 그럴듯하게 띄우느니 아무 숫자도 내지 않는다.
-    if (!progress.breakConfigMatches) return null;
+    // 관리자가 휴식 총량을 바꿔 코드 상수와 어긋나거나, 교대 길이가 720분 모델이 아니면
+    // 경과 계획시간이 틀린다. 틀린 숫자를 그럴듯하게 띄우느니 아무 숫자도 내지 않는다.
+    if (!progress.breakConfigMatches || !shiftModelSupported) return null;
 
     return calculateRealtimeProgress({
       shift: currentShiftInfo.shift,
       shiftStart: currentShiftInfo.startTime,
       now,
-      operatingMinutes: 720,
+      operatingMinutes,
       tactTimeSeconds: progress.tactTimeSeconds,
       downtimeMinutes: progress.downtimeMinutes,
       shiftOutputQty: progress.lastReportedQty,
@@ -282,6 +291,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   }, [
     progress.downtimeMinutes, progress.tactTimeSeconds, progress.lastReportedQty,
     progress.breakConfigMatches, currentShiftInfo.shift, currentShiftInfo.startTime, now,
+    operatingMinutes, shiftModelSupported,
   ]);
 
   // 주기 자동갱신. 원안은 열 때·저장할 때만 갱신돼 그 사이 경과시간 지표가 얼어붙고,
@@ -580,18 +590,52 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                 label: machinesT('operator.oeeStatus'),
                 children: (
                   <>
-                    {/* 항목이 없으면 OEE 계산 불가다. 예전에는 훅이 모든 설비에 0% 기본
-                        지표를 넣어줘서 이 조건이 항상 참이었고, 아래 "실적을 입력하세요"
-                        빈 상태는 도달할 수 없는 죽은 코드였다. */}
-                    {selectedMachineMetrics ? (
-                      <Card size="small">
-                        <OEEGauge
-                          metrics={selectedMachineMetrics}
-                          title={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name}
-                          size="small"
-                          showDetails={true}
-                        />
-                        {/* 교대 중 실시간 가동×성능·진척. 품질(불량)은 검사 전이라 여기 없다. */}
+                    {!selectedMachine ? (
+                      <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
+                        {machinesT('operator.selectMachine')}
+                      </div>
+                    ) : (
+                      <>
+                        {/* 확정 OEE 게이지: 이 설비에 확정 실적(스냅샷)이 있을 때만. 없으면
+                            빈 상태 안내를 보인다. 예전엔 이 게이지 분기 "안에" 실시간 카드와
+                            진행 보고 버튼이 중첩돼 있어, 확정 실적이 없는 설비에서는 진행 보고
+                            기능 자체가 사라졌다 (Finding 2). 이제 아래로 끌어내 분리한다. */}
+                        {selectedMachineMetrics ? (
+                          <Card size="small">
+                            <OEEGauge
+                              metrics={selectedMachineMetrics}
+                              title={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name}
+                              size="small"
+                              showDetails={true}
+                            />
+                            {/* 여기 도달했다면 지표가 실재한다 = 확인된 진짜 0% 다 (미보고 아님) */}
+                            {selectedMachineMetrics.oee === 0 && (
+                              <Alert
+                                message={machinesT('operator.oeeDataCollecting')}
+                                description={machinesT('operator.oeeDataCollectingDesc')}
+                                type="info"
+                                showIcon
+                                style={{ marginTop: 16 }}
+                              />
+                            )}
+                          </Card>
+                        ) : (
+                          <Card size="small">
+                            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                              <ClockCircleOutlined style={{ fontSize: 40, color: '#bfbfbf', marginBottom: 12 }} />
+                              <div style={{ color: '#666', fontSize: 14 }}>
+                                <p style={{ marginBottom: 8 }}>{machinesT('operator.loadingOeeData')}</p>
+                                <p style={{ fontSize: 12, color: '#999' }}>
+                                  {machinesT('operator.inputProductionForOee')}
+                                </p>
+                              </div>
+                            </div>
+                          </Card>
+                        )}
+
+                        {/* 교대 중 실시간 가동×성능·진척·경과율. 확정 OEE 유무와 독립이다 —
+                            이 기능의 존재 이유가 "확정 실적이 나오기 전, 교대 중"이라 확정 OEE 에
+                            종속되면 신규·미보고 설비에서 통째로 사라진다. 품질(불량)은 검사 전이라 없다. */}
                         {realtime && (
                           <Card size="small" style={{ marginTop: 16 }}>
                             <Space direction="vertical" style={{ width: '100%' }}>
@@ -609,47 +653,31 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                                   {realtime.progressQty ?? '—'} / {realtime.capaQty ?? '—'}
                                 </strong>
                               </div>
-                              <Button type="primary" block onClick={() => setProgressModalOpen(true)}>
-                                {machinesT('operator.inputProduction')}
-                              </Button>
+                              {/* 경과율: "지금 몇 개"만으로는 순조로운지 알 수 없다.
+                                  교대의 몇 %가 지났는지를 함께 보여야 판단이 선다 (Finding 7·사양 요구). */}
+                              <div>
+                                {machinesT('operator.elapsedRatio')}:{' '}
+                                <strong>
+                                  {realtime.elapsedRatio === null
+                                    ? '—'
+                                    : `${(realtime.elapsedRatio * 100).toFixed(0)}%`}
+                                </strong>
+                              </div>
                             </Space>
                           </Card>
                         )}
-                        {/* 여기 도달했다면 지표가 실재한다 = 확인된 진짜 0% 다 (미보고 아님) */}
-                        {selectedMachineMetrics.oee === 0 && (
-                          <Alert
-                            message={machinesT('operator.oeeDataCollecting')}
-                            description={machinesT('operator.oeeDataCollectingDesc')}
-                            type="info"
-                            showIcon
-                            style={{ marginTop: 16 }}
-                          />
-                        )}
-                      </Card>
-                    ) : selectedMachine ? (
-                      <Card size="small">
-                        <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                          <ClockCircleOutlined style={{ fontSize: 48, color: '#bfbfbf', marginBottom: 16 }} />
-                          <div style={{ color: '#666', fontSize: 14 }}>
-                            <p style={{ marginBottom: 8 }}>{machinesT('operator.loadingOeeData')}</p>
-                            <p style={{ fontSize: 12, color: '#999' }}>
-                              {machinesT('operator.inputProductionForOee')}
-                            </p>
-                          </div>
-                          <Button
-                            type="primary"
-                            size="small"
-                            style={{ marginTop: 16 }}
-                            onClick={() => setShowProductionInput(true)}
-                          >
-                            {machinesT('operator.inputProduction')}
-                          </Button>
-                        </div>
-                      </Card>
-                    ) : (
-                      <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
-                        {machinesT('operator.selectMachine')}
-                      </div>
+
+                        {/* 진행 보고 버튼: 설비만 선택되면 항상 뜬다. 잠금·초기값·오류는 모달이
+                            처리하므로 realtime 계산 가능 여부와 무관하게 보고 자체는 가능해야 한다. */}
+                        <Button
+                          type="primary"
+                          block
+                          style={{ marginTop: 16 }}
+                          onClick={() => setProgressModalOpen(true)}
+                        >
+                          {machinesT('operator.reportProgress')}
+                        </Button>
+                      </>
                     )}
                   </>
                 )

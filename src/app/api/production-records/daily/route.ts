@@ -14,6 +14,8 @@ import {
   resolveConfirmedDowntimeMinutes,
   type DowntimeSourceInterval,
 } from './downtimeCalculation';
+import { getBusinessTimeConfig } from '@/lib/shiftConfig';
+import { loadDowntimeSourceRows } from '@/lib/shiftDowntime';
 import {
   apiAuthErrorResponse,
   assertMachineAccess,
@@ -60,38 +62,6 @@ function validateQuantities(
     return `${shiftName} 불량 수량은 생산 수량보다 클 수 없습니다`;
   }
   return null;
-}
-
-const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Ho_Chi_Minh';
-const DEFAULT_SHIFT_A_START = '08:00';
-const DEFAULT_SHIFT_B_START = '20:00';
-
-async function getBusinessTimeConfig() {
-  const defaults = {
-    timezone: DEFAULT_BUSINESS_TIMEZONE,
-    shiftAStart: DEFAULT_SHIFT_A_START,
-    shiftBStart: DEFAULT_SHIFT_B_START,
-  };
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('system_settings')
-      .select('category, setting_key, setting_value')
-      .in('category', ['general', 'shift'])
-      .eq('is_active', true);
-    if (error || !data) return defaults;
-    const readValue = (category: string, key: string): string | undefined => {
-      const row = data.find(item => item.category === category && item.setting_key === key);
-      const value = row?.setting_value as { value?: unknown } | null | undefined;
-      return typeof value?.value === 'string' ? value.value : undefined;
-    };
-    return {
-      timezone: readValue('general', 'timezone') || defaults.timezone,
-      shiftAStart: readValue('shift', 'shift_a_start') || defaults.shiftAStart,
-      shiftBStart: readValue('shift', 'shift_b_start') || defaults.shiftBStart,
-    };
-  } catch {
-    return defaults;
-  }
 }
 
 // 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시)
@@ -147,51 +117,15 @@ async function loadDowntimeMinutes(
 ): Promise<{ A: number | null; B: number | null }> {
   const rangeStart = new Date(Math.min(windows.A.start, windows.B.start)).toISOString();
   const rangeEnd = new Date(Math.max(windows.A.end, windows.B.end)).toISOString();
-  const pageSize = 1000;
-  const rows: DowntimeSourceInterval[] = [];
 
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabaseAdmin
-      .from('downtime_entries')
-      .select('start_time, end_time, reason')
-      .eq('machine_id', machineId)
-      .lt('start_time', rangeEnd)
-      .or(`end_time.is.null,end_time.gt.${rangeStart}`)
-      .order('start_time', { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) {
-      console.error('Failed to load manual downtime for OEE:', error);
-      return { A: null, B: null };
-    }
-    rows.push(...((data || []).map(row => ({
-      start_time: row.start_time,
-      end_time: row.end_time,
-      is_planned: ['plannedStop', 'planned_stop', 'PLANNED_STOP', '계획 정지']
-        .includes(String(row.reason)),
-    })) as DowntimeSourceInterval[]));
-    if (!data || data.length < pageSize) break;
-  }
-
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabaseAdmin
-      .from('machine_logs')
-      .select('start_time, end_time, state')
-      .eq('machine_id', machineId)
-      .neq('state', 'NORMAL_OPERATION')
-      .lt('start_time', rangeEnd)
-      .or(`end_time.is.null,end_time.gt.${rangeStart}`)
-      .order('start_time', { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) {
-      console.error('Failed to load machine downtime for OEE:', error);
-      return { A: null, B: null };
-    }
-    rows.push(...((data || []).map(row => ({
-      start_time: row.start_time,
-      end_time: row.end_time,
-      is_planned: row.state === 'PLANNED_STOP',
-    })) as DowntimeSourceInterval[]));
-    if (!data || data.length < pageSize) break;
+  // downtime_entries + machine_logs 병합 로딩은 실시간 경로(production-progress)와 공유한다.
+  // 두 경로가 같은 원천을 봐야 실시간 가동률과 확정 OEE 가 어긋나지 않는다.
+  let rows: DowntimeSourceInterval[];
+  try {
+    rows = await loadDowntimeSourceRows(machineId, rangeStart, rangeEnd);
+  } catch (error) {
+    console.error('Failed to load downtime for OEE:', error);
+    return { A: null, B: null };
   }
 
   const now = Date.now();
