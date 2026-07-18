@@ -676,11 +676,13 @@ import { GET } from '../route';
 const MACHINE = '11111111-1111-4111-8111-111111111111';
 const call = (qs: string) => GET({ url: `http://x/api/production-records/pending?${qs}` } as never);
 
-// production_shift_states: WORKING 교대 목록 / production_records: 확정 record(및 defect null 여부)
-const wire = ({ working = [{ date: '2026-07-17', shift: 'A' }, { date: '2026-07-17', shift: 'B' }],
+// 마감대기 = 진척 보고가 있는(작업 증거) 교대 중 확정 record 없는 것. progress_reports 기반이라
+// 자동 바운드된다. production_shift_states(status='WORKING' 6천여 행)로 도출하면 과거 전체가
+// 마감대기로 떠서 못 쓴다(실측 확인). 컬럼도 'state' 가 아니라 'status'.
+const wire = ({ progressed = [{ date: '2026-07-17', shift: 'A' }, { date: '2026-07-17', shift: 'A' }, { date: '2026-07-17', shift: 'B' }],
                 records = [{ date: '2026-07-17', shift: 'A', record_id: 'rA', defect_qty: null }] } = {}) => {
   mockFrom.mockImplementation((t: string) => {
-    if (t === 'production_shift_states') return { select: () => ({ eq: () => ({ eq: async () => ({ data: working, error: null }) }) }) };
+    if (t === 'production_progress_reports') return { select: () => ({ eq: async () => ({ data: progressed, error: null }) }) };
     if (t === 'production_records') return { select: () => ({ eq: async () => ({ data: records, error: null }) }) };
     throw new Error(`unexpected ${t}`);
   });
@@ -689,11 +691,11 @@ const wire = ({ working = [{ date: '2026-07-17', shift: 'A' }, { date: '2026-07-
 describe('GET /api/production-records/pending', () => {
   beforeEach(() => { jest.clearAllMocks(); mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] }); });
 
-  it('마감대기(record 없는 WORKING 교대)와 불량대기(defect NULL)를 분리해 돌려준다', async () => {
+  it('진척 있고 record 없는 교대 = 마감대기(중복 제거), defect NULL = 불량대기', async () => {
     wire();
     const res = await call(`machine_id=${MACHINE}`);
     const body = await res.json() as { close_pending: unknown[]; defect_pending: unknown[] };
-    // B 조는 WORKING 인데 record 없음 → 마감대기. A 조는 record 있고 defect null → 불량대기.
+    // A 는 record 있음 → 마감대기 아님. B 는 진척 있고 record 없음 → 마감대기. A 는 defect null → 불량대기.
     expect(body.close_pending).toEqual([{ date: '2026-07-17', shift: 'B' }]);
     expect(body.defect_pending).toEqual([{ date: '2026-07-17', shift: 'A', record_id: 'rA' }]);
   });
@@ -723,7 +725,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * GET /api/production-records/pending?machine_id= — 마감/불량 백로그.
- * close_pending: WORKING 교대인데 확정 record 없음(마감 필요). 무기한(자동 마감 없음).
+ * close_pending: 진척 보고(작업 증거) 있는 교대인데 확정 record 없음(마감 필요). 무기한(자동 마감 없음).
  * defect_pending: record 있으나 defect NULL(미검사, 다음날 불량 필요).
  */
 export async function GET(request: NextRequest) {
@@ -734,20 +736,25 @@ export async function GET(request: NextRequest) {
     if (!UUID.test(machineId)) return NextResponse.json({ error: 'machine_id is required' }, { status: 400 });
     assertMachineAccess(user, machineId);
 
-    const { data: working, error: wErr } = await supabaseAdmin
-      .from('production_shift_states')
-      .select('date, shift').eq('machine_id', machineId).eq('state', 'WORKING');
-    if (wErr) return NextResponse.json({ error: 'Failed to read shift states' }, { status: 500 });
+    // 마감대기: 진척 보고(작업 증거)가 있는 교대 중 확정 record 없는 것. progress_reports 기반이라
+    // 자동 바운드된다. production_shift_states.status='WORKING' 은 6천여 행이라 마감대기 도출에 쓰면 안 됨(실측).
+    const { data: progressed, error: pErr } = await supabaseAdmin
+      .from('production_progress_reports')
+      .select('date, shift').eq('machine_id', machineId);
+    if (pErr) return NextResponse.json({ error: 'Failed to read progress' }, { status: 500 });
 
     const { data: records, error: rErr } = await supabaseAdmin
       .from('production_records')
       .select('date, shift, record_id, defect_qty').eq('machine_id', machineId);
     if (rErr) return NextResponse.json({ error: 'Failed to read records' }, { status: 500 });
 
-    const recByKey = new Map((records ?? []).map(r => [`${r.date} ${r.shift}`, r]));
-    const close_pending = (working ?? [])
-      .filter(w => !recByKey.has(`${w.date} ${w.shift}`))
-      .map(w => ({ date: w.date, shift: w.shift }));
+    const recKeys = new Set((records ?? []).map(r => `${r.date}|${r.shift}`));
+    const seen = new Set<string>();
+    const close_pending: { date: string; shift: string }[] = [];
+    for (const p of progressed ?? []) {
+      const key = `${p.date}|${p.shift}`;
+      if (!recKeys.has(key) && !seen.has(key)) { seen.add(key); close_pending.push({ date: p.date, shift: p.shift }); }
+    }
     const defect_pending = (records ?? [])
       .filter(r => r.defect_qty === null)
       .map(r => ({ date: r.date, shift: r.shift, record_id: r.record_id }));
@@ -779,7 +786,7 @@ git commit -m "feat(records): 마감/불량 백로그 조회 엔드포인트"
 ## Self-Review (작성자 체크)
 
 - **Spec 커버리지:** §5 defect NULL(Task 1·2), OEE 품질보류 규율(Task 2·3), 교대 마감·늦은 귀속(Task 4), 다음날 불량 확정(Task 5), 마감/불량 백로그(Task 6). §4.5 andon(비가동 동시 기록)은 **Plan 2**에서 다룸(콘솔 동작). §6 진입점 통합·§4.1~4.4 UI 는 Plan 2.
-- **미해결(구현 시 확인):** ① `production_records` 유니크 제약 `(machine_id,date,shift)` 존재 여부(Task 4 upsert 전제) — 없으면 유니크 마이그레이션 선행. ② `production_shift_states` 의 상태 컬럼명/값 `WORKING`(Task 6) — 실제 스키마 확인. ③ `daily/route.ts` `calculateShiftMetrics` 반환 필드명이 `computeShiftSnapshot` 과 다르면 매핑(Task 3 Step 5). 이 셋은 각 태스크 Step 에 확인 지시를 넣어 뒀다.
+- **실측 완료(2026-07-18, 리뷰에서 해소):** ① `production_records` 에 `UNIQUE(machine_id,date,shift)` **존재**(`production_records_machine_id_date_shift_key`) → Task 4 upsert `onConflict:'machine_id,date,shift'` 유효, 별도 유니크 마이그레이션 불필요. ② `production_shift_states` 컬럼은 `state` 가 아니라 **`status`**, 값 WORKING(6,218)·MISSING(1,622) — WORKING−records 로 마감대기를 뽑으면 과거 전체가 뜨므로 **Task 6 을 진척 보고(작업 증거) 기반으로 재설계함**(shift_states 미사용). ③ `daily` `calculateShiftMetrics` 반환 = {plannedRuntime, actualRuntime, idealRuntime, availability, performance, quality, oee, downtime} → `computeShiftSnapshot` 와 동일 → Task 3 추출 안전.
 - **적용 게이트:** 마이그레이션(Task 1) 적용·main 병합은 사용자 명시 지시 시에만.
 
 ---

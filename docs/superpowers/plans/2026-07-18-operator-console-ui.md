@@ -81,10 +81,14 @@ Expected: FAIL — 파일 없음.
 -- andon 비가동: 한 동작이 machine_logs(상태 구간) + downtime_entries(비가동 구간)를 함께 기록.
 -- 두 소스는 OEE 계산이 유니온으로 한 번만 센다(calculateVerifiedDowntimeMinutesForWindow).
 -- 설비별 advisory lock 으로 중복 open 을 막는다.
+-- 실측 반영: downtime_entries.date·reason 은 NOT NULL(is_planned 컬럼 없음, reason 으로 파생).
+-- machines.current_state 는 ENUM machine_status → 캐스트. p_reason 은 라우트가 8개 비정상 값으로
+-- 검증해 넘긴다. machine_logs.state 는 text NOT NULL. p_date 는 업무일자(라우트가 계산).
 create or replace function public.toggle_machine_downtime(
   p_machine_id uuid,
   p_action text,           -- 'start' | 'resume'
-  p_reason text,           -- start 시 비정상 상태값(INSPECTION 등). resume 시 무시.
+  p_reason text,           -- start 시 machine_status 값(INSPECTION 등). resume 시 무시.
+  p_date date,             -- downtime_entries.date(NOT NULL). 라우트가 업무일자로 계산해 넘김.
   p_operator_id uuid
 ) returns jsonb language plpgsql as $$
 declare now_ts timestamptz := now();
@@ -94,33 +98,33 @@ begin
   if p_action = 'start' then
     update public.machine_logs set end_time = now_ts
       where machine_id = p_machine_id and end_time is null;
-    insert into public.machine_logs(machine_id, state, start_time)
-      values (p_machine_id, p_reason, now_ts);
-    insert into public.downtime_entries(machine_id, start_time, reason)
-      values (p_machine_id, now_ts, p_reason);
-    update public.machines set current_state = p_reason where id = p_machine_id;
+    insert into public.machine_logs(machine_id, state, start_time, operator_id)
+      values (p_machine_id, p_reason, now_ts, p_operator_id);
+    insert into public.downtime_entries(machine_id, date, start_time, reason, operator_id)
+      values (p_machine_id, p_date, now_ts, p_reason, p_operator_id);
+    update public.machines set current_state = p_reason::machine_status where id = p_machine_id;
     return jsonb_build_object('ok', true, 'state', p_reason);
 
   elsif p_action = 'resume' then
     update public.machine_logs set end_time = now_ts
       where machine_id = p_machine_id and end_time is null;
-    insert into public.machine_logs(machine_id, state, start_time)
-      values (p_machine_id, 'NORMAL_OPERATION', now_ts);
+    insert into public.machine_logs(machine_id, state, start_time, operator_id)
+      values (p_machine_id, 'NORMAL_OPERATION', now_ts, p_operator_id);
     update public.downtime_entries set end_time = now_ts
       where machine_id = p_machine_id and end_time is null;
-    update public.machines set current_state = 'NORMAL_OPERATION' where id = p_machine_id;
+    update public.machines set current_state = 'NORMAL_OPERATION'::machine_status where id = p_machine_id;
     return jsonb_build_object('ok', true, 'state', 'NORMAL_OPERATION');
   end if;
 
   return jsonb_build_object('ok', false, 'reason', 'invalid_action');
 end; $$;
 
-revoke all on function public.toggle_machine_downtime(uuid, text, text, uuid)
+revoke all on function public.toggle_machine_downtime(uuid, text, text, date, uuid)
   from public, anon, authenticated, service_role;
-grant execute on function public.toggle_machine_downtime(uuid, text, text, uuid) to service_role;
+grant execute on function public.toggle_machine_downtime(uuid, text, text, date, uuid) to service_role;
 ```
 
-> **주의:** `machine_logs` 의 실제 컬럼(예: `log_id` PK 기본값, `change_reason`, `duration_minutes` 등 NOT NULL)과 `downtime_entries` 의 NOT NULL 컬럼(`date`/`shift`/`is_planned` 등)을 스키마로 확인해 INSERT 를 맞춘다. `downtime_entries` 가 date/shift 를 요구하면 `getShiftAt`/`getBusinessDateAt` 로 채운다(서버 라우트에서 계산해 RPC 인자로 넘기는 방식도 가능). state enum 제약이 있으면 p_reason 검증을 추가.
+> **실측 반영(2026-07-18):** `downtime_entries` = {`date` NOT NULL, `reason` NOT NULL, `shift` nullable, `is_planned` 컬럼 **없음**(reason 으로 파생)}. `machine_logs` = {`state` text NOT NULL, `start_time` default now(), `log_id`/gen_random_uuid, `operator_id` nullable, `duration` nullable — `change_reason`/`duration_minutes` 없음}. `machines.current_state` = **ENUM `machine_status`**(9값: NORMAL_OPERATION·INSPECTION·BREAKDOWN_REPAIR·PM_MAINTENANCE·MODEL_CHANGE·PLANNED_STOP·PROGRAM_CHANGE·TOOL_CHANGE·TEMPORARY_STOP). → RPC 는 `p_date` 를 라우트에서 받고, `current_state = p_reason::machine_status` 캐스트, `reason` 은 라우트가 위 8개 비정상 값으로 검증(Task 2).
 
 - [ ] **Step 4: 통과 확인**
 
@@ -158,6 +162,9 @@ jest.mock('@/lib/apiAuth', () => ({
   apiAuthErrorResponse: () => null,
 }));
 jest.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { rpc: (...a: unknown[]) => mockRpc(...a) } }));
+// 라우트가 업무일자 계산에 쓰는 의존성(RPC 인자 p_date). 라우트 로직만 검증하므로 고정 mock.
+jest.mock('@/lib/shiftConfig', () => ({ getBusinessTimeConfig: async () => ({ timezone: 'Asia/Ho_Chi_Minh', shiftAStart: '08:00', shiftBStart: '20:00' }) }));
+jest.mock('@/utils/downtimeIntervals', () => ({ getBusinessDateAt: () => '2026-07-18' }));
 import { POST } from '../route';
 const MACHINE = '11111111-1111-4111-8111-111111111111';
 const req = (b: unknown) => ({ json: async () => b }) as never;
@@ -211,8 +218,16 @@ Expected: FAIL — 라우트 없음.
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { getBusinessTimeConfig } from '@/lib/shiftConfig';
+import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 
 export const dynamic = 'force-dynamic';
+
+// machines.current_state ENUM machine_status 의 비정상 값(NORMAL 제외). andon 사유 = 이 8개.
+const DOWNTIME_REASONS = new Set([
+  'INSPECTION', 'BREAKDOWN_REPAIR', 'PM_MAINTENANCE', 'MODEL_CHANGE',
+  'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP',
+]);
 
 /** POST /api/machines/[machineId]/downtime — andon 한 동작(start+reason / resume). */
 export async function POST(request: NextRequest, ctx: { params: Promise<{ machineId: string }> }) {
@@ -223,13 +238,19 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ machin
     const action = body.action === 'start' || body.action === 'resume' ? body.action : null;
     const reason = typeof body.reason === 'string' ? body.reason : '';
     if (action === null) return NextResponse.json({ error: "action must be 'start' or 'resume'" }, { status: 400 });
-    if (action === 'start' && reason.length === 0)
-      return NextResponse.json({ error: 'reason is required for start' }, { status: 400 });
+    // reason 은 machine_status enum 값이어야 한다(RPC 의 ::machine_status 캐스트 실패 방지).
+    if (action === 'start' && !DOWNTIME_REASONS.has(reason))
+      return NextResponse.json({ error: 'reason must be a valid non-normal machine_status' }, { status: 400 });
 
     assertMachineAccess(user, machineId);
 
+    // downtime_entries.date = 업무일자(시작 시각의 shift 귀속). RPC 로 넘긴다.
+    const cfg = await getBusinessTimeConfig();
+    const businessDate = getBusinessDateAt(new Date(), cfg.timezone, cfg.shiftAStart);
+
     const { data, error } = await supabaseAdmin.rpc('toggle_machine_downtime', {
-      p_machine_id: machineId, p_action: action, p_reason: reason, p_operator_id: user.userId,
+      p_machine_id: machineId, p_action: action, p_reason: reason,
+      p_date: businessDate, p_operator_id: user.userId,
     });
     if (error) {
       console.error('andon 오류:', error);
@@ -506,11 +527,12 @@ git commit -m "i18n(console): 통합 콘솔 문구(ko/vi)"
 ## Self-Review (작성자 체크)
 
 - **Spec 커버리지:** §4.1 레이아웃 A(Task 6), §4.2 콘솔 섹션(Task 5·6), §4.5 andon(Task 1·2·3·5b), §4.4 늦은 마감·귀속(Task 5c + Plan 1 close-shift), §4.3 라이프사이클 배지(Task 4·6), 불량 확정(Task 5d + Plan 1), i18n(Task 7). 브라우저 증명(Task 8).
-- **미해결(구현 시 확인):** ① `machine_logs`/`downtime_entries`/`machines` 실제 컬럼·enum(Task 1 INSERT). ② `downtime_entries` 가 date/shift/is_planned 를 요구하면 라우트에서 계산해 RPC 인자로 넘길지 결정. ③ 진행보고 모달(`ProgressInputModal`) 제거 vs 유지(인라인으로 대체 시 기존 테스트 이관). ④ 기존 상태변경 경로(`/api/machines/[machineId]` PATCH)와 andon 의 공존/대체 정리.
+- **실측 완료(2026-07-18, 리뷰에서 해소):** ① `machine_logs`/`downtime_entries`/`machines` 컬럼·enum 확인 → Task 1 RPC 를 실제 컬럼(date NOT NULL, ::machine_status 캐스트, operator_id)에 맞게 수정. ② `downtime_entries.date` NOT NULL → 라우트가 업무일자(`getBusinessDateAt`) 계산해 `p_date` 로 전달(Task 2), `shift` 는 nullable 이라 생략, `is_planned` 컬럼 없음.
+- **남은 설계 결정(구현 시):** ③ 진행보고 모달(`ProgressInputModal`) 제거 vs 유지 — 인라인(5a)으로 대체 시 기존 `ProgressInputModal.test.tsx` 케이스를 이관. ④ 기존 상태변경 경로(`/api/machines/[machineId]` PATCH)와 andon 의 공존/대체 정리(운영자는 andon, 관리자는 기존 유지 등).
 - **적용 게이트:** 두 마이그레이션 적용·main 병합은 명시적 지시 시에만.
 
 ---
 
 ## 전체 실행 순서 요약
 
-Plan 1(데이터/API) → Plan 2(콘솔 UI). 각 태스크 TDD·빈번 커밋. 마이그레이션 3개(defect nullable · andon RPC, + Plan 1 없음)와 close-shift/defect/pending·andon 엔드포인트가 기반, 그 위에 콘솔 컴포넌트. 데이터입력 페이지는 관리자 백필로 존치. 실시간 기능·OEE 규율·확정 스냅샷은 유지.
+Plan 1(데이터/API) → Plan 2(콘솔 UI). 각 태스크 TDD·빈번 커밋. 마이그레이션 **2개**(Plan 1: `defect_qty` nullable · Plan 2: andon RPC)와 close-shift/defect/pending·andon 엔드포인트가 기반, 그 위에 콘솔 컴포넌트. 데이터입력 페이지는 관리자 백필로 존치. 실시간 기능·OEE 규율·확정 스냅샷은 유지.
