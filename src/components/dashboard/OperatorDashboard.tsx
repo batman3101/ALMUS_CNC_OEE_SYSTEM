@@ -13,11 +13,9 @@ import {
   UnorderedListOutlined
 } from '@ant-design/icons';
 import { MachineStatusInput } from '@/components/machines';
-import { ProductionRecordInput } from '@/components/production';
 import { MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
-import { useProductionRecords } from '@/hooks/useProductionRecords';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { getCurrentShiftInfo, shouldShowShiftEndNotification, type ShiftTimeConfig } from '@/utils/shiftUtils';
@@ -78,7 +76,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   const { t: machinesT, language } = useMachinesTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [showStatusInput, setShowStatusInput] = useState(false);
-  const [showProductionInput, setShowProductionInput] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
@@ -100,7 +97,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     isConnected
   } = useRealtimeData(user?.id, user?.role);
 
-  const { createProductionRecord } = useProductionRecords();
   const { getCompanyInfo, getShiftTimes } = useSystemSettings();
 
 
@@ -354,11 +350,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           description={machinesT('operator.shiftEndDescription')}
           type="warning"
           showIcon
-          action={
-            <Button size="small" onClick={() => setShowProductionInput(true)}>
-              {machinesT('operator.inputRecord')}
-            </Button>
-          }
           style={{ marginBottom: 16 }}
         />
       )}
@@ -478,18 +469,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             {/* 상태 변경 버튼 */}
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               <Space>
-                <Button 
-                  type="primary" 
+                <Button
+                  type="primary"
                   onClick={() => setShowStatusInput(true)}
                   disabled={!selectedMachine}
                 >
                   {machinesT('operator.changeState')}
-                </Button>
-                <Button 
-                  onClick={() => setShowProductionInput(true)}
-                  disabled={!selectedMachine}
-                >
-                  {machinesT('operator.inputProduction')}
                 </Button>
               </Space>
             </div>
@@ -575,27 +560,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           onClose={() => setShowStatusInput(false)}
           onStatusChange={handleStatusChange}
           language={language}
-        />
-      )}
-
-      {/* 생산 실적 입력 모달 */}
-      {showProductionInput && selectedMachine && (
-        <ProductionRecordInput
-          machine={processedData.assignedMachines.find(m => m.id === selectedMachine) || null}
-          shift={currentShiftInfo.shift}
-          date={productionBusinessDate}
-          visible={showProductionInput}
-          onClose={() => setShowProductionInput(false)}
-          onSubmit={async (data) => {
-            await createProductionRecord({
-              machine_id: selectedMachine,
-              output_qty: data.output_qty,
-              defect_qty: data.defect_qty,
-              shift: currentShiftInfo.shift,
-              date: productionBusinessDate
-            });
-            refresh();
-          }}
         />
       )}
 

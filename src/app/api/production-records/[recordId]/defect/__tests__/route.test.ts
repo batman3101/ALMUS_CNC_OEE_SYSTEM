@@ -2,10 +2,11 @@ jest.mock('next/server', () => ({
   NextResponse: { json: (b: unknown, i?: { status?: number }) => ({ status: i?.status ?? 200, json: async () => b }) },
 }));
 const mockRequireUser = jest.fn();
+const mockAssert = jest.fn();
 const mockFrom = jest.fn();
 jest.mock('@/lib/apiAuth', () => ({
   requireUser: (...a: unknown[]) => mockRequireUser(...a),
-  assertMachineAccess: () => undefined,
+  assertMachineAccess: (...a: unknown[]) => mockAssert(...a),
   apiAuthErrorResponse: () => null,
 }));
 jest.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { from: (...a: unknown[]) => mockFrom(...a) } }));
@@ -26,7 +27,7 @@ const req = (b: unknown) => ({ json: async () => b }) as never;
 const ctx = { params: Promise.resolve({ recordId: REC }) } as never;
 
 describe('PATCH .../[recordId]/defect', () => {
-  beforeEach(() => { jest.clearAllMocks(); mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator' }); });
+  beforeEach(() => { jest.clearAllMocks(); mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator' }); mockAssert.mockReturnValue(undefined); });
 
   it('불량을 넣으면 quality·oee 를 파생 확정한다', async () => {
     const { update } = wire();
@@ -49,5 +50,19 @@ describe('PATCH .../[recordId]/defect', () => {
     wire({ record: null });
     const res = await PATCH(req({ defect_qty: 1 }), ctx);
     expect(res.status).toBe(404);
+  });
+
+  // F1(감사): record_id 만으로 남의 설비 실적을 조작하지 못하게 담당 설비 검사를 건다(IDOR 방지).
+  it('record 의 machine_id 로 담당 설비 검사를 호출한다', async () => {
+    wire();
+    await PATCH(req({ defect_qty: 5 }), ctx);
+    expect(mockAssert).toHaveBeenCalledWith(expect.objectContaining({ userId: 'op-1' }), 'm1');
+  });
+
+  it('담당이 아닌 설비의 record 는 거부한다', async () => {
+    const { update } = wire();
+    mockAssert.mockImplementation(() => { throw new Error('forbidden'); });
+    await expect(PATCH(req({ defect_qty: 5 }), ctx)).rejects.toThrow();
+    expect(update).not.toHaveBeenCalled();
   });
 });

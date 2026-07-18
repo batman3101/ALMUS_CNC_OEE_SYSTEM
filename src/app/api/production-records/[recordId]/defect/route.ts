@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,6 @@ export const dynamic = 'force-dynamic';
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ recordId: string }> }) {
   try {
     const user = await requireUser(request, ['admin', 'engineer', 'operator']);
-    void user;
     const { recordId } = await ctx.params;
     const body = await request.json() as { defect_qty?: unknown };
     const defect = typeof body.defect_qty === 'number' ? body.defect_qty : Number.NaN;
@@ -20,10 +19,14 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ recor
 
     const { data: rec, error: readErr } = await supabaseAdmin
       .from('production_records')
-      .select('record_id, output_qty, availability, performance')
+      .select('record_id, machine_id, output_qty, availability, performance')
       .eq('record_id', recordId).maybeSingle();
     if (readErr) return NextResponse.json({ error: 'Failed to read record' }, { status: 500 });
     if (!rec) return NextResponse.json({ error: 'record not found' }, { status: 404 });
+
+    // 담당 설비 검사 — record_id 만으로 남의 설비 실적을 조작하지 못하게 한다(형제 라우트와 동일 기준).
+    assertMachineAccess(user, rec.machine_id);
+
     if (defect > rec.output_qty)
       return NextResponse.json({ error: 'defect_qty must not exceed output_qty' }, { status: 400 });
 
