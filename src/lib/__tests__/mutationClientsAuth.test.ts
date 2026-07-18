@@ -6,7 +6,11 @@ const mutationClients = [
   'src/hooks/useRealtimeProductionRecords.ts',
   'src/hooks/useRealtimeMachines.ts',
   'src/components/production/ProductionRecordList.tsx',
-  'src/components/dashboard/OperatorDashboard.tsx',
+  // OperatorDashboard 는 더 이상 직접 변이하지 않는다(상태변경·생산실적 제거). 변이는 아래 운영자 콘솔 파일·훅으로 이관됨.
+  'src/hooks/useMachineDowntime.ts',
+  'src/components/dashboard/operator-console/ProgressInputSection.tsx',
+  'src/components/dashboard/operator-console/CloseShiftSection.tsx',
+  'src/components/dashboard/operator-console/DefectPendingSection.tsx',
   'src/components/machines/MachineEditModal.tsx',
   'src/components/data-input/ShiftDataInputForm.tsx',
 ];

@@ -12,7 +12,6 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined
 } from '@ant-design/icons';
-import { MachineStatusInput } from '@/components/machines';
 import { MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
@@ -23,7 +22,6 @@ import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { MachineConsole } from '@/components/dashboard/operator-console/MachineConsole';
-import { authFetch } from '@/lib/authFetch';
 
 // Removed deprecated TabPane import
 
@@ -73,9 +71,8 @@ interface OperatorDashboardProps {
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
   useClientOnly();
   const { user } = useAuth();
-  const { t: machinesT, language } = useMachinesTranslation();
+  const { t: machinesT } = useMachinesTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
-  const [showStatusInput, setShowStatusInput] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
@@ -176,43 +173,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       };
     }
   }, [machines, machineLogs, oeeMetrics, user, onError]);
-
-  // 상태 변경 핸들러
-  const handleStatusChange = async (machineId: string, newState: MachineState) => {
-    try {
-      console.log(`설비 ${machineId} 상태를 ${newState}로 변경 중...`);
-      
-      // API 호출하여 설비 상태 변경
-      const response = await authFetch(`/api/machines/${machineId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          current_state: newState,
-          change_reason: '운영자 수동 변경'
-        }),
-      });
-
-      const result = await response.json();
-      
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || '상태 변경에 실패했습니다');
-      }
-
-      console.log('설비 상태 변경 성공:', result.message);
-      setShowStatusInput(false);
-      
-      // 실시간 데이터 강제 새로고침 (Realtime이 동작하지 않을 경우 대비)
-      refresh();
-      
-    } catch (error: unknown) {
-      console.error('상태 변경 실패:', error);
-      // 에러 메시지를 사용자에게 표시 (message는 antd에서 import 필요)
-      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
-      alert(`상태 변경 실패: ${errorMessage}`);
-    }
-  };
 
   // 교대 정보·업무일자는 시스템 설정의 시간대·교대 시간을 기준으로 계산한다
   // (하드코딩된 08:00/20:00·브라우저 로컬 시계 대신 downtimeIntervals 단일 소스에 위임)
@@ -466,18 +426,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
               />
             )}
             
-            {/* 상태 변경 버튼 */}
-            <div style={{ marginTop: 16, textAlign: 'center' }}>
-              <Space>
-                <Button
-                  type="primary"
-                  onClick={() => setShowStatusInput(true)}
-                  disabled={!selectedMachine}
-                >
-                  {machinesT('operator.changeState')}
-                </Button>
-              </Space>
-            </div>
           </Card>
         </Col>
 
@@ -552,16 +500,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
         </Col>
       </Row>
 
-      {/* 상태 입력 모달 */}
-      {showStatusInput && selectedMachine && (
-        <MachineStatusInput
-          machine={processedData.assignedMachines.find(m => m.id === selectedMachine) || null}
-          visible={showStatusInput}
-          onClose={() => setShowStatusInput(false)}
-          onStatusChange={handleStatusChange}
-          language={language}
-        />
-      )}
 
     </div>
   );
