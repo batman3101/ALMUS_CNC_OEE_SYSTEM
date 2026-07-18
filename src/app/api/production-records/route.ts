@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
         performance: !processStandardKnown || metrics.performance === null
           ? null
           : Math.round(metrics.performance * 10000) / 10000,
-        quality: Math.round(metrics.quality * 10000) / 10000,
+        quality: metrics.quality === null ? null : Math.round(metrics.quality * 10000) / 10000,
         oee: !processStandardKnown || metrics.oee === null
           ? null
           : Math.round(metrics.oee * 10000) / 10000

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
+import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
 import {
-  calculateOeeMetrics,
   DEFAULT_CAVITY,
   DEFAULT_TACT_SECONDS,
   resolveHistoricalProductionParameters,
@@ -16,6 +15,7 @@ import {
 } from './downtimeCalculation';
 import { getBusinessTimeConfig } from '@/lib/shiftConfig';
 import { loadDowntimeSourceRows } from '@/lib/shiftDowntime';
+import { computeShiftSnapshot } from '@/lib/shiftMetrics';
 import {
   apiAuthErrorResponse,
   assertMachineAccess,
@@ -64,8 +64,9 @@ function validateQuantities(
   return null;
 }
 
-// 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시)
-// 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
+// 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시).
+// 계산은 shiftMetrics.computeShiftSnapshot 에 위임한다 — close-shift 라우트와 공유(DRY).
+// cavity 는 per-piece tact 규율상 계산에 쓰지 않으므로 시그니처만 유지하고 전달하지 않는다.
 function calculateShiftMetrics(params: {
   operatingMinutes: number;
   breakMinutes: number;
@@ -75,39 +76,14 @@ function calculateShiftMetrics(params: {
   tactSeconds: number;
   cavity: number;
 }) {
-  const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
-  if (params.downtimeMinutes === null) {
-    const metrics = calculateOeeMetrics({
-      plannedRuntime,
-      actualRuntime: 0,
-      outputQty: params.outputQty,
-      defectQty: params.defectQty,
-      // tact 는 개당(1 piece) 가공시간이므로 cavity 로 나누지 않는다 (oeeRules.ts 참고).
-      minutesPerUnit: params.tactSeconds / 60,
-    });
-    return {
-      ...metrics,
-      actualRuntime: null,
-      availability: null,
-      performance: null,
-      oee: null,
-      downtime: null,
-    };
-  }
-
-  const downtime = Math.min(Math.max(params.downtimeMinutes, 0), plannedRuntime);
-  const actualRuntime = Math.max(0, plannedRuntime - downtime);
-  return {
-    ...calculateOeeMetrics({
-      plannedRuntime,
-      actualRuntime,
-      outputQty: params.outputQty,
-      defectQty: params.defectQty,
-      // tact 는 개당(1 piece) 가공시간이므로 cavity 로 나누지 않는다 (oeeRules.ts 참고).
-      minutesPerUnit: params.tactSeconds / 60,
-    }),
-    downtime,
-  };
+  return computeShiftSnapshot({
+    operatingMinutes: params.operatingMinutes,
+    breakMinutes: params.breakMinutes,
+    downtimeMinutes: params.downtimeMinutes,
+    outputQty: params.outputQty,
+    defectQty: params.defectQty,
+    tactSeconds: params.tactSeconds,
+  });
 }
 
 async function loadDowntimeMinutes(
@@ -307,7 +283,7 @@ export async function POST(request: NextRequest) {
         performance: !processStandardKnown || metrics.performance === null
           ? null
           : Math.round(metrics.performance * 10000) / 10000,
-        quality: Math.round(metrics.quality * 10000) / 10000,
+        quality: metrics.quality === null ? null : Math.round(metrics.quality * 10000) / 10000,
         oee: !processStandardKnown || metrics.oee === null
           ? null
           : Math.round(metrics.oee * 10000) / 10000,

@@ -32,7 +32,7 @@ export function calculateOeeMetrics(params: {
   plannedRuntime: number;
   actualRuntime: number;
   outputQty: number;
-  defectQty: number;
+  defectQty: number | null;   // null = 미검사(품질 모름)
   minutesPerUnit: number;
 }) {
   const plannedRuntime = Math.max(0, params.plannedRuntime);
@@ -40,9 +40,14 @@ export function calculateOeeMetrics(params: {
   const idealRuntime = Math.max(0, params.outputQty * params.minutesPerUnit);
   const availability = plannedRuntime > 0 ? actualRuntime / plannedRuntime : 0;
   const performance = actualRuntime > 0 ? Math.min(Math.max(idealRuntime / actualRuntime, 0), 1) : 0;
-  const quality = params.outputQty > 0
-    ? Math.min(Math.max((params.outputQty - params.defectQty) / params.outputQty, 0), 1)
-    : 0;
+  // 불량 미검사(null)면 품질을 만들지 않는다. 0 으로 채우면 멀쩡한 교대가 OEE 0% 로 보인다
+  // (NULL≠0%). availability·performance 는 검사와 무관하므로 그대로 둔다.
+  const quality: number | null = params.defectQty === null
+    ? null
+    : (params.outputQty > 0
+        ? Math.min(Math.max((params.outputQty - params.defectQty) / params.outputQty, 0), 1)
+        : 0);
+  const oee: number | null = quality === null ? null : availability * performance * quality;
   return {
     plannedRuntime,
     actualRuntime,
@@ -50,7 +55,7 @@ export function calculateOeeMetrics(params: {
     availability,
     performance,
     quality,
-    oee: availability * performance * quality,
+    oee,
   };
 }
 
