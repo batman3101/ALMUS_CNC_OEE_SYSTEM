@@ -71,4 +71,14 @@ describe('POST /api/production-records/close-shift', () => {
     mockAssert.mockImplementation(() => { throw new Error('forbidden'); });
     await expect(POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }))).rejects.toThrow();
   });
+
+  // 브라우저 E2E 에서 잡은 회귀: runtime 은 정수 컬럼이라 반올림해야 한다(fractional tact 방어).
+  it('정수 컬럼(planned/actual/ideal_runtime)을 반올림해 저장한다', async () => {
+    const { upsert } = wireDb({ lastQty: 112, tact: 322 }); // 112*322/60 = 601.07 → 반올림 필요
+    await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
+    const payload = upsert.mock.calls[0][0] as { planned_runtime: number; actual_runtime: number | null; ideal_runtime: number };
+    expect(Number.isInteger(payload.planned_runtime)).toBe(true);
+    expect(Number.isInteger(payload.ideal_runtime)).toBe(true);
+    expect(payload.actual_runtime === null || Number.isInteger(payload.actual_runtime)).toBe(true);
+  });
 });

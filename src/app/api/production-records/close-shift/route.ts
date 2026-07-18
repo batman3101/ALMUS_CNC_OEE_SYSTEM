@@ -65,9 +65,15 @@ export async function POST(request: NextRequest) {
       .upsert({
         machine_id: machineId, date, shift,
         output_qty: outputQty, defect_qty: null,           // 미검사
-        planned_runtime: snap.plannedRuntime, actual_runtime: snap.actualRuntime,
-        ideal_runtime: snap.idealRuntime, availability: snap.availability,
-        performance: snap.performance, quality: snap.quality, oee: snap.oee,
+        // 정수 컬럼(runtime)·소수 4자리(비율)로 반올림해 저장한다(daily 라우트와 동일 규율).
+        planned_runtime: Math.round(snap.plannedRuntime),
+        actual_runtime: snap.actualRuntime === null ? null : Math.round(snap.actualRuntime),
+        ideal_runtime: Math.round(snap.idealRuntime),
+        availability: snap.availability === null ? null : Math.round(snap.availability * 10000) / 10000,
+        performance: snap.performance === null ? null : Math.round(snap.performance * 10000) / 10000,
+        quality: snap.quality === null ? null : Math.round(snap.quality * 10000) / 10000,
+        oee: snap.oee === null ? null : Math.round(snap.oee * 10000) / 10000,
+        downtime_minutes: snap.downtime === null ? null : Math.round(snap.downtime),
         tact_time_seconds: tactSeconds,
       }, { onConflict: 'machine_id,date,shift' });
 

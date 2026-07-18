@@ -67,7 +67,9 @@ export const MachineConsole: React.FC<Props> = ({
     shift, now, shiftModelSupported,
   ]);
 
-  const closePending = backlog.closePending[0] ?? null;
+  // 마감대기에서 현재 진행 중인 교대는 제외한다 — 교대가 끝나기 전에 "마감"하면 안 된다.
+  // (진척은 있고 record 는 없어서 백로그엔 들지만, 지금 교대는 아직 마감 대상이 아니다.)
+  const closePending = backlog.closePending.find(p => !(p.date === date && p.shift === shift)) ?? null;
   const defectPending = backlog.defectPending[0] ?? null;
 
   return (
