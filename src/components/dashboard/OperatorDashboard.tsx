@@ -13,7 +13,6 @@ import {
   UnorderedListOutlined
 } from '@ant-design/icons';
 import { MachineStatusInput } from '@/components/machines';
-import { OEEGauge } from '@/components/oee';
 import { ProductionRecordInput } from '@/components/production';
 import { MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
@@ -25,9 +24,7 @@ import { getCurrentShiftInfo, shouldShowShiftEndNotification, type ShiftTimeConf
 import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
-import { ProgressInputModal } from '@/components/production/ProgressInputModal';
-import { useRealtimeProgress } from '@/hooks/useRealtimeProgress';
-import { calculateRealtimeProgress } from '@/utils/realtimeProgress';
+import { MachineConsole } from '@/components/dashboard/operator-console/MachineConsole';
 import { authFetch } from '@/lib/authFetch';
 
 // Removed deprecated TabPane import
@@ -252,59 +249,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
     ? (oeeMetrics?.[selectedMachine] ?? null)
     : null;
 
-  // 교대 중 실시간 진행. OEE 는 만들지 않는다 — 불량은 다음날 검사하므로 품질을 모른다.
-  const [progressModalOpen, setProgressModalOpen] = useState(false);
-
-  const progress = useRealtimeProgress({
-    machineId: selectedMachine,
-    date: productionBusinessDate,
-    shift: currentShiftInfo.shift,
-  });
-
   const selectedMachineRow = processedData.assignedMachines.find(m => m.id === selectedMachine);
 
-  // 교대 창(길이·시작)은 서버가 준다 (progress.operatingMinutes/shiftStart). 프런트가 endTime 으로
-  // 길이를 따로 계산하면 서버·확정 OEE 창(buildShiftWindows, 시작→시작)과 어긋나므로, 단일
-  // 소스인 서버 값을 그대로 쓴다. shiftBreaks 의 휴식 시간대는 720분 교대 전제라, 720 이 아니면
-  // 계산하지 않고 fail-closed 한다 — breakConfigMatches 와 같은 규율(틀린 숫자보다 없는 숫자).
-  const shiftModelSupported = progress.operatingMinutes === 720;
-
-  const realtime = useMemo(() => {
-    // 비가동·tact·서버 교대창 중 하나라도 모르면 계산하지 않는다. 0 으로 채우면 가동률 100% 로 보인다.
-    if (
-      progress.downtimeMinutes === null ||
-      progress.tactTimeSeconds === null ||
-      progress.operatingMinutes === null ||
-      progress.shiftStart === null
-    ) return null;
-    // 휴식 총량이 코드 상수와 어긋나거나 교대 길이가 720분 모델이 아니면 경과 계획시간이 틀린다.
-    // 틀린 숫자를 그럴듯하게 띄우느니 아무 숫자도 내지 않는다.
-    if (!progress.breakConfigMatches || !shiftModelSupported) return null;
-
-    return calculateRealtimeProgress({
-      shift: currentShiftInfo.shift,
-      shiftStart: new Date(progress.shiftStart),
-      now,
-      operatingMinutes: progress.operatingMinutes,
-      tactTimeSeconds: progress.tactTimeSeconds,
-      downtimeMinutes: progress.downtimeMinutes,
-      shiftOutputQty: progress.lastReportedQty,
-    });
-  }, [
-    progress.downtimeMinutes, progress.tactTimeSeconds, progress.lastReportedQty,
-    progress.breakConfigMatches, progress.operatingMinutes, progress.shiftStart,
-    currentShiftInfo.shift, now, shiftModelSupported,
-  ]);
-
-  // 주기 자동갱신. 원안은 열 때·저장할 때만 갱신돼 그 사이 경과시간 지표가 얼어붙고,
-  // 다른 곳에서 기록된 비가동도 저장 전엔 안 보였다. 간격은 하드코딩하지 않고
-  // 시스템 설정의 displaySettings.refreshInterval 을 그대로 상속한다(useAutoRefresh 내부).
-  //  - setNow: 현재 시각 전진 → 교대 진행·경과 지표가 흐른다 (selectedMachine 유무와 무관)
-  //  - progress.refresh: 비가동·마지막 보고 재조회. selectedMachine 이 null 이면 훅 내부
-  //    가드로 no-op 이므로 항상 켜도 안전하다. 언마운트 clearInterval 은 useAutoRefresh 가 처리.
+  // 주기 자동갱신: 현재 시각 전진 → 교대 진행 컨텍스트(currentShiftInfo/isShiftEnd)가 흐른다.
+  // 선택 설비의 실시간 지표·진척·비가동·백로그 갱신은 MachineConsole 이 자체적으로 처리한다.
   useAutoRefresh(() => {
     setNow(new Date());
-    progress.refresh();
   }, true);
 
   // 테이블 컬럼 정의
@@ -597,89 +547,17 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                         {machinesT('operator.selectMachine')}
                       </div>
                     ) : (
-                      <>
-                        {/* 확정 OEE 게이지: 이 설비에 확정 실적(스냅샷)이 있을 때만. 없으면
-                            빈 상태 안내를 보인다. 예전엔 이 게이지 분기 "안에" 실시간 카드와
-                            진행 보고 버튼이 중첩돼 있어, 확정 실적이 없는 설비에서는 진행 보고
-                            기능 자체가 사라졌다 (Finding 2). 이제 아래로 끌어내 분리한다. */}
-                        {selectedMachineMetrics ? (
-                          <Card size="small">
-                            <OEEGauge
-                              metrics={selectedMachineMetrics}
-                              title={processedData.assignedMachines.find(m => m.id === selectedMachine)?.name}
-                              size="small"
-                              showDetails={true}
-                            />
-                            {/* 여기 도달했다면 지표가 실재한다 = 확인된 진짜 0% 다 (미보고 아님) */}
-                            {selectedMachineMetrics.oee === 0 && (
-                              <Alert
-                                message={machinesT('operator.oeeDataCollecting')}
-                                description={machinesT('operator.oeeDataCollectingDesc')}
-                                type="info"
-                                showIcon
-                                style={{ marginTop: 16 }}
-                              />
-                            )}
-                          </Card>
-                        ) : (
-                          <Card size="small">
-                            <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                              <ClockCircleOutlined style={{ fontSize: 40, color: '#bfbfbf', marginBottom: 12 }} />
-                              <div style={{ color: '#666', fontSize: 14 }}>
-                                <p style={{ marginBottom: 8 }}>{machinesT('operator.loadingOeeData')}</p>
-                                <p style={{ fontSize: 12, color: '#999' }}>
-                                  {machinesT('operator.inputProductionForOee')}
-                                </p>
-                              </div>
-                            </div>
-                          </Card>
-                        )}
-
-                        {/* 교대 중 실시간 가동×성능·진척·경과율. 확정 OEE 유무와 독립이다 —
-                            이 기능의 존재 이유가 "확정 실적이 나오기 전, 교대 중"이라 확정 OEE 에
-                            종속되면 신규·미보고 설비에서 통째로 사라진다. 품질(불량)은 검사 전이라 없다. */}
-                        {realtime && (
-                          <Card size="small" style={{ marginTop: 16 }}>
-                            <Space direction="vertical" style={{ width: '100%' }}>
-                              <div>
-                                {machinesT('operator.realtimeAvailabilityTimesPerformance')}:{' '}
-                                <strong>
-                                  {realtime.availabilityTimesPerformance === null
-                                    ? '—'
-                                    : `${(realtime.availabilityTimesPerformance * 100).toFixed(1)}%`}
-                                </strong>
-                              </div>
-                              <div>
-                                {machinesT('operator.shiftProgress')}:{' '}
-                                <strong>
-                                  {realtime.progressQty ?? '—'} / {realtime.capaQty ?? '—'}
-                                </strong>
-                              </div>
-                              {/* 경과율: "지금 몇 개"만으로는 순조로운지 알 수 없다.
-                                  교대의 몇 %가 지났는지를 함께 보여야 판단이 선다 (Finding 7·사양 요구). */}
-                              <div>
-                                {machinesT('operator.elapsedRatio')}:{' '}
-                                <strong>
-                                  {realtime.elapsedRatio === null
-                                    ? '—'
-                                    : `${(realtime.elapsedRatio * 100).toFixed(0)}%`}
-                                </strong>
-                              </div>
-                            </Space>
-                          </Card>
-                        )}
-
-                        {/* 진행 보고 버튼: 설비만 선택되면 항상 뜬다. 잠금·초기값·오류는 모달이
-                            처리하므로 realtime 계산 가능 여부와 무관하게 보고 자체는 가능해야 한다. */}
-                        <Button
-                          type="primary"
-                          block
-                          style={{ marginTop: 16 }}
-                          onClick={() => setProgressModalOpen(true)}
-                        >
-                          {machinesT('operator.reportProgress')}
-                        </Button>
-                      </>
+                      // 설비 선택 → 통합 콘솔 하나. 실시간 지표·진척 인라인·andon 비가동·
+                      // 지난교대 마감·다음날 불량을 MachineConsole 이 전부 담는다.
+                      <MachineConsole
+                        machineId={selectedMachine}
+                        machineName={selectedMachineRow?.name ?? ''}
+                        currentState={(selectedMachineRow?.current_state ?? 'NORMAL_OPERATION') as MachineState}
+                        downtimeSince={selectedMachineRow?.downtimeSince ?? null}
+                        date={productionBusinessDate}
+                        shift={currentShiftInfo.shift}
+                        confirmedMetrics={selectedMachineMetrics}
+                      />
                     )}
                   </>
                 )
@@ -721,20 +599,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
         />
       )}
 
-      {/* 진행 보고 입력 모달 (교대 중 실시간). 비가동 중이면 모달이 입력을 잠근다. */}
-      {selectedMachine && selectedMachineRow && (
-        <ProgressInputModal
-          open={progressModalOpen}
-          machineId={selectedMachine}
-          machineName={selectedMachineRow.name}
-          date={productionBusinessDate}
-          shift={currentShiftInfo.shift}
-          lastReportedQty={progress.lastReportedQty}
-          downtimeSince={selectedMachineRow.downtimeSince}
-          onClose={() => setProgressModalOpen(false)}
-          onSaved={progress.refresh}
-        />
-      )}
     </div>
   );
 };
