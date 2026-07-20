@@ -16,7 +16,12 @@ const call = (qs: string) => GET({ url: `http://x/api/production-records/pending
 // 마감대기 = 진척 있고 record 없는 교대. production_shift_states(WORKING 수천 행)로 도출하면
 // 과거 전체가 뜨므로 쓰지 않는다(리뷰에서 진척 기반으로 재설계).
 const gteCalls: Array<[string, unknown]> = [];
-const wire = ({ progressed = [{ date: '2026-07-17', shift: 'A' }, { date: '2026-07-17', shift: 'A' }, { date: '2026-07-17', shift: 'B' }],
+const wire = ({ progressed = [
+                  { date: '2026-07-17', shift: 'A', shift_output_qty: 40 },
+                  { date: '2026-07-17', shift: 'A', shift_output_qty: 90 },
+                  { date: '2026-07-17', shift: 'B', shift_output_qty: 30 },
+                  { date: '2026-07-17', shift: 'B', shift_output_qty: 75 },
+                ],
                 records = [{ date: '2026-07-17', shift: 'A', record_id: 'rA', defect_qty: null }] } = {}) => {
   gteCalls.length = 0;
   mockFrom.mockImplementation((t: string) => {
@@ -36,7 +41,8 @@ describe('GET /api/production-records/pending', () => {
     const res = await call(`machine_id=${MACHINE}`);
     const body = await res.json() as { close_pending: unknown[]; defect_pending: unknown[] };
     // A 는 record 있음 → 마감대기 아님. B 는 진척 있고 record 없음 → 마감대기. A 는 defect null → 불량대기.
-    expect(body.close_pending).toEqual([{ date: '2026-07-17', shift: 'B' }]);
+    // last_qty = 그 교대 진척의 최댓값(단조증가라 마지막값) — 마감 prefill 용(Codex 감사 #5).
+    expect(body.close_pending).toEqual([{ date: '2026-07-17', shift: 'B', last_qty: 75 }]);
     expect(body.defect_pending).toEqual([{ date: '2026-07-17', shift: 'A', record_id: 'rA' }]);
   });
 

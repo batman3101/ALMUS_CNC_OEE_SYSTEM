@@ -52,42 +52,33 @@ export async function POST(request: NextRequest) {
     const downtimeMinutes = calculateVerifiedDowntimeMinutesForWindow(rows, window, breakMinutes, Date.now());
     const operatingMinutes = Math.round((window.end - window.start) / 60_000);
 
+    // tact 없음 = 공정 기준 미확인 → null. 임의 기본값(과거 120초)으로 성능을 날조해
+    // 확정 저장하면 안 된다(NULL≠0 원칙, daily 라우트의 processStandardKnown 과 동일 정책).
     const { data: tactRow } = await supabaseAdmin
       .from('machines_with_production_info').select('current_tact_time').eq('id', machineId).maybeSingle();
-    const tactSeconds = tactRow?.current_tact_time && tactRow.current_tact_time > 0 ? tactRow.current_tact_time : 120;
+    const tactSeconds = tactRow?.current_tact_time && tactRow.current_tact_time > 0 ? tactRow.current_tact_time : null;
 
-    // F2: 이미 다음날 불량이 확정된 교대를 재마감하는 경우 그 확정 불량을 보존한다.
-    // null 로 덮으면 파생된 quality/oee 까지 소실되므로, 기존 defect 를 읽어 스냅샷에 넘겨 재파생한다.
-    const { data: existingRec } = await supabaseAdmin
-      .from('production_records')
-      .select('defect_qty')
-      .eq('machine_id', machineId).eq('date', date).eq('shift', shift)
-      .maybeSingle();
-    const preservedDefect = existingRec?.defect_qty ?? null;
-
+    // quality/oee 는 여기서 만들지 않는다 — 기존 확정 불량(F2 보존)을 읽어 재파생하는 일은
+    // close_shift_upsert RPC 가 advisory lock(machine·date·shift) 아래에서 원자적으로 한다.
+    // (앱에서 읽고 upsert 하면 불량 확정과 경쟁해 확정 불량이 유실될 수 있다 — TOCTOU)
     const snap = computeShiftSnapshot({
-      operatingMinutes, breakMinutes, downtimeMinutes, outputQty, defectQty: preservedDefect, tactSeconds,
+      operatingMinutes, breakMinutes, downtimeMinutes, outputQty, defectQty: null, tactSeconds,
     });
 
-    const { error: upsertError } = await supabaseAdmin
-      .from('production_records')
-      .upsert({
-        machine_id: machineId, date, shift,
-        output_qty: outputQty, defect_qty: preservedDefect,  // 미검사면 NULL, 확정 불량 있으면 보존
-        // 정수 컬럼(runtime)·소수 4자리(비율)로 반올림해 저장한다(daily 라우트와 동일 규율).
-        planned_runtime: Math.round(snap.plannedRuntime),
-        actual_runtime: snap.actualRuntime === null ? null : Math.round(snap.actualRuntime),
-        ideal_runtime: Math.round(snap.idealRuntime),
-        availability: snap.availability === null ? null : Math.round(snap.availability * 10000) / 10000,
-        performance: snap.performance === null ? null : Math.round(snap.performance * 10000) / 10000,
-        quality: snap.quality === null ? null : Math.round(snap.quality * 10000) / 10000,
-        oee: snap.oee === null ? null : Math.round(snap.oee * 10000) / 10000,
-        downtime_minutes: snap.downtime === null ? null : Math.round(snap.downtime),
-        tact_time_seconds: tactSeconds,
-      }, { onConflict: 'machine_id,date,shift' });
+    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('close_shift_upsert', {
+      p_machine_id: machineId, p_date: date, p_shift: shift, p_output_qty: outputQty,
+      // 정수 컬럼(runtime)·소수 4자리(비율)로 반올림해 저장한다(daily 라우트와 동일 규율).
+      p_planned_runtime: Math.round(snap.plannedRuntime),
+      p_actual_runtime: snap.actualRuntime === null ? null : Math.round(snap.actualRuntime),
+      p_ideal_runtime: snap.idealRuntime === null ? null : Math.round(snap.idealRuntime),
+      p_availability: snap.availability === null ? null : Math.round(snap.availability * 10000) / 10000,
+      p_performance: snap.performance === null ? null : Math.round(snap.performance * 10000) / 10000,
+      p_downtime_minutes: snap.downtime === null ? null : Math.round(snap.downtime),
+      p_tact_time_seconds: tactSeconds,
+    });
 
-    if (upsertError) {
-      console.error('교대 마감 저장 오류:', upsertError);
+    if (rpcError || !(rpcData as { ok?: boolean } | null)?.ok) {
+      console.error('교대 마감 저장 오류:', rpcError ?? rpcData);
       return NextResponse.json({ error: 'Failed to close shift' }, { status: 500 });
     }
     return NextResponse.json({ success: true }, { status: 201 });

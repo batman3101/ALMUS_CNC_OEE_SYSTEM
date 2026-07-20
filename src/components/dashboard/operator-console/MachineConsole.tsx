@@ -102,6 +102,9 @@ export const MachineConsole: React.FC<Props> = ({
 
       <Card size="small" title={t('operator.reportProgress')}>
         <ProgressInputSection
+          // 컨텍스트가 바뀌면 리마운트 — 미저장 입력값(qty)이 다른 설비/교대로 넘어가는 것을 차단.
+          // (lastReportedQty 가 양쪽 다 null 이면 prop 기반 effect 는 발화하지 않아 값이 잔존했다)
+          key={`${machineId}:${date}:${shift}`}
           machineId={machineId}
           date={date}
           shift={shift}
@@ -122,7 +125,9 @@ export const MachineConsole: React.FC<Props> = ({
       <CloseShiftSection
         machineId={machineId}
         pendingShift={closePending}
-        prefillQty={null}
+        // 마감 대상(지난) 교대의 마지막 진척값 — 현재 교대의 progress.lastReportedQty 를
+        // 쓰면 안 된다(다른 교대의 값). pending API 가 교대별 last_qty 를 내려준다.
+        prefillQty={closePending?.last_qty ?? null}
         onClosed={() => backlog.refresh()}
       />
 

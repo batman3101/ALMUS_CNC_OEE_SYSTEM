@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     // 대상 교대를 직접 골라 마감한다(Plan 2 — 백로그는 nudge, 유일 경로 아님).
     const { data: progressed, error: pErr } = await supabaseAdmin
       .from('production_progress_reports')
-      .select('date, shift').eq('machine_id', machineId).gte('date', cutoff);
+      .select('date, shift, shift_output_qty').eq('machine_id', machineId).gte('date', cutoff);
     if (pErr) return NextResponse.json({ error: 'Failed to read progress' }, { status: 500 });
 
     const { data: records, error: rErr } = await supabaseAdmin
@@ -39,11 +39,21 @@ export async function GET(request: NextRequest) {
     if (rErr) return NextResponse.json({ error: 'Failed to read records' }, { status: 500 });
 
     const recKeys = new Set((records ?? []).map(r => `${r.date}|${r.shift}`));
-    const seen = new Set<string>();
-    const close_pending: { date: string; shift: string }[] = [];
+    // 교대별 마지막(=최대, 단조증가) 진척값 — 마감 UI prefill 용(스펙: "진척값 prefill + 원탭 확정").
+    const lastQtyByKey = new Map<string, number>();
     for (const p of progressed ?? []) {
       const key = `${p.date}|${p.shift}`;
-      if (!recKeys.has(key) && !seen.has(key)) { seen.add(key); close_pending.push({ date: p.date, shift: p.shift }); }
+      const prev = lastQtyByKey.get(key);
+      if (prev === undefined || p.shift_output_qty > prev) lastQtyByKey.set(key, p.shift_output_qty);
+    }
+    const seen = new Set<string>();
+    const close_pending: { date: string; shift: string; last_qty: number }[] = [];
+    for (const p of progressed ?? []) {
+      const key = `${p.date}|${p.shift}`;
+      if (!recKeys.has(key) && !seen.has(key)) {
+        seen.add(key);
+        close_pending.push({ date: p.date, shift: p.shift, last_qty: lastQtyByKey.get(key) ?? 0 });
+      }
     }
     const defect_pending = (records ?? [])
       .filter(r => r.defect_qty === null)
