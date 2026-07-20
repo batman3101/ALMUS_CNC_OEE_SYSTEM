@@ -114,4 +114,23 @@ describe('POST /api/production-records/close-shift', () => {
     const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
     expect(res.status).toBe(500);
   });
+
+  // 자체 감사 #4: UI 는 현재 교대를 제외하지만 API 를 직접 치면 진행 중·미래 교대를
+  // "마감"해 가동률 100% 확정 record 를 만들 수 있었다 — 교대 종료 후에만 마감 허용.
+  it('아직 끝나지 않은 교대는 400 (이른 마감 금지)', async () => {
+    wireDb();
+    const future = Date.now() + 60 * 60 * 1000;
+    mockGetShiftWindow.mockResolvedValue({ start: future - 12 * 3600_000, end: future });
+    const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10 }));
+    expect(res.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  // 자체 감사 #2: 확정 불량보다 작은 output 재마감은 RPC 가 거부(output_lt_defect) → 409.
+  it('확정 불량보다 작은 output 재마감은 409', async () => {
+    wireDb();
+    mockRpc.mockResolvedValue({ data: { ok: false, reason: 'output_lt_defect', defect_qty: 8 }, error: null });
+    const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 5 }));
+    expect(res.status).toBe(409);
+  });
 });

@@ -639,9 +639,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         <div style={{ color: '#666', fontSize: '16px' }}>
           {t('adminDashboard.loadingMachineData')}
         </div>
-        <div style={{ color: '#999', fontSize: '14px' }}>
-          {t('adminDashboard.loadingMachineCount', { count: 60 })}
-        </div>
+        {/* 설비 수 하드코딩(60) 제거 — 로딩 시점엔 총수를 모르므로 개수 문구를 표시하지 않는다 */}
       </div>
     );
   }

@@ -47,6 +47,10 @@ export async function POST(request: NextRequest) {
     // 비가동 = 확정 OEE 와 동일 계약. tact = 뷰.
     const window = await getShiftWindow(date, shift);
     if (!window) return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
+    // 마감은 교대 종료 후에만(늦은 마감은 무기한 허용, 이른 마감은 금지). UI 는 현재 교대를
+    // 제외하지만 API 를 직접 치면 진행 중·미래 교대의 확정 record 를 만들 수 있었다(자체 감사 #4).
+    if (window.end > Date.now())
+      return NextResponse.json({ error: 'shift has not ended yet (이른 마감 금지)' }, { status: 400 });
     const rows = await loadDowntimeSourceRows(machineId, new Date(window.start).toISOString(), new Date(window.end).toISOString());
     const breakMinutes = await getBreakTimeMinutes();
     const downtimeMinutes = calculateVerifiedDowntimeMinutesForWindow(rows, window, breakMinutes, Date.now());
@@ -77,7 +81,14 @@ export async function POST(request: NextRequest) {
       p_tact_time_seconds: tactSeconds,
     });
 
-    if (rpcError || !(rpcData as { ok?: boolean } | null)?.ok) {
+    const rpcResult = rpcData as { ok?: boolean; reason?: string; defect_qty?: number } | null;
+    if (rpcError || !rpcResult?.ok) {
+      // 확정 불량보다 작은 output 재마감 — 데이터 불변조건(defect ≤ output) 보호.
+      if (rpcResult?.reason === 'output_lt_defect')
+        return NextResponse.json(
+          { error: 'output_qty is less than confirmed defect_qty', defect_qty: rpcResult.defect_qty },
+          { status: 409 },
+        );
       console.error('교대 마감 저장 오류:', rpcError ?? rpcData);
       return NextResponse.json({ error: 'Failed to close shift' }, { status: 500 });
     }

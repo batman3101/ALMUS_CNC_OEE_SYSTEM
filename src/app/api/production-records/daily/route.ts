@@ -276,7 +276,9 @@ export async function POST(request: NextRequest) {
       return {
         planned_runtime: Math.round(metrics.plannedRuntime),
         actual_runtime: metrics.actualRuntime === null ? null : Math.round(metrics.actualRuntime),
-        ideal_runtime: processStandardKnown ? Math.round(metrics.idealRuntime) : null,
+        // 이 라우트는 tactSeconds 를 항상 number 로 넘기므로 idealRuntime 이 null 일 일은
+        // 없지만, computeShiftSnapshot 의 tact-null 확장(감사 #2) 이후 타입상 가드가 필요하다.
+        ideal_runtime: processStandardKnown && metrics.idealRuntime !== null ? Math.round(metrics.idealRuntime) : null,
         output_qty: outputQty,
         defect_qty: defectQty,
         availability: metrics.availability === null ? null : Math.round(metrics.availability * 10000) / 10000,

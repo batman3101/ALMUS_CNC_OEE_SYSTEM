@@ -314,7 +314,8 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>
-                {data.length > 0 ? (data.reduce((sum, item) => sum + item.oee, 0) / data.length * 100).toFixed(1) : 0}%
+                {/* 빈 기간은 0% 가 아니라 미집계다(NULL≠0) */}
+                {data.length > 0 ? `${(data.reduce((sum, item) => sum + item.oee, 0) / data.length * 100).toFixed(1)}%` : '—'}
               </div>
               <div style={{ fontSize: 12, color: '#666' }}>{t('oee.average')}</div>
             </div>
@@ -323,7 +324,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#52c41a' }}>
-                {data.length > 0 ? Math.max(...data.map(item => item.oee * 100)).toFixed(1) : 0}%
+                {data.length > 0 ? `${Math.max(...data.map(item => item.oee * 100)).toFixed(1)}%` : '—'}
               </div>
               <div style={{ fontSize: 12, color: '#666' }}>{t('oee.highest')}</div>
             </div>
@@ -332,7 +333,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
           <Col>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 'bold', color: '#ff4d4f' }}>
-                {data.length > 0 ? Math.min(...data.map(item => item.oee * 100)).toFixed(1) : 0}%
+                {data.length > 0 ? `${Math.min(...data.map(item => item.oee * 100)).toFixed(1)}%` : '—'}
               </div>
               <div style={{ fontSize: 12, color: '#666' }}>{t('oee.lowest')}</div>
             </div>
