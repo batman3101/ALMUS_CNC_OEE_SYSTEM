@@ -80,8 +80,9 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
   const [processes, setProcesses] = useState<MachineProcessInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [processesLoading, setProcessesLoading] = useState(false);
-  // 폼 초기값 설정을 지연시키는 타이머 핸들. 모달이 닫히거나 컴포넌트가 언마운트되면 정리한다.
-  const formInitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 이번 오픈에서 폼을 초기화한 설비 id. 실시간/폴링이 machine 객체를 계속 새로 만들어도
+  // (identity 변경) 편집 중인 폼 값을 덮어쓰지 않기 위한 가드다.
+  const initializedForRef = useRef<string | null>(null);
 
   // 생산 모델 목록 가져오기
   const fetchProductModels = async () => {
@@ -123,46 +124,40 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
     }
   };
 
-  // 모달이 열릴 때 데이터 로드 및 폼 초기화
+  // 모달이 열릴 때 데이터 로드 및 폼 초기화.
+  // 과거에는 setTimeout(100ms)으로 지연 설정했는데, 실시간/폴링 갱신이 machine 의
+  // identity 를 100ms 보다 빨리 바꾸면 cleanup 이 타이머를 계속 취소해 폼이 영영
+  // 비어 있었다(800대 환경에서 실제 재현). 오픈당 1회만 동기 초기화한다.
   useEffect(() => {
-    if (visible && machine) {
-      // 데이터 먼저 로드
-      fetchProductModels();
-
-      // 약간의 딜레이 후 폼 값 설정
-      formInitTimeoutRef.current = setTimeout(() => {
-        formInitTimeoutRef.current = null;
-
-        // 폼 초기값 설정 (생산 모델과 공정은 실제 데이터 기반으로)
-        const productionModelId = machine.production_model?.id || unwrapJoin(machine.product_models)?.id || machine.production_model_id;
-        const currentProcessId = machine.current_process?.id || unwrapJoin(machine.model_processes)?.id || machine.current_process_id;
-
-        form.setFieldsValue({
-          name: machine.name,
-          location: machine.location,
-          equipment_type: machine.equipment_type,
-          is_active: machine.is_active,
-          current_state: machine.current_state,
-          production_model_id: productionModelId,
-          current_process_id: currentProcessId
-        });
-
-        // 생산 모델이 있으면 해당 모델의 공정들만 다시 로드
-        if (productionModelId) {
-          fetchProcesses(productionModelId);
-        } else {
-          setProcesses([]);
-        }
-      }, 100);
+    if (!visible) {
+      initializedForRef.current = null;
+      return;
     }
+    if (!machine || initializedForRef.current === machine.id) return;
+    initializedForRef.current = machine.id;
 
-    // 모달이 닫히거나(재실행) 컴포넌트가 언마운트되면 예약된 타이머를 정리한다
-    return () => {
-      if (formInitTimeoutRef.current) {
-        clearTimeout(formInitTimeoutRef.current);
-        formInitTimeoutRef.current = null;
-      }
-    };
+    fetchProductModels();
+
+    // 폼 초기값 설정 (생산 모델과 공정은 실제 데이터 기반으로)
+    const productionModelId = machine.production_model?.id || unwrapJoin(machine.product_models)?.id || machine.production_model_id;
+    const currentProcessId = machine.current_process?.id || unwrapJoin(machine.model_processes)?.id || machine.current_process_id;
+
+    form.setFieldsValue({
+      name: machine.name,
+      location: machine.location,
+      equipment_type: machine.equipment_type,
+      is_active: machine.is_active,
+      current_state: machine.current_state,
+      production_model_id: productionModelId,
+      current_process_id: currentProcessId
+    });
+
+    // 생산 모델이 있으면 해당 모델의 공정들만 다시 로드
+    if (productionModelId) {
+      fetchProcesses(productionModelId);
+    } else {
+      setProcesses([]);
+    }
   }, [visible, machine, form]);
 
   // 생산 모델 변경 시 공정 목록 업데이트
@@ -228,6 +223,8 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
       open={visible}
       onCancel={handleCancel}
       width={800}
+      forceRender
+
       footer={[
         <Button key="cancel" icon={<CloseOutlined />} onClick={handleCancel}>
           {t('common.cancel')}
