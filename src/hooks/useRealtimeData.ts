@@ -170,7 +170,31 @@ export interface UseRealtimeDataOptions {
    * 설비별 지표가 필요한 화면은 useMachineOEEStats 처럼 서버 집계를 쓴다.
    */
   includeProductionRecords?: boolean;
+  /**
+   * 설비 로그를 조회·구독할지 (기본 true).
+   *
+   * false 면 machine_logs 초기 조회(최대 5,000행)와 전체 테이블 실시간 채널을
+   * 만들지 않고 `machineLogs` 는 빈 배열이 된다. 엔지니어 화면이 실적과 같은
+   * 이유로 로그도 받아서 전부 버리고 있었다 — 쓰지 않는 데이터는 받지 않는다.
+   */
+  includeMachineLogs?: boolean;
 }
+
+/**
+ * Realtime 채널용 in-필터. 담당 설비가 소수인 운영자는 전체 테이블 이벤트 대신
+ * 자기 설비 이벤트만 받는다(800대 체제에서 이벤트 팬아웃 절감).
+ * 주의: DELETE 이벤트는 replica identity(PK)만 실리므로 PK 가 아닌 컬럼 필터는
+ * DELETE 를 걸러버린다 — 필터는 INSERT/UPDATE 반영용이고, 삭제 반영은 주기
+ * 새로고침(useAutoRefresh/refresh)이 맡는다.
+ */
+const REALTIME_FILTER_MAX_IDS = 100;
+export const buildRealtimeInFilter = (
+  column: string,
+  ids: string[] | undefined
+): string | undefined =>
+  ids && ids.length > 0 && ids.length <= REALTIME_FILTER_MAX_IDS
+    ? `${column}=in.(${ids.join(',')})`
+    : undefined;
 
 interface RealtimeDataState {
   machines: Machine[];
@@ -195,6 +219,7 @@ export const useRealtimeData = (
   options?: UseRealtimeDataOptions
 ) => {
   const includeProductionRecords = options?.includeProductionRecords !== false;
+  const includeMachineLogs = options?.includeMachineLogs !== false;
   const [state, setState] = useState<RealtimeDataState>({
     machines: [],
     machineLogs: [],
@@ -213,6 +238,9 @@ export const useRealtimeData = (
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
   const isMountedRef = useRef(true);
+  // 운영자의 담당 설비 — 초기 조회에서 채워지고, 이후 구독 설정이 채널 필터로 쓴다.
+  // undefined = 전체(관리자/엔지니어 또는 프로필 미조회).
+  const assignedIdsRef = useRef<string[] | undefined>(undefined);
 
   // 연결 상태 업데이트 함수
   const updateConnectionStatus = useCallback((status: 'connecting' | 'connected' | 'disconnected' | 'error') => {
@@ -233,8 +261,11 @@ export const useRealtimeData = (
       if (!isMountedRef.current) return;
       console.log('🔄 실시간 연결 재시도...');
       updateConnectionStatus('connecting');
-      loadInitialData();
-      setupRealtimeSubscriptions();
+      // 구독은 초기 조회 완료 후에 연다 — 운영자 담당 설비 필터(assignedIdsRef)가
+      // 프로필 조회로 채워진 뒤에야 채널에 적용될 수 있다.
+      void loadInitialData().then(() => {
+        if (isMountedRef.current) setupRealtimeSubscriptions();
+      });
     }, 5000); // 5초 후 재연결 시도
   }, []);
 
@@ -286,19 +317,23 @@ export const useRealtimeData = (
       const assignedMachineIds = userRole === 'operator'
         ? (userProfile?.assigned_machines || [])
         : undefined;
+      // 구독 설정(loadInitialData 완료 후 실행)이 채널 필터로 쓸 수 있게 심는다.
+      assignedIdsRef.current = assignedMachineIds;
 
       const [machinesResult, openLogsResult, recentMachineLogs, productionRecords] = await Promise.all([
         supabase
           .from('machines')
           .select('*')
           .eq('is_active', true),
-        supabase
-          .from('machine_logs')
-          .select('*')
-          .is('end_time', null)
-          .order('start_time', { ascending: false }),
-        fetchRecentMachineLogs(),
         // 쓰지 않을 데이터는 받지 않는다. 가장 빠른 조회는 실행하지 않는 조회다.
+        includeMachineLogs
+          ? supabase
+              .from('machine_logs')
+              .select('*')
+              .is('end_time', null)
+              .order('start_time', { ascending: false })
+          : Promise.resolve({ data: [] as MachineLog[], error: null }),
+        includeMachineLogs ? fetchRecentMachineLogs() : Promise.resolve([] as MachineLog[]),
         includeProductionRecords
           ? fetchAllRecentProductionRecords(assignedMachineIds)
           : Promise.resolve([] as ProductionRecord[])
@@ -380,7 +415,7 @@ export const useRealtimeData = (
       // 에러 발생시 자동 재연결 스케줄
       scheduleReconnect();
     }
-  }, [scheduleReconnect, includeProductionRecords]);
+  }, [scheduleReconnect, includeProductionRecords, includeMachineLogs]);
 
   // 채널 정리 함수
   const cleanupChannels = useCallback(() => {
@@ -408,15 +443,21 @@ export const useRealtimeData = (
     // 기존 채널 정리
     cleanupChannels();
 
-    // 설비 로그 실시간 구독 (최적화)
-    const machineLogsChannel = supabase
+    // 운영자는 담당 설비 이벤트만 받는다 (담당이 소수일 때만 — buildRealtimeInFilter 참고).
+    const assignedIds = assignedIdsRef.current;
+    const machineIdFilter = buildRealtimeInFilter('machine_id', assignedIds);
+    const machinePkFilter = buildRealtimeInFilter('id', assignedIds);
+
+    // 설비 로그 실시간 구독 (초기 조회를 건너뛴 경우 구독도 하지 않는다 — 실적과 동일 규율)
+    const machineLogsChannel = !includeMachineLogs ? null : supabase
       .channel('machine_logs_changes')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'machine_logs'
+          table: 'machine_logs',
+          ...(machineIdFilter ? { filter: machineIdFilter } : {})
         },
         (payload) => {
           console.log('📊 Machine log 변경:', payload.eventType, (payload.new as Partial<MachineLog>).log_id);
@@ -465,7 +506,8 @@ export const useRealtimeData = (
         {
           event: '*',
           schema: 'public',
-          table: 'production_records'
+          table: 'production_records',
+          ...(machineIdFilter ? { filter: machineIdFilter } : {})
         },
         (payload) => {
           console.log('Production record change:', payload);
@@ -548,7 +590,9 @@ export const useRealtimeData = (
         {
           event: '*',
           schema: 'public',
-          table: 'machines'
+          table: 'machines',
+          // machines 는 id 가 PK 라 DELETE 이벤트에도 필터가 적용된다.
+          ...(machinePkFilter ? { filter: machinePkFilter } : {})
         },
         (payload) => {
           console.log('Machine change:', payload);
@@ -601,7 +645,7 @@ export const useRealtimeData = (
       .filter((channel): channel is RealtimeChannel => channel !== null);
 
     console.log('🔗 실시간 구독 설정 완료');
-  }, [cleanupChannels, updateConnectionStatus, scheduleReconnect, includeProductionRecords]);
+  }, [cleanupChannels, updateConnectionStatus, scheduleReconnect, includeProductionRecords, includeMachineLogs]);
 
   // 실시간 구독 설정
   useEffect(() => {
@@ -612,8 +656,10 @@ export const useRealtimeData = (
 
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
-      loadInitialData();
-      setupRealtimeSubscriptions();
+      // 구독은 초기 조회 완료 후에 연다 (운영자 담당 설비 필터가 채워진 뒤).
+      void loadInitialData().then(() => {
+        if (isMountedRef.current) setupRealtimeSubscriptions();
+      });
     }
 
     // 정리 함수
@@ -632,8 +678,9 @@ export const useRealtimeData = (
   // 수동 새로고침 함수 (최적화)
   const refresh = useCallback(() => {
     console.log('🔄 수동 새로고침 시작...');
-    loadInitialData();
-    setupRealtimeSubscriptions();
+    void loadInitialData().then(() => {
+      if (isMountedRef.current) setupRealtimeSubscriptions();
+    });
   }, [loadInitialData, setupRealtimeSubscriptions]);
 
   // 역할별 필터링된 데이터 반환

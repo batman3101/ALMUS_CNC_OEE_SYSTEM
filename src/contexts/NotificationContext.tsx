@@ -254,6 +254,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }
   }, [user?.id, getAcknowledgedNotifications, writeAcknowledgedNotifications]);
 
+  // 인증 실패(401/403) 연속 횟수와 그에 따른 폴링 건너뛰기 잔여 횟수.
+  // 만료된 토큰으로 매 폴링 틱마다 재시도하면 서버 로그가 401 로 도배된다(자체 감사 #7 관찰).
+  // 성공하면 리셋되고, user 가 바뀌면(재로그인) effect 초기화에서 리셋된다.
+  const authFailStreakRef = useRef(0);
+  const skipPollsRef = useRef(0);
+
   // 알림 목록 새로고침
   const refreshNotifications = useCallback(async () => {
     console.log('🔄 refreshNotifications 시작');
@@ -263,13 +269,22 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       // 실제 데이터베이스 기반 알림 생성
       const realNotifications = await generateRealNotifications();
       console.log('📋 생성된 알림 데이터:', realNotifications);
-      
+
       dispatch({ type: 'SET_NOTIFICATIONS', payload: realNotifications });
       dispatch({ type: 'SET_ERROR', payload: null });
-      
+      authFailStreakRef.current = 0;
+      skipPollsRef.current = 0;
+
       console.log('✅ 실제 데이터베이스 기반 알림 생성 완료:', realNotifications.length, '개');
     } catch (error) {
       console.error('❌ refreshNotifications 오류:', error);
+      const msg = error instanceof Error ? error.message : '';
+      if (/HTTP 40[13]/.test(msg)) {
+        authFailStreakRef.current += 1;
+        // 연속 실패 횟수에 지수적으로 비례해 폴링을 건너뛴다(최대 32틱 ≈ 세션 갱신 대기).
+        skipPollsRef.current = Math.min(2 ** authFailStreakRef.current, 32);
+        console.warn(`⏸️ 알림 폴링 백오프: 인증 실패 ${authFailStreakRef.current}회, ${skipPollsRef.current}틱 건너뜀`);
+      }
       dispatch({ type: 'SET_ERROR', payload: 'Failed to fetch notifications' });
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -463,11 +478,20 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     console.log('🔄 NotificationContext 초기화 - 사용자 ID:', user.id);
 
+    // 재로그인/사용자 전환 시 인증 백오프를 리셋한다.
+    authFailStreakRef.current = 0;
+    skipPollsRef.current = 0;
+
     let cancelled = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const runRefresh = () => {
       if (cancelled) return;
+      // 인증 실패 백오프 중이면 이번 틱은 건너뛴다 (만료 토큰으로 401 도배 방지).
+      if (skipPollsRef.current > 0) {
+        skipPollsRef.current -= 1;
+        return;
+      }
       // 설비 상태가 바뀌었으므로 캐시된 목록을 버린다
       invalidateMachinesCache();
       refreshRef.current();

@@ -1,5 +1,6 @@
 // 한국어 폰트 지원을 위한 유틸리티
-import jsPDF from 'jspdf';
+// jsPDF 는 타입으로만 쓰므로 type-only import — 이 모듈이 jspdf 번들을 끌고 오지 않게 한다.
+import type jsPDF from 'jspdf';
 
 // 한국어를 지원하는 시스템 폰트 목록
 const KOREAN_FONTS = [
