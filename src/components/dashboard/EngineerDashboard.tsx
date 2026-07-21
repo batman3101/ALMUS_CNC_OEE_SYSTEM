@@ -89,7 +89,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     error: realtimeError,
     refresh,
     isConnected
-  } = useRealtimeData(user?.id, user?.role, { includeProductionRecords: false });
+  // 이 화면은 machines 만 쓴다 — 실적(7일치)과 로그(최대 5,000행)는 받아봤자 버려진다.
+  } = useRealtimeData(user?.id, user?.role, { includeProductionRecords: false, includeMachineLogs: false });
 
   // 위치 필터에 해당하는 설비 ID 목록 (전체 선택 시 null = 위치 필터 없음)
   const locationMachineIds = React.useMemo(() => {

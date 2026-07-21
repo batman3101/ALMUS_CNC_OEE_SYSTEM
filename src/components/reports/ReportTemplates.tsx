@@ -1,9 +1,9 @@
 'use client';
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import html2canvas from 'html2canvas';
+// 무거운 내보내기 라이브러리(jspdf·xlsx·html2canvas, 합계 ~2MB)는 내보내기를 실제로
+// 실행할 때만 동적 로드한다 — /reports 첫 로드가 이들을 파싱하지 않게(자체 감사 #7).
+// jsPDF 는 타입 시그니처에만 필요하므로 type-only import(런타임 제거)로 남긴다.
+import type jsPDF from 'jspdf';
 import { Machine, ProductionRecord } from '@/types';
 import { OEEMetrics } from '@/types/reports';
 import { calculateWeightedOEE } from '@/utils/weightedOee';
@@ -46,6 +46,7 @@ export class ReportTemplates {
   // DOM 요소를 이미지로 캡처하는 헬퍼 함수
   static async captureElementAsImage(element: HTMLElement): Promise<string> {
     try {
+      const { default: html2canvas } = await import('html2canvas');
       const canvas = await html2canvas(element, {
         backgroundColor: '#ffffff',
         scale: 2,
@@ -66,7 +67,11 @@ export class ReportTemplates {
       if (data.reportType === 'detailed' && data.productionData.length > MAX_PDF_DETAIL_RECORDS) {
         throw new Error(`상세 PDF는 최대 ${MAX_PDF_DETAIL_RECORDS.toLocaleString()}건까지 생성할 수 있습니다. 기간 또는 설비 범위를 줄이거나 Excel을 사용하세요.`);
       }
-      const doc = new jsPDF();
+      const [{ default: JsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
+      const doc = new JsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       let yPosition = 20;
@@ -414,6 +419,7 @@ export class ReportTemplates {
 
   static async generateExcelReport(data: ReportData): Promise<void> {
     try {
+      const XLSX = await import('xlsx');
       const workbook = XLSX.utils.book_new();
 
     // === 요약 시트 ===
