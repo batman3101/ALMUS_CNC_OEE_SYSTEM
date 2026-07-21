@@ -33,7 +33,8 @@ from public.downtime_entries de;
 
 comment on view public.machine_downtime_intervals is
   '비가동 구간의 단일 표면(machine_logs 비정상 구간 ∪ downtime_entries). '
-  '겹치는 구간은 소비 측에서 병합해야 한다(두 소스가 같은 비가동을 함께 기록한다 — andon).';
+  '겹치는 구간은 소비 측에서 병합해야 한다(두 소스가 같은 비가동을 함께 기록한다 — andon). '
+  '분(minutes) 합계는 machine_downtime_merged_minutes(20260721020000) 를 쓸 것 — 직접 SUM 은 이중 계산.';
 
 revoke all on public.machine_downtime_intervals from public, anon;
 grant select on public.machine_downtime_intervals to authenticated, service_role;

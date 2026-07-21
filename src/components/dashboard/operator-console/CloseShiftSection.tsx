@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Card, InputNumber, Button, Space, Typography, Alert, Badge } from 'antd';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import { authFetch } from '@/lib/authFetch';
@@ -29,15 +29,31 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
   const [qty, setQty] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 작업자가 수량 칸을 건드렸는지 — 폴링 갱신이 입력값을 덮지 않게 하는 가드
+  // (ProgressInputSection 과 동일 교훈).
+  const edited = useRef(false);
+
+  // 첫 렌더에서 첫 항목으로 selKey 를 고정한다. 이렇게 하지 않으면 selKey=null 인 채로
+  // 30초 폴링이 (미정렬이던) 배열 순서를 바꿀 때 "첫 항목"이 다른 교대가 되어, 입력 중이던
+  // 수량이 엉뚱한 교대로 넘어갈 수 있었다(자체 감사 후속 #1). API 정렬과 이중 방어.
+  useEffect(() => {
+    if (selKey === null && pendingShifts.length > 0) setSelKey(keyOf(pendingShifts[0]));
+  }, [selKey, pendingShifts]);
 
   // 선택 항목이 마감되어 목록에서 사라지면 첫 건으로 되돌아간다.
   const selected = pendingShifts.find(p => keyOf(p) === selKey) ?? pendingShifts[0] ?? null;
 
-  // 선택이 바뀌면 그 교대의 진척값으로 prefill (설비 전환은 부모의 key 리마운트가 초기화).
+  // 선택 교대가 바뀔 때만 그 교대의 진척값으로 prefill 하고 편집 플래그를 리셋한다.
+  // 손대지 않은 칸은 last_qty 변화를 따라가되, 작업자가 친 숫자는 폴링이 덮지 않는다.
+  const selectedKey = selected ? keyOf(selected) : null;
   useEffect(() => {
+    edited.current = false;
     setQty(selected ? selected.last_qty : null);
     setError(null);
-  }, [selected?.date, selected?.shift, selected?.last_qty]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!edited.current) setQty(selected ? selected.last_qty : null);
+  }, [selected?.last_qty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!selected) return null;
 
@@ -93,7 +109,7 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
         )}
         <InputNumber
           value={qty}
-          onChange={setQty}
+          onChange={(v) => { edited.current = true; setQty(v); }}
           min={0}
           step={1}
           style={{ width: '100%', fontSize: 20 }}

@@ -15,6 +15,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,6 +26,14 @@ const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
 const appliedNames = new Set(ledger.applied.map(m => m.name));
 const fileMatches = ledger.file_matches ?? {};
 const skipped = ledger.intentionally_skipped ?? {};
+const hashes = ledger.hashes ?? {};
+
+// 파일 내용 해시(원장의 적용-시점 해시와 대조 — 적용 후 편집/드리프트 탐지).
+const fileHash = stem => crypto
+  .createHash('sha256')
+  .update(fs.readFileSync(path.join(migrationsDir, `${stem}.sql`), 'utf8').replace(/\r\n/g, '\n'))
+  .digest('hex')
+  .slice(0, 16);
 
 const localStems = fs.readdirSync(migrationsDir)
   .filter(f => f.endsWith('.sql'))
@@ -34,6 +43,7 @@ const localStems = fs.readdirSync(migrationsDir)
 const suffixOf = stem => stem.replace(/^\d{14}_/, '');
 
 const missing = [];
+const drifted = [];
 let appliedCount = 0;
 const matchedNames = new Set();
 
@@ -47,6 +57,10 @@ for (const stem of localStems) {
   if (hit.length === candidates.length || (!(stem in fileMatches) && hit.length > 0)) {
     appliedCount += 1;
     hit.forEach(n => matchedNames.add(n));
+    // 적용된 파일의 내용이 원장 해시와 다르면 = 적용 후 편집(드리프트). 재적용 여부 확인 필요.
+    const expectedHash = hashes[stem];
+    if (expectedHash && fileHash(stem) !== expectedHash) drifted.push(stem);
+    else if (!expectedHash) drifted.push(`${stem} (원장에 해시 없음 — 추가 필요)`);
   } else {
     missing.push({ stem, expected: candidates, found: hit });
   }
@@ -54,8 +68,16 @@ for (const stem of localStems) {
 
 const unmatchedApplied = ledger.applied.filter(m => !matchedNames.has(m.name));
 
-console.log(`\n로컬 ${localStems.length}개 중 적용 ${appliedCount}, 의도적 건너뜀 ${Object.keys(skipped).length}, 미적용 ${missing.length}`);
+console.log(`\n로컬 ${localStems.length}개 중 적용 ${appliedCount}, 의도적 건너뜀 ${Object.keys(skipped).length}, 미적용 ${missing.length}, 드리프트 ${drifted.length}`);
 console.log(`원장에만 있는 적용 이력(저장소 이전 히스토리 등): ${unmatchedApplied.length}건`);
+
+// 드리프트는 경고다(실패 아님) — create-or-replace 재적용 같은 정당한 편집도 있으므로,
+// "적용 후 파일이 바뀌었으니 재적용했는지 + 원장 해시를 갱신했는지 확인하라"는 신호다.
+if (drifted.length > 0) {
+  console.warn('\n⚠️  적용 후 내용이 바뀐(또는 해시 미등록) 마이그레이션:');
+  for (const d of drifted) console.warn(`   - ${d}`);
+  console.warn('재적용했다면 supabase/applied-migrations.json 의 hashes 를 갱신하세요.');
+}
 
 if (missing.length > 0) {
   console.error('\n❌ 미적용(또는 원장 미갱신) 마이그레이션:');
@@ -67,4 +89,4 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log('✅ 로컬 마이그레이션과 운영 적용 원장이 일치합니다.');
+console.log('✅ 로컬 마이그레이션과 운영 적용 원장이 일치합니다.' + (drifted.length ? ' (드리프트 경고 있음)' : ''));

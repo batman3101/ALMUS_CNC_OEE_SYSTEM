@@ -261,16 +261,16 @@ export const useRealtimeData = (
       if (!isMountedRef.current) return;
       console.log('🔄 실시간 연결 재시도...');
       updateConnectionStatus('connecting');
-      // 구독은 초기 조회 완료 후에 연다 — 운영자 담당 설비 필터(assignedIdsRef)가
-      // 프로필 조회로 채워진 뒤에야 채널에 적용될 수 있다.
-      void loadInitialData().then(() => {
-        if (isMountedRef.current) setupRealtimeSubscriptions();
-      });
+      // 담당 필터 확정 직후(스냅샷 조회 전) 구독을 연다 — 갭 이벤트 유실 방지.
+      void loadInitialData(setupRealtimeSubscriptions);
     }, 5000); // 5초 후 재연결 시도
   }, []);
 
   // 초기 데이터 로드 (성능 최적화)
-  const loadInitialData = useCallback(async () => {
+  // afterScopeResolved: 담당 설비(assignedIdsRef)가 확정된 직후, 무거운 스냅샷 조회 **이전에**
+  // 호출된다. 구독을 이 시점에 열면 (a) 필터가 준비돼 있고 (b) 스냅샷 SELECT 가 구독 이후에
+  // 실행돼 그 사이 커밋된 변경을 모두 포함하므로 "조회↔구독 갭" 이벤트 유실이 없다(후속 #3).
+  const loadInitialData = useCallback(async (afterScopeResolved?: () => void) => {
     if (!isMountedRef.current) return;
     try {
       setState(prev => ({
@@ -293,15 +293,17 @@ export const useRealtimeData = (
         return profileError ? null : profile;
       };
 
-      const fetchRecentMachineLogs = async (): Promise<MachineLog[]> => {
+      const fetchRecentMachineLogs = async (scopeIds?: string[]): Promise<MachineLog[]> => {
         const pageSize = 1000;
         const recent: MachineLog[] = [];
         for (let offset = 0; offset < MAX_LOGS; offset += pageSize) {
-          const { data, error } = await supabase
+          let query = supabase
             .from('machine_logs')
             .select('*')
             .not('end_time', 'is', null)
-            .gte('start_time', getLogWindowStart())
+            .gte('start_time', getLogWindowStart());
+          if (scopeIds !== undefined) query = query.in('machine_id', scopeIds);
+          const { data, error } = await query
             .order('start_time', { ascending: false })
             .range(offset, Math.min(offset + pageSize - 1, MAX_LOGS - 1));
           if (error) throw error;
@@ -317,23 +319,29 @@ export const useRealtimeData = (
       const assignedMachineIds = userRole === 'operator'
         ? (userProfile?.assigned_machines || [])
         : undefined;
-      // 구독 설정(loadInitialData 완료 후 실행)이 채널 필터로 쓸 수 있게 심는다.
+      // 구독이 채널 필터로 쓸 수 있게 심고, 곧바로 구독을 연다(스냅샷 조회보다 먼저).
       assignedIdsRef.current = assignedMachineIds;
+      if (afterScopeResolved && isMountedRef.current) afterScopeResolved();
+
+      // 운영자는 담당 설비만 초기 조회한다 — 예전에는 machines·machine_logs 전체를 받아
+      // UI 에서만 걸러, 담당 외 데이터가 브라우저(DevTools)에 노출되고 800대에서 전송량이
+      // 컸다(자체 감사 후속 #4). productionRecords 는 이미 담당별로 조회 중이었다.
+      // (RLS 가 authenticated 전체 조회를 아직 허용하므로 이 클라이언트 스코프가 방어선이다)
+      let machinesQuery = supabase.from('machines').select('*').eq('is_active', true);
+      if (assignedMachineIds !== undefined) machinesQuery = machinesQuery.in('id', assignedMachineIds);
+
+      const openLogsQuery = () => {
+        let q = supabase.from('machine_logs').select('*').is('end_time', null)
+          .order('start_time', { ascending: false });
+        if (assignedMachineIds !== undefined) q = q.in('machine_id', assignedMachineIds);
+        return q;
+      };
 
       const [machinesResult, openLogsResult, recentMachineLogs, productionRecords] = await Promise.all([
-        supabase
-          .from('machines')
-          .select('*')
-          .eq('is_active', true),
+        machinesQuery,
         // 쓰지 않을 데이터는 받지 않는다. 가장 빠른 조회는 실행하지 않는 조회다.
-        includeMachineLogs
-          ? supabase
-              .from('machine_logs')
-              .select('*')
-              .is('end_time', null)
-              .order('start_time', { ascending: false })
-          : Promise.resolve({ data: [] as MachineLog[], error: null }),
-        includeMachineLogs ? fetchRecentMachineLogs() : Promise.resolve([] as MachineLog[]),
+        includeMachineLogs ? openLogsQuery() : Promise.resolve({ data: [] as MachineLog[], error: null }),
+        includeMachineLogs ? fetchRecentMachineLogs(assignedMachineIds) : Promise.resolve([] as MachineLog[]),
         includeProductionRecords
           ? fetchAllRecentProductionRecords(assignedMachineIds)
           : Promise.resolve([] as ProductionRecord[])
@@ -415,7 +423,9 @@ export const useRealtimeData = (
       // 에러 발생시 자동 재연결 스케줄
       scheduleReconnect();
     }
-  }, [scheduleReconnect, includeProductionRecords, includeMachineLogs]);
+    // userId/userRole 을 deps 에 포함해야 사용자 전환 후 이전 담당 설비로 조회하는
+    // stale closure 를 피한다(후속 MEDIUM). 이 함수가 재생성되면 mount effect 도 재실행된다.
+  }, [scheduleReconnect, includeProductionRecords, includeMachineLogs, userId, userRole]);
 
   // 채널 정리 함수
   const cleanupChannels = useCallback(() => {
@@ -656,10 +666,8 @@ export const useRealtimeData = (
 
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
-      // 구독은 초기 조회 완료 후에 연다 (운영자 담당 설비 필터가 채워진 뒤).
-      void loadInitialData().then(() => {
-        if (isMountedRef.current) setupRealtimeSubscriptions();
-      });
+      // 담당 필터 확정 직후(스냅샷 조회 전) 구독을 연다 (갭 유실 방지).
+      void loadInitialData(setupRealtimeSubscriptions);
     }
 
     // 정리 함수
@@ -678,9 +686,7 @@ export const useRealtimeData = (
   // 수동 새로고침 함수 (최적화)
   const refresh = useCallback(() => {
     console.log('🔄 수동 새로고침 시작...');
-    void loadInitialData().then(() => {
-      if (isMountedRef.current) setupRealtimeSubscriptions();
-    });
+    void loadInitialData(setupRealtimeSubscriptions);
   }, [loadInitialData, setupRealtimeSubscriptions]);
 
   // 역할별 필터링된 데이터 반환

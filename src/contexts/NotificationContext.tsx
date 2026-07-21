@@ -281,8 +281,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       const msg = error instanceof Error ? error.message : '';
       if (/HTTP 40[13]/.test(msg)) {
         authFailStreakRef.current += 1;
-        // 연속 실패 횟수에 지수적으로 비례해 폴링을 건너뛴다(최대 32틱 ≈ 세션 갱신 대기).
-        skipPollsRef.current = Math.min(2 ** authFailStreakRef.current, 32);
+        // 폴링만 지수 백오프로 건너뛴다(최대 4틱 = 4분). 토큰은 보통 곧 auto-refresh 되므로
+        // 상한을 낮게 둔다 — 예전 32틱(32분)은 회복이 과하게 늦었다(자체 감사 후속 #2).
+        // Realtime 이벤트 경로는 이 카운터를 쓰지 않으므로 설비 고장 알림이 지연되지 않는다.
+        skipPollsRef.current = Math.min(2 ** authFailStreakRef.current, 4);
         console.warn(`⏸️ 알림 폴링 백오프: 인증 실패 ${authFailStreakRef.current}회, ${skipPollsRef.current}틱 건너뜀`);
       }
       dispatch({ type: 'SET_ERROR', payload: 'Failed to fetch notifications' });
@@ -485,19 +487,26 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     let cancelled = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const runRefresh = () => {
+    // 실제 새로고침(캐시 무효화 + 조회). Realtime 이벤트는 이 경로를 직접 쓴다 —
+    // 설비 고장 같은 실제 상태 변경 이벤트가 폴링 백오프에 막히면 안 된다(자체 감사 후속 #2).
+    const doRefresh = () => {
       if (cancelled) return;
-      // 인증 실패 백오프 중이면 이번 틱은 건너뛴다 (만료 토큰으로 401 도배 방지).
-      if (skipPollsRef.current > 0) {
-        skipPollsRef.current -= 1;
-        return;
-      }
-      // 설비 상태가 바뀌었으므로 캐시된 목록을 버린다
       invalidateMachinesCache();
       refreshRef.current();
     };
 
-    runRefresh();
+    // 폴링 경로: 인증 실패 백오프 중이면 이번 틱을 건너뛴다(만료 토큰으로 401 도배 방지).
+    const runPoll = () => {
+      if (cancelled) return;
+      if (skipPollsRef.current > 0) {
+        skipPollsRef.current -= 1;
+        return;
+      }
+      doRefresh();
+    };
+
+    // 최초 1회는 즉시 조회한다(백오프 없이).
+    doRefresh();
 
     // (a) 설비 상태 변경 실시간 구독.
     //
@@ -512,9 +521,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'machines' },
           () => {
-            // 대량 상태 변경이 연달아 들어와도 한 번만 재조회한다
+            // 대량 상태 변경이 연달아 들어와도 한 번만 재조회한다.
+            // Realtime 은 실제 상태 변경 신호이므로 폴링 백오프를 우회한다(doRefresh).
             if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(runRefresh, REALTIME_DEBOUNCE_MS);
+            debounceTimer = setTimeout(doRefresh, REALTIME_DEBOUNCE_MS);
           }
         )
         .subscribe();
@@ -522,8 +532,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.error('❌ 알림 실시간 구독 실패 - 폴링으로 대체합니다:', error);
     }
 
-    // (b) Realtime 이 끊기거나 구독에 실패해도 따라잡기 위한 폴백 폴링
-    const pollTimer = setInterval(runRefresh, NOTIFICATION_POLL_INTERVAL_MS);
+    // (b) Realtime 이 끊기거나 구독에 실패해도 따라잡기 위한 폴백 폴링(인증 백오프 적용)
+    const pollTimer = setInterval(runPoll, NOTIFICATION_POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;

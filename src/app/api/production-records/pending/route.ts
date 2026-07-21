@@ -55,9 +55,17 @@ export async function GET(request: NextRequest) {
         close_pending.push({ date: p.date, shift: p.shift, last_qty: lastQtyByKey.get(key) ?? 0 });
       }
     }
+    // 안정 정렬(오래된 교대 먼저) — Supabase 는 정렬 없는 select 의 행 순서를 보장하지
+    // 않는다. 미정렬이면 폴링마다 close_pending 순서가 달라져, 콘솔이 "첫 항목"을 기본
+    // 선택할 때 사용자가 마감하려던 교대가 바뀔 수 있다(자체 감사 후속 #1).
+    const shiftRank = (s: string) => (s === 'A' ? 0 : 1);
+    close_pending.sort((a, b) =>
+      a.date === b.date ? shiftRank(a.shift) - shiftRank(b.shift) : a.date.localeCompare(b.date));
+
     const defect_pending = (records ?? [])
       .filter(r => r.defect_qty === null)
-      .map(r => ({ date: r.date, shift: r.shift, record_id: r.record_id }));
+      .map(r => ({ date: r.date, shift: r.shift, record_id: r.record_id }))
+      .sort((a, b) => (a.date === b.date ? shiftRank(a.shift) - shiftRank(b.shift) : a.date.localeCompare(b.date)));
 
     return NextResponse.json({ close_pending, defect_pending });
   } catch (error) {
