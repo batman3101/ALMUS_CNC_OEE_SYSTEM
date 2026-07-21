@@ -140,21 +140,59 @@
 
 ---
 
-## 6. 롤백
+## 7. (2026-07-20 추가) `20260718000004_toggle_machine_downtime_idempotent` 적용 계획
 
-- **1차 안전망:** 적용 전 백업/PITR 복원 지점.
-- 함수: 직전 버전(`codex_round2_fixes`·`downtime_reporting_visibility` 파일 본문) 재적용으로 복원 가능.
-- 신규 테이블(`alert_acknowledgements`, `production_shift_states`): DROP.
-- 신규 컬럼(`version`·`updated_at`), 신규 트리거: DROP.
-- backfill(닫힌 로그/비가동): 되돌리기 비권장 — 무한 열림 정리이므로 유지가 정상.
+2026-07-20 브라우저 기능테스트에서 확인된 상태 (→ **같은 날 적용 완료**, 아래 체크 참조):
+
+- 000000~000003 은 적용 완료, 000004 만 미적용이었다.
+- 그리고 000003(적용본)에 **machine_logs 이중 기록 결함**이 있다: RPC 가 로그를 직접
+  쓰고 나서 `machines.current_state` 를 갱신 → `machines_status_change_trigger` 가 같은
+  트랜잭션에서 한 번 더 쓴다. 상태 전환 1회당 2행(0분 유령 + 실제 행). 실측: 7/13 이후
+  로그 135건 중 36건(27%)이 유령 행, '최근 작업' 피드 중복 표시의 원인.
+- 000004 파일은 2026-07-20 에 **보강**됨: 멱등(원래 목적) + machine_logs 를 트리거에
+  위임(단일 writer 복원, operator 는 `app.status_operator_id` GUC 로 전달).
+
+적용 절차 (0절 원칙대로 MCP `apply_migration` / SQL Editor, `db push` 금지):
+
+1. [x] 백업/PITR 복원 지점 확인.
+2. [x] `20260718000004_toggle_machine_downtime_idempotent.sql` (2026-07-20 보강판) 적용 완료.
+3. [x] 스모크 통과: start→resume 각 1행(유령 0), 같은 사유 start/resume 재호출 → `{ok, noop}`,
+   operator GUC 가 machine_logs.operator_id 로 기록됨.
+4. [x] 기존 유령 행 정리 완료 — 36건 삭제(잔여 0). 사용한 SQL:
+
+   ```sql
+   -- 같은 설비·상태·시작시각의 살아있는 쌍둥이가 있는 0분 행만 삭제
+   DELETE FROM machine_logs g
+   USING machine_logs k
+   WHERE g.end_time = g.start_time
+     AND k.log_id <> g.log_id
+     AND k.machine_id = g.machine_id
+     AND k.state = g.state
+     AND k.start_time = g.start_time
+     AND (k.end_time IS NULL OR k.end_time > k.start_time);
+   ```
+
+5. [ ] 롤백: 000003 파일 본문 재적용(함수 원복) + `log_machine_status_change()` 는
+   `20251024 fix_machine_status_change_trigger` 시점 정의로 복원.
+
+참고: `apply_machine_update()` 경로는 여전히 트리거가 `auth.uid()`(=service_role 에선 NULL)
+로 로그를 남긴다. 필요해지면 같은 GUC 를 심는 후속 마이그레이션으로 확장한다.
 
 ---
 
-## 6. 롤백
+## 8. (2026-07-20 추가) `20260720010000_shift_write_atomicity` 적용 계획
 
-- **1차 안전망:** 적용 전 백업/PITR 복원 지점.
-- 함수: 직전 버전(`codex_round2_fixes`·`downtime_reporting_visibility` 파일 본문) 재적용으로 복원 가능.
-- 신규 테이블(`alert_acknowledgements`, `production_shift_states`): DROP.
-- 신규 컬럼(`version`·`updated_at`), 신규 트리거: DROP.
-- backfill(닫힌 로그/비가동): 되돌리기 비권장 — 무한 열림 정리이므로 유지가 정상.
+Codex 적대 감사 HIGH 1·3 수정. 내용은 마이그레이션 파일 헤더 주석 참조:
+
+- `report_shift_progress` 가 andon 과 같은 machine 단독 락을 먼저 잡는다(락 키 정렬).
+- `close_shift_upsert` / `confirm_shift_defect` RPC 신설 — 재마감·불량 확정을 같은
+  composite 락(machine||date||shift) 아래 원자화(F2 보존의 TOCTOU 구멍 봉합).
+- 앱 라우트(close-shift·defect)는 같은 커밋에서 RPC 호출로 전환되므로 **코드 배포와
+  마이그레이션 적용을 같은 창에서** 한다(RPC 없이 신코드가 돌면 마감·불량 확정이 실패한다).
+
+1. [x] `20260720010000_shift_write_atomicity.sql` 적용 완료 (2026-07-20).
+2. [x] 스모크 통과: 진척(55) → 원탭 마감 → 불량 확정(2) 브라우저 E2E, 재마감 RPC 호출 시
+   `preserved_defect: 2` 유지·quality/oee 재파생 확인. 테스트 데이터는 정리됨
+   (record·진척·부활한 MISSING shift_state 삭제).
+3. 롤백: 000001(report_shift_progress)·구 라우트 코드로 복원, 신설 RPC 2개 DROP.
 

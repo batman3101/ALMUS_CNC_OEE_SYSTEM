@@ -96,7 +96,10 @@ src/
 - **Row Level Security (RLS)** enforces database-level permissions
 - **Three User Roles**:
   - `admin`: Full system access (all CRUD operations, system settings, user management)
-  - `engineer`: Read-only access to all machines and analytics
+  - `engineer`: All machines and analytics, **plus production-data writes** (production
+    records, shift close, defect confirm, progress reports, downtime/andon) — confirmed as
+    intended policy 2026-07-20. Destructive ops (record DELETE, settings, user mgmt) stay
+    admin-only.
   - `operator`: Access only to assigned machines (via `assigned_machines` array field in `user_profiles`)
 - **AuthContext** (`src/contexts/AuthContext.tsx`): Manages authentication state with automatic session recovery and cleanup on unmount to prevent memory leaks
 - **Profile Fetching Strategy**: Attempts Service Role API first (admin endpoint), falls back to client-side query if RLS blocks it

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
+import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
 import {
-  calculateOeeMetrics,
   DEFAULT_CAVITY,
   DEFAULT_TACT_SECONDS,
   resolveHistoricalProductionParameters,
@@ -14,6 +13,9 @@ import {
   resolveConfirmedDowntimeMinutes,
   type DowntimeSourceInterval,
 } from './downtimeCalculation';
+import { getBusinessTimeConfig } from '@/lib/shiftConfig';
+import { loadDowntimeSourceRows } from '@/lib/shiftDowntime';
+import { computeShiftSnapshot } from '@/lib/shiftMetrics';
 import {
   apiAuthErrorResponse,
   assertMachineAccess,
@@ -62,40 +64,9 @@ function validateQuantities(
   return null;
 }
 
-const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Ho_Chi_Minh';
-const DEFAULT_SHIFT_A_START = '08:00';
-const DEFAULT_SHIFT_B_START = '20:00';
-
-async function getBusinessTimeConfig() {
-  const defaults = {
-    timezone: DEFAULT_BUSINESS_TIMEZONE,
-    shiftAStart: DEFAULT_SHIFT_A_START,
-    shiftBStart: DEFAULT_SHIFT_B_START,
-  };
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('system_settings')
-      .select('category, setting_key, setting_value')
-      .in('category', ['general', 'shift'])
-      .eq('is_active', true);
-    if (error || !data) return defaults;
-    const readValue = (category: string, key: string): string | undefined => {
-      const row = data.find(item => item.category === category && item.setting_key === key);
-      const value = row?.setting_value as { value?: unknown } | null | undefined;
-      return typeof value?.value === 'string' ? value.value : undefined;
-    };
-    return {
-      timezone: readValue('general', 'timezone') || defaults.timezone,
-      shiftAStart: readValue('shift', 'shift_a_start') || defaults.shiftAStart,
-      shiftBStart: readValue('shift', 'shift_b_start') || defaults.shiftBStart,
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-// 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시)
-// 계획 가동시간 = max(0, 가동시간 - 휴식시간(system_settings))
+// 교대별 OEE 지표 계산 (서버가 단일 진실 공급원 - 클라이언트 값 무시).
+// 계산은 shiftMetrics.computeShiftSnapshot 에 위임한다 — close-shift 라우트와 공유(DRY).
+// cavity 는 per-piece tact 규율상 계산에 쓰지 않으므로 시그니처만 유지하고 전달하지 않는다.
 function calculateShiftMetrics(params: {
   operatingMinutes: number;
   breakMinutes: number;
@@ -105,39 +76,14 @@ function calculateShiftMetrics(params: {
   tactSeconds: number;
   cavity: number;
 }) {
-  const plannedRuntime = resolvePlannedRuntime(params.operatingMinutes, params.breakMinutes);
-  if (params.downtimeMinutes === null) {
-    const metrics = calculateOeeMetrics({
-      plannedRuntime,
-      actualRuntime: 0,
-      outputQty: params.outputQty,
-      defectQty: params.defectQty,
-      // tact 는 개당(1 piece) 가공시간이므로 cavity 로 나누지 않는다 (oeeRules.ts 참고).
-      minutesPerUnit: params.tactSeconds / 60,
-    });
-    return {
-      ...metrics,
-      actualRuntime: null,
-      availability: null,
-      performance: null,
-      oee: null,
-      downtime: null,
-    };
-  }
-
-  const downtime = Math.min(Math.max(params.downtimeMinutes, 0), plannedRuntime);
-  const actualRuntime = Math.max(0, plannedRuntime - downtime);
-  return {
-    ...calculateOeeMetrics({
-      plannedRuntime,
-      actualRuntime,
-      outputQty: params.outputQty,
-      defectQty: params.defectQty,
-      // tact 는 개당(1 piece) 가공시간이므로 cavity 로 나누지 않는다 (oeeRules.ts 참고).
-      minutesPerUnit: params.tactSeconds / 60,
-    }),
-    downtime,
-  };
+  return computeShiftSnapshot({
+    operatingMinutes: params.operatingMinutes,
+    breakMinutes: params.breakMinutes,
+    downtimeMinutes: params.downtimeMinutes,
+    outputQty: params.outputQty,
+    defectQty: params.defectQty,
+    tactSeconds: params.tactSeconds,
+  });
 }
 
 async function loadDowntimeMinutes(
@@ -147,51 +93,15 @@ async function loadDowntimeMinutes(
 ): Promise<{ A: number | null; B: number | null }> {
   const rangeStart = new Date(Math.min(windows.A.start, windows.B.start)).toISOString();
   const rangeEnd = new Date(Math.max(windows.A.end, windows.B.end)).toISOString();
-  const pageSize = 1000;
-  const rows: DowntimeSourceInterval[] = [];
 
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabaseAdmin
-      .from('downtime_entries')
-      .select('start_time, end_time, reason')
-      .eq('machine_id', machineId)
-      .lt('start_time', rangeEnd)
-      .or(`end_time.is.null,end_time.gt.${rangeStart}`)
-      .order('start_time', { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) {
-      console.error('Failed to load manual downtime for OEE:', error);
-      return { A: null, B: null };
-    }
-    rows.push(...((data || []).map(row => ({
-      start_time: row.start_time,
-      end_time: row.end_time,
-      is_planned: ['plannedStop', 'planned_stop', 'PLANNED_STOP', '계획 정지']
-        .includes(String(row.reason)),
-    })) as DowntimeSourceInterval[]));
-    if (!data || data.length < pageSize) break;
-  }
-
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabaseAdmin
-      .from('machine_logs')
-      .select('start_time, end_time, state')
-      .eq('machine_id', machineId)
-      .neq('state', 'NORMAL_OPERATION')
-      .lt('start_time', rangeEnd)
-      .or(`end_time.is.null,end_time.gt.${rangeStart}`)
-      .order('start_time', { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) {
-      console.error('Failed to load machine downtime for OEE:', error);
-      return { A: null, B: null };
-    }
-    rows.push(...((data || []).map(row => ({
-      start_time: row.start_time,
-      end_time: row.end_time,
-      is_planned: row.state === 'PLANNED_STOP',
-    })) as DowntimeSourceInterval[]));
-    if (!data || data.length < pageSize) break;
+  // downtime_entries + machine_logs 병합 로딩은 실시간 경로(production-progress)와 공유한다.
+  // 두 경로가 같은 원천을 봐야 실시간 가동률과 확정 OEE 가 어긋나지 않는다.
+  let rows: DowntimeSourceInterval[];
+  try {
+    rows = await loadDowntimeSourceRows(machineId, rangeStart, rangeEnd);
+  } catch (error) {
+    console.error('Failed to load downtime for OEE:', error);
+    return { A: null, B: null };
   }
 
   const now = Date.now();
@@ -366,14 +276,16 @@ export async function POST(request: NextRequest) {
       return {
         planned_runtime: Math.round(metrics.plannedRuntime),
         actual_runtime: metrics.actualRuntime === null ? null : Math.round(metrics.actualRuntime),
-        ideal_runtime: processStandardKnown ? Math.round(metrics.idealRuntime) : null,
+        // 이 라우트는 tactSeconds 를 항상 number 로 넘기므로 idealRuntime 이 null 일 일은
+        // 없지만, computeShiftSnapshot 의 tact-null 확장(감사 #2) 이후 타입상 가드가 필요하다.
+        ideal_runtime: processStandardKnown && metrics.idealRuntime !== null ? Math.round(metrics.idealRuntime) : null,
         output_qty: outputQty,
         defect_qty: defectQty,
         availability: metrics.availability === null ? null : Math.round(metrics.availability * 10000) / 10000,
         performance: !processStandardKnown || metrics.performance === null
           ? null
           : Math.round(metrics.performance * 10000) / 10000,
-        quality: Math.round(metrics.quality * 10000) / 10000,
+        quality: metrics.quality === null ? null : Math.round(metrics.quality * 10000) / 10000,
         oee: !processStandardKnown || metrics.oee === null
           ? null
           : Math.round(metrics.oee * 10000) / 10000,
