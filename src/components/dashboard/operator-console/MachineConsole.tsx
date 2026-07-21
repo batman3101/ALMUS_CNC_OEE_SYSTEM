@@ -69,7 +69,8 @@ export const MachineConsole: React.FC<Props> = ({
 
   // 마감대기에서 현재 진행 중인 교대는 제외한다 — 교대가 끝나기 전에 "마감"하면 안 된다.
   // (진척은 있고 record 는 없어서 백로그엔 들지만, 지금 교대는 아직 마감 대상이 아니다.)
-  const closePending = backlog.closePending.find(p => !(p.date === date && p.shift === shift)) ?? null;
+  // 다건이면 전부 넘긴다 — 건수 배지·선택 UI 는 CloseShiftSection 이 담당(코드맵 피드백).
+  const closePendingList = backlog.closePending.filter(p => !(p.date === date && p.shift === shift));
   const defectPending = backlog.defectPending[0] ?? null;
 
   return (
@@ -123,11 +124,12 @@ export const MachineConsole: React.FC<Props> = ({
       </Card>
 
       <CloseShiftSection
+        // 설비 전환 시 내부 선택·입력 상태 초기화 (ProgressInputSection 과 동일 교훈).
+        key={machineId}
         machineId={machineId}
-        pendingShift={closePending}
-        // 마감 대상(지난) 교대의 마지막 진척값 — 현재 교대의 progress.lastReportedQty 를
-        // 쓰면 안 된다(다른 교대의 값). pending API 가 교대별 last_qty 를 내려준다.
-        prefillQty={closePending?.last_qty ?? null}
+        // prefill 은 각 항목의 last_qty(그 교대의 마지막 진척값) — 현재 교대의
+        // progress.lastReportedQty 를 쓰면 안 된다(다른 교대의 값).
+        pendingShifts={closePendingList}
         onClosed={() => backlog.refresh()}
       />
 

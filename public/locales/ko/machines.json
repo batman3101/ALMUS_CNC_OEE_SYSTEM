@@ -169,6 +169,8 @@
     "closeShiftButton": "교대 마감",
     "closeShiftHint": "이 값이 확정 생산량으로 저장됩니다. 불량은 다음날 입력.",
     "closeShiftFailed": "마감에 실패했습니다. 다시 시도하세요.",
+    "closeShiftBacklogCount": "{{count}}건 대기",
+    "closeShiftPick": "마감할 교대 선택",
     "defectTitle": "지난 교대 {{date}} {{shift}}조 불량 입력",
     "defectQtyPlaceholder": "불량 수량",
     "defectConfirm": "확정",

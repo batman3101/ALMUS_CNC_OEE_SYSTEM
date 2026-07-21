@@ -169,6 +169,8 @@
     "closeShiftButton": "Chốt ca",
     "closeShiftHint": "Giá trị này được lưu thành sản lượng xác nhận. Lỗi nhập ngày hôm sau.",
     "closeShiftFailed": "Chốt ca thất bại. Vui lòng thử lại.",
+    "closeShiftBacklogCount": "{{count}} ca chờ",
+    "closeShiftPick": "Chọn ca cần chốt",
     "defectTitle": "Nhập lỗi ca {{date}} {{shift}}",
     "defectQtyPlaceholder": "Số lượng lỗi",
     "defectConfirm": "Xác nhận",
