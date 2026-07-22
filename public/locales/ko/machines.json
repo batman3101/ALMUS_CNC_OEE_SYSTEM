@@ -151,6 +151,7 @@
     "title": "운영자 대시보드",
     "description": "실시간으로 담당 설비를 모니터링하고 관리합니다",
     "assignedMachines": "담당 설비 현황",
+    "searchMachinePlaceholder": "설비 번호 검색 (예: 12)",
     "recentWork": "최근 작업",
     "oeeStatus": "OEE 현황",
     "changeState": "상태 변경",

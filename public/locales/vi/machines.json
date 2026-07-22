@@ -151,6 +151,7 @@
     "title": "Bảng điều khiển vận hành viên",
     "description": "Theo dõi và quản lý thiết bị được giao theo thời gian thực",
     "assignedMachines": "Tình trạng thiết bị được giao",
+    "searchMachinePlaceholder": "Tìm theo số thiết bị (VD: 12)",
     "recentWork": "Công việc gần đây",
     "oeeStatus": "Tình trạng OEE",
     "changeState": "Thay đổi trạng thái",

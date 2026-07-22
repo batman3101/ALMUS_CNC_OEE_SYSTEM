@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Row, Col, Card, Button, Space, Badge, Timeline, Alert, Tabs, Pagination, Table, Segmented } from 'antd';
+import { Row, Col, Card, Button, Space, Badge, Timeline, Alert, Tabs, Pagination, Table, Segmented, Drawer, Grid, AutoComplete, Input } from 'antd';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -10,7 +10,8 @@ import {
   ReloadOutlined,
   WifiOutlined,
   AppstoreOutlined,
-  UnorderedListOutlined
+  UnorderedListOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import { MachineState } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
@@ -55,6 +56,12 @@ const getStateText = (state: MachineState, machinesT: (key: string) => string) =
   return stateMap[state] || state;
 };
 
+// 설비 번호 추출 (예: "CNC-012" -> 12). 목록 정렬과 번호 검색이 같은 규칙을 쓴다.
+const extractMachineNumber = (name: string): number => {
+  const match = name.match(/(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
 const formatDuration = (minutes: number, machinesT: (key: string) => string): string => {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -69,12 +76,20 @@ interface OperatorDashboardProps {
 }
 
 export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError }) => {
-  useClientOnly();
+  const isClient = useClientOnly();
+  const screens = Grid.useBreakpoint();
   const { user } = useAuth();
   const { t: machinesT } = useMachinesTranslation();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [activeTab, setActiveTab] = useState<'logs' | 'oee'>('logs');
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchValue, setSearchValue] = useState('');
+  // 태블릿/모바일(< lg)에서는 설비 목록과 사이드 패널이 세로 스택이 되어 콘솔까지
+  // 스크롤이 길다 → 카드 탭 시 콘솔을 Drawer 로 띄운다. 마운트 전에는 SSR 마크업과
+  // 동일한 데스크톱 레이아웃을 유지해 하이드레이션 불일치를 피한다 (useBreakpoint 는
+  // 첫 렌더에 빈 객체를 반환).
+  const isCompactLayout = isClient && !screens.lg;
   const pageSize = 20;
   // 현재 시각을 state 로 둔다. 주기 자동갱신이 setNow(new Date()) 로 전진시키면
   // 경과시간 기반 지표(교대 진행·가동×성능)가 흐른다. `const now = new Date()` 를
@@ -116,12 +131,6 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
           recentLogs: []
         };
       }
-
-      // 설비 번호 추출 함수 (예: "CNC-012" -> 12)
-      const extractMachineNumber = (name: string): number => {
-        const match = name.match(/(\d+)$/);
-        return match ? parseInt(match[1], 10) : 0;
-      };
 
       const assignedMachines = machines
         .filter(machine => assignedMachineIds.includes(machine.id))
@@ -207,6 +216,55 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
 
   const selectedMachineRow = processedData.assignedMachines.find(m => m.id === selectedMachine);
 
+  // 설비 선택의 단일 진입점. 데스크톱은 사이드 패널의 OEE 탭으로 자동 전환하고,
+  // 컴팩트 레이아웃은 selectedMachine 이 곧 Drawer open 조건이라 별도 상태가 없다.
+  // 선택 설비가 있는 페이지로 이동한다 — 검색으로 고른 설비가 다른 페이지에 있으면
+  // 하이라이트된 카드가 화면에 없어 어느 설비를 보고 있는지 알 수 없다.
+  const handleSelectMachine = (machineId: string) => {
+    setSelectedMachine(machineId);
+    const idx = processedData.assignedMachines.findIndex(m => m.id === machineId);
+    if (idx >= 0) {
+      setCurrentPage(Math.floor(idx / pageSize) + 1);
+    }
+    if (!isCompactLayout) {
+      setActiveTab('oee');
+    }
+  };
+
+  // 설비 번호 검색 드롭다운. "12" 처럼 번호만 입력해도 이름에 그 숫자가 포함되거나
+  // 설비 번호가 정확히 일치하는 설비를 보여준다. 정확한 번호 일치를 맨 위로 올린다
+  // ("1" 입력 시 CNC-001 이 CNC-010~019 보다 먼저).
+  const searchOptions = useMemo(() => {
+    const query = searchValue.trim().toLowerCase();
+    if (!query) return [];
+    const digits = query.replace(/\D/g, '');
+    const exactNumber = digits ? parseInt(digits, 10) : null;
+
+    return processedData.assignedMachines
+      .filter(m =>
+        m.name.toLowerCase().includes(query) ||
+        (exactNumber !== null && extractMachineNumber(m.name) === exactNumber)
+      )
+      .sort((a, b) => {
+        const aExact = extractMachineNumber(a.name) === exactNumber ? 0 : 1;
+        const bExact = extractMachineNumber(b.name) === exactNumber ? 0 : 1;
+        return aExact - bExact || extractMachineNumber(a.name) - extractMachineNumber(b.name);
+      })
+      .slice(0, 10)
+      .map(m => ({
+        value: m.id,
+        label: (
+          <Space>
+            {getStateIcon(m.current_state)}
+            <span style={{ fontWeight: 'bold' }}>{m.name}</span>
+            <span style={{ fontSize: 12, color: '#999' }}>
+              {getStateText(m.current_state, machinesT)}
+            </span>
+          </Space>
+        )
+      }));
+  }, [searchValue, processedData.assignedMachines, machinesT]);
+
   // 주기 자동갱신: 현재 시각 전진 → 교대 진행 컨텍스트(currentShiftInfo/isShiftEnd)가 흐른다.
   // 선택 설비의 실시간 지표·진척·비가동·백로그 갱신은 MachineConsole 이 자체적으로 처리한다.
   useAutoRefresh(() => {
@@ -228,7 +286,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
             color: selectedMachine === record.id ? '#1890ff' : 'inherit',
             cursor: 'pointer'
           }}
-          onClick={() => setSelectedMachine(record.id)}
+          onClick={() => handleSelectMachine(record.id)}
         >
           {name}
         </span>
@@ -337,6 +395,29 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                 </Space>
               }
             >
+            {processedData.assignedMachines.length > 0 && (
+              // 설비 번호 검색 — 99+대에서 카드/페이지를 뒤지는 대신 번호를 쳐서 바로 연다.
+              // 선택하면 카드 클릭과 같은 경로(handleSelectMachine)로 콘솔이 열린다.
+              <AutoComplete
+                value={searchValue}
+                options={searchOptions}
+                // onChange 는 옵션 선택 시에도 발화해 입력창에 machine id 가 남는다.
+                // 타이핑에만 반응하는 onSearch 로 제어하고, 선택하면 입력을 비운다.
+                onSearch={(value) => setSearchValue(value)}
+                onSelect={(machineId: string) => {
+                  handleSelectMachine(machineId);
+                  setSearchValue('');
+                }}
+                style={{ width: '100%', marginBottom: 16 }}
+              >
+                <Input
+                  allowClear
+                  prefix={<SearchOutlined style={{ color: '#999' }} />}
+                  placeholder={machinesT('operator.searchMachinePlaceholder')}
+                  inputMode="numeric"
+                />
+              </AutoComplete>
+            )}
             {loading ? (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <span>{machinesT('operator.loadingData')}</span>
@@ -353,7 +434,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                     <Card
                       size="small"
                       hoverable
-                      onClick={() => setSelectedMachine(machine.id)}
+                      onClick={() => handleSelectMachine(machine.id)}
                       style={{
                         border: selectedMachine === machine.id ? '2px solid #1890ff' : '1px solid #d9d9d9',
                         cursor: 'pointer'
@@ -420,7 +501,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                 }}
                 rowClassName={(record) => selectedMachine === record.id ? 'ant-table-row-selected' : ''}
                 onRow={(record) => ({
-                  onClick: () => setSelectedMachine(record.id),
+                  onClick: () => handleSelectMachine(record.id),
                   style: { cursor: 'pointer' }
                 })}
               />
@@ -431,8 +512,12 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
 
         {/* 사이드 패널 */}
         <Col xs={24} lg={8}>
-          <Tabs 
-            defaultActiveKey="logs"
+          <Tabs
+            // 컴팩트 레이아웃에서는 콘솔이 Drawer 로 뜨므로 OEE 탭을 내리고(이중 마운트
+            // = 이중 실시간 구독 방지), activeKey 도 logs 로 강제한다 — 데스크톱에서
+            // oee 탭을 보던 중 화면이 좁아져도 사라진 탭을 가리키지 않게.
+            activeKey={isCompactLayout ? 'logs' : activeTab}
+            onChange={(key) => setActiveTab(key as 'logs' | 'oee')}
             items={[
               {
                 key: 'logs',
@@ -470,7 +555,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                   </Card>
                 )
               },
-              {
+              ...(isCompactLayout ? [] : [{
                 key: 'oee',
                 label: machinesT('operator.oeeStatus'),
                 children: (
@@ -494,13 +579,45 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                     )}
                   </>
                 )
-              }
+              }])
             ]}
           />
         </Col>
       </Row>
 
-
+      {/* 컴팩트 레이아웃 전용 입력 콘솔 Drawer — 카드 목록을 지나 하단 패널까지
+          스크롤하는 대신 설비 탭 즉시 콘솔에 도달한다. open 조건이 곧 선택 상태라
+          별도 open state 가 없고, 닫으면 선택도 해제된다. */}
+      <Drawer
+        title={
+          selectedMachineRow ? (
+            <Space>
+              {getStateIcon(selectedMachineRow.current_state)}
+              <span>{selectedMachineRow.name}</span>
+              <span style={{ fontSize: 12, fontWeight: 'normal', color: '#999' }}>
+                {getStateText(selectedMachineRow.current_state, machinesT)}
+              </span>
+            </Space>
+          ) : ''
+        }
+        placement="bottom"
+        height="92%"
+        open={isCompactLayout && !!selectedMachine}
+        onClose={() => setSelectedMachine(null)}
+        styles={{ body: { padding: 12 } }}
+      >
+        {isCompactLayout && selectedMachine && (
+          <MachineConsole
+            machineId={selectedMachine}
+            machineName={selectedMachineRow?.name ?? ''}
+            currentState={(selectedMachineRow?.current_state ?? 'NORMAL_OPERATION') as MachineState}
+            downtimeSince={selectedMachineRow?.downtimeSince ?? null}
+            date={productionBusinessDate}
+            shift={currentShiftInfo.shift}
+            confirmedMetrics={selectedMachineMetrics}
+          />
+        )}
+      </Drawer>
     </div>
   );
 };
