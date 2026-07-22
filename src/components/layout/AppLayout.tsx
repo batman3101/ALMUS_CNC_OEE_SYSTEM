@@ -34,15 +34,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   // 로그인 페이지인지 확인
   const isLoginPage = pathname === '/login';
+  const isOperatorConsolePage = pathname === '/operator-view' || (pathname === '/dashboard' && user?.role === 'operator');
 
-  // 모바일에서만 사이드바를 접음 (데스크탑에서는 항상 펼침)
+  // 태블릿에서는 콘텐츠 폭을 확보하고, 운영자 콘솔에서는 데스크톱도 아이콘 레일로 시작한다.
   useEffect(() => {
-    if (screens.xs || screens.sm) {
-      setCollapsed(true);
-    } else {
-      setCollapsed(false); // 데스크탑에서는 항상 펼침
-    }
-  }, [screens]);
+    if (screens.lg === undefined) return;
+    setCollapsed(!screens.lg || isOperatorConsolePage);
+  }, [screens.lg, isOperatorConsolePage]);
 
 
 
@@ -93,7 +91,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <Layout>
         <Header className={styles.header}>
           <div className={styles.headerLeft}>
-            {(screens.xs || screens.sm) && (
+            {(!screens.lg || isOperatorConsolePage) && (
               <Button
                 type="text"
                 icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}

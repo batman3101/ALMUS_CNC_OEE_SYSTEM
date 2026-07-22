@@ -172,11 +172,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   return (
     <Sider 
       trigger={null} 
-      collapsible={false} // 데스크탑에서는 접기 비활성화
+      collapsible
       collapsed={collapsed}
       width={240}
-      collapsedWidth={screens.xs ? 0 : 240} // 데스크탑에서는 항상 240px
-      className={`${styles.sidebar} ${screens.xs && !collapsed ? styles.sidebarMobile : ''}`}
+      collapsedWidth={screens.lg ? 80 : 0}
+      className={`${styles.sidebar} ${!screens.lg && !collapsed ? styles.sidebarMobile : ''}`}
       breakpoint="lg"
       onBreakpoint={() => {
         // 브레이크포인트에서 자동으로 접기/펼치기 처리는 AppLayout에서 관리
@@ -188,12 +188,14 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
           alt="ALMUS Logo"
           width={32}
           height={32}
-          className={styles.logoImage}
+          className={`${styles.logoImage} ${collapsed ? styles.logoImageCollapsed : ''}`}
           priority
         />
-        <span className={`${styles.logoText} ${screens.xs ? styles.logoTextMobile : ''}`}>
-          {isLoading ? 'Loading...' : companyInfo.name}
-        </span>
+        {!collapsed && (
+          <span className={`${styles.logoText} ${!screens.lg ? styles.logoTextMobile : ''}`}>
+            {isLoading ? 'Loading...' : companyInfo.name}
+          </span>
+        )}
       </div>
       
       <Menu
@@ -202,12 +204,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
         selectedKeys={[pathname.startsWith('/dashboard') ? '/dashboard' : pathname]}
         items={getMenuItems()}
         onClick={handleMenuClick}
-        className={`${styles.menu} ${screens.xs ? styles.menuMobile : ''}`}
-        inlineCollapsed={false} // 데스크탑에서는 항상 펼침
+        className={`${styles.menu} ${!screens.lg ? styles.menuMobile : ''}`}
+        inlineCollapsed={collapsed}
       />
       
       {/* 모바일에서 사이드바가 열려있을 때 배경 오버레이 */}
-      {screens.xs && !collapsed && (
+      {!screens.lg && !collapsed && (
         <div
           className={styles.overlay}
           onClick={() => onCollapse?.(true)}

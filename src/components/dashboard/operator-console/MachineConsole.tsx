@@ -75,6 +75,24 @@ export const MachineConsole: React.FC<Props> = ({
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
+      <Card
+        size="small"
+        title={t('operator.reportProgress')}
+        style={{ position: 'sticky', top: 0, zIndex: 3, borderColor: '#1677ff' }}
+      >
+        <ProgressInputSection
+          // 컨텍스트가 바뀌면 리마운트 — 미저장 입력값(qty)이 다른 설비/교대로 넘어가는 것을 차단.
+          // (lastReportedQty 가 양쪽 다 null 이면 prop 기반 effect 는 발화하지 않아 값이 잔존했다)
+          key={`${machineId}:${date}:${shift}`}
+          machineId={machineId}
+          date={date}
+          shift={shift}
+          lastReportedQty={progress.lastReportedQty}
+          downtimeSince={downtimeSince}
+          onSaved={progress.refresh}
+        />
+      </Card>
+
       {confirmedMetrics && (
         <Card size="small">
           <OEEGauge metrics={confirmedMetrics} title={machineName} size="small" showDetails={true} />
@@ -100,20 +118,6 @@ export const MachineConsole: React.FC<Props> = ({
           </Space>
         </Card>
       )}
-
-      <Card size="small" title={t('operator.reportProgress')}>
-        <ProgressInputSection
-          // 컨텍스트가 바뀌면 리마운트 — 미저장 입력값(qty)이 다른 설비/교대로 넘어가는 것을 차단.
-          // (lastReportedQty 가 양쪽 다 null 이면 prop 기반 effect 는 발화하지 않아 값이 잔존했다)
-          key={`${machineId}:${date}:${shift}`}
-          machineId={machineId}
-          date={date}
-          shift={shift}
-          lastReportedQty={progress.lastReportedQty}
-          downtimeSince={downtimeSince}
-          onSaved={progress.refresh}
-        />
-      </Card>
 
       <Card size="small" title={t('operator.downtime')}>
         <DowntimeAndonSection
