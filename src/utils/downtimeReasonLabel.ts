@@ -20,7 +20,15 @@ export function resolveDowntimeReasonLabel(reason: string, t: TranslateFn): stri
   const fromFormReasons = t(`dataInput:downtime.reasons.${reason}`, { defaultValue: MISSING });
   if (fromFormReasons !== MISSING) return fromFormReasons;
 
-  // TODO(사용자 작성): 두 사전 어디에도 없는 코드의 폴백.
-  // 아래 return 을 지우고 원하는 동작을 구현하세요.
+  // 두 사전 어디에도 없으면 **원문 코드를 그대로 노출한다** (2026-07-28 사용자 결정).
+  //
+  // 이 자리에 도달하는 경우는 사실상 하나뿐이다 — **번역 누락**. machine_status ENUM 이나
+  // 입력 폼 사유에 항목이 추가됐는데 locales 에 키를 안 넣었을 때다.
+  // (2026-07-28 실측: 실제 데이터 13종이 전부 둘 중 한 사전에 있어 폴백 도달 0건.)
+  //
+  // "기타" 로 뭉개지 않는 이유: `other` 가 **이미 실제 사유 코드**로 91건 존재한다.
+  // 미번역 코드를 "기타" 로 접으면 진짜 기타와 섞여 분석에서 구분이 불가능해지고,
+  // "기타가 왜 늘었지?" 에서 원인을 되짚을 수 없다. 못생긴 코드가 화면에 뜨는 편이
+  // 원인을 1분 안에 특정하게 해 준다 — 이 저장소의 "틀린 값보다 없는 값이 낫다" 와 같은 규율.
   return reason;
 }
