@@ -29,7 +29,7 @@ jest.mock('@/lib/shiftDowntime', () => ({
 jest.mock('@/lib/plannedRuntime', () => ({
   getBreakTimeMinutes: (...a: unknown[]) => mockGetBreakMinutes(...a),
 }));
-import { GET, POST } from '../route';
+import { GET, PATCH, POST } from '../route';
 const MACHINE = '11111111-1111-4111-8111-111111111111';
 const req = (b: unknown) => ({ json: async () => b }) as never;
 const ctx = { params: Promise.resolve({ machineId: MACHINE }) } as never;
@@ -189,6 +189,49 @@ describe('GET .../[machineId]/downtime', () => {
   it('교대 설정이 유효하지 않으면 500', async () => {
     mockGetShiftWindow.mockResolvedValue(null);
     const res = await GET(getReq('date=2026-07-28&shift=A'), ctx);
+    expect(res.status).toBe(500);
+  });
+});
+
+describe('PATCH .../[machineId]/downtime (사유 정정)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
+    mockAssert.mockReturnValue(undefined);
+    mockRpc.mockResolvedValue({ data: { ok: true, state: 'BREAKDOWN_REPAIR' }, error: null });
+  });
+
+  it('사유를 정정 RPC 로 전달한다', async () => {
+    const res = await PATCH(req({ reason: 'BREAKDOWN_REPAIR' }), ctx);
+    expect(res.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledWith('correct_open_downtime_reason', {
+      p_machine_id: MACHINE, p_reason: 'BREAKDOWN_REPAIR', p_operator_id: 'op-1',
+    });
+  });
+
+  it('유효하지 않은 사유는 400 (RPC 호출 안 함)', async () => {
+    const res = await PATCH(req({ reason: 'NOT_A_STATE' }), ctx);
+    expect(res.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('NORMAL_OPERATION 은 정정 사유가 될 수 없다', async () => {
+    const res = await PATCH(req({ reason: 'NORMAL_OPERATION' }), ctx);
+    expect(res.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('가동 중이면 409 로 되묻는다', async () => {
+    mockRpc.mockResolvedValue({ data: { ok: false, reason: 'not_in_downtime' }, error: null });
+    const res = await PATCH(req({ reason: 'INSPECTION' }), ctx);
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('not_in_downtime');
+  });
+
+  it('RPC 오류는 500', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'boom' } });
+    const res = await PATCH(req({ reason: 'INSPECTION' }), ctx);
     expect(res.status).toBe(500);
   });
 });

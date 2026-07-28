@@ -39,7 +39,7 @@ const POLICY: Record<string, Record<string, string>> = {
   'machine-status-descriptions': { GET: AEO },
   'machines': { GET: AEO, POST: A, DELETE: A },
   'machines/[machineId]': { GET: AEO, PUT: A, PATCH: AEO },
-  'machines/[machineId]/downtime': { GET: AEO, POST: AEO },
+  'machines/[machineId]/downtime': { GET: AEO, PATCH: AEO, POST: AEO },
   'machines/[machineId]/oee': { GET: AEO },
   'machines/[machineId]/production': { GET: AEO },
   'model-processes': { GET: AEO, POST: A },

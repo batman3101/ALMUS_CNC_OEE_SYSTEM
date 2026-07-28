@@ -128,3 +128,55 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
     throw error;
   }
 }
+
+/**
+ * PATCH /api/machines/[machineId]/downtime — 진행 중인 비가동의 사유 정정.
+ *
+ * 정정은 **덮어쓰기**다. 시작 시각을 유지한 채 사유만 바꾼다. 사유를 바꾸며 구간을
+ * 나누고 싶다면 그건 정정이 아니라 전환이고, POST(action='start')가 이미 그렇게 동작한다.
+ */
+export async function PATCH(request: NextRequest, ctx: { params: Promise<{ machineId: string }> }) {
+  try {
+    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const { machineId } = await ctx.params;
+    const body = await request.json() as { reason?: unknown };
+    const reason = typeof body.reason === 'string' ? body.reason : '';
+
+    // NORMAL_OPERATION 은 DOWNTIME_REASONS 에 없다 — 정정으로 가동 재개를 흉내낼 수 없다.
+    // 가동 재개는 POST(action='resume') 의 책임이고, 그쪽만 구간을 닫는다.
+    if (!DOWNTIME_REASONS.has(reason)) {
+      return NextResponse.json(
+        { error: 'reason must be a valid non-normal machine_status' },
+        { status: 400 }
+      );
+    }
+
+    assertMachineAccess(user, machineId);
+
+    const { data, error } = await supabaseAdmin.rpc('correct_open_downtime_reason', {
+      p_machine_id: machineId,
+      p_reason: reason,
+      p_operator_id: user.userId,
+    });
+
+    if (error) {
+      console.error('비가동 사유 정정 오류:', error);
+      return NextResponse.json({ error: 'Failed to correct downtime reason' }, { status: 500 });
+    }
+
+    const result = data as { ok: boolean; state?: string; reason?: string };
+    if (!result.ok) {
+      // 가동 중이라 정정 대상이 없다 — 클라이언트가 목록을 새로고침하고 안내해야 한다.
+      if (result.reason === 'not_in_downtime') {
+        return NextResponse.json({ error: 'not_in_downtime' }, { status: 409 });
+      }
+      return NextResponse.json({ error: result.reason ?? 'failed' }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, state: result.state }, { status: 200 });
+  } catch (error) {
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+    throw error;
+  }
+}
