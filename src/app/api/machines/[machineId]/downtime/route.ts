@@ -6,7 +6,7 @@ import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 import { getBusinessDayWindow, getShiftWindow, loadDowntimeDetailRows } from '@/lib/shiftDowntime';
 import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
 import { calculateVerifiedDowntimeMinutesForWindow } from '@/app/api/production-records/daily/downtimeCalculation';
-import { buildDowntimeBreakdown } from '@/utils/downtimeBreakdown';
+import { buildDowntimeBreakdown, type DowntimeBreakdownResponse } from '@/utils/downtimeBreakdown';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,7 +123,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
       ? new Date(Math.min(...openStarts)).toISOString()
       : null;
 
-    return NextResponse.json({
+    // DowntimeBreakdownResponse 로 명시해 훅과 계약을 공유한다 — 라우트가 계약과
+    // 어긋나면 여기서 tsc 가 막는다.
+    const body: DowntimeBreakdownResponse = {
       business_date: date,
       window_start: windowStartIso,
       window_end: windowEndIso,
@@ -144,7 +146,8 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
       },
       ongoing_since: ongoingSince,
       intervals: buildDowntimeBreakdown(rows, businessWindow, nowMs),
-    });
+    };
+    return NextResponse.json(body);
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;

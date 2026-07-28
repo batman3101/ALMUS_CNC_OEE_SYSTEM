@@ -128,3 +128,30 @@ export function buildDowntimeBreakdown(
     }))
     .sort((left, right) => Date.parse(left.start) - Date.parse(right.start));
 }
+
+/** 시간대별 소계. start/end 를 함께 실어 화면이 교대 시각을 하드코딩하지 않게 한다. */
+export interface DowntimeShiftTotal {
+  minutes: number | null;
+  start: string;
+  end: string;
+}
+
+/**
+ * GET /api/machines/[machineId]/downtime 의 응답 계약.
+ *
+ * **한 곳에만 적는다.** 예전에는 라우트와 훅이 각자 모양을 적어 두고 훅이 `as` 로 단언했다.
+ * 그래서 서버가 교대 단위에서 업무일 단위로 바뀌고 shift_start 가 사라졌는데도 tsc 가
+ * 아무 오류도 내지 않았다 — 클라이언트는 조용히 다른 뜻의 숫자를 그리고 있었다.
+ * 양쪽이 이 타입을 공유하면 다음 계약 변경은 컴파일이 막는다.
+ */
+export interface DowntimeBreakdownResponse {
+  business_date: string;
+  window_start: string;
+  window_end: string;
+  /** 업무일 전체 누적. null = 계산 보류(계획정지·휴식 겹침). 0 과 구분한다. */
+  total_minutes: number | null;
+  shift_totals: { day: DowntimeShiftTotal; night: DowntimeShiftTotal };
+  /** 진행 중 비가동의 클립되지 않은 시작. null = 진행 중 없음. */
+  ongoing_since: string | null;
+  intervals: DowntimeBreakdownRow[];
+}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authFetch } from '@/lib/authFetch';
-import type { DowntimeBreakdownRow } from '@/utils/downtimeBreakdown';
+import type { DowntimeBreakdownRow, DowntimeBreakdownResponse } from '@/utils/downtimeBreakdown';
 
 interface Args {
   machineId: string | null;
@@ -57,11 +57,7 @@ export function useDowntimeBreakdown({ machineId, date, shift }: Args): Result {
       if (reqId !== reqRef.current) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      const body = await res.json() as {
-        total_minutes: number | null;
-        ongoing_since: string | null;
-        intervals: DowntimeBreakdownRow[];
-      };
+      const body = await res.json() as DowntimeBreakdownResponse;
       if (reqId !== reqRef.current) return;
 
       setTotalMinutes(body.total_minutes);
