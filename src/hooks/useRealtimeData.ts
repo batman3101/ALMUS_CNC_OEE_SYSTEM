@@ -241,6 +241,14 @@ export const useRealtimeData = (
   // 운영자의 담당 설비 — 초기 조회에서 채워지고, 이후 구독 설정이 채널 필터로 쓴다.
   // undefined = 전체(관리자/엔지니어 또는 프로필 미조회).
   const assignedIdsRef = useRef<string[] | undefined>(undefined);
+  // 구독 세대. cleanupChannels() 의 unsubscribe() 는 정리한 채널의 상태 콜백을 CLOSED 로
+  // 발화시키고, 그 CLOSED 핸들러가 scheduleReconnect() 를 부른다. 재연결은 다시
+  // setupRealtimeSubscriptions → cleanupChannels 로 이어져 5초마다 무한 반복됐다
+  // (한 세션에서 501회 누적, oee-data 를 끝없이 재조회). 채널을 열 때 현재 세대를 캡처해
+  // 상태 콜백에 실어 보내고, 콜백이 불릴 때 세대가 바뀌었으면(=우리가 이미 정리한 채널이면)
+  // 무시한다. useRealtimeProgress 의 reqRef 와 같은 규율 — 늦게 도착한 콜백은 현재 상태에
+  // 영향을 주면 안 된다.
+  const subscriptionGenerationRef = useRef(0);
 
   // 연결 상태 업데이트 함수
   const updateConnectionStatus = useCallback((status: 'connecting' | 'connected' | 'disconnected' | 'error') => {
@@ -429,6 +437,8 @@ export const useRealtimeData = (
 
   // 채널 정리 함수
   const cleanupChannels = useCallback(() => {
+    // unsubscribe() 보다 먼저 세대를 올린다 — 이후 발화하는 상태 콜백은 모두 이전 세대다.
+    subscriptionGenerationRef.current += 1;
     channelsRef.current.forEach(channel => {
       try {
         channel.unsubscribe();
@@ -450,8 +460,11 @@ export const useRealtimeData = (
 
     console.log('🔗 실시간 구독 설정 시작...');
 
-    // 기존 채널 정리
+    // 기존 채널 정리 (이 호출로 세대가 하나 올라간다 — cleanupChannels 참고)
     cleanupChannels();
+    // 지금부터 여는 채널들이 속한 세대. 아래 각 상태 콜백은 자신이 열릴 때의 세대를
+    // 클로저로 들고 있다가, 불릴 때 subscriptionGenerationRef.current 와 비교한다.
+    const generation = subscriptionGenerationRef.current;
 
     // 운영자는 담당 설비 이벤트만 받는다 (담당이 소수일 때만 — buildRealtimeInFilter 참고).
     const assignedIds = assignedIdsRef.current;
@@ -491,6 +504,9 @@ export const useRealtimeData = (
         }
       )
       .subscribe((status, error) => {
+        // 이 채널이 이미 cleanupChannels() 로 정리된 이전 세대라면(=unsubscribe 가
+        // 발화시킨 CLOSED 등), 지금 상태를 반영하거나 재연결을 재장전하면 안 된다.
+        if (generation !== subscriptionGenerationRef.current) return;
         if (status === 'SUBSCRIBED') {
           console.log('✅ Machine logs 실시간 구독 성공');
           updateConnectionStatus('connected');
@@ -583,6 +599,8 @@ export const useRealtimeData = (
         }
       )
       .subscribe((status, error) => {
+        // machine_logs 채널과 동일한 세대 가드 — 정리된 이전 세대의 콜백은 무시한다.
+        if (generation !== subscriptionGenerationRef.current) return;
         if (status === 'CHANNEL_ERROR') {
           console.error('❌ Production records 구독 오류:', error);
           scheduleReconnect();
@@ -636,6 +654,8 @@ export const useRealtimeData = (
         }
       )
       .subscribe((status, error) => {
+        // machine_logs 채널과 동일한 세대 가드 — 정리된 이전 세대의 콜백은 무시한다.
+        if (generation !== subscriptionGenerationRef.current) return;
         if (status === 'CHANNEL_ERROR') {
           console.error('❌ Machines 구독 오류:', error);
           scheduleReconnect();
