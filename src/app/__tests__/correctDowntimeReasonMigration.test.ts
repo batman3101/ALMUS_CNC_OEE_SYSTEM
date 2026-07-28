@@ -33,7 +33,19 @@ describe('correct_open_downtime_reason 마이그레이션', () => {
 
   it('정정을 audit_log 에 남긴다', () => {
     expect(sql).toMatch(/insert\s+into\s+public\.audit_log/i);
-    expect(sql).toMatch(/'correct_downtime_reason'/);
+    expect(sql).toMatch(/'correct_reason'/);
+  });
+
+  // audit_log.action 은 varchar(20). 23자짜리 값을 넣었더니 RPC 가 22001 로 항상 실패했다
+  // (2026-07-28 운영 적용 직후 라이브 검증에서 발견). 텍스트 계약으로 잡을 수 있는 최소한의
+  // 방어는 "action 리터럴이 20자를 넘지 않는가" 뿐이다 — 컬럼 폭 자체는 여기서 알 수 없다.
+  it('audit_log.action 리터럴이 varchar(20) 을 넘지 않는다', () => {
+    const insertBlock = /insert\s+into\s+public\.audit_log[\s\S]*?;/i.exec(sql)?.[0] ?? '';
+    const literals = [...insertBlock.matchAll(/'([^']*)'/g)].map(m => m[1]);
+    expect(literals.length).toBeGreaterThan(0);
+    const action = literals.find(value => value.includes('correct'));
+    expect(action).toBeDefined();
+    expect(action!.length).toBeLessThanOrEqual(20);
   });
 
   it('service_role 에만 EXECUTE 를 준다', () => {

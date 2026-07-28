@@ -111,11 +111,15 @@ begin
   update public.machines set current_state = p_reason::machine_status where id = p_machine_id;
 
   -- 정정은 이력 수정이다. 누가 무엇을 언제 바꿨는지 남긴다.
+  -- ⚠️ audit_log.action 은 varchar(20) 이다. 23자짜리 'correct_downtime_reason' 을 넣었더니
+  -- RPC 가 22001 로 **항상** 실패했다(2026-07-28 운영 적용 직후 라이브 검증에서 발견).
+  -- SQL 텍스트 계약 테스트는 컬럼 폭을 알 수 없어 이걸 잡지 못한다. 값을 바꿀 때 길이를 확인할 것.
+  -- table_name='downtime_entries' 가 이미 맥락을 주므로 'correct_reason'(14자)으로 충분하다.
   insert into public.audit_log (table_name, record_id, action, old_values, new_values, changed_by)
   values (
     'downtime_entries',
     v_entry_id,
-    'correct_downtime_reason',
+    'correct_reason',
     jsonb_build_object('reason', coalesce(v_old_reason, v_state), 'current_state', v_state),
     jsonb_build_object('reason', p_reason, 'current_state', p_reason),
     p_operator_id
