@@ -1,16 +1,24 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Alert, Button, Collapse, Space, Typography } from 'antd';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Button, Collapse, Modal, Space, Typography } from 'antd';
 import { useDowntimeBreakdown } from '@/hooks/useDowntimeBreakdown';
 import { useMultipleTranslation } from '@/hooks/useTranslation';
 import { resolveDowntimeReasonLabel } from '@/utils/downtimeReasonLabel';
+import { authFetch } from '@/lib/authFetch';
 import type { DowntimeBreakdownRow } from '@/utils/downtimeBreakdown';
+import type { MachineState } from '@/types';
 
 const { Text } = Typography;
 
 /** 진행 중 경과 표시 갱신 주기. 분 단위 표시라 10초면 충분하고 렌더도 아깝지 않다. */
 const TICK_MS = 10_000;
+
+// machine_status ENUM 의 비정상 값(NORMAL 제외). DowntimeAndonSection 과 같은 8개다.
+const REASONS: MachineState[] = [
+  'INSPECTION', 'BREAKDOWN_REPAIR', 'PM_MAINTENANCE', 'MODEL_CHANGE',
+  'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP',
+];
 
 export interface DowntimeBreakdownCardProps {
   machineId: string;
@@ -46,10 +54,7 @@ const formatDuration = (
  */
 export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
   machineId, date, shift,
-  // Task 12(정정 UI)가 소비한다. 이 태스크는 읽기 전용이라 아직 쓰지 않는다.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onCorrected,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   allowCorrection = false,
 }) => {
   const { t } = useMultipleTranslation(['machines', 'dataInput']);
@@ -65,6 +70,38 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
   // 진행 중 비가동은 조회한 데이터가 알려준다 — 설비 상태를 prop 으로 따로 받지 않는다.
   // (Machine 타입에는 비가동 시작 시각 필드가 없고, 두 소스를 두면 화면끼리 어긋난다.)
   const ongoingRow = intervals.find(row => row.end === null) ?? null;
+
+  const [correcting, setCorrecting] = useState(false);
+  const [correctError, setCorrectError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submitCorrection = useCallback(async (reason: MachineState) => {
+    setBusy(true);
+    setCorrectError(null);
+    try {
+      const res = await authFetch(`/api/machines/${machineId}/downtime`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) {
+        // 409 = 이미 가동 재개됨. 일반 실패와 다른 안내가 필요하다.
+        setCorrectError(
+          res.status === 409
+            ? t('downtimeBreakdown.correctNotInDowntime')
+            : t('downtimeBreakdown.correctFailed')
+        );
+        return;
+      }
+      setCorrecting(false);
+      refresh();
+      onCorrected();
+    } catch {
+      setCorrectError(t('downtimeBreakdown.correctFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }, [machineId, onCorrected, refresh, t]);
   // 경과는 **클립되지 않은** ongoingSince 로 잰다. ongoingRow.start 는 교대 시작으로
   // 잘려 있어서, 이전 교대에서 이어진 비가동의 경과가 실제보다 짧게 나온다.
   const elapsedMinutes = ongoingSince
@@ -85,6 +122,11 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
         {t('downtimeBreakdown.minutesShort', { minutes: row.minutes })}
       </Text>
       <Text>{resolveDowntimeReasonLabel(row.reason, t)}</Text>
+      {row.end === null && allowCorrection && (
+        <Button size="small" type="link" onClick={() => { setCorrectError(null); setCorrecting(true); }}>
+          {t('downtimeBreakdown.correct')}
+        </Button>
+      )}
     </div>
   );
 
@@ -148,6 +190,33 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
           }]}
         />
       )}
+
+      <Modal
+        open={correcting}
+        title={t('downtimeBreakdown.correctTitle')}
+        footer={null}
+        onCancel={() => setCorrecting(false)}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Alert type="info" showIcon message={t('downtimeBreakdown.correctHint')} />
+          {correctError && <Alert type="error" showIcon message={correctError} />}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            {/* 현재 사유는 제외한다 — 같은 사유로 정정하면 RPC 가 no-op 이라 눌러도 아무 일이
+                일어나지 않는다. 누를 수 없는 버튼을 보여주지 않는다. */}
+            {REASONS.filter(reason => reason !== ongoingRow?.reason).map(reason => (
+              <Button
+                key={reason}
+                size="large"
+                style={{ height: 56 }}
+                loading={busy}
+                onClick={() => void submitCorrection(reason)}
+              >
+                {resolveDowntimeReasonLabel(reason, t)}
+              </Button>
+            ))}
+          </div>
+        </Space>
+      </Modal>
     </Space>
   );
 };

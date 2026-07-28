@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DowntimeBreakdownCard } from '../DowntimeBreakdownCard';
 import type { DowntimeBreakdownRow } from '@/utils/downtimeBreakdown';
 
@@ -22,6 +22,11 @@ jest.mock('@/hooks/useTranslation', () => ({
     language: 'ko',
     changeLanguage: () => {},
   }),
+}));
+
+const mockAuthFetch = jest.fn();
+jest.mock('@/lib/authFetch', () => ({
+  authFetch: (...a: unknown[]) => mockAuthFetch(...a),
 }));
 
 const MACHINE = '11111111-1111-4111-8111-111111111111';
@@ -129,5 +134,92 @@ describe('DowntimeBreakdownCard', () => {
     expect(mockUseBreakdown).toHaveBeenCalledWith({
       machineId: MACHINE, date: '2026-07-28', shift: 'A',
     });
+  });
+});
+
+describe('DowntimeBreakdownCard 사유 정정', () => {
+  const ongoing: DowntimeBreakdownRow[] = [
+    {
+      id: 'de-1', source: 'downtime_entry', reason: 'INSPECTION',
+      start: '2026-07-28T06:00:00.000Z', end: null,
+      minutes: 23, clipped_start: false,
+    },
+  ];
+  const downState = (over: Record<string, unknown> = {}) => state({
+    intervals: ongoing,
+    totalMinutes: 23,
+    ongoingSince: '2026-07-28T06:00:00.000Z',
+    ...over,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+  });
+
+  it('allowCorrection 이 없으면 정정 버튼을 그리지 않는다', () => {
+    mockUseBreakdown.mockReturnValue(downState());
+    render(<DowntimeBreakdownCard {...base} />);
+    expect(screen.queryByText(/downtimeBreakdown\.correct$/)).not.toBeInTheDocument();
+  });
+
+  it('종료된 건에는 정정 버튼을 그리지 않는다', () => {
+    mockUseBreakdown.mockReturnValue(state());  // rows[0].end 가 채워져 있다
+    render(<DowntimeBreakdownCard {...base} allowCorrection />);
+    expect(screen.queryByText(/downtimeBreakdown\.correct$/)).not.toBeInTheDocument();
+  });
+
+  it('진행 중인 건의 정정 버튼을 누르면 사유 선택이 열린다', () => {
+    mockUseBreakdown.mockReturnValue(downState());
+    render(<DowntimeBreakdownCard {...base} allowCorrection />);
+    fireEvent.click(screen.getByText(/downtimeBreakdown\.correct$/));
+    expect(screen.getByText(/downtimeBreakdown\.correctTitle/)).toBeInTheDocument();
+  });
+
+  it('현재 사유는 선택지에서 제외한다', () => {
+    mockUseBreakdown.mockReturnValue(downState());
+    render(<DowntimeBreakdownCard {...base} allowCorrection />);
+    fireEvent.click(screen.getByText(/downtimeBreakdown\.correct$/));
+    // 진행 중인 건의 사유가 INSPECTION 이므로 그 **선택 버튼**은 없다.
+    // 반드시 role=button 으로 범위를 좁힌다. 목록 행이 그 사유 라벨을 <Text>INSPECTION</Text>
+    // 로 그대로 렌더하므로(그게 이 기능의 목적이다), 문서 전체에서 찾으면 버튼이 올바로
+    // 제외됐는데도 행에 걸려 영원히 실패한다.
+    expect(screen.queryByRole('button', { name: 'INSPECTION' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'BREAKDOWN_REPAIR' })).toBeInTheDocument();
+  });
+
+  it('사유를 고르면 PATCH 를 보내고 상위에 알린다', async () => {
+    const onCorrected = jest.fn();
+    const refresh = jest.fn();
+    mockUseBreakdown.mockReturnValue(downState({ refresh }));
+    render(<DowntimeBreakdownCard {...base} allowCorrection onCorrected={onCorrected} />);
+
+    fireEvent.click(screen.getByText(/downtimeBreakdown\.correct$/));
+    fireEvent.click(screen.getByText('BREAKDOWN_REPAIR'));
+
+    await waitFor(() => {
+      expect(mockAuthFetch).toHaveBeenCalledWith(
+        `/api/machines/${MACHINE}/downtime`,
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ reason: 'BREAKDOWN_REPAIR' }),
+        })
+      );
+    });
+    await waitFor(() => expect(onCorrected).toHaveBeenCalled());
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('정정에 실패하면 오류를 보여주고 상위에 성공을 알리지 않는다', async () => {
+    const onCorrected = jest.fn();
+    mockAuthFetch.mockResolvedValue({ ok: false, status: 409, json: async () => ({ error: 'not_in_downtime' }) });
+    mockUseBreakdown.mockReturnValue(downState());
+    render(<DowntimeBreakdownCard {...base} allowCorrection onCorrected={onCorrected} />);
+
+    fireEvent.click(screen.getByText(/downtimeBreakdown\.correct$/));
+    fireEvent.click(screen.getByText('BREAKDOWN_REPAIR'));
+
+    await waitFor(() => expect(screen.getByText(/correctNotInDowntime/)).toBeInTheDocument());
+    expect(onCorrected).not.toHaveBeenCalled();
   });
 });
