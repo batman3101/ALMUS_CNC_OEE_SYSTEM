@@ -61,6 +61,22 @@ describe('DowntimeBreakdownCard', () => {
     expect(screen.queryByText(/cumulative\(/)).not.toBeInTheDocument();
   });
 
+  // 2026-07-28 브라우저 확인에서 발견: 조회 전에도 totalMinutes 가 null 이라, 로딩 중
+  // 화면에 "계획정지와 휴식이 겹쳐 계산을 보류했습니다"라는 **있지도 않은 이유**가 떴다.
+  // null 에 겹쳐 있는 세 뜻(조회 전 / 실패 / 계산 보류)을 loaded 로 갈라야 한다.
+  it('아직 조회 전이면 계산 보류 사유를 단정하지 않는다', () => {
+    mockUseBreakdown.mockReturnValue(state({ totalMinutes: null, loaded: false, error: null }));
+    render(<DowntimeBreakdownCard {...base} />);
+    expect(screen.getByText(/cumulativeUnknown/)).toBeInTheDocument();
+    expect(screen.queryByText(/cumulativeUnknownHint/)).not.toBeInTheDocument();
+  });
+
+  it('조회를 마친 뒤의 null 에만 계산 보류 사유를 붙인다', () => {
+    mockUseBreakdown.mockReturnValue(state({ totalMinutes: null, loaded: true }));
+    render(<DowntimeBreakdownCard {...base} />);
+    expect(screen.getByText(/cumulativeUnknownHint/)).toBeInTheDocument();
+  });
+
   // 2026-07-28 브라우저 확인에서 발견: 서버 total_minutes 는 소수 2자리(119.64)를 유지하는데
   // 건별 행은 정수(120)라, 같은 시간이 두 숫자로 보여 사용자가 계산 오류로 읽었다.
   it('누적 분은 정수로 표시한다 (행과 같은 반올림 규칙)', () => {

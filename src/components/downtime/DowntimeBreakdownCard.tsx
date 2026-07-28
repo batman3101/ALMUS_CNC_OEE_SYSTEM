@@ -144,12 +144,14 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
         />
       )}
 
-      {/* 누적. null 은 "0분"이 아니라 "계산 보류"다 — 섞으면 멈춘 설비가 멀쩡해 보인다. */}
+      {/* 누적. null 은 "0분"이 아니라 "모름"이다 — 섞으면 멈춘 설비가 멀쩡해 보인다.
+          단 null 에는 세 가지 뜻이 겹쳐 있다: 아직 조회 전 / 조회 실패 / 계획정지·휴식
+          겹침으로 계산 보류. loaded 로 갈라야 한다. 안 그러면 로딩 중에 "계획정지 때문"
+          이라는 **있지도 않은 이유**를 단정해 알리게 된다(2026-07-28 브라우저에서 실제 발생). */}
       {totalMinutes === null ? (
         <Text type="secondary">
           {t('downtimeBreakdown.cumulativeUnknown')}
-          {' · '}
-          {t('downtimeBreakdown.cumulativeUnknownHint')}
+          {loaded && ` · ${t('downtimeBreakdown.cumulativeUnknownHint')}`}
         </Text>
       ) : (
         <Text>
