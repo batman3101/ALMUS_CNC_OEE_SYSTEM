@@ -101,6 +101,8 @@ GET /api/machines/[machineId]/downtime?date=YYYY-MM-DD&shift=A|B
   shift_end: string;                   // ISO
   // 이 교대 누적. null = 계산 보류(계획정지·휴식 겹침). 0과 구분한다.
   total_minutes: number | null;
+  // 진행 중 비가동의 **클립되지 않은** 시작(ISO). null = 진행 중인 비가동 없음.
+  ongoing_since: string | null;
   intervals: Array<{
     id: string;                        // source_id — 안정 React key
     source: 'downtime_entry' | 'machine_log';
@@ -204,12 +206,19 @@ interface Props {
   machineId: string;
   date: string;            // 교대 창은 반드시 주입 — 컴포넌트가 "지금 교대"를 추측하지 않는다
   shift: 'A' | 'B';
-  currentState: MachineState;
-  downtimeSince: string | null;   // 진행 중 경과 계산 기준
   onCorrected: () => void;
   allowCorrection?: boolean;      // 기본 false. 운영자 콘솔만 true
 }
 ```
+
+**설비 상태와 비가동 시작 시각은 prop 으로 받지 않는다.** 계획 작성 중에 드러난 사실:
+`Machine` 타입에는 비가동 시작 시각을 담는 필드가 아예 없다(`id, name, current_state?,
+updated_at?` 뿐). 즉 설비 상세 모달은 그 값을 넘길 방법이 없다.
+
+카드가 조회하는 데이터에 이미 답이 있으므로(`end === null` 인 행 + `ongoing_since`) 두 prop
+을 제거한다. 부수 효과로 "두 화면이 서로 다른 소스에서 비가동 상태를 읽는" 위험도 사라진다.
+경과 시간은 목록의 `start`(교대 창에 클립됨)가 아니라 `ongoing_since`(원본)로 재야 이전
+교대에서 이어진 비가동이 실제보다 짧게 표시되지 않는다.
 
 - **운영자 콘솔**: `MachineConsole`의 비가동 카드 안에 `DowntimeBreakdownCard`
   (`allowCorrection`) + `DowntimeAndonSection`을 함께 렌더한다
