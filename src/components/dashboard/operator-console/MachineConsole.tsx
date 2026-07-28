@@ -13,6 +13,7 @@ import { ProgressInputSection } from './ProgressInputSection';
 import { DowntimeAndonSection } from './DowntimeAndonSection';
 import { CloseShiftSection } from './CloseShiftSection';
 import { DefectPendingSection } from './DefectPendingSection';
+import { DowntimeBreakdownCard } from '@/components/downtime';
 
 interface Props {
   machineId: string;
@@ -120,11 +121,23 @@ export const MachineConsole: React.FC<Props> = ({
       )}
 
       <Card size="small" title={t('operator.downtime')}>
-        <DowntimeAndonSection
-          machineId={machineId}
-          currentState={currentState}
-          onChanged={() => { progress.refresh(); backlog.refresh(); }}
-        />
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {/* 읽기(경과·누적·사유 목록 + 정정). 교대 창은 이 컴포넌트가 소유한 값을 그대로 넘긴다.
+              진행 중 비가동은 카드가 조회한 데이터에서 스스로 알아내므로 상태를 넘기지 않는다. */}
+          <DowntimeBreakdownCard
+            machineId={machineId}
+            date={date}
+            shift={shift}
+            allowCorrection
+            onCorrected={() => { progress.refresh(); backlog.refresh(); }}
+          />
+          {/* 상태 전이 쓰기(비가동 시작 / 가동 재개)는 별개 책임으로 남긴다. */}
+          <DowntimeAndonSection
+            machineId={machineId}
+            currentState={currentState}
+            onChanged={() => { progress.refresh(); backlog.refresh(); }}
+          />
+        </Space>
       </Card>
 
       <CloseShiftSection
