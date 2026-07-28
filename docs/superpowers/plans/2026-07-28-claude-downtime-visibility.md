@@ -8,7 +8,13 @@
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript 5, Ant Design 5, Supabase(PostgreSQL + RPC), Jest + Testing Library, react-i18next
 
-**설계 문서:** `docs/superpowers/specs/2026-07-28-downtime-visibility-design.md`
+**설계 문서:** `docs/superpowers/specs/2026-07-28-claude-downtime-visibility-design.md`
+
+> **주의 — 같은 기능을 두 에이전트가 병행 작업 중이다.** Codex 는
+> `feature/codex-2026-07-28-downtime-details` 에서 `2026-07-28-downtime-summary-*` 문서로
+> **다른 설계**를 구현하고 있다(비가동 소스를 `downtime_entries` 로만 한정, 업무일 A+B 범위).
+> 이 계획은 `feature/claude-2026-07-28-downtime-visibility` 브랜치 전용이며, 두 소스의
+> 유니온과 현재 교대 범위를 쓴다. 두 산출물을 섞지 말 것.
 
 ---
 
