@@ -117,6 +117,7 @@
     ]
   },
   "intentionally_skipped": {
-    "20260715120000_atomic_downtime_save": "160000(independent_downtime_lifecycle)이 완전 대체 — 단독 적용 시 커플링 재도입 (런북 0절)"
+    "20260715120000_atomic_downtime_save": "160000(independent_downtime_lifecycle)이 완전 대체 — 단독 적용 시 커플링 재도입 (런북 0절)",
+    "20260728010000_correct_open_downtime_reason": "사용자 승인 전 — 미적용 (비가동 사유 정정 RPC + 상태 로그 트리거 억제 플래그)"
   }
 }
