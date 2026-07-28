@@ -21,10 +21,12 @@ jest.mock('@/utils/downtimeIntervals', () => ({
 }));
 const mockLoadDetail = jest.fn();
 const mockGetShiftWindow = jest.fn();
+const mockGetBusinessDayWindow = jest.fn();
 const mockGetBreakMinutes = jest.fn();
 jest.mock('@/lib/shiftDowntime', () => ({
   loadDowntimeDetailRows: (...a: unknown[]) => mockLoadDetail(...a),
   getShiftWindow: (...a: unknown[]) => mockGetShiftWindow(...a),
+  getBusinessDayWindow: (...a: unknown[]) => mockGetBusinessDayWindow(...a),
 }));
 jest.mock('@/lib/plannedRuntime', () => ({
   getBreakTimeMinutes: (...a: unknown[]) => mockGetBreakMinutes(...a),
@@ -76,10 +78,18 @@ describe('POST .../[machineId]/downtime', () => {
 });
 
 describe('GET .../[machineId]/downtime', () => {
-  const WINDOW = {
+  // 업무일 창(A교대 시작 ~ 다음날 A교대 시작 직전)과 그 안의 day(A)/night(B) 소계 창.
+  // buildBusinessRange 와 buildShiftWindows 가 실제로 만들어낼 값과 같은 경계를 쓴다.
+  const DAY_WINDOW = {
     start: Date.parse('2026-07-28T01:00:00.000Z'),
     end: Date.parse('2026-07-28T13:00:00.000Z'),
   };
+  const NIGHT_WINDOW = {
+    start: Date.parse('2026-07-28T13:00:00.000Z'),
+    end: Date.parse('2026-07-29T01:00:00.000Z'),
+  };
+  const BUSINESS_WINDOW = { start: DAY_WINDOW.start, end: NIGHT_WINDOW.end };
+
   const getReq = (qs: string) =>
     ({ url: `http://localhost/api/machines/${MACHINE}/downtime?${qs}` }) as never;
 
@@ -87,28 +97,35 @@ describe('GET .../[machineId]/downtime', () => {
     jest.clearAllMocks();
     mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
     mockAssert.mockReturnValue(undefined);
-    mockGetShiftWindow.mockResolvedValue(WINDOW);
+    mockGetBusinessDayWindow.mockResolvedValue(BUSINESS_WINDOW);
+    mockGetShiftWindow.mockImplementation((_date: string, shift: 'A' | 'B') =>
+      Promise.resolve(shift === 'A' ? DAY_WINDOW : NIGHT_WINDOW));
     mockGetBreakMinutes.mockResolvedValue(60);
     mockLoadDetail.mockResolvedValue([]);
   });
 
-  it('date·shift 가 없으면 400 (조회하지 않음)', async () => {
-    const res = await GET(getReq('date=2026-07-28'), ctx);
+  it('date 가 없으면 400 (조회하지 않음)', async () => {
+    const res = await GET(getReq(''), ctx);
     expect(res.status).toBe(400);
     expect(mockLoadDetail).not.toHaveBeenCalled();
   });
 
   it('잘못된 date 형식은 400', async () => {
-    const res = await GET(getReq('date=07-28-2026&shift=A'), ctx);
+    const res = await GET(getReq('date=07-28-2026'), ctx);
     expect(res.status).toBe(400);
   });
 
   it('담당 설비가 아니면 403 (assertMachineAccess 가 던진다)', async () => {
     mockAssert.mockImplementation(() => { throw new Error('forbidden'); });
-    await expect(GET(getReq('date=2026-07-28&shift=A'), ctx)).rejects.toThrow();
+    await expect(GET(getReq('date=2026-07-28'), ctx)).rejects.toThrow();
   });
 
-  it('교대 창과 누적·건별 목록을 함께 돌려준다', async () => {
+  it('shift 파라미터 없이 date 만으로 200', async () => {
+    const res = await GET(getReq('date=2026-07-28'), ctx);
+    expect(res.status).toBe(200);
+  });
+
+  it('업무일 창과 시간대별 소계·건별 목록을 함께 돌려준다', async () => {
     mockLoadDetail.mockResolvedValue([
       {
         id: 'de-1', source: 'downtime_entry', reason: 'INSPECTION',
@@ -121,28 +138,33 @@ describe('GET .../[machineId]/downtime', () => {
         is_planned: false,
       },
     ]);
-    const res = await GET(getReq('date=2026-07-28&shift=A'), ctx);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.shift_start).toBe('2026-07-28T01:00:00.000Z');
-    expect(body.shift_end).toBe('2026-07-28T13:00:00.000Z');
+    expect(body.business_date).toBe('2026-07-28');
+    expect(body.window_start).toBe('2026-07-28T01:00:00.000Z');
+    expect(body.window_end).toBe('2026-07-29T01:00:00.000Z');
     expect(body.total_minutes).toBe(30);
+    expect(body.shift_totals).toEqual({
+      day: { minutes: 30, start: '2026-07-28T01:00:00.000Z', end: '2026-07-28T13:00:00.000Z' },
+      night: { minutes: 0, start: '2026-07-28T13:00:00.000Z', end: '2026-07-29T01:00:00.000Z' },
+    });
     expect(body.ongoing_since).toBeNull();
     // andon 이중 기록은 1행으로 접힌다
     expect(body.intervals).toHaveLength(1);
     expect(body.intervals[0]).toMatchObject({ id: 'de-1', reason: 'INSPECTION', minutes: 30 });
   });
 
-  it('진행 중 비가동의 ongoing_since 는 교대 시작으로 클립되지 않은 원본 시각이다', async () => {
-    // 이전 교대(00:30)에 시작해 아직 진행 중. 목록의 start 는 교대 시작(01:00)으로 클립되지만
-    // 경과 시간은 실제 시작부터 재야 하므로 ongoing_since 는 원본을 준다.
+  it('진행 중 비가동의 ongoing_since 는 업무일 시작으로 클립되지 않은 원본 시각이다', async () => {
+    // 이전 업무일(00:30)에 시작해 아직 진행 중. 목록의 start 는 업무일 시작(01:00)으로
+    // 클립되지만 경과 시간은 실제 시작부터 재야 하므로 ongoing_since 는 원본을 준다.
     mockLoadDetail.mockResolvedValue([
       {
         id: 'de-1', source: 'downtime_entry', reason: 'INSPECTION',
         start_time: '2026-07-28T00:30:00.000Z', end_time: null, is_planned: false,
       },
     ]);
-    const res = await GET(getReq('date=2026-07-28&shift=A'), ctx);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
     const body = await res.json();
     expect(body.ongoing_since).toBe('2026-07-28T00:30:00.000Z');
     expect(body.intervals[0].start).toBe('2026-07-28T01:00:00.000Z');
@@ -160,7 +182,7 @@ describe('GET .../[machineId]/downtime', () => {
         start_time: '2026-07-28T06:00:00.000Z', end_time: null, is_planned: false,
       },
     ]);
-    const res = await GET(getReq('date=2026-07-28&shift=A'), ctx);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
     const body = await res.json();
     expect(body.ongoing_since).toBe('2026-07-28T06:00:00.000Z');
   });
@@ -173,23 +195,55 @@ describe('GET .../[machineId]/downtime', () => {
         is_planned: true,
       },
     ]);
-    const res = await GET(getReq('date=2026-07-28&shift=A'), ctx);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
     const body = await res.json();
     expect(body.total_minutes).toBeNull();
     expect(body.intervals).toHaveLength(1);
   });
 
   it('비가동이 없으면 total_minutes 는 0 이고 목록은 빈 배열', async () => {
-    const res = await GET(getReq('date=2026-07-28&shift=A'), ctx);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
     const body = await res.json();
     expect(body.total_minutes).toBe(0);
+    expect(body.shift_totals.day.minutes).toBe(0);
+    expect(body.shift_totals.night.minutes).toBe(0);
     expect(body.intervals).toEqual([]);
   });
 
-  it('교대 설정이 유효하지 않으면 500', async () => {
-    mockGetShiftWindow.mockResolvedValue(null);
-    const res = await GET(getReq('date=2026-07-28&shift=A'), ctx);
+  it('업무일 창이 유효하지 않으면 500', async () => {
+    mockGetBusinessDayWindow.mockResolvedValue(null);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
     expect(res.status).toBe(500);
+  });
+
+  it('교대(day/night) 창이 유효하지 않으면 500', async () => {
+    mockGetShiftWindow.mockResolvedValue(null);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
+    expect(res.status).toBe(500);
+  });
+
+  it('day/night 경계를 넘는 비가동은 양쪽 소계에 나뉘어 기여하지만 목록엔 한 줄로 남는다', async () => {
+    // 12:50~13:30, 경계(13:00)를 넘는다: day 에 10분, night 에 30분, 업무일 총합 40분.
+    mockLoadDetail.mockResolvedValue([
+      {
+        id: 'de-1', source: 'downtime_entry', reason: 'INSPECTION',
+        start_time: '2026-07-28T12:50:00.000Z', end_time: '2026-07-28T13:30:00.000Z',
+        is_planned: false,
+      },
+    ]);
+    const res = await GET(getReq('date=2026-07-28'), ctx);
+    const body = await res.json();
+    expect(body.total_minutes).toBe(40);
+    expect(body.shift_totals.day.minutes).toBe(10);
+    expect(body.shift_totals.night.minutes).toBe(30);
+    // 목록은 경계에서 쪼개지 않는다 — 실제 시각을 가진 한 줄.
+    expect(body.intervals).toHaveLength(1);
+    expect(body.intervals[0]).toMatchObject({
+      id: 'de-1',
+      start: '2026-07-28T12:50:00.000Z',
+      end: '2026-07-28T13:30:00.000Z',
+      minutes: 40,
+    });
   });
 });
 

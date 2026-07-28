@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { buildShiftWindows, type Interval } from '@/utils/downtimeIntervals';
+import { buildBusinessRange, buildShiftWindows, type Interval } from '@/utils/downtimeIntervals';
 import { getBusinessTimeConfig } from '@/lib/shiftConfig';
 import type { DowntimeSourceInterval } from '@/app/api/production-records/daily/downtimeCalculation';
 
@@ -112,4 +112,18 @@ export async function getShiftWindow(date: string, shift: 'A' | 'B'): Promise<In
     requestedShifts: [shift],
   });
   return window ?? null;
+}
+
+/**
+ * 업무일 한 덩어리의 시간창. A교대 시작부터 다음날 A교대 시작 직전까지이며 A·B 교대를 모두
+ * 포함한다. 교대 창 두 개를 만들어 병합할 필요가 없다 — buildBusinessRange 가 곧 그 구간이다.
+ * 교대 창과 같은 설정(timezone·shiftAStart)에서 나오므로 경계가 어긋나지 않는다.
+ */
+export async function getBusinessDayWindow(date: string): Promise<Interval | null> {
+  const cfg = await getBusinessTimeConfig();
+  try {
+    return buildBusinessRange(date, date, cfg.timezone, cfg.shiftAStart);
+  } catch {
+    return null;
+  }
 }
