@@ -73,6 +73,26 @@
     "durationHM": "{{hours}}시간 {{minutes}}분",
     "ongoing": "진행중"
   },
+  "downtimeBreakdown": {
+    "sectionTitle": "비가동",
+    "elapsedNow": "{{reason}} · {{duration}} 경과",
+    "since": "{{time}}~",
+    "cumulative": "누적 {{count}}건 · {{minutes}}분",
+    "cumulativeUnknown": "누적 —",
+    "cumulativeUnknownHint": "계획정지와 휴식이 겹쳐 계산을 보류했습니다",
+    "toggle": "비가동 내역 보기 ({{count}}건)",
+    "empty": "이번 교대 비가동 없음",
+    "loadFailed": "비가동 내역을 불러오지 못했습니다",
+    "retry": "다시 불러오기",
+    "ongoing": "진행중",
+    "carriedOver": "이전 교대에서 이어짐",
+    "minutesShort": "{{minutes}}분",
+    "correct": "정정",
+    "correctTitle": "사유 정정",
+    "correctHint": "시작 시각은 그대로 두고 사유만 바꿉니다",
+    "correctFailed": "사유 정정에 실패했습니다",
+    "correctNotInDowntime": "이미 가동 중이라 정정할 수 없습니다"
+  },
   "fields": {
     "name": "설비명",
     "location": "위치",
