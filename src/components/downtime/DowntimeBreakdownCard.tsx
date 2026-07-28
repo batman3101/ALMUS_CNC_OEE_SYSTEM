@@ -113,7 +113,11 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
         <Text>
           {t('downtimeBreakdown.cumulative', {
             count: intervals.length,
-            minutes: totalMinutes,
+            // 표시할 때 정수로 맞춘다. 서버의 total_minutes 는 소수 2자리를 유지하는데
+            // (확정 OEE 와 같은 함수의 산출물이라 정밀도를 깎지 않는다), 그대로 그리면
+            // 건별 행은 120분인데 누적은 119.64분으로 보인다 — 같은 시간이 두 숫자로
+            // 나타나 사용자가 계산 오류로 읽는다. 행(Math.round)과 같은 규칙으로 맞춘다.
+            minutes: Math.round(totalMinutes),
           })}
         </Text>
       )}

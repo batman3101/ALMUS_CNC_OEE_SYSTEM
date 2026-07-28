@@ -56,6 +56,15 @@ describe('DowntimeBreakdownCard', () => {
     expect(screen.queryByText(/cumulative\(/)).not.toBeInTheDocument();
   });
 
+  // 2026-07-28 브라우저 확인에서 발견: 서버 total_minutes 는 소수 2자리(119.64)를 유지하는데
+  // 건별 행은 정수(120)라, 같은 시간이 두 숫자로 보여 사용자가 계산 오류로 읽었다.
+  it('누적 분은 정수로 표시한다 (행과 같은 반올림 규칙)', () => {
+    mockUseBreakdown.mockReturnValue(state({ totalMinutes: 119.64 }));
+    render(<DowntimeBreakdownCard {...base} />);
+    expect(screen.getByText(/minutes=120/)).toBeInTheDocument();
+    expect(screen.queryByText(/119\.64/)).not.toBeInTheDocument();
+  });
+
   it('조회에 실패하면 "0건"이 아니라 오류를 보여준다', () => {
     mockUseBreakdown.mockReturnValue(
       state({ loaded: false, error: 'HTTP 500', intervals: [], totalMinutes: null })
