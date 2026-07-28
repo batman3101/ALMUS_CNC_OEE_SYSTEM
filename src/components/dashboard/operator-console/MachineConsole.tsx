@@ -36,6 +36,8 @@ export const MachineConsole: React.FC<Props> = ({
 }) => {
   const { t } = useMachinesTranslation();
   const [now, setNow] = useState<Date>(() => new Date());
+  // andon 이 비가동을 시작/재개하면 이 값을 올려 비가동 카드에 재조회를 알린다.
+  const [downtimeRefreshToken, setDowntimeRefreshToken] = useState(0);
   const progress = useRealtimeProgress({ machineId, date, shift });
   const backlog = useShiftBacklog(machineId);
 
@@ -128,13 +130,21 @@ export const MachineConsole: React.FC<Props> = ({
             machineId={machineId}
             date={date}
             allowCorrection
+            refreshToken={downtimeRefreshToken}
             onCorrected={() => { progress.refresh(); backlog.refresh(); }}
           />
-          {/* 상태 전이 쓰기(비가동 시작 / 가동 재개)는 별개 책임으로 남긴다. */}
+          {/* 상태 전이 쓰기(비가동 시작 / 가동 재개)는 별개 책임으로 남긴다.
+              두 컴포넌트는 형제라 서로를 모른다 — andon 이 상태를 바꾸면 여기서
+              토큰을 올려 카드에 재조회를 알린다. 안 그러면 "비가동 중" 배너 옆에서
+              누적이 그대로 남는다(2026-07-28 브라우저 확인). */}
           <DowntimeAndonSection
             machineId={machineId}
             currentState={currentState}
-            onChanged={() => { progress.refresh(); backlog.refresh(); }}
+            onChanged={() => {
+              progress.refresh();
+              backlog.refresh();
+              setDowntimeRefreshToken(token => token + 1);
+            }}
           />
         </Space>
       </Card>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Collapse, Modal, Space, Typography } from 'antd';
 import { useDowntimeBreakdown } from '@/hooks/useDowntimeBreakdown';
 import { useMultipleTranslation } from '@/hooks/useTranslation';
@@ -30,6 +30,15 @@ export interface DowntimeBreakdownCardProps {
   onCorrected: () => void;
   /** 기본 false. 운영자 콘솔만 true. */
   allowCorrection?: boolean;
+  /**
+   * 값이 바뀌면 재조회한다. andon 으로 비가동을 시작/재개했을 때 상위가 올린다.
+   *
+   * 이 카드와 DowntimeAndonSection 은 **형제**라 서로를 모르고, 이 카드의 훅에는 자체
+   * 폴링이 없다(마운트·인자 변경 시에만 조회). 그래서 andon 으로 비가동을 시작해도
+   * 카드가 그대로 남아 "비가동 중" 배너 옆에서 누적이 안 변하는 상태가 됐다
+   * (2026-07-28 브라우저 확인). 상위가 명시적으로 알려 주는 것이 유일한 경로다.
+   */
+  refreshToken?: number;
 }
 
 const formatClock = (iso: string): string =>
@@ -55,10 +64,21 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
   machineId, date,
   onCorrected,
   allowCorrection = false,
+  refreshToken,
 }) => {
   const { t } = useMultipleTranslation(['machines', 'dataInput']);
   const { totalMinutes, shiftTotals, ongoingSince, intervals, loaded, error, refresh } =
     useDowntimeBreakdown({ machineId, date });
+
+  // 마운트 조회는 훅이 이미 한다. 여기서는 **토큰이 바뀐 뒤**부터만 재조회한다.
+  const skipFirstTokenRef = useRef(true);
+  useEffect(() => {
+    if (skipFirstTokenRef.current) { skipFirstTokenRef.current = false; return; }
+    refresh();
+    // refreshToken 이 바뀔 때만 재조회한다. refresh 를 deps 에 넣으면 machineId/date 변경 시
+    // 훅의 자체 재조회와 겹쳐 같은 요청을 두 번 보낸다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken]);
 
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {

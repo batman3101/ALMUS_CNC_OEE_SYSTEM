@@ -161,6 +161,28 @@ describe('DowntimeBreakdownCard', () => {
     });
   });
 
+  // 2026-07-28 브라우저 확인에서 발견: andon 으로 비가동을 시작해도 카드가 그대로 남아
+  // "비가동 중" 배너 옆에서 누적이 안 변했다. 카드와 andon 은 형제라 서로를 모르고
+  // 카드의 훅에는 자체 폴링이 없어서, 상위가 토큰을 올려 알려 주는 것이 유일한 경로다.
+  it('refreshToken 이 바뀌면 재조회한다 (andon 이 상태를 바꿨을 때의 유일한 갱신 경로)', () => {
+    const refresh = jest.fn();
+    mockUseBreakdown.mockReturnValue(state({ refresh }));
+    const { rerender } = render(<DowntimeBreakdownCard {...base} refreshToken={0} />);
+    // 마운트 조회는 훅이 한다 — 토큰 때문에 중복 호출하면 안 된다.
+    expect(refresh).not.toHaveBeenCalled();
+
+    rerender(<DowntimeBreakdownCard {...base} refreshToken={1} />);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('같은 refreshToken 으로 리렌더되면 재조회하지 않는다', () => {
+    const refresh = jest.fn();
+    mockUseBreakdown.mockReturnValue(state({ refresh }));
+    const { rerender } = render(<DowntimeBreakdownCard {...base} refreshToken={7} />);
+    rerender(<DowntimeBreakdownCard {...base} refreshToken={7} />);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it('주간/야간 소계를 shiftTotals 의 시각과 분으로 그린다 (하드코딩하지 않는다)', () => {
     mockUseBreakdown.mockReturnValue(state({ shiftTotals: SHIFT_TOTALS }));
     render(<DowntimeBreakdownCard {...base} />);
