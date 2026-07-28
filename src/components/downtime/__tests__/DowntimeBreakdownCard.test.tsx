@@ -33,9 +33,18 @@ const MACHINE = '11111111-1111-4111-8111-111111111111';
 const base = {
   machineId: MACHINE,
   date: '2026-07-28',
-  shift: 'A' as const,
   onCorrected: () => {},
 };
+
+const SHIFT_TOTALS = {
+  day: { minutes: 12, start: '2026-07-28T01:00:00.000Z', end: '2026-07-28T13:00:00.000Z' },
+  night: { minutes: 6, start: '2026-07-28T13:00:00.000Z', end: '2026-07-29T01:00:00.000Z' },
+};
+
+// 카드가 쓰는 것과 같은 규칙으로 기대값을 만든다 — 테스트 실행 환경의 로컬 타임존이
+// 무엇이든(고정 안 되어 있음) 하드코딩한 "10:00" 같은 문자열과 어긋나지 않게 한다.
+const clock = (iso: string) =>
+  new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 const rows: DowntimeBreakdownRow[] = [
   {
@@ -46,7 +55,7 @@ const rows: DowntimeBreakdownRow[] = [
 ];
 
 const state = (over: Record<string, unknown> = {}) => ({
-  totalMinutes: 18, ongoingSince: null, intervals: rows,
+  totalMinutes: 18, shiftTotals: SHIFT_TOTALS, ongoingSince: null, intervals: rows,
   loaded: true, loading: false, error: null,
   refresh: jest.fn(), ...over,
 });
@@ -144,12 +153,58 @@ describe('DowntimeBreakdownCard', () => {
     expect(screen.getByText('endmillChange')).toBeInTheDocument();
   });
 
-  it('교대 창을 훅에 그대로 넘긴다 (스스로 추측하지 않는다)', () => {
+  it('업무일을 훅에 그대로 넘긴다 (스스로 추측하지 않는다)', () => {
     mockUseBreakdown.mockReturnValue(state());
     render(<DowntimeBreakdownCard {...base} />);
     expect(mockUseBreakdown).toHaveBeenCalledWith({
-      machineId: MACHINE, date: '2026-07-28', shift: 'A',
+      machineId: MACHINE, date: '2026-07-28',
     });
+  });
+
+  it('주간/야간 소계를 shiftTotals 의 시각과 분으로 그린다 (하드코딩하지 않는다)', () => {
+    mockUseBreakdown.mockReturnValue(state({ shiftTotals: SHIFT_TOTALS }));
+    render(<DowntimeBreakdownCard {...base} />);
+    const dayFrom = clock(SHIFT_TOTALS.day.start);
+    const dayTo = clock(SHIFT_TOTALS.day.end);
+    const nightFrom = clock(SHIFT_TOTALS.night.start);
+    const nightTo = clock(SHIFT_TOTALS.night.end);
+    expect(screen.getByText(new RegExp(
+      `shiftTotalDay\\(from=${dayFrom},to=${dayTo},minutes=downtimeBreakdown\\.minutesShort\\(minutes=12\\)\\)`
+    ))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(
+      `shiftTotalNight\\(from=${nightFrom},to=${nightTo},minutes=downtimeBreakdown\\.minutesShort\\(minutes=6\\)\\)`
+    ))).toBeInTheDocument();
+  });
+
+  it('소계가 null 이면 숫자 대신 대시를 그린다 ("모름" ≠ "0분")', () => {
+    mockUseBreakdown.mockReturnValue(state({
+      shiftTotals: {
+        day: { ...SHIFT_TOTALS.day, minutes: null },
+        night: SHIFT_TOTALS.night,
+      },
+    }));
+    render(<DowntimeBreakdownCard {...base} />);
+    const dayFrom = clock(SHIFT_TOTALS.day.start);
+    const dayTo = clock(SHIFT_TOTALS.day.end);
+    expect(screen.getByText(new RegExp(
+      `shiftTotalDay\\(from=${dayFrom},to=${dayTo},minutes=—\\)`
+    ))).toBeInTheDocument();
+  });
+
+  it('shiftTotals 가 아직 없으면 소계 줄을 그리지 않는다', () => {
+    mockUseBreakdown.mockReturnValue(state({ shiftTotals: null }));
+    render(<DowntimeBreakdownCard {...base} />);
+    expect(screen.queryByText(/shiftTotalDay/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/shiftTotalNight/)).not.toBeInTheDocument();
+  });
+
+  // A/B 는 이 시스템에서 근무조가 아니라 시간대인데 현장은 조 이름으로 읽는다 —
+  // 그래서 화면 라벨에서 A/B 글자를 아예 뺐다. 회귀를 막는 가드.
+  it('주간/야간 소계에 A교대/B교대 같은 A/B 라벨을 쓰지 않는다', () => {
+    mockUseBreakdown.mockReturnValue(state({ shiftTotals: SHIFT_TOTALS }));
+    render(<DowntimeBreakdownCard {...base} />);
+    expect(screen.queryByText(/A교대/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/B교대/)).not.toBeInTheDocument();
   });
 });
 

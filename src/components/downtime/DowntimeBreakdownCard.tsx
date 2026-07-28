@@ -23,11 +23,10 @@ const REASONS: MachineState[] = [
 export interface DowntimeBreakdownCardProps {
   machineId: string;
   /**
-   * 교대 창은 **반드시 주입한다**. 컴포넌트가 "지금 교대"를 스스로 추측하면 두 화면이
+   * 업무일을 **반드시 주입한다**. 컴포넌트가 "오늘"을 스스로 추측하면 두 화면이
    * 서로 다른 창을 볼 수 있다 — 이 프로젝트가 이미 겪은 실패 유형이다.
    */
   date: string;
-  shift: 'A' | 'B';
   onCorrected: () => void;
   /** 기본 false. 운영자 콘솔만 true. */
   allowCorrection?: boolean;
@@ -53,13 +52,13 @@ const formatDuration = (
  * DowntimeAndonSection 이 담당한다. 여기는 읽기와 사유 정정만 한다.
  */
 export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
-  machineId, date, shift,
+  machineId, date,
   onCorrected,
   allowCorrection = false,
 }) => {
   const { t } = useMultipleTranslation(['machines', 'dataInput']);
-  const { totalMinutes, ongoingSince, intervals, loaded, error, refresh } =
-    useDowntimeBreakdown({ machineId, date, shift });
+  const { totalMinutes, shiftTotals, ongoingSince, intervals, loaded, error, refresh } =
+    useDowntimeBreakdown({ machineId, date });
 
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -162,6 +161,29 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
             // 건별 행은 120분인데 누적은 119.64분으로 보인다 — 같은 시간이 두 숫자로
             // 나타나 사용자가 계산 오류로 읽는다. 행(Math.round)과 같은 규칙으로 맞춘다.
             minutes: Math.round(totalMinutes),
+          })}
+        </Text>
+      )}
+
+      {/* 주간/야간 소계. 라벨에 A/B 글자를 쓰지 않는다 — 이 시스템의 A/B 는 시간대이지
+          근무조가 아닌데, 현장은 조 이름으로 읽는다. 시각은 서버가 내려준 start/end 를
+          그대로 쓴다(설정값이라 하드코딩하지 않는다). null 소계는 "모름"이라 대시로 그린다. */}
+      {shiftTotals !== null && (
+        <Text type="secondary">
+          {t('downtimeBreakdown.shiftTotalDay', {
+            from: formatClock(shiftTotals.day.start),
+            to: formatClock(shiftTotals.day.end),
+            minutes: shiftTotals.day.minutes === null
+              ? '—'
+              : t('downtimeBreakdown.minutesShort', { minutes: Math.round(shiftTotals.day.minutes) }),
+          })}
+          {' · '}
+          {t('downtimeBreakdown.shiftTotalNight', {
+            from: formatClock(shiftTotals.night.start),
+            to: formatClock(shiftTotals.night.end),
+            minutes: shiftTotals.night.minutes === null
+              ? '—'
+              : t('downtimeBreakdown.minutesShort', { minutes: Math.round(shiftTotals.night.minutes) }),
           })}
         </Text>
       )}

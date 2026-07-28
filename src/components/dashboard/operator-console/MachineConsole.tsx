@@ -122,12 +122,11 @@ export const MachineConsole: React.FC<Props> = ({
 
       <Card size="small" title={t('operator.downtime')}>
         <Space direction="vertical" style={{ width: '100%' }}>
-          {/* 읽기(경과·누적·사유 목록 + 정정). 교대 창은 이 컴포넌트가 소유한 값을 그대로 넘긴다.
+          {/* 읽기(경과·누적·사유 목록 + 정정). 업무일은 이 컴포넌트가 소유한 값을 그대로 넘긴다.
               진행 중 비가동은 카드가 조회한 데이터에서 스스로 알아내므로 상태를 넘기지 않는다. */}
           <DowntimeBreakdownCard
             machineId={machineId}
             date={date}
-            shift={shift}
             allowCorrection
             onCorrected={() => { progress.refresh(); backlog.refresh(); }}
           />

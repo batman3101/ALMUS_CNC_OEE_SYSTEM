@@ -262,7 +262,6 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
               <DowntimeBreakdownCard
                 machineId={machine.id}
                 date={currentShift.businessDate}
-                shift={currentShift.shift}
                 // 읽기 맥락이므로 정정은 열지 않는다(운영자 콘솔에서만).
                 onCorrected={() => {}}
               />
