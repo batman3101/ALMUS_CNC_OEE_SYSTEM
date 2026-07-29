@@ -80,6 +80,24 @@ function getLocalDateString(date: Date): string {
   }).format(date);
 }
 
+/**
+ * JWT 페이로드를 읽는다. **검증하지 않는다** — 이 함수는 `verify_jwt: true` 로 배포되어
+ * 있어 서명 검증은 플랫폼이 이미 끝냈다. 여기서 하는 일은 검증된 토큰에서 role 클레임을
+ * 꺼내는 것뿐이다.
+ */
+function readJwtClaims(token: string): { role?: string } | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    // base64url → base64 (JWT 는 '-'/'_' 를 쓰고 패딩을 생략한다)
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+      .padEnd(payload.length + ((4 - (payload.length % 4)) % 4), '=');
+    return JSON.parse(atob(base64));
+  } catch (_e) {
+    return null;
+  }
+}
+
 /** 생산 수량이 0인데 파생 지표가 0이 아니면 정합성이 깨진 것이다. */
 function isInconsistentEmptyShift(row: ProductionRecordRow): boolean {
   if ((row.output_qty ?? 0) > 0) return false;
@@ -106,6 +124,57 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // ── 호출자 인가 ────────────────────────────────────────────────────────
+    //
+    // 이 함수는 Service Role 로 production_records 를 UPDATE 한다. 그런데 호출자의 역할을
+    // 전혀 보지 않아, **유효한 JWT 를 가진 아무 로그인 사용자**(운영자 포함)나 임의 날짜를
+    // 지정해 호출할 수 있었다(Codex 감사 2026-07-29 #4).
+    //
+    // 지금 이 함수가 쓰는 값은 output_qty=0 인 행의 파생 지표뿐이라 손상 능력이 없지만,
+    // 본문이 나중에 확장되면 그 순간 권한 상승이 된다. 경계는 지금 세운다.
+    //
+    // service_role 분기가 **필수**다 — pg_cron 스케줄(08:30 / 20:30)은 service_role 키로
+    // 호출하고, 그 토큰에는 대응하는 user_profiles 행이 없다. 분기 없이 프로필만 조회하면
+    // 정기 집계가 통째로 죽는다.
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'unauthorized' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    // verify_jwt: true 이므로 서명은 플랫폼이 이미 검증했다. role 클레임은 신뢰할 수 있다.
+    // (브라우저 번들에 실려 있는 anon 키의 토큰은 role='anon' 이라 이 분기를 통과하지 못하고,
+    //  아래 getUser 에서도 사용자로 해석되지 않아 401 이 된다)
+    const callerRole = readJwtClaims(token)?.role;
+
+    if (callerRole !== 'service_role') {
+      const { data: caller, error: callerError } = await supabase.auth.getUser(token);
+      if (callerError || !caller?.user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'unauthorized' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role, is_active')
+        .eq('user_id', caller.user.id)
+        .maybeSingle();
+
+      // 비활성 계정은 역할이 admin 이어도 거부한다(apiAuth.requireUser 와 같은 규율).
+      if (!profile || profile.role !== 'admin' || profile.is_active !== true) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'forbidden' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+    }
 
     // 날짜는 supabase.functions.invoke() 가 보내는 POST 바디({ date })로 전달된다.
     // 바디가 없으면 쿼리스트링(?date=), 그것도 없으면 오늘(현지 날짜)로 폴백한다.

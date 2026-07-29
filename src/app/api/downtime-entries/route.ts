@@ -7,35 +7,11 @@ import {
   assertMachineAccess,
   requireUser,
 } from '@/lib/apiAuth';
-
-const DEFAULT_TIME_CONFIG = {
-  timezone: 'Asia/Ho_Chi_Minh',
-  shiftAStart: '08:00',
-  shiftBStart: '20:00',
-};
+// 교대 경계 설정은 정본 하나만 쓴다. 이 파일에 있던 사본은 조회 실패를 기본값으로
+// 위장했고(Codex 감사 2026-07-29 #7), 사본이 셋이라 한 곳만 고치면 나머지가 남았다.
+import { getBusinessTimeConfig } from '@/lib/shiftConfig';
 
 const isBusinessDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
-
-async function getBusinessTimeConfig() {
-  const { data, error } = await supabaseAdmin
-    .from('system_settings')
-    .select('category, setting_key, setting_value')
-    .in('category', ['general', 'shift'])
-    .eq('is_active', true);
-
-  if (error || !data) return DEFAULT_TIME_CONFIG;
-  const readValue = (category: string, key: string): string | undefined => {
-    const row = data.find(item => item.category === category && item.setting_key === key);
-    const setting = row?.setting_value as { value?: unknown } | null | undefined;
-    return typeof setting?.value === 'string' ? setting.value : undefined;
-  };
-
-  return {
-    timezone: readValue('general', 'timezone') || DEFAULT_TIME_CONFIG.timezone,
-    shiftAStart: readValue('shift', 'shift_a_start') || DEFAULT_TIME_CONFIG.shiftAStart,
-    shiftBStart: readValue('shift', 'shift_b_start') || DEFAULT_TIME_CONFIG.shiftBStart,
-  };
-}
 
 function rpcErrorResponse(error: { code?: string; message?: string }) {
   if (error.code === '55000' && error.message?.includes('MACHINE_INACTIVE')) {

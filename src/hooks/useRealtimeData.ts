@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Machine, MachineLog, ProductionRecord, OEEMetrics, User } from '@/types';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { authFetch } from '@/lib/authFetch';
+import { replayBufferedUpdates } from './realtimeBuffer';
 
 // 생산 실적 조회 기간 (초기 조회와 실시간 반영이 동일한 윈도우를 사용해야 배열이 무한히 커지지 않는다)
 const PRODUCTION_WINDOW_DAYS = 7;
@@ -253,6 +254,46 @@ export const useRealtimeData = (
   // 사이클 안에서 afterScopeResolved → setup → cleanup 으로 세대를 올리므로, 세대로 비교하면
   // 정상 로드가 스스로를 취소한다. 늦게 끝난 옛 로드가 새 구독을 덮지 않게 하는 것이 목적이다.
   const loadSequenceRef = useRef(0);
+  // 스냅샷이 아직 적용되지 않은 동안 도착한 구독 이벤트를 담아둔다.
+  //
+  // 왜 필요한가 — 구독은 스냅샷 조회보다 **먼저** 열린다(조회↔구독 갭 방지). 그래서 스냅샷
+  // SELECT 가 도는 동안 이벤트가 먼저 도착할 수 있는데, 스냅샷 적용은 `machines`,
+  // `machineLogs`, `productionRecords` 를 **배열째 교체**한다. 그 결과 먼저 반영해 둔 이벤트가
+  // 통째로 지워졌다(Codex 감사 2026-07-29 #8). 구독을 먼저 여는 설계가 오히려 이 경로를 만들었다.
+  //
+  // loadSequenceRef 로는 못 막는다 — 그건 **로드끼리**의 경합을 다루는 축이고, 이건 한 번의
+  // 로드와 그 로드가 연 구독 사이의 문제다.
+  //
+  // 해법: 스냅샷 적용 전에는 상태를 바로 바꾸지 않고 갱신 함수를 모아 두었다가, 스냅샷을
+  // 교체한 **바로 그 갱신 안에서** 순서대로 재생한다. 스냅샷에 이미 반영된 이벤트를 다시
+  // 재생해도 각 갱신이 id 기준이라 결과가 같다(멱등) — 중복 걱정 없이 전부 재생할 수 있다.
+  const pendingRealtimeUpdatesRef = useRef<Array<(prev: RealtimeDataState) => RealtimeDataState>>([]);
+  const snapshotAppliedRef = useRef(false);
+
+  /** 스냅샷 적용 전이면 버퍼에 쌓고, 적용된 뒤면 곧바로 반영한다. */
+  const applyRealtimeUpdate = useCallback(
+    (updater: (prev: RealtimeDataState) => RealtimeDataState) => {
+      if (!snapshotAppliedRef.current) {
+        pendingRealtimeUpdatesRef.current.push(updater);
+        return;
+      }
+      setState(updater);
+    },
+    []
+  );
+
+  /**
+   * 스냅샷을 적용하면서 버퍼에 쌓인 이벤트를 이어서 재생한다.
+   *
+   * 목록을 setState **이전에** 꺼내 비우는 것이 중요하다. 갱신 함수는 나중에 실행되므로,
+   * 그때 ref 를 읽으면 이미 비워진(혹은 새로 쌓인) 배열을 보게 된다.
+   */
+  const applySnapshot = useCallback((snapshot: (prev: RealtimeDataState) => RealtimeDataState) => {
+    const buffered = pendingRealtimeUpdatesRef.current;
+    pendingRealtimeUpdatesRef.current = [];
+    snapshotAppliedRef.current = true;
+    setState(prev => replayBufferedUpdates(snapshot(prev), buffered));
+  }, []);
   // scheduleReconnect 는 순환 의존(setup → scheduleReconnect → load → scheduleReconnect) 때문에
   // deps 를 비워야 한다. 그 대가로 최초 렌더의 클로저를 영구히 붙잡아, 사용자·역할이 바뀐 뒤
   // 재연결하면 **이전 권한 범위**로 조회·구독한다. 최신 함수를 ref 로 건네 순환을 깨면서
@@ -308,6 +349,10 @@ export const useRealtimeData = (
     // 안에서(afterScopeResolved → setup → cleanup) 세대를 스스로 올리기 때문이다.
     // useRealtimeProgress 의 reqRef 와 같은 규율.
     const sequence = ++loadSequenceRef.current;
+    // 이 로드의 스냅샷이 아직 적용되지 않았다. 지금부터 오는 이벤트는 버퍼에 쌓인다.
+    // (refresh() 로 다시 부를 때도 마찬가지다 — 스냅샷은 언제 적용되든 배열을 교체하므로,
+    //  그 사이 이벤트를 바로 반영하면 똑같이 지워진다)
+    snapshotAppliedRef.current = false;
     try {
       setState(prev => ({
         ...prev,
@@ -430,7 +475,8 @@ export const useRealtimeData = (
 
       if (!isMountedRef.current) return;
 
-      setState(prev => ({
+      // 배열을 통째로 교체하되, 스냅샷 조회 중 도착한 이벤트를 그 위에 이어서 재생한다.
+      applySnapshot(prev => ({
         ...prev,
         machines: machines || [],
         machineLogs: machineLogs || [],
@@ -458,7 +504,10 @@ export const useRealtimeData = (
       // error 로 덮어쓰거나, 이미 회복된 연결에 불필요한 재연결을 또 예약하면 안 된다.
       if (sequence !== loadSequenceRef.current) return;
 
-      setState(prev => ({
+      // 스냅샷은 못 받았지만 버퍼를 계속 쌓아두면 안 된다 — 그러면 이후 모든 실시간 이벤트가
+      // 영원히 화면에 닿지 못한다. 실패한 스냅샷 대신 **기존 상태 위에** 버퍼를 재생하고
+      // 버퍼링을 해제한다. 재연결이 성공하면 그때 스냅샷이 다시 배열을 맞춘다.
+      applySnapshot(prev => ({
         ...prev,
         loading: false,
         error: error instanceof Error ? error.message : '데이터 로드에 실패했습니다.',
@@ -470,12 +519,18 @@ export const useRealtimeData = (
     }
     // userId/userRole 을 deps 에 포함해야 사용자 전환 후 이전 담당 설비로 조회하는
     // stale closure 를 피한다(후속 MEDIUM). 이 함수가 재생성되면 mount effect 도 재실행된다.
-  }, [scheduleReconnect, includeProductionRecords, includeMachineLogs, userId, userRole]);
+    // applySnapshot 은 useCallback([], …) 이라 정체성이 안정적이다 — deps 에 넣어도
+    // loadInitialData 가 매 렌더 재생성되지 않는다(=mount effect 도 재실행되지 않는다).
+  }, [applySnapshot, scheduleReconnect, includeProductionRecords, includeMachineLogs, userId, userRole]);
 
   // 채널 정리 함수
   const cleanupChannels = useCallback(() => {
     // unsubscribe() 보다 먼저 세대를 올린다 — 이후 발화하는 상태 콜백은 모두 이전 세대다.
     subscriptionGenerationRef.current += 1;
+    // 아직 재생하지 못한 이벤트는 버린다. 사용자·역할이 바뀌어 재구독하는 경우, 이전 담당
+    // 설비의 이벤트를 새 스냅샷 위에 재생하면 담당 밖 데이터가 목록에 섞인다. 버려도
+    // 유실되지 않는다 — 새 구독은 새 스냅샷 조회보다 먼저 열리므로 그 사이가 비지 않는다.
+    pendingRealtimeUpdatesRef.current = [];
     channelsRef.current.forEach(channel => {
       try {
         channel.unsubscribe();
@@ -527,7 +582,7 @@ export const useRealtimeData = (
           // 발화시킬 수 있다. 아래 상태 콜백과 동일한 세대 가드를 여기에도 건다.
           if (generation !== subscriptionGenerationRef.current) return;
 
-          setState(prev => {
+          applyRealtimeUpdate(prev => {
             const newLogs = applyRealtimeMachineLog(
               prev.machineLogs,
               payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -582,7 +637,7 @@ export const useRealtimeData = (
           // machine_logs 핸들러와 동일한 세대 가드 — 해제 중인 이전 채널의 이벤트는 무시한다.
           if (generation !== subscriptionGenerationRef.current) return;
 
-          setState(prev => {
+          applyRealtimeUpdate(prev => {
             let newRecords = [...prev.productionRecords];
             const newOeeMetrics = { ...prev.oeeMetrics };
             const windowStart = getProductionWindowStart();
@@ -671,7 +726,7 @@ export const useRealtimeData = (
           // 위와 동일한 세대 가드 — 해제 중인 이전 채널의 이벤트는 무시한다.
           if (generation !== subscriptionGenerationRef.current) return;
 
-          setState(prev => {
+          applyRealtimeUpdate(prev => {
             let newMachines = [...prev.machines];
 
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -719,7 +774,8 @@ export const useRealtimeData = (
       .filter((channel): channel is RealtimeChannel => channel !== null);
 
     console.log('🔗 실시간 구독 설정 완료');
-  }, [cleanupChannels, updateConnectionStatus, scheduleReconnect, includeProductionRecords, includeMachineLogs]);
+    // applyRealtimeUpdate 도 useCallback([], …) 이라 안정적이다 — 재구독을 유발하지 않는다.
+  }, [applyRealtimeUpdate, cleanupChannels, updateConnectionStatus, scheduleReconnect, includeProductionRecords, includeMachineLogs]);
 
   // scheduleReconnect 의 순환 의존(setup → scheduleReconnect → load → scheduleReconnect)을 깨기
   // 위해 deps 를 비워뒀다. 그 타임아웃 클로저가 최초 렌더에 고정되지 않도록, 매 렌더 후

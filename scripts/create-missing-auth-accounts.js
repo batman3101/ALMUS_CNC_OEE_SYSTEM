@@ -13,6 +13,14 @@ const supabaseAdmin = createClient(
   }
 );
 
+// 임시 비밀번호는 코드에 두지 않는다 — 저장소가 공개다(Codex 감사 2026-07-29 후속).
+// 없으면 약한 기본값으로 진행하지 않고 실패한다.
+const SEED_PASSWORD = process.env.SEED_USER_PASSWORD;
+if (!SEED_PASSWORD) {
+  console.error('❌ SEED_USER_PASSWORD 환경변수가 필요합니다. .env.local 에 설정하세요.');
+  process.exit(1);
+}
+
 // 생성할 사용자들
 const usersToCreate = [
   {
@@ -20,35 +28,35 @@ const usersToCreate = [
     name: '박관리',
     email: 'admin3@cnc-oee.com',
     role: 'admin',
-    password: 'cncoee123!'  // 임시 비밀번호
+    password: SEED_PASSWORD
   },
   {
     existing_id: 'af2a254b-a0ce-43e0-99c9-cea8c95c3dae',
     name: '정기술',
     email: 'engineer2@cnc-oee.com',
     role: 'engineer',
-    password: 'cncoee123!'
+    password: SEED_PASSWORD
   },
   {
     existing_id: 'df30c251-c614-48f1-ab8e-5e0b95e37938',
     name: '서운영',
     email: 'operator2@cnc-oee.com',
     role: 'operator',
-    password: 'cncoee123!'
+    password: SEED_PASSWORD
   },
   {
     existing_id: 'eeb70b8f-2cf7-4eae-a2e1-6ce0bb6cf542',
     name: '이관리',
     email: 'admin2@cnc-oee.com',
     role: 'engineer',
-    password: 'cncoee123!'
+    password: SEED_PASSWORD
   },
   {
     existing_id: 'befad2bf-e896-4c0d-ad3f-1a168cffc1ac',
     name: '에헤야',
     email: 'limcaca@gmail.com',
     role: 'operator',
-    password: 'cncoee123!'
+    password: SEED_PASSWORD
   }
 ];
 

@@ -4,7 +4,8 @@ import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/ap
 import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
 import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 import { calculateVerifiedDowntimeMinutesForWindow } from '@/app/api/production-records/daily/downtimeCalculation';
-import { getShiftWindow, loadDowntimeSourceRows } from '@/lib/shiftDowntime';
+import { getShiftReportingWindow, getShiftWindow, loadDowntimeSourceRows } from '@/lib/shiftDowntime';
+import { classifyReportingWindow } from '@/utils/shiftReportingWindow';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,24 @@ export async function POST(request: NextRequest) {
 
     assertMachineAccess(user, machineId);
 
+    // 인자로 온 (date, shift)가 **지금 열려 있는 교대**인지 서버 시각으로 확인한다.
+    // 예전에는 검사가 없어, 담당 설비를 가진 운영자가 API 를 직접 호출하면 임의의 과거·미래
+    // 교대에 진척을 넣을 수 있었다(Codex 감사 2026-07-29 #5). 그 값은 마감이 output_qty 로
+    // 승격시키므로 과거 실적과 backlog 를 오염시킨다.
+    const reporting = await getShiftReportingWindow(date, shift);
+    if (!reporting) {
+      return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
+    }
+    const verdict = classifyReportingWindow(reporting.window, reporting.bufferMinutes, Date.now());
+    if (verdict !== 'open') {
+      // 어느 방향으로 닫혔는지 알려준다 — 클라이언트가 "아직 시작 안 함" 과 "이미 끝남" 을
+      // 다르게 안내할 수 있어야 한다.
+      return NextResponse.json(
+        { error: 'shift is not open for progress reporting', reason: verdict },
+        { status: 400 },
+      );
+    }
+
     // 교대 유효성 + 통합 비가동(machine_logs 열린 비정상 + downtime_entries 열린 항목) +
     // 단조증가 + INSERT 를 하나의 트랜잭션(advisory lock)으로 원자화한다. 앱 레벨의
     // read-then-insert 갭(검사 직후 비가동/경쟁)과 비가동 소스 누락을 함께 없앤다.
@@ -80,6 +99,14 @@ export async function POST(request: NextRequest) {
           { error: 'machine_in_downtime', state: result.state },
           { status: 409 }
         );
+      }
+      // 비활성 설비는 보고 대상이 아니다. RPC 가 잠금 아래에서 판정하므로, 관리자가 방금
+      // 비활성화했더라도 이 응답이 정확하다(라우트에서 미리 조회했다면 놓칠 수 있는 경쟁).
+      if (result.reason === 'machine_inactive') {
+        return NextResponse.json({ error: 'machine_inactive' }, { status: 409 });
+      }
+      if (result.reason === 'machine_not_found') {
+        return NextResponse.json({ error: 'machine_not_found' }, { status: 404 });
       }
       if (result.reason === 'decreased') {
         // last_reported_qty 를 함께 실어, 모달이 일반 실패가 아닌 감소 안내를 띄우게 한다.

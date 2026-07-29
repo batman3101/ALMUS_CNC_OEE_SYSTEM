@@ -55,9 +55,15 @@ async function runMigrations() {
     const { data: existingUser } = await supabase.auth.admin.getUserByEmail('admin@example.com');
     
     if (!existingUser) {
+      // 초기 관리자 비밀번호를 코드에 두지 않는다 — 저장소가 공개다.
+      const initialPassword = process.env.SEED_ADMIN_PASSWORD;
+      if (!initialPassword) {
+        console.error('❌ SEED_ADMIN_PASSWORD 환경변수가 필요합니다. .env.local 에 설정하세요.');
+        process.exit(1);
+      }
       const { data: user, error } = await supabase.auth.admin.createUser({
         email: 'admin@example.com',
-        password: 'admin123456',
+        password: initialPassword,
         email_confirm: true
       });
 
@@ -70,7 +76,7 @@ async function runMigrations() {
         
         console.log('✅ Admin user created:');
         console.log('   Email: admin@example.com');
-        console.log('   Password: admin123456');
+        console.log('   Password: (SEED_ADMIN_PASSWORD 환경변수 값)');
       }
     } else {
       console.log('ℹ️ Admin user already exists');

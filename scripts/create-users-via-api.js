@@ -1,34 +1,20 @@
+require('dotenv').config({ path: '.env.local' });
+
+// 시드 비밀번호는 코드에 두지 않는다. 이 파일에는 계정 5개의 평문 비밀번호가 리터럴로
+// 박혀 있었고 저장소는 공개다(Codex 감사 2026-07-29 후속). 환경변수로 받고, 없으면
+// 약한 기본값으로 조용히 진행하는 대신 실패한다 — 시드 스크립트가 만든 계정은 실제 계정이다.
+const SEED_PASSWORD = process.env.SEED_USER_PASSWORD;
+if (!SEED_PASSWORD) {
+  console.error('❌ SEED_USER_PASSWORD 환경변수가 필요합니다. .env.local 에 설정하세요.');
+  process.exit(1);
+}
+
 const usersToCreate = [
-  {
-    name: '박관리',
-    email: 'admin3@cnc-oee.com',
-    password: 'cncoee123!',
-    role: 'admin'
-  },
-  {
-    name: '정기술', 
-    email: 'engineer2@cnc-oee.com',
-    password: 'cncoee123!',
-    role: 'engineer'
-  },
-  {
-    name: '서운영',
-    email: 'operator2@cnc-oee.com', 
-    password: 'cncoee123!',
-    role: 'operator'
-  },
-  {
-    name: '이관리',
-    email: 'admin2@cnc-oee.com',
-    password: 'cncoee123!',
-    role: 'engineer'
-  },
-  {
-    name: '에헤야',
-    email: 'limcaca@gmail.com',
-    password: 'cncoee123!',
-    role: 'operator'
-  }
+  { name: '박관리', email: 'admin3@cnc-oee.com', password: SEED_PASSWORD, role: 'admin' },
+  { name: '정기술', email: 'engineer2@cnc-oee.com', password: SEED_PASSWORD, role: 'engineer' },
+  { name: '서운영', email: 'operator2@cnc-oee.com', password: SEED_PASSWORD, role: 'operator' },
+  { name: '이관리', email: 'admin2@cnc-oee.com', password: SEED_PASSWORD, role: 'engineer' },
+  { name: '에헤야', email: 'limcaca@gmail.com', password: SEED_PASSWORD, role: 'operator' }
 ];
 
 async function createUsersViaAPI() {

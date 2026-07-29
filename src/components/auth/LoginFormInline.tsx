@@ -26,15 +26,9 @@ export const LoginFormInline: React.FC<LoginFormInlineProps> = ({ onSuccess, onE
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 자동 로그인 비활성화 - 항상 수동으로 입력하도록 변경
-  // React.useEffect(() => {
-  //   if (isDevelopment()) {
-  //     form.setFieldsValue({
-  //       email: 'zetooo1972@gmail.com',
-  //       password: 'youkillme-1972'
-  //     });
-  //   }
-  // }, [form]);
+  // 개발용 자동 로그인 프리필이 여기 주석으로 남아 있었고, 그 안에 실제 이메일·비밀번호가
+  // 평문으로 들어 있었다(Codex 감사 2026-07-29). 저장소가 공개라 주석이어도 노출이다.
+  // 다시 필요해지면 코드 리터럴이 아니라 .env.local 의 NEXT_PUBLIC_DEV_LOGIN_* 로 받는다.
 
   const handleSubmit = async (values: LoginFormData) => {
     setLoading(true);

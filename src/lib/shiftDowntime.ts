@@ -101,8 +101,11 @@ export async function loadDowntimeSourceRows(
  * (date, shift) 한 교대의 시간창. 확정 OEE 와 같은 buildShiftWindows 를 써서 경계 정의를
  * 공유한다(B교대는 자정을 넘어 시작일 20:00 ~ 다음날 08:00). 설정이 유효하지 않으면 null.
  */
-export async function getShiftWindow(date: string, shift: 'A' | 'B'): Promise<Interval | null> {
-  const cfg = await getBusinessTimeConfig();
+function windowFromConfig(
+  cfg: { timezone: string; shiftAStart: string; shiftBStart: string },
+  date: string,
+  shift: 'A' | 'B',
+): Interval | null {
   const [window] = buildShiftWindows({
     startDate: date,
     endDate: date,
@@ -112,6 +115,26 @@ export async function getShiftWindow(date: string, shift: 'A' | 'B'): Promise<In
     requestedShifts: [shift],
   });
   return window ?? null;
+}
+
+export async function getShiftWindow(date: string, shift: 'A' | 'B'): Promise<Interval | null> {
+  const cfg = await getBusinessTimeConfig();
+  return windowFromConfig(cfg, date, shift);
+}
+
+/**
+ * 진행 보고를 받아도 되는 시간창. 교대 창에 관리자가 설정한 전환 유예를 더한 것이다.
+ *
+ * 설정을 **한 번만** 읽어 창과 유예를 함께 돌려준다. 둘을 따로 읽으면 그 사이 설정이
+ * 바뀔 때 서로 다른 세대의 값으로 판단하게 된다 — 드물지만 굳이 만들 이유가 없는 창이다.
+ */
+export async function getShiftReportingWindow(
+  date: string,
+  shift: 'A' | 'B',
+): Promise<{ window: Interval; bufferMinutes: number } | null> {
+  const cfg = await getBusinessTimeConfig();
+  const window = windowFromConfig(cfg, date, shift);
+  return window ? { window, bufferMinutes: cfg.shiftChangeBufferMinutes } : null;
 }
 
 /**
