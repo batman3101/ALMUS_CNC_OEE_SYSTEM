@@ -1,12 +1,10 @@
--- ⚠️ 이 마이그레이션은 **단독으로 적용하면 안 된다.** 같은 커밋의 앱 코드와 함께 배포한다.
---    아래에서 옛 4-인자 apply_machine_update 를 DROP 하기 때문에, 아직 4-인자로 호출하는
---    배포본이 떠 있는 동안 적용하면 PUT/PATCH /api/machines/[machineId] 와
---    PUT /api/admin/machines/[machineId] 가 전부 "function does not exist" 로 실패한다.
---    (DROP 없이 오버로드로 두면 잠금 없는 옛 경로가 살아남아 고치려던 결함이 그대로다 —
---     그래서 DROP 은 선택지가 아니고, 대신 배포 순서를 묶는다)
---    2026-07-29 사용자 결정: 브랜치 병합·배포 시점에 코드와 함께 적용한다.
---
 -- 설비 상태 쓰기 경로의 **잠금 규약을 하나로 통일**한다.
+--
+-- 이 마이그레이션은 **전방 호환**이다. 함수 시그니처를 바꾸지 않으므로 코드보다 먼저 적용해도
+-- 안전하고, 옛 배포본이 계속 호출해도 동작한다. (초안은 p_require_active 인자를 추가하고 옛
+-- 4-인자 함수를 DROP 했는데, 그러면 어느 순서로 배포해도 "함수 없음" 창이 생긴다 —
+-- PostgREST 의 스키마 캐시 리로드 지연까지 겹쳐 설비 수정 API 3개가 그동안 전부 500 이었다.
+-- 인자를 늘리지 않는 쪽으로 바꿔 그 창을 통째로 없앴다.)
 --
 -- [결함] 같은 설비의 상태를 바꾸는 함수가 넷인데, 서로 **다른 종류의 잠금**을 쓰고 있었다.
 --
@@ -44,21 +42,24 @@
 -- [함께 고치는 것] PATCH /api/machines/[machineId] 는 is_active 를 Node 에서 **먼저 조회한 뒤**
 -- RPC 를 호출했다. 그 조회는 트랜잭션 밖이라 잠금과 무관하고, 조회와 쓰기 사이에 설비가
 -- 비활성화될 수 있다(= 4단계와 같은 종류의 결함). 판단을 잠금 안으로 옮긴다:
--- p_require_active 를 받아 잠금을 잡은 뒤 확인하고 MACHINE_INACTIVE(55000)를 던진다.
--- 이는 upsert_downtime_entry 가 이미 쓰는 규약과 같아서 라우트의 매핑도 그대로 재사용된다.
--- p_require_active 의 기본값은 false 라 PUT/admin 경로의 동작은 바뀌지 않는다
--- (관리자는 비활성 설비의 정보를 계속 수정할 수 있어야 한다).
-
--- 인자가 늘었으므로 옛 4-인자 함수는 **반드시 지운다.** 남겨 두면 오버로드로 공존하고,
--- 잠금 없는 그 버전이 계속 호출될 수 있다 — 고치려던 결함이 그대로 살아남는다.
-DROP FUNCTION IF EXISTS public.apply_machine_update(uuid, jsonb, text, uuid);
+-- **비활성 설비의 상태 변경은 거부한다**(MACHINE_INACTIVE / 55000 — upsert_downtime_entry 가
+-- 이미 쓰는 규약이라 라우트의 409 매핑을 그대로 재사용한다).
+--
+-- 이 가드는 호출자를 구분하지 않는다. 그래서 인자가 필요 없고, 그래서 전방 호환이다.
+-- 동작 변화:
+--   · PATCH 가 비활성 설비의 **상태**를 바꾸려 하면 409 (예전과 같다)
+--   · PATCH 가 비활성 설비의 모델/공정만 바꾸면 이제 허용된다 (예전에는 무조건 409)
+--   · PUT/admin 이 비활성 설비의 **상태**를 바꾸려 하면 이제 409 (예전에는 허용)
+--     비활성 설비에 상태를 쓰면 zz_close_machine_activity_when_inactive 가 방금 연 로그를
+--     즉시 닫아 0분 유령 행을 만든다. 관리자에게도 허용할 이유가 없다.
+--   · PUT/admin 이 이름·위치·is_active 만 바꾸면 그대로 허용된다 (상태가 안 바뀌므로)
+--   · 같은 호출로 재활성화(is_active=true)하면서 상태를 바꾸는 것은 허용된다
 
 CREATE OR REPLACE FUNCTION public.apply_machine_update(
   p_machine_id uuid,
   p_updates jsonb,
   p_change_reason text DEFAULT NULL,
-  p_changed_by uuid DEFAULT NULL,
-  p_require_active boolean DEFAULT false
+  p_changed_by uuid DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -105,22 +106,22 @@ BEGIN
     v_new_state := v_machine.current_state;
   END IF;
 
-  -- 아래 UPDATE 의 is_active CASE 와 **같은 규칙**으로 결과값을 미리 구한다.
-  -- 이 호출이 스스로 설비를 다시 활성화하는 경우까지 비활성으로 판정하면 안 되기 때문이다.
+  -- 아래 UPDATE 의 is_active 규칙과 **같게** 결과값을 미리 구한다.
+  -- 이 호출이 스스로 설비를 재활성화하는 경우까지 비활성으로 판정하면 안 되기 때문이다.
   IF p_updates ? 'is_active' AND p_updates ->> 'is_active' IS NOT NULL THEN
     v_new_active := (p_updates ->> 'is_active')::boolean;
   ELSE
     v_new_active := v_machine.is_active;
   END IF;
 
-  -- 운영 경로(PATCH)는 비활성 설비를 건드리지 않는다. 이 판단이 잠금 **안**에 있다는 점이 핵심 —
+  v_state_changed := v_new_state IS DISTINCT FROM v_machine.current_state;
+
+  -- 비활성 설비의 상태는 바꾸지 않는다. 이 판단이 잠금 **안**에 있다는 점이 핵심 —
   -- 잠금 밖(Node)에서 미리 조회하면 조회 시점과 쓰기 시점 사이에 설비가 비활성화될 수 있다.
-  -- 코드는 upsert_downtime_entry 와 같은 55000/MACHINE_INACTIVE 를 쓴다(라우트 매핑 재사용).
-  IF p_require_active AND NOT v_new_active THEN
+  -- 상태를 바꾸지 않는 수정(이름·위치·모델·재활성화)은 막지 않는다.
+  IF v_state_changed AND NOT v_new_active THEN
     RAISE EXCEPTION 'MACHINE_INACTIVE' USING ERRCODE = '55000';
   END IF;
-
-  v_state_changed := v_new_state IS DISTINCT FROM v_machine.current_state;
 
   -- 이전 상태의 지속 시간은 반드시 UPDATE 이전에 읽어야 한다.
   -- UPDATE 직후 트리거가 열린 로그를 닫아버리기 때문이다.
@@ -192,7 +193,7 @@ $function$;
 
 -- 이 함수는 서버(API Route)의 service_role 클라이언트에서만 호출한다.
 -- SECURITY DEFINER 이므로 브라우저에서 직접 호출 가능한 역할에는 권한을 주지 않는다.
-REVOKE ALL ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid, boolean) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid, boolean) FROM anon;
-REVOKE ALL ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid, boolean) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid, boolean) TO service_role;
+REVOKE ALL ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.apply_machine_update(uuid, jsonb, text, uuid) TO service_role;

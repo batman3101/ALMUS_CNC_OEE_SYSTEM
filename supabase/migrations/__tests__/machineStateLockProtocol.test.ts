@@ -136,22 +136,36 @@ describe('설비 상태 잠금 규약', () => {
     }
   });
 
-  it('잠금 없는 옛 4-인자 apply_machine_update 는 남겨 두지 않는다', () => {
-    // create or replace 는 인자 목록이 다르면 **덮어쓰지 않고 오버로드를 만든다.**
-    // 옛 버전이 살아 있으면 잠금 없는 경로가 그대로 호출될 수 있다.
+  it('전방 호환이다 — 시그니처를 바꾸지 않고 함수를 DROP 하지 않는다', () => {
+    // 인자를 늘리면 create or replace 가 **덮어쓰지 않고 오버로드를 만들어**, 잠금 없는 옛
+    // 버전이 살아남는다. 그래서 DROP 이 필요해지고, DROP 하는 순간 마이그레이션과 코드 배포
+    // 사이에 "함수 없음" 창이 생긴다(PostgREST 스키마 캐시 지연까지 겹친다).
+    // 이 마이그레이션은 4-인자 시그니처를 유지해 그 창을 없앤다 — 코드보다 먼저 적용해도 안전하다.
     const migration = fs.readFileSync(
       path.join(MIGRATIONS_DIR, '20260729030000_machine_state_lock_protocol.sql'),
       'utf8'
     );
-    expect(migration).toMatch(
-      /drop\s+function\s+if\s+exists\s+public\.apply_machine_update\(uuid,\s*jsonb,\s*text,\s*uuid\)/i
-    );
+
+    expect(migration).not.toMatch(/drop\s+function[\s\S]{0,80}apply_machine_update/i);
+
+    // 인자 목록을 통째로 뽑아 이름만 비교한다 (줄바꿈·들여쓰기·기본값에 흔들리지 않게).
+    const signature = /create\s+or\s+replace\s+function\s+public\.apply_machine_update\(([^)]*)\)/i
+      .exec(migration);
+    expect(signature).not.toBeNull();
+    const paramNames = signature![1]
+      .split(',')
+      .map(part => part.trim().split(/\s+/)[0])
+      .filter(Boolean);
+    // 호출자를 구분하는 인자(p_require_active 등)가 붙으면 여기서 걸린다.
+    // 파일 전체에서 그 이름을 금지하지는 않는다 — 왜 그 설계를 버렸는지 설명하는 주석에도
+    // 그 이름이 나오고, 그 설명은 남아 있어야 한다.
+    expect(paramNames).toEqual(['p_machine_id', 'p_updates', 'p_change_reason', 'p_changed_by']);
   });
 
-  it('비활성 설비 판단이 잠금 안에서 이뤄진다', () => {
+  it('비활성 설비 판단이 잠금 안에서, 쓰기보다 먼저 이뤄진다', () => {
     const fn = definitions.get('apply_machine_update')!;
     const lockAt = fn.body.search(CANONICAL_LOCK);
-    const guardAt = fn.body.search(/if\s+p_require_active\s+and\s+not\s+v_new_active/i);
+    const guardAt = fn.body.search(/if\s+v_state_changed\s+and\s+not\s+v_new_active/i);
     const writeAt = fn.body.search(/update\s+public\.machines\s+m/i);
 
     expect(guardAt).toBeGreaterThan(lockAt);
@@ -160,8 +174,15 @@ describe('설비 상태 잠금 규약', () => {
     expect(fn.body).toMatch(/raise\s+exception\s+'MACHINE_INACTIVE'\s+using\s+errcode\s*=\s*'55000'/i);
   });
 
-  it('기본값은 false 라 관리자 경로(PUT)의 동작이 바뀌지 않는다', () => {
+  it('상태가 바뀔 때만 거부한다 — 이름·위치 수정과 재활성화는 막지 않는다', () => {
     const fn = definitions.get('apply_machine_update')!;
-    expect(fn.body).toMatch(/p_require_active\s+boolean\s+default\s+false/i);
+
+    // 가드가 v_state_changed 를 함께 보지 않으면 비활성 설비는 어떤 수정도 못 하게 된다.
+    expect(fn.body).toMatch(/if\s+v_state_changed\s+and\s+not\s+v_new_active/i);
+    // v_new_active 는 "이 호출이 끝난 뒤의 값"이어야 한다. v_machine.is_active 를 그대로 보면
+    // 재활성화와 상태 변경을 한 번에 하는 관리자 호출이 거부된다.
+    expect(fn.body).toMatch(
+      /p_updates \? 'is_active'[\s\S]{0,160}v_new_active\s*:=[\s\S]{0,160}v_machine\.is_active/i
+    );
   });
 });

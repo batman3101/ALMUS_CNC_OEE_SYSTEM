@@ -46,33 +46,26 @@ describe('BUG-016 machine update validation', () => {
 describe('비활성 설비 판단을 RPC(잠금 안)로 넘긴 계약', () => {
   beforeEach(() => rpc.mockReset());
 
-  it('요청한 대로 p_require_active 를 RPC 에 전달한다', async () => {
+  it('RPC 인자는 4개 그대로다 — 시그니처가 바뀌면 배포 창이 생긴다', async () => {
     rpc.mockResolvedValue({ data: { machine: {}, state_changed: false, duration_minutes: null }, error: null });
 
-    await applyMachineUpdate('m1', { current_state: 'INSPECTION' }, null, 'u1', { requireActive: true });
+    await applyMachineUpdate('m1', { current_state: 'INSPECTION' }, null, 'u1');
 
-    expect(rpc).toHaveBeenCalledWith(
-      'apply_machine_update',
-      expect.objectContaining({ p_machine_id: 'm1', p_require_active: true })
-    );
-  });
-
-  it('기본값은 false 다 — 관리자 경로(PUT/admin)는 비활성 설비도 계속 수정할 수 있어야 한다', async () => {
-    rpc.mockResolvedValue({ data: { machine: {}, state_changed: false, duration_minutes: null }, error: null });
-
-    await applyMachineUpdate('m1', { name: 'CNC-01' }, null, 'u1');
-
-    expect(rpc).toHaveBeenCalledWith(
-      'apply_machine_update',
-      expect.objectContaining({ p_require_active: false })
-    );
+    // 인자를 하나라도 늘리면 옛 함수를 DROP 해야 하고(안 그러면 잠금 없는 오버로드가 남는다),
+    // 그 순간 마이그레이션과 코드 배포 사이에 "함수 없음" 창이 생긴다.
+    expect(rpc).toHaveBeenCalledWith('apply_machine_update', {
+      p_machine_id: 'm1',
+      p_updates: { current_state: 'INSPECTION' },
+      p_change_reason: null,
+      p_changed_by: 'u1',
+    });
   });
 
   it('RPC 의 MACHINE_INACTIVE 를 409 로 옮긴다 (예전 사전 조회와 같은 문구)', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: '55000', message: 'MACHINE_INACTIVE' } });
 
     await expect(
-      applyMachineUpdate('m1', { current_state: 'INSPECTION' }, null, 'u1', { requireActive: true })
+      applyMachineUpdate('m1', { current_state: 'INSPECTION' }, null, 'u1')
     ).rejects.toBeInstanceOf(MachineInactiveError);
 
     const response = machineUpdateErrorResponse(new MachineInactiveError()) as unknown as {
@@ -87,7 +80,7 @@ describe('비활성 설비 판단을 RPC(잠금 안)로 넘긴 계약', () => {
     rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'MACHINE_NOT_FOUND' } });
 
     await expect(
-      applyMachineUpdate('missing', { current_state: 'INSPECTION' }, null, 'u1', { requireActive: true })
+      applyMachineUpdate('missing', { current_state: 'INSPECTION' }, null, 'u1')
     ).rejects.toBeInstanceOf(MachineNotFoundError);
 
     const response = machineUpdateErrorResponse(new MachineNotFoundError()) as unknown as { status: number };

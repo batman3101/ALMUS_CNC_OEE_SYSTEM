@@ -212,13 +212,12 @@ export async function PATCH(
     }
 
     // 상태 변경에 따른 로그/이력 기록까지 RPC 안에서 원자적으로 처리된다.
-    // requireActive: 운영 경로이므로 비활성 설비는 거부한다(판단은 잠금 안에서 이뤄진다).
+    // 비활성 설비의 상태 변경 거부도 RPC 안(잠금 확보 후)에서 판단한다 -> MACHINE_INACTIVE -> 409.
     const result = await applyMachineUpdate(
       machineId,
       updates,
       body.change_reason || null,
-      authenticatedUser.userId,
-      { requireActive: true }
+      authenticatedUser.userId
     );
 
     const updatedMachine = result.machine as { name?: string } | null;

@@ -55,16 +55,18 @@ describe('PATCH /api/machines/[machineId] — 비활성 판단이 잠금 안에 
     mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator' });
   });
 
-  it('RPC 에 p_require_active: true 를 넘긴다', async () => {
+  it('RPC 를 4-인자 그대로 호출한다 (전방 호환)', async () => {
     rpc.mockResolvedValue(okRpc());
 
     const response = await patch({ current_state: 'INSPECTION' });
 
     expect(response.status).toBe(200);
-    expect(rpc).toHaveBeenCalledWith(
-      'apply_machine_update',
-      expect.objectContaining({ p_machine_id: 'machine-1', p_require_active: true })
-    );
+    expect(rpc).toHaveBeenCalledWith('apply_machine_update', {
+      p_machine_id: 'machine-1',
+      p_updates: { current_state: 'INSPECTION' },
+      p_change_reason: null,
+      p_changed_by: 'op-1',
+    });
   });
 
   it('RPC 를 부르기 전에 machines 를 미리 조회하지 않는다', async () => {
@@ -119,7 +121,7 @@ describe('PUT /api/machines/[machineId] — 관리자 경로는 그대로다', (
     mockRequireUser.mockResolvedValue({ userId: 'admin-1', role: 'admin' });
   });
 
-  it('비활성 설비도 계속 수정할 수 있어야 하므로 require_active 를 켜지 않는다', async () => {
+  it('PATCH 와 완전히 같은 RPC 시그니처를 쓴다', async () => {
     rpc.mockResolvedValue(okRpc());
 
     const response = await PUT(
@@ -132,7 +134,27 @@ describe('PUT /api/machines/[machineId] — 관리자 경로는 그대로다', (
     expect(response.status).toBe(200);
     expect(rpc).toHaveBeenCalledWith(
       'apply_machine_update',
-      expect.objectContaining({ p_require_active: false })
+      expect.objectContaining({ p_machine_id: 'machine-1', p_changed_by: 'admin-1' })
     );
+    // 호출자를 구분하는 인자가 없어야 한다 — 있으면 옛 함수를 DROP 해야 하고 배포 창이 생긴다.
+    expect(Object.keys(rpc.mock.calls[0][1] as object).sort()).toEqual(
+      ['p_change_reason', 'p_changed_by', 'p_machine_id', 'p_updates']
+    );
+  });
+
+  it('비활성 설비의 이름만 바꾸는 것은 막지 않는다 (상태가 안 바뀌면 RPC 가 통과시킨다)', async () => {
+    // 라우트는 더 이상 비활성 여부로 분기하지 않는다. 판단은 전부 RPC(잠금 안)에 있고,
+    // RPC 는 **상태가 바뀔 때만** 거부한다. 라우트가 이를 앞질러 막으면 안 된다.
+    rpc.mockResolvedValue(okRpc());
+
+    const response = await PUT(
+      {
+        json: async () => ({ name: '새이름', location: 'A동', current_state: 'NORMAL_OPERATION' }),
+      } as never,
+      { params } as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(from).not.toHaveBeenCalled();
   });
 });
