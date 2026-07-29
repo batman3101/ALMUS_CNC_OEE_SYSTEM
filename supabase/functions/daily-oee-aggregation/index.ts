@@ -134,9 +134,16 @@ serve(async (req) => {
     // 지금 이 함수가 쓰는 값은 output_qty=0 인 행의 파생 지표뿐이라 손상 능력이 없지만,
     // 본문이 나중에 확장되면 그 순간 권한 상승이 된다. 경계는 지금 세운다.
     //
-    // service_role 분기가 **필수**다 — pg_cron 스케줄(08:30 / 20:30)은 service_role 키로
-    // 호출하고, 그 토큰에는 대응하는 user_profiles 행이 없다. 분기 없이 프로필만 조회하면
-    // 정기 집계가 통째로 죽는다.
+    // service_role 분기를 둔 이유 — service_role 토큰에는 대응하는 user_profiles 행이 없어서,
+    // 분기 없이 프로필만 조회하면 service_role 호출이 전부 403 이 된다.
+    //
+    // ⚠ 문서 정정(2026-07-29 실측): CLAUDE.md 와 docs/OEE_AGGREGATION_SYSTEM.md 는 이 함수가
+    //   pg_cron 으로 매일 08:30 / 20:30 에 자동 실행된다고 적어 두었지만, **이 프로젝트에는
+    //   pg_cron 이 설치되어 있지 않고(installed_version=null) cron 스키마도 없다.**
+    //   즉 예약 호출자는 존재하지 않으며, 현재 유일한 호출자는 관리자 UI
+    //   (OEEAggregationService.triggerDailyAggregation → 브라우저 세션 JWT)다.
+    //   그래도 이 분기는 유지한다 — 나중에 스케줄러를 붙일 때 필요하고, 지금 지우면
+    //   그때 같은 함정을 다시 밟는다.
     const authHeader = req.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
