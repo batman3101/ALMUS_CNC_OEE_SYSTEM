@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { DEFAULT_BREAK_TIME_MINUTES } from '@/lib/shiftDefaults';
 
 /**
  * 계획 가동시간(planned_runtime)의 단일 정의.
@@ -16,7 +17,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 export const DEFAULT_OPERATING_MINUTES = 720;
 
 // system_settings 에 break_time_minutes 가 없거나 조회 실패한 경우에만 사용하는 기본값
-export const DEFAULT_BREAK_TIME_MINUTES = 60;
+export { DEFAULT_BREAK_TIME_MINUTES } from '@/lib/shiftDefaults';
 
 /**
  * system_settings(category='shift', setting_key='break_time_minutes') 에서 휴식 시간 조회.
