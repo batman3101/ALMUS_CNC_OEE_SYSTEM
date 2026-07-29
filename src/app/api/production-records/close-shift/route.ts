@@ -51,7 +51,25 @@ export async function POST(request: NextRequest) {
     // 제외하지만 API 를 직접 치면 진행 중·미래 교대의 확정 record 를 만들 수 있었다(자체 감사 #4).
     if (window.end > Date.now())
       return NextResponse.json({ error: 'shift has not ended yet (이른 마감 금지)' }, { status: 400 });
-    const rows = await loadDowntimeSourceRows(machineId, new Date(window.start).toISOString(), new Date(window.end).toISOString());
+    const windowStartIso = new Date(window.start).toISOString();
+    const windowEndIso = new Date(window.end).toISOString();
+
+    // 원천 지문을 **행을 읽기 전에** 잡는다. 이 순서가 정확성의 전부다(자체 감사 #6).
+    //
+    // 반대로 하면(행 먼저, 지문 나중) 그 사이의 변경이 지문에는 반영되고 행에는 반영되지
+    // 않는다. RPC 의 대조는 통과하고, 낡은 행으로 계산한 지표가 확정 저장된다 — 거짓 음성.
+    // 지금 순서에서는 같은 변경이 지문 불일치를 만들어 409 가 된다. 최악이 "불필요한 재시도"
+    // 이고, 그건 되돌릴 수 있다. 거짓 음성은 되돌릴 수 없다(스냅샷 보존 원칙).
+    const { data: expectedDigest, error: digestError } = await supabaseAdmin.rpc(
+      'downtime_window_digest',
+      { p_machine_id: machineId, p_window_start: windowStartIso, p_window_end: windowEndIso },
+    );
+    if (digestError || typeof expectedDigest !== 'string') {
+      console.error('비가동 원천 지문 조회 오류:', digestError);
+      return NextResponse.json({ error: 'Failed to read downtime source' }, { status: 500 });
+    }
+
+    const rows = await loadDowntimeSourceRows(machineId, windowStartIso, windowEndIso);
     const breakMinutes = await getBreakTimeMinutes();
     const downtimeMinutes = calculateVerifiedDowntimeMinutesForWindow(rows, window, breakMinutes, Date.now());
     const operatingMinutes = Math.round((window.end - window.start) / 60_000);
@@ -69,7 +87,7 @@ export async function POST(request: NextRequest) {
       operatingMinutes, breakMinutes, downtimeMinutes, outputQty, defectQty: null, tactSeconds,
     });
 
-    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('close_shift_upsert', {
+    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('close_shift_upsert_v2', {
       p_machine_id: machineId, p_date: date, p_shift: shift, p_output_qty: outputQty,
       // 정수 컬럼(runtime)·소수 4자리(비율)로 반올림해 저장한다(daily 라우트와 동일 규율).
       p_planned_runtime: Math.round(snap.plannedRuntime),
@@ -79,6 +97,10 @@ export async function POST(request: NextRequest) {
       p_performance: snap.performance === null ? null : Math.round(snap.performance * 10000) / 10000,
       p_downtime_minutes: snap.downtime === null ? null : Math.round(snap.downtime),
       p_tact_time_seconds: tactSeconds,
+      // 잠금 아래에서 원천이 그대로인지 대조할 재료.
+      p_window_start: windowStartIso,
+      p_window_end: windowEndIso,
+      p_expected_digest: expectedDigest,
     });
 
     const rpcResult = rpcData as { ok?: boolean; reason?: string; defect_qty?: number } | null;
@@ -87,6 +109,13 @@ export async function POST(request: NextRequest) {
       if (rpcResult?.reason === 'output_lt_defect')
         return NextResponse.json(
           { error: 'output_qty is less than confirmed defect_qty', defect_qty: rpcResult.defect_qty },
+          { status: 409 },
+        );
+      // 지표를 계산하는 사이 비가동이 바뀌었다. 낡은 값을 확정 저장하지 않고 되묻는다 —
+      // 클라이언트가 재시도하면 새 원천으로 다시 계산된다.
+      if (rpcResult?.reason === 'source_changed')
+        return NextResponse.json(
+          { error: 'downtime source changed during close', retryable: true },
           { status: 409 },
         );
       console.error('교대 마감 저장 오류:', rpcError ?? rpcData);

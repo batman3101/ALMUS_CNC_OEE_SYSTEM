@@ -62,11 +62,25 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
     setSaving(true);
     setError(null);
     try {
-      const res = await authFetch('/api/production-records/close-shift', {
+      const post = () => authFetch('/api/production-records/close-shift', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ machine_id: machineId, date: selected.date, shift: selected.shift, final_qty: qty }),
       });
+
+      let res = await post();
+
+      // 지표를 계산하는 사이 비가동이 바뀌면 서버가 저장하지 않고 409(retryable)로 되묻는다.
+      // 낡은 값을 확정 저장하지 않기 위한 설계이므로, 여기서 한 번 다시 보내면 서버가 새
+      // 원천으로 다시 계산한다. 작업자에게 보이는 것은 아무것도 없다.
+      //
+      // 한 번만 재시도한다 — 두 번 연속 어긋난다면 누군가 지금 비가동을 계속 고치고 있다는
+      // 뜻이고, 그때는 조용히 반복하기보다 실패로 알리는 편이 낫다.
+      if (res.status === 409) {
+        const body = await res.clone().json().catch(() => null) as { retryable?: boolean } | null;
+        if (body?.retryable) res = await post();
+      }
+
       if (!res.ok) { setError(t('operator.closeShiftFailed')); return; }
       onClosed();
     } catch {
