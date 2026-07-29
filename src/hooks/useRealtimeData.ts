@@ -249,6 +249,18 @@ export const useRealtimeData = (
   // 무시한다. useRealtimeProgress 의 reqRef 와 같은 규율 — 늦게 도착한 콜백은 현재 상태에
   // 영향을 주면 안 된다.
   const subscriptionGenerationRef = useRef(0);
+  // 로드 순번. 채널 세대(subscriptionGenerationRef)와는 **다른 축**이다 — 정상 로드는 자기
+  // 사이클 안에서 afterScopeResolved → setup → cleanup 으로 세대를 올리므로, 세대로 비교하면
+  // 정상 로드가 스스로를 취소한다. 늦게 끝난 옛 로드가 새 구독을 덮지 않게 하는 것이 목적이다.
+  const loadSequenceRef = useRef(0);
+  // scheduleReconnect 는 순환 의존(setup → scheduleReconnect → load → scheduleReconnect) 때문에
+  // deps 를 비워야 한다. 그 대가로 최초 렌더의 클로저를 영구히 붙잡아, 사용자·역할이 바뀐 뒤
+  // 재연결하면 **이전 권한 범위**로 조회·구독한다. 최신 함수를 ref 로 건네 순환을 깨면서
+  // 스코프는 최신으로 유지한다.
+  const reconnectTargetRef = useRef<{
+    load: (afterScopeResolved?: () => void) => Promise<void>;
+    setup: () => void;
+  } | null>(null);
 
   // 연결 상태 업데이트 함수
   const updateConnectionStatus = useCallback((status: 'connecting' | 'connected' | 'disconnected' | 'error') => {
@@ -267,12 +279,22 @@ export const useRealtimeData = (
 
     reconnectTimeoutRef.current = setTimeout(() => {
       if (!isMountedRef.current) return;
+      // 최신 함수를 ref 에서 읽는다 — 이 타임아웃 클로저는 최초 렌더에 고정돼 있으므로
+      // 직접 참조하면 사용자·역할이 바뀐 뒤에도 그 이전의 loadInitialData/
+      // setupRealtimeSubscriptions 를 계속 부른다(=이전 권한 범위로 재연결).
+      const target = reconnectTargetRef.current;
+      if (!target) return;
       console.log('🔄 실시간 연결 재시도...');
       updateConnectionStatus('connecting');
       // 담당 필터 확정 직후(스냅샷 조회 전) 구독을 연다 — 갭 이벤트 유실 방지.
-      void loadInitialData(setupRealtimeSubscriptions);
+      void target.load(target.setup);
     }, 5000); // 5초 후 재연결 시도
-  }, []);
+    // 의존성이 **완전하다**. 예전에는 loadInitialData/setupRealtimeSubscriptions 를 직접
+    // 참조해 넣을 수가 없었고(넣으면 setup → scheduleReconnect → load → scheduleReconnect
+    // 순환), 그래서 배열을 비운 채 경고를 안고 갔다. 이제 그 둘은 ref 로 읽으므로 클로저가
+    // 직접 참조하지 않는다. 남은 updateConnectionStatus 는 useCallback([], …) 이라 안정적이라
+    // 넣어도 scheduleReconnect 의 정체성이 바뀌지 않는다 — 순환도 재발하지 않는다.
+  }, [updateConnectionStatus]);
 
   // 초기 데이터 로드 (성능 최적화)
   // afterScopeResolved: 담당 설비(assignedIdsRef)가 확정된 직후, 무거운 스냅샷 조회 **이전에**
@@ -280,6 +302,12 @@ export const useRealtimeData = (
   // 실행돼 그 사이 커밋된 변경을 모두 포함하므로 "조회↔구독 갭" 이벤트 유실이 없다(후속 #3).
   const loadInitialData = useCallback(async (afterScopeResolved?: () => void) => {
     if (!isMountedRef.current) return;
+    // 이 호출의 순번을 캡처한다. loadInitialData 는 마운트, refresh(), scheduleReconnect 에서
+    // 각각 독립적으로 불릴 수 있어, 먼저 시작한 호출이 await 사이에 더 새 호출에게 추월당할
+    // 수 있다. 채널 세대(subscriptionGenerationRef)로는 못 막는다 — 정상 로드도 자기 사이클
+    // 안에서(afterScopeResolved → setup → cleanup) 세대를 스스로 올리기 때문이다.
+    // useRealtimeProgress 의 reqRef 와 같은 규율.
+    const sequence = ++loadSequenceRef.current;
     try {
       setState(prev => ({
         ...prev,
@@ -324,6 +352,9 @@ export const useRealtimeData = (
       // 열린 로그는 최근 N 제한과 분리한다. 오래 열린 설비도 현재 상태 계산에서 누락되지 않는다.
       // (기존에는 4개 쿼리를 순차적으로 await 하여 첫 화면 렌더링까지 불필요하게 오래 걸렸음)
       const userProfile = await fetchUserProfile();
+      // 더 새 로드가 이미 시작됐다 — 이 결과로 스코프를 확정하거나 afterScopeResolved 를
+      // 불러 채널을 (이전 권한 범위로) 재구독하면 안 된다.
+      if (sequence !== loadSequenceRef.current) return;
       const assignedMachineIds = userRole === 'operator'
         ? (userProfile?.assigned_machines || [])
         : undefined;
@@ -354,6 +385,9 @@ export const useRealtimeData = (
           ? fetchAllRecentProductionRecords(assignedMachineIds)
           : Promise.resolve([] as ProductionRecord[])
       ]);
+      // 더 새 로드가 이미 시작됐다 — 이 결과로 상태를 덮지 않는다(늦게 끝난 옛 로드가
+      // 새 구독의 결과를 이전 권한 범위 데이터로 덮어쓰는 것을 막는다).
+      if (sequence !== loadSequenceRef.current) return;
 
       // 설비 데이터
       const { data: machines, error: machinesError } = machinesResult;
@@ -420,6 +454,9 @@ export const useRealtimeData = (
       console.error('❌ 초기 데이터 로드 실패:', error);
 
       if (!isMountedRef.current) return;
+      // 더 새 로드가 이미 시작(또는 성공)됐다면 이 실패는 stale 이다 — 새 로드의 성공 상태를
+      // error 로 덮어쓰거나, 이미 회복된 연결에 불필요한 재연결을 또 예약하면 안 된다.
+      if (sequence !== loadSequenceRef.current) return;
 
       setState(prev => ({
         ...prev,
@@ -486,6 +523,9 @@ export const useRealtimeData = (
           console.log('📊 Machine log 변경:', payload.eventType, (payload.new as Partial<MachineLog>).log_id);
 
           if (!isMountedRef.current) return;
+          // 실제 unsubscribe() 는 비동기다 — 해제 중인 이전 세대 채널도 이 payload 콜백을
+          // 발화시킬 수 있다. 아래 상태 콜백과 동일한 세대 가드를 여기에도 건다.
+          if (generation !== subscriptionGenerationRef.current) return;
 
           setState(prev => {
             const newLogs = applyRealtimeMachineLog(
@@ -539,6 +579,8 @@ export const useRealtimeData = (
           console.log('Production record change:', payload);
 
           if (!isMountedRef.current) return;
+          // machine_logs 핸들러와 동일한 세대 가드 — 해제 중인 이전 채널의 이벤트는 무시한다.
+          if (generation !== subscriptionGenerationRef.current) return;
 
           setState(prev => {
             let newRecords = [...prev.productionRecords];
@@ -626,6 +668,8 @@ export const useRealtimeData = (
           console.log('Machine change:', payload);
 
           if (!isMountedRef.current) return;
+          // 위와 동일한 세대 가드 — 해제 중인 이전 채널의 이벤트는 무시한다.
+          if (generation !== subscriptionGenerationRef.current) return;
 
           setState(prev => {
             let newMachines = [...prev.machines];
@@ -676,6 +720,13 @@ export const useRealtimeData = (
 
     console.log('🔗 실시간 구독 설정 완료');
   }, [cleanupChannels, updateConnectionStatus, scheduleReconnect, includeProductionRecords, includeMachineLogs]);
+
+  // scheduleReconnect 의 순환 의존(setup → scheduleReconnect → load → scheduleReconnect)을 깨기
+  // 위해 deps 를 비워뒀다. 그 타임아웃 클로저가 최초 렌더에 고정되지 않도록, 매 렌더 후
+  // (deps 없는 이펙트) 최신 loadInitialData/setupRealtimeSubscriptions 를 ref 에 담아둔다.
+  useEffect(() => {
+    reconnectTargetRef.current = { load: loadInitialData, setup: setupRealtimeSubscriptions };
+  });
 
   // 실시간 구독 설정
   useEffect(() => {
