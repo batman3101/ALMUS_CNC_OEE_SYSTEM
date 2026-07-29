@@ -1,4 +1,4 @@
-import { classifyReportingWindow } from '../shiftReportingWindow';
+import { classifyReportingWindow, isShiftCloseAllowed } from '../shiftReportingWindow';
 
 /**
  * Codex 감사 2026-07-29 #5 회귀 검사 — 진행 보고를 받아도 되는 교대인지의 판정 규칙.
@@ -76,5 +76,50 @@ describe('classifyReportingWindow', () => {
     it('다음날 아침 유예가 끝나면 닫힌다', () => {
       expect(classifyReportingWindow(B_SHIFT, 10, B_SHIFT.end + 10 * MINUTE)).toBe('closed');
     });
+  });
+});
+
+/**
+ * 적대적 재감사 2026-07-29 #5 회귀 검사.
+ *
+ * 예전에는 마감 허용 시작이 `window.end`(라우트 안 별도 산술)이고 진척 허용 종료가
+ * `window.end + 유예`(이 파일)여서 **운영값 기준 10분간 겹쳤다.** 그 사이 마감이 잠금
+ * 밖에서 읽어둔 수량 위로 더 큰 진척이 승인되면, 원천은 110 인데 확정 레코드는 100 으로
+ * 남고 레코드가 존재하므로 재마감도 요구되지 않는다.
+ *
+ * 아래 검사의 핵심은 개별 경계값이 아니라 **어떤 유예값에서도 두 창이 겹치지 않는다**는
+ * 성질이다. 그래서 유예를 여러 값으로 돌려 확인한다 — 특정 값(10분)만 확인하면 설정이
+ * 바뀔 때 같은 결함이 조용히 돌아온다.
+ */
+describe('isShiftCloseAllowed', () => {
+  it('진척 창이 열려 있는 동안에는 마감할 수 없다', () => {
+    expect(isShiftCloseAllowed(A_SHIFT, 10, A_END)).toBe(false);
+    expect(isShiftCloseAllowed(A_SHIFT, 10, A_END + 10 * MINUTE - 1)).toBe(false);
+  });
+
+  it('유예가 끝나는 순간부터 마감할 수 있다', () => {
+    expect(isShiftCloseAllowed(A_SHIFT, 10, A_END + 10 * MINUTE)).toBe(true);
+  });
+
+  it('교대 시작 전·진행 중에는 마감할 수 없다 (이른 마감 금지)', () => {
+    expect(isShiftCloseAllowed(A_SHIFT, 10, A_START - 1)).toBe(false);
+    expect(isShiftCloseAllowed(A_SHIFT, 10, A_START + 6 * 60 * MINUTE)).toBe(false);
+  });
+
+  it('늦은 마감은 무기한 허용한다', () => {
+    expect(isShiftCloseAllowed(A_SHIFT, 10, A_END + 30 * 24 * 60 * MINUTE)).toBe(true);
+  });
+
+  it('어떤 유예값에서도 진척 창과 마감 창이 겹치지 않는다', () => {
+    // 이것이 #5 의 본질이다. 두 판정이 같은 함수에서 나오므로 서로소는 정의상 참이지만,
+    // 누군가 마감 쪽에 별도 산술을 다시 넣으면 이 검사가 잡는다.
+    for (const buffer of [0, 1, 10, 15, 60, -5]) {
+      const grace = Math.max(0, buffer) * MINUTE;
+      for (const now of [A_END - 1, A_END, A_END + grace - 1, A_END + grace, A_END + grace + 1]) {
+        const reportingOpen = classifyReportingWindow(A_SHIFT, buffer, now) === 'open';
+        const closeAllowed = isShiftCloseAllowed(A_SHIFT, buffer, now);
+        expect(reportingOpen && closeAllowed).toBe(false);
+      }
+    }
   });
 });
