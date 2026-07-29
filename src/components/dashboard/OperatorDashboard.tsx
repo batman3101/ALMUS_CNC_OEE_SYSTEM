@@ -22,6 +22,7 @@ import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { MachineConsole } from '@/components/dashboard/operator-console/MachineConsole';
+import { elapsedMinutesSince } from '@/utils/elapsedMinutes';
 
 const { useBreakpoint } = Grid;
 
@@ -147,8 +148,10 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
         .map(machine => {
           const logs = machineLogs.filter(log => log.machine_id === machine.id);
           const currentLog = logs.find(log => !log.end_time);
+          // 서버가 찍은 start_time 을 브라우저 시계로 재므로, 상태 전환 직후 음수가 될 수
+          // 있다. elapsedMinutesSince 가 0 으로 접는다 (그 전에는 "-1분" 이 떴다).
           const currentDuration = currentLog
-            ? Math.floor((Date.now() - new Date(currentLog.start_time).getTime()) / (1000 * 60))
+            ? elapsedMinutesSince(currentLog.start_time, Date.now())
             : 0;
 
           return {
