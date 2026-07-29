@@ -39,7 +39,11 @@
     "20260728010000_correct_open_downtime_reason": "efb4f0fecab7e8b4",
     "20260729010000_correct_downtime_reason_audit_fix": "c9b9c2c65790454c",
     "20260729030000_machine_state_lock_protocol": "03dad0ddcb8c7d3c",
-    "20260729060000_machine_row_lock_on_read": "0506da75e3297182"
+    "20260729060000_machine_row_lock_on_read": "0506da75e3297182",
+    "20260729120000_progress_report_inactive_machine_guard": "a9951115ad666903",
+    "20260729130000_machine_logs_write_lockdown": "b6b18e62eca04e1f",
+    "20260729140000_scope_operational_reads": "1bc018fe2dc3b57f",
+    "20260729150000_revoke_anon_table_grants": "9dd768a719c3f8e2"
   },
   "applied": [
     {
@@ -317,6 +321,22 @@
     {
       "version": "20260729051507",
       "name": "machine_row_lock_on_read"
+    },
+    {
+      "version": "20260729081253",
+      "name": "progress_report_inactive_machine_guard"
+    },
+    {
+      "version": "20260729081436",
+      "name": "machine_logs_write_lockdown"
+    },
+    {
+      "version": "20260729081456",
+      "name": "scope_operational_reads"
+    },
+    {
+      "version": "20260729081524",
+      "name": "revoke_anon_table_grants"
     }
   ],
   "file_matches": {
