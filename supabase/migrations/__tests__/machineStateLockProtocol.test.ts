@@ -20,6 +20,18 @@ const MIGRATIONS_DIR = path.join(process.cwd(), 'supabase/migrations');
 const CANONICAL_LOCK =
   /pg_advisory_xact_lock\(\s*hashtextextended\(\s*p_machine_id::text\s*,\s*0\s*\)\s*\)/i;
 
+/**
+ * `machines` 를 행 잠금과 함께 읽는가.
+ *
+ * advisory lock 은 **RPC 끼리만** 상호 배제한다. RPC 를 거치지 않고 machines 를 직접
+ * UPDATE 하는 경로(관리자 설비 비활성화 2곳)에는 아무 효력이 없다 — Node 문장 하나는
+ * 트랜잭션 범위 advisory lock 을 잡을 수 없기 때문이다.
+ *
+ * FOR UPDATE 로 읽으면 튜플의 xmax 가 이 트랜잭션으로 표시되고, 동시에 들어온 UPDATE 는
+ * 그 xid 를 보고 커밋까지 대기한다. 그래야 판단과 쓰기 사이가 비지 않는다.
+ */
+const MACHINES_ROW_LOCK = /from\s+(?:public\.)?machines\b[\s\S]{0,200}?for\s+update/i;
+
 // 설비 단위 상태로 취급하는 쓰기. 이 중 하나라도 하면 잠금 규약의 대상이다.
 const MACHINE_STATE_WRITE =
   /\b(?:update\s+(?:public\.)?machines\b|(?:insert\s+into|update)\s+(?:public\.)?downtime_entries\b)/i;
@@ -110,6 +122,30 @@ describe('설비 상태 잠금 규약', () => {
       .map(fn => `${fn.name} (${fn.file})`);
 
     expect(missing).toEqual([]);
+  });
+
+  it('machines 를 행 잠금과 함께 읽는다', () => {
+    // advisory lock 만으로는 RPC 를 거치지 않는 writer 를 막지 못한다.
+    // 실제로 관리자 설비 비활성화(DELETE 라우트 2곳)가 그런 writer 이고, 이 잠금이 없으면
+    // andon·정정의 판단과 쓰기 사이로 끼어들어 0초 유령 행과 상태 불일치를 남긴다.
+    const missing = stateWriters
+      .filter(fn => !MACHINES_ROW_LOCK.test(fn.body))
+      .map(fn => `${fn.name} (${fn.file})`);
+
+    expect(missing).toEqual([]);
+  });
+
+  it('행 잠금을 첫 쓰기보다 먼저 잡는다', () => {
+    const outOfOrder = stateWriters
+      .map(fn => ({
+        fn,
+        readAt: fn.body.search(MACHINES_ROW_LOCK),
+        writeAt: fn.body.search(MACHINE_STATE_WRITE),
+      }))
+      .filter(item => item.readAt < 0 || item.readAt > item.writeAt)
+      .map(item => `${item.fn.name} (read@${item.readAt} > write@${item.writeAt})`);
+
+    expect(outOfOrder).toEqual([]);
   });
 
   it('잠금을 첫 쓰기보다 먼저 잡는다', () => {
