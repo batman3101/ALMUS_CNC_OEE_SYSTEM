@@ -43,6 +43,7 @@ export interface ApplyMachineUpdateResult {
 export class MachineNotFoundError extends Error {}
 export class InvalidMachineStateError extends Error {}
 export class InvalidMachineUpdateError extends Error {}
+export class MachineInactiveError extends Error {}
 
 /**
  * 요청 본문에서 허용된 키만 골라낸다. 값이 undefined 인 키는 제외되어 기존 값이 유지된다.
@@ -88,6 +89,12 @@ export function pickMachineUpdates(body: Record<string, unknown>): MachineUpdate
 /**
  * 설비 정보/상태 변경을 apply_machine_update RPC 하나로 처리한다.
  * (열린 로그 닫기 -> 새 로그 -> 상태 이력 -> machines 갱신을 단일 트랜잭션으로 묶는다)
+ *
+ * 비활성 설비의 **상태 변경 거부**는 이 함수가 아니라 RPC 안에서 판단한다. 예전에는 라우트가
+ * `select is_active` 를 먼저 하고 그 결과로 분기했는데, 그 조회는 RPC 트랜잭션 밖이라 잠금과
+ * 무관했다. 조회와 쓰기 사이에 다른 요청이 설비를 비활성화하면 검사를 통과한 쓰기가 그대로
+ * 실행된다. RPC 는 advisory lock 을 잡은 뒤 읽으므로 판단과 쓰기가 같은 잠금 아래 있다.
+ * (덤으로 DB 왕복이 2회에서 1회로 준다 — DB 가 싱가포르라 왕복 비용이 작지 않다)
  */
 export async function applyMachineUpdate(
   machineId: string,
@@ -105,6 +112,10 @@ export async function applyMachineUpdate(
   if (error) {
     if (error.message?.includes('MACHINE_NOT_FOUND')) {
       throw new MachineNotFoundError('Machine not found');
+    }
+    // upsert_downtime_entry 와 같은 규약: 55000 + MACHINE_INACTIVE
+    if (error.message?.includes('MACHINE_INACTIVE')) {
+      throw new MachineInactiveError('Machine is inactive');
     }
     // machine_status enum 에 없는 값을 보낸 경우 (Postgres: invalid input value for enum)
     if (error.code === '22P02') {
@@ -131,6 +142,13 @@ export function machineUpdateErrorResponse(error: unknown): NextResponse | null 
     return NextResponse.json(
       { success: false, error: 'Invalid machine update', message: error.message },
       { status: 400 }
+    );
+  }
+  if (error instanceof MachineInactiveError) {
+    // 문구는 예전 라우트의 사전 조회가 쓰던 것과 같다 — 판단 위치만 옮겼을 뿐 계약은 그대로다.
+    return NextResponse.json(
+      { success: false, error: 'Inactive machines cannot receive operational status changes' },
+      { status: 409 }
     );
   }
   return null;

@@ -37,7 +37,8 @@
     "20260721010000_machine_downtime_union_view": "2490bc9067b6758a",
     "20260721020000_downtime_merged_minutes": "4092669236ac56d9",
     "20260728010000_correct_open_downtime_reason": "efb4f0fecab7e8b4",
-    "20260729010000_correct_downtime_reason_audit_fix": "c9b9c2c65790454c"
+    "20260729010000_correct_downtime_reason_audit_fix": "c9b9c2c65790454c",
+    "20260729030000_machine_state_lock_protocol": "03dad0ddcb8c7d3c"
   },
   "applied": [
     {
@@ -307,6 +308,10 @@
     {
       "version": "20260729022702",
       "name": "correct_downtime_reason_audit_fix"
+    },
+    {
+      "version": "20260729045626",
+      "name": "machine_state_lock_protocol"
     }
   ],
   "file_matches": {
