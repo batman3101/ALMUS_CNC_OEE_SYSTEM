@@ -44,7 +44,8 @@
     "20260729130000_machine_logs_write_lockdown": "b6b18e62eca04e1f",
     "20260729140000_scope_operational_reads": "1bc018fe2dc3b57f",
     "20260729150000_revoke_anon_table_grants": "9dd768a719c3f8e2",
-    "20260729160000_close_shift_source_digest": "7300e73da4435409"
+    "20260729160000_close_shift_source_digest": "7300e73da4435409",
+    "20260729170000_drop_close_shift_upsert_v1": "f28c5463dd1d9de4"
   },
   "applied": [
     {
@@ -342,6 +343,10 @@
     {
       "version": "20260729085007",
       "name": "close_shift_source_digest"
+    },
+    {
+      "version": "20260729085303",
+      "name": "drop_close_shift_upsert_v1"
     }
   ],
   "file_matches": {
