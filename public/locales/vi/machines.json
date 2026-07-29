@@ -73,6 +73,28 @@
     "durationHM": "{{hours}} giờ {{minutes}} phút",
     "ongoing": "Đang tiến hành"
   },
+  "downtimeBreakdown": {
+    "sectionTitle": "Dừng máy",
+    "elapsedNow": "{{reason}} · đã {{duration}}",
+    "since": "Từ {{time}}",
+    "cumulative": "Ngày làm việc: {{count}} lần · {{minutes}} phút",
+    "cumulativeUnknown": "Tổng —",
+    "cumulativeUnknownHint": "Tạm hoãn tính toán do dừng theo kế hoạch trùng giờ nghỉ",
+    "shiftTotalDay": "Ca ngày {{from}}~{{to}} · {{minutes}}",
+    "shiftTotalNight": "Ca đêm {{from}}~{{to}} · {{minutes}}",
+    "toggle": "Xem chi tiết dừng máy ({{count}})",
+    "empty": "Ngày làm việc này không có dừng máy",
+    "loadFailed": "Không tải được chi tiết dừng máy",
+    "retry": "Tải lại",
+    "ongoing": "Đang diễn ra",
+    "carriedOver": "Tiếp nối từ ca trước",
+    "minutesShort": "{{minutes}} phút",
+    "correct": "Sửa",
+    "correctTitle": "Sửa lý do",
+    "correctHint": "Giữ nguyên thời điểm bắt đầu, chỉ đổi lý do",
+    "correctFailed": "Sửa lý do thất bại",
+    "correctNotInDowntime": "Máy đã chạy lại nên không thể sửa"
+  },
   "fields": {
     "name": "Tên thiết bị",
     "location": "Vị trí",
