@@ -48,8 +48,10 @@ async function createUsersViaAPI() {
 
   console.log('\n🎉 모든 사용자 생성 완료!');
   console.log('\n📋 로그인 정보:');
-  console.log('임시 비밀번호: cncoee123!');
-  console.log('모든 사용자가 이 비밀번호로 로그인할 수 있습니다.');
+  // 값을 찍지 않는다 — 6행에서 env 로 옮긴 비밀번호를 여기서 평문으로 뱉으면
+  // 옮긴 의미가 없다(실제로 그렇게 남아 있었다).
+  console.log('임시 비밀번호: SEED_USER_PASSWORD 환경변수에 설정한 값');
+  console.log('모든 사용자가 그 비밀번호로 로그인할 수 있습니다.');
 }
 
 createUsersViaAPI().catch(console.error);
