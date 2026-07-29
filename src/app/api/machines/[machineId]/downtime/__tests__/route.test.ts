@@ -299,6 +299,16 @@ describe('PATCH .../[machineId]/downtime (사유 정정)', () => {
     expect(body.error).toBe('not_in_downtime');
   });
 
+  // 20260729010000 이 추가한 응답. 상태는 비정상인데 고칠 열린 로그·항목이 전무한
+  // 경우로, "이미 가동 중"(409)과는 다른 상황이라 같은 코드로 뭉뚱그리면 안 된다.
+  it('고칠 대상이 없으면 409 가 아니라 400 이다', async () => {
+    mockRpc.mockResolvedValue({ data: { ok: false, reason: 'no_open_downtime' }, error: null });
+    const res = await PATCH(req({ reason: 'INSPECTION' }), ctx);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('no_open_downtime');
+  });
+
   it('RPC 오류는 500', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: 'boom' } });
     const res = await PATCH(req({ reason: 'INSPECTION' }), ctx);
