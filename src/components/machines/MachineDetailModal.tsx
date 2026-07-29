@@ -28,6 +28,9 @@ import MachineEditModal from './MachineEditModal';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 import { formatMachineLocation } from '@/utils/machineLocation';
+import { DowntimeBreakdownCard } from '@/components/downtime';
+import { getCurrentShiftInfo, type ShiftTimeConfig } from '@/utils/shiftUtils';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 const { Title, Text } = Typography;
 
@@ -71,6 +74,19 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
     getAntdColorFromHex
   } = useMachineStatusTranslations(currentLanguage);
   const [editModalVisible, setEditModalVisible] = useState(false);
+
+  // 모달에는 날짜·교대 컨텍스트가 없다. 운영자 콘솔과 같은 단일 소스(shiftUtils)로 해결해
+  // 두 화면이 같은 교대 창을 보게 한다.
+  const { getShiftTimes, getCompanyInfo } = useSystemSettings();
+  const shiftTimes = getShiftTimes();
+  const shiftConfig: ShiftTimeConfig = {
+    timezone: getCompanyInfo().timezone,
+    shiftAStart: shiftTimes.shiftA.start,
+    shiftAEnd: shiftTimes.shiftA.end,
+    shiftBStart: shiftTimes.shiftB.start,
+    shiftBEnd: shiftTimes.shiftB.end,
+  };
+  const currentShift = getCurrentShiftInfo(new Date(), shiftConfig);
 
   if (!machine) return null;
 
@@ -240,6 +256,16 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({
                 </Card>
               </Col>
             </Row>
+
+            <Divider />
+            <Card size="small" title={t('downtimeBreakdown.sectionTitle')}>
+              <DowntimeBreakdownCard
+                machineId={machine.id}
+                date={currentShift.businessDate}
+                // 읽기 맥락이므로 정정은 열지 않는다(운영자 콘솔에서만).
+                onCorrected={() => {}}
+              />
+            </Card>
 
           </div>
         )}

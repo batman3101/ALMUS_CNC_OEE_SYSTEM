@@ -13,6 +13,7 @@ import { ProgressInputSection } from './ProgressInputSection';
 import { DowntimeAndonSection } from './DowntimeAndonSection';
 import { CloseShiftSection } from './CloseShiftSection';
 import { DefectPendingSection } from './DefectPendingSection';
+import { DowntimeBreakdownCard } from '@/components/downtime';
 
 interface Props {
   machineId: string;
@@ -35,6 +36,8 @@ export const MachineConsole: React.FC<Props> = ({
 }) => {
   const { t } = useMachinesTranslation();
   const [now, setNow] = useState<Date>(() => new Date());
+  // andon 이 비가동을 시작/재개하면 이 값을 올려 비가동 카드에 재조회를 알린다.
+  const [downtimeRefreshToken, setDowntimeRefreshToken] = useState(0);
   const progress = useRealtimeProgress({ machineId, date, shift });
   const backlog = useShiftBacklog(machineId);
 
@@ -42,6 +45,10 @@ export const MachineConsole: React.FC<Props> = ({
     setNow(new Date());
     progress.refresh();
     backlog.refresh();
+    // 비가동 카드도 함께 갱신한다. 카드에는 자체 폴링이 없어서, 이 콜백에 넣지 않으면
+    // **다른 사람·다른 화면**이 가동 재개하거나 새 비가동을 시작해도 이 화면만 옛 상태로
+    // 남는다(경과 시간이 계속 올라간다). andon 콜백은 같은 콘솔에서 누른 경우만 덮는다.
+    setDowntimeRefreshToken(token => token + 1);
   }, true);
 
   // 교대 창은 서버값(progress). 720 모델이 아니면 fail-closed.
@@ -120,11 +127,30 @@ export const MachineConsole: React.FC<Props> = ({
       )}
 
       <Card size="small" title={t('operator.downtime')}>
-        <DowntimeAndonSection
-          machineId={machineId}
-          currentState={currentState}
-          onChanged={() => { progress.refresh(); backlog.refresh(); }}
-        />
+        <Space direction="vertical" style={{ width: '100%' }}>
+          {/* 읽기(경과·누적·사유 목록 + 정정). 업무일은 이 컴포넌트가 소유한 값을 그대로 넘긴다.
+              진행 중 비가동은 카드가 조회한 데이터에서 스스로 알아내므로 상태를 넘기지 않는다. */}
+          <DowntimeBreakdownCard
+            machineId={machineId}
+            date={date}
+            allowCorrection
+            refreshToken={downtimeRefreshToken}
+            onCorrected={() => { progress.refresh(); backlog.refresh(); }}
+          />
+          {/* 상태 전이 쓰기(비가동 시작 / 가동 재개)는 별개 책임으로 남긴다.
+              두 컴포넌트는 형제라 서로를 모른다 — andon 이 상태를 바꾸면 여기서
+              토큰을 올려 카드에 재조회를 알린다. 안 그러면 "비가동 중" 배너 옆에서
+              누적이 그대로 남는다(2026-07-28 브라우저 확인). */}
+          <DowntimeAndonSection
+            machineId={machineId}
+            currentState={currentState}
+            onChanged={() => {
+              progress.refresh();
+              backlog.refresh();
+              setDowntimeRefreshToken(token => token + 1);
+            }}
+          />
+        </Space>
       </Card>
 
       <CloseShiftSection
