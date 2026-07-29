@@ -17,10 +17,7 @@ import {
 } from 'antd';
 import { SaveOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import {
-  DEFAULT_BREAK_TIME_MINUTES as DEFAULT_BREAK_MINUTES,
-  DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES,
-} from '@/lib/shiftDefaults';
+import { resolveBreakMinutes, resolveShiftChangeBufferMinutes } from '@/lib/shiftDefaults';
 import { systemSettingsService } from '@/lib/systemSettings';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useShiftSettings } from '@/hooks/useSystemSettings';
@@ -62,11 +59,11 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
         // (휴식 없음 / 전환 유예 없음) `||` 는 그걸 falsy 로 보고 기본값으로 되돌린다.
         // 화면은 60·15 를 보여주는데 DB 에는 0 이 들어 있는 상태가 되고, 저장을 누르면
         // 관리자가 고른 적 없는 값이 저장된다(적대적 재감사 #9).
-        break_time_minutes: settings.break_time_minutes ?? DEFAULT_BREAK_MINUTES,
+        break_time_minutes: resolveBreakMinutes(settings.break_time_minutes),
         // 기본값 15 는 서버(`src/lib/shiftConfig.ts` = 10)와 달랐다. 설정이 비어 있을 때
         // 화면과 서버가 서로 다른 값으로 계산하게 된다 — 같은 상수를 쓴다.
         shift_change_buffer_minutes:
-          settings.shift_change_buffer_minutes ?? DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES
+          resolveShiftChangeBufferMinutes(settings.shift_change_buffer_minutes)
       });
     }
   }, [settings, form]);
@@ -182,7 +179,14 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
   const aShiftDuration = calculateShiftDuration(formValues.shift_a_start, aShiftEnd);
   const bShiftDuration = calculateShiftDuration(formValues.shift_b_start, bShiftEnd);
-  const breakTime = formValues.break_time_minutes || 60;
+  // 폼 초기값(65행)과 **같은 규칙**이어야 한다. 여기만 `|| 60` 으로 남겨 뒀더니 브라우저
+  // 테스트에서 바로 드러났다 — 휴식을 0으로 저장한 뒤 입력칸은 0 을 보여주는데 요약은
+  // "교대당 60분", 작업 시간 11시간(=720−60)을 보여줬다. 한 화면 안에서 두 숫자가 서로
+  // 다른 규칙을 따르는 상태다.
+  //
+  // 이 결함의 모양이 이번 감사 전체의 주제다: 같은 규칙이 두 곳에 흩어져 한쪽만 고쳐진다.
+  // 고치는 쪽도 예외가 아니라서, 위를 고칠 때 여기를 같이 세지 않으면 그대로 반복된다.
+  const breakTime = resolveBreakMinutes(formValues.break_time_minutes);
 
   /** 파생된 종료 시각을 입력칸이 아닌 읽기 전용 표시로 보여준다. */
   const derivedEndTime = (value: dayjs.Dayjs | undefined, hint: string) => (

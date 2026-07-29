@@ -4,10 +4,7 @@ import { useSystemSettings as useSystemSettingsContext } from '@/contexts/System
 import { useMemo, useEffect } from 'react';
 import type { Dayjs } from 'dayjs';
 import type { SettingCategory, AllSystemSettings } from '@/types/systemSettings';
-import {
-  DEFAULT_BREAK_TIME_MINUTES,
-  DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES,
-} from '@/lib/shiftDefaults';
+import { resolveBreakMinutes, resolveShiftChangeBufferMinutes } from '@/lib/shiftDefaults';
 import { 
   initializeDateTimeFormatter, 
   getDateTimeFormatter,
@@ -91,11 +88,10 @@ export function useSystemSettings() {
       return {
         shiftA: { start: shiftAStart, end: shiftBStart },
         shiftB: { start: shiftBStart, end: shiftAStart },
-        breakTime: context.getSetting('shift', 'break_time_minutes') ?? DEFAULT_BREAK_TIME_MINUTES,
+        breakTime: resolveBreakMinutes(context.getSetting('shift', 'break_time_minutes') as number | undefined),
         // 서버 기본값(shiftConfig)과 같은 상수를 쓴다. 예전에는 여기만 15 였다.
-        bufferTime:
-          context.getSetting('shift', 'shift_change_buffer_minutes')
-          ?? DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES
+        bufferTime: resolveShiftChangeBufferMinutes(
+          context.getSetting('shift', 'shift_change_buffer_minutes') as number | undefined)
       };
     },
 

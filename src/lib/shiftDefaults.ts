@@ -20,3 +20,23 @@ export const DEFAULT_BREAK_TIME_MINUTES = 60;
  * 받는다(두 창은 서로소여야 한다 — `shiftReportingWindow.ts` 참조).
  */
 export const DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES = 10;
+
+/**
+ * 설정값 → 실제로 쓸 값. **`??` 여야 하고 `||` 이면 안 된다.**
+ *
+ * 관리자가 명시적으로 0(휴식 없음 / 유예 없음)을 고를 수 있다. `||` 는 그 0 을 falsy 로 보고
+ * 기본값으로 되돌리므로, 화면은 60 을 보여주는데 DB 에는 0 이 든 상태가 되고 저장을 누르면
+ * 고른 적 없는 값이 저장된다.
+ *
+ * 왜 상수를 노출하고도 굳이 함수를 두는가 — 브라우저 테스트에서 배운 것이다. 폼 초기값의
+ * `|| 60` 은 고쳤는데 같은 화면의 요약 계산에 있던 `|| 60` 을 놓쳤고, 그 결과 입력칸은 0,
+ * 요약은 "교대당 60분"을 동시에 보여줬다. 한 화면 안에서 두 숫자가 다른 규칙을 따른 것이다.
+ * 규칙을 함수로 만들면 "양쪽을 같이 고쳐야 한다"를 사람이 기억하지 않아도 된다.
+ */
+export function resolveBreakMinutes(value: number | null | undefined): number {
+  return value ?? DEFAULT_BREAK_TIME_MINUTES;
+}
+
+export function resolveShiftChangeBufferMinutes(value: number | null | undefined): number {
+  return value ?? DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES;
+}
