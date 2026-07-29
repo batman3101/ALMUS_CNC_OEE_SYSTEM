@@ -5,6 +5,7 @@ import {
   getBreakTimeMinutes,
   resolvePlannedRuntime
 } from '@/lib/plannedRuntime';
+import { redactSecrets } from '@/lib/redactSecrets';
 import { synchronizeDowntime } from '../oeeRules';
 import {
   apiAuthErrorResponse,
@@ -304,7 +305,7 @@ export async function PUT(
     console.log('PUT /api/production-records/[recordId] called with id:', recordId);
 
     const body = await request.json();
-    console.log('PUT request body:', JSON.stringify(body, null, 2));
+    console.log('PUT request body:', JSON.stringify(redactSecrets(body), null, 2));
 
     // 생산 기록 존재 확인
     const { data: existingRecord, error: checkError } = await supabaseAdmin
@@ -436,7 +437,7 @@ export async function PATCH(
     console.log('PATCH /api/production-records/[recordId] called with id:', recordId);
 
     const body = await request.json();
-    console.log('PATCH request body:', JSON.stringify(body, null, 2));
+    console.log('PATCH request body:', JSON.stringify(redactSecrets(body), null, 2));
 
     // 생산 기록 존재 확인
     const { data: existingRecord, error: checkError } = await supabaseAdmin

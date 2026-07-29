@@ -280,6 +280,8 @@
       "bShift": "Ca B (Ban đêm)",
       "startTime": "Thời gian bắt đầu",
       "endTime": "Thời gian kết thúc",
+      "endTimeDerivedFromB": "Tự động xác định từ giờ bắt đầu ca B",
+      "endTimeDerivedFromA": "Tự động xác định từ giờ bắt đầu ca A (ngày hôm sau)",
       "nextDay": "Ngày hôm sau",
       "startTimeRequired": "Chọn thời gian bắt đầu",
       "endTimeRequired": "Chọn thời gian kết thúc",

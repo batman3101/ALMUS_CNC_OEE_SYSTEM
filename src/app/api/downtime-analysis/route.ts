@@ -9,6 +9,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 import { unwrapJoin } from '@/types';
+import { getBusinessTimeConfig } from '@/lib/shiftConfig';
 import {
   allocateDowntimeIntervals,
   buildBusinessRange,
@@ -18,53 +19,11 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// 영업시간 기준 기본값 (system_settings 조회 실패 시 사용, src/utils/shiftUtils.ts 정의와 동일)
-const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Ho_Chi_Minh';
-const DEFAULT_SHIFT_A_START = '08:00';
-const DEFAULT_SHIFT_B_START = '20:00';
 const RAW_PAGE_SIZE = 1000;
 const DOWNTIME_SOURCE_POLICY = 'manual_overrides_overlap' as const;
 
-interface BusinessTimeConfig {
-  timezone: string;
-  shiftAStart: string;
-  shiftBStart: string;
-}
-
-// system_settings에서 시간대 및 교대 시작 시각 조회 (실패 시 기본값 사용)
-async function getBusinessTimeConfig(): Promise<BusinessTimeConfig> {
-  const defaults: BusinessTimeConfig = {
-    timezone: DEFAULT_BUSINESS_TIMEZONE,
-    shiftAStart: DEFAULT_SHIFT_A_START,
-    shiftBStart: DEFAULT_SHIFT_B_START
-  };
-
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('system_settings')
-      .select('category, setting_key, setting_value')
-      .in('category', ['general', 'shift'])
-      .eq('is_active', true);
-
-    if (error || !data) {
-      return defaults;
-    }
-
-    const readValue = (category: string, key: string): string | undefined => {
-      const row = data.find(d => d.category === category && d.setting_key === key);
-      const value = row?.setting_value as { value?: unknown } | null | undefined;
-      return typeof value?.value === 'string' ? value.value : undefined;
-    };
-
-    return {
-      timezone: readValue('general', 'timezone') || defaults.timezone,
-      shiftAStart: readValue('shift', 'shift_a_start') || defaults.shiftAStart,
-      shiftBStart: readValue('shift', 'shift_b_start') || defaults.shiftBStart
-    };
-  } catch {
-    return defaults;
-  }
-}
+// 교대 경계 설정은 @/lib/shiftConfig 의 정본 하나만 쓴다. 여기 있던 사본은 조회 실패를
+// 기본값으로 위장했다(Codex 감사 2026-07-29 #7).
 
 // 교대 판별은 더 이상 "로그의 시작 시각이 속한 교대" 하나로 하지 않는다.
 // 교대를 시간 구간으로 만들어 로그와 교집합을 내므로(buildShiftWindows), 교대를 넘긴 장애도

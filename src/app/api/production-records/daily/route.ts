@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
+import { redactSecrets } from '@/lib/redactSecrets';
 import {
   DEFAULT_CAVITY,
   DEFAULT_TACT_SECONDS,
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
     console.log('POST /api/production-records/daily called');
 
     const body: DailyProductionRequest = await request.json();
-    console.log('Received daily production data:', body);
+    console.log('Received daily production data:', redactSecrets(body));
 
     const {
       machine_id,

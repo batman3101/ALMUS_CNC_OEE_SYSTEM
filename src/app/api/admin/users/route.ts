@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { redactSecrets } from '@/lib/redactSecrets';
 
 // GET /api/admin/users - 모든 사용자 목록 조회
 export async function GET(request: NextRequest) {
@@ -56,7 +57,8 @@ export async function POST(request: NextRequest) {
     await requireUser(request, ['admin']);
 
     const body = await request.json();
-    console.log('🔍 받은 요청 데이터:', JSON.stringify(body, null, 2));
+    // 본문에는 관리자가 방금 입력한 평문 비밀번호가 들어 있다 — 절대 그대로 찍지 않는다.
+    console.log('🔍 받은 요청 데이터:', JSON.stringify(redactSecrets(body), null, 2));
     const { email, password, name, role, assigned_machines } = body;
 
     let authUserId = null;
