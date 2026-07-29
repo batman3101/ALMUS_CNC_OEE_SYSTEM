@@ -16,7 +16,22 @@ const DOWNTIME_REASONS = new Set([
   'PLANNED_STOP', 'PROGRAM_CHANGE', 'TOOL_CHANGE', 'TEMPORARY_STOP',
 ]);
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * 업무일 문자열 검증. 모양만이 아니라 **달력에 실제로 있는 날짜**인지 본다.
+ *
+ * 모양만 보면 `2026-02-31` 이 통과하고, dayjs 가 이를 `2026-03-03` 으로 조용히 보정한다
+ * (`2026-13-01` → `2027-01-01`, `2026-00-10` → `2025-12-10`). 그러면 사용자가 요청한 날과
+ * **다른 날의 비가동**이 400 없이 그대로 돌아온다 — 화면은 정상으로 보이므로 알아챌 방법이 없다.
+ */
+const isValidBusinessDate = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+};
 
 /** POST /api/machines/[machineId]/downtime — andon 한 동작(start+reason / resume). */
 export async function POST(request: NextRequest, ctx: { params: Promise<{ machineId: string }> }) {
@@ -77,9 +92,9 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') ?? '';
 
-    if (!DATE.test(date)) {
+    if (!isValidBusinessDate(date)) {
       return NextResponse.json(
-        { error: 'date must be YYYY-MM-DD' },
+        { error: 'date must be a real calendar date in YYYY-MM-DD' },
         { status: 400 }
       );
     }

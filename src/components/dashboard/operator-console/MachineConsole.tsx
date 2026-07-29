@@ -45,6 +45,10 @@ export const MachineConsole: React.FC<Props> = ({
     setNow(new Date());
     progress.refresh();
     backlog.refresh();
+    // 비가동 카드도 함께 갱신한다. 카드에는 자체 폴링이 없어서, 이 콜백에 넣지 않으면
+    // **다른 사람·다른 화면**이 가동 재개하거나 새 비가동을 시작해도 이 화면만 옛 상태로
+    // 남는다(경과 시간이 계속 올라간다). andon 콜백은 같은 콘솔에서 누른 경우만 덮는다.
+    setDowntimeRefreshToken(token => token + 1);
   }, true);
 
   // 교대 창은 서버값(progress). 720 모델이 아니면 fail-closed.

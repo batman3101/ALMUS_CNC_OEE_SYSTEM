@@ -83,7 +83,7 @@
     "shiftTotalDay": "주간 {{from}}~{{to}} · {{minutes}}",
     "shiftTotalNight": "야간 {{from}}~{{to}} · {{minutes}}",
     "toggle": "비가동 내역 보기 ({{count}}건)",
-    "empty": "이번 교대 비가동 없음",
+    "empty": "이번 업무일 비가동 없음",
     "loadFailed": "비가동 내역을 불러오지 못했습니다",
     "retry": "다시 불러오기",
     "ongoing": "진행중",

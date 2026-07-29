@@ -41,8 +41,16 @@ export interface DowntimeBreakdownCardProps {
   refreshToken?: number;
 }
 
-const formatClock = (iso: string): string =>
-  new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+/** 앱 언어 → Intl 로케일. 시각 표기가 화면 언어를 따라가야 한다. */
+const CLOCK_LOCALE: Record<string, string> = { ko: 'ko-KR', vi: 'vi-VN' };
+
+// hour12: false 를 명시하므로 로케일이 바뀌어도 24시간제는 유지된다 — 바뀌는 것은
+// 자릿수·구분자 관례뿐이다. 예전에는 'ko-KR' 이 하드코딩돼 베트남어 화면에서도
+// 한국 로케일로 시각을 그렸다.
+const formatClock = (iso: string, language: string): string =>
+  new Date(iso).toLocaleTimeString(CLOCK_LOCALE[language] ?? 'ko-KR', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
 
 const formatDuration = (
   minutesTotal: number,
@@ -66,7 +74,7 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
   allowCorrection = false,
   refreshToken,
 }) => {
-  const { t } = useMultipleTranslation(['machines', 'dataInput']);
+  const { t, language } = useMultipleTranslation(['machines', 'dataInput']);
   const { totalMinutes, shiftTotals, ongoingSince, intervals, loaded, error, refresh } =
     useDowntimeBreakdown({ machineId, date });
 
@@ -133,9 +141,9 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
       style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '4px 0' }}
     >
       <Text type="secondary" style={{ minWidth: 108, fontVariantNumeric: 'tabular-nums' }}>
-        {row.clipped_start ? '‹' : ''}{formatClock(row.start)}
+        {row.clipped_start ? '‹' : ''}{formatClock(row.start, language)}
         {'~'}
-        {row.end === null ? t('downtimeBreakdown.ongoing') : formatClock(row.end)}
+        {row.end === null ? t('downtimeBreakdown.ongoing') : formatClock(row.end, language)}
       </Text>
       <Text strong style={{ minWidth: 56, fontVariantNumeric: 'tabular-nums' }}>
         {t('downtimeBreakdown.minutesShort', { minutes: row.minutes })}
@@ -159,7 +167,7 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
             reason: resolveDowntimeReasonLabel(ongoingRow?.reason ?? '', t),
             duration: formatDuration(elapsedMinutes, t),
           })}
-          description={t('downtimeBreakdown.since', { time: formatClock(ongoingSince) })}
+          description={t('downtimeBreakdown.since', { time: formatClock(ongoingSince, language) })}
         />
       )}
 
@@ -191,16 +199,16 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
       {shiftTotals !== null && (
         <Text type="secondary">
           {t('downtimeBreakdown.shiftTotalDay', {
-            from: formatClock(shiftTotals.day.start),
-            to: formatClock(shiftTotals.day.end),
+            from: formatClock(shiftTotals.day.start, language),
+            to: formatClock(shiftTotals.day.end, language),
             minutes: shiftTotals.day.minutes === null
               ? '—'
               : t('downtimeBreakdown.minutesShort', { minutes: Math.round(shiftTotals.day.minutes) }),
           })}
           {' · '}
           {t('downtimeBreakdown.shiftTotalNight', {
-            from: formatClock(shiftTotals.night.start),
-            to: formatClock(shiftTotals.night.end),
+            from: formatClock(shiftTotals.night.start, language),
+            to: formatClock(shiftTotals.night.end, language),
             minutes: shiftTotals.night.minutes === null
               ? '—'
               : t('downtimeBreakdown.minutesShort', { minutes: Math.round(shiftTotals.night.minutes) }),

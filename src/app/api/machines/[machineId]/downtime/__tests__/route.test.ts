@@ -115,6 +115,22 @@ describe('GET .../[machineId]/downtime', () => {
     expect(res.status).toBe(400);
   });
 
+  // 모양만 보면 통과하지만 달력에 없는 날짜다. dayjs 는 이를 조용히 보정하므로
+  // (2026-02-31 → 2026-03-03) 막지 않으면 **다른 날의 비가동**이 200 으로 돌아온다.
+  it.each(['2026-02-31', '2026-13-01', '2026-00-10', '2025-02-29'])(
+    '달력에 없는 날짜(%s)는 400 — 조회하지 않는다',
+    async (badDate) => {
+      const res = await GET(getReq(`date=${badDate}`), ctx);
+      expect(res.status).toBe(400);
+      expect(mockLoadDetail).not.toHaveBeenCalled();
+    }
+  );
+
+  it('윤년의 2월 29일은 유효하다', async () => {
+    const res = await GET(getReq('date=2028-02-29'), ctx);
+    expect(res.status).toBe(200);
+  });
+
   it('담당 설비가 아니면 403 (assertMachineAccess 가 던진다)', async () => {
     mockAssert.mockImplementation(() => { throw new Error('forbidden'); });
     await expect(GET(getReq('date=2026-07-28'), ctx)).rejects.toThrow();

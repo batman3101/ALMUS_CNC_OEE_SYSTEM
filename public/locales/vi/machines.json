@@ -83,7 +83,7 @@
     "shiftTotalDay": "Ca ngày {{from}}~{{to}} · {{minutes}}",
     "shiftTotalNight": "Ca đêm {{from}}~{{to}} · {{minutes}}",
     "toggle": "Xem chi tiết dừng máy ({{count}})",
-    "empty": "Ca này không có dừng máy",
+    "empty": "Ngày làm việc này không có dừng máy",
     "loadFailed": "Không tải được chi tiết dừng máy",
     "retry": "Tải lại",
     "ongoing": "Đang diễn ra",
