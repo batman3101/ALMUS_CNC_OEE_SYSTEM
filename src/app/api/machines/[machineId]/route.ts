@@ -183,21 +183,10 @@ export async function PATCH(
     assertMachineAccess(authenticatedUser, machineId);
     console.log('PATCH /api/machines/[machineId] called with id:', machineId);
 
-    const { data: machineState, error: machineStateError } = await supabaseAdmin
-      .from('machines')
-      .select('is_active')
-      .eq('id', machineId)
-      .single();
-    if (machineStateError || !machineState) {
-      return NextResponse.json({ success: false, error: 'Machine not found' }, { status: 404 });
-    }
-    if (!machineState.is_active) {
-      return NextResponse.json(
-        { success: false, error: 'Inactive machines cannot receive operational status changes' },
-        { status: 409 }
-      );
-    }
-
+    // 비활성 설비 거부와 설비 존재 확인은 여기서 하지 않는다 — 아래 RPC 가 advisory lock 을
+    // 잡은 **뒤에** 판단한다. 예전에는 이 자리에서 is_active 를 먼저 조회했는데, 그 조회는
+    // RPC 트랜잭션 밖이라 어떤 잠금도 걸지 않는다. 조회와 쓰기 사이에 다른 요청이 설비를
+    // 비활성화하면 "활성이다"라는 이미 낡은 판단 위에서 쓰기가 진행됐다.
     const body = await request.json();
     const { current_state, production_model_id, current_process_id } = body;
 
@@ -222,12 +211,14 @@ export async function PATCH(
       );
     }
 
-    // 상태 변경에 따른 로그/이력 기록까지 RPC 안에서 원자적으로 처리된다
+    // 상태 변경에 따른 로그/이력 기록까지 RPC 안에서 원자적으로 처리된다.
+    // requireActive: 운영 경로이므로 비활성 설비는 거부한다(판단은 잠금 안에서 이뤄진다).
     const result = await applyMachineUpdate(
       machineId,
       updates,
       body.change_reason || null,
-      authenticatedUser.userId
+      authenticatedUser.userId,
+      { requireActive: true }
     );
 
     const updatedMachine = result.machine as { name?: string } | null;

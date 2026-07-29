@@ -1,9 +1,17 @@
-jest.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: {} }));
+const rpc = jest.fn();
+jest.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { rpc: (...args: unknown[]) => rpc(...args) } }));
 jest.mock('next/server', () => ({
   NextResponse: { json: (body: unknown, init?: { status?: number }) => ({ body, status: init?.status ?? 200 }) },
 }));
 
-import { InvalidMachineUpdateError, pickMachineUpdates } from '../machineUpdate';
+import {
+  InvalidMachineUpdateError,
+  MachineInactiveError,
+  MachineNotFoundError,
+  applyMachineUpdate,
+  machineUpdateErrorResponse,
+  pickMachineUpdates,
+} from '../machineUpdate';
 
 describe('BUG-016 machine update validation', () => {
   it('accepts JSON booleans including false', () => {
@@ -32,5 +40,63 @@ describe('BUG-016 machine update validation', () => {
       location: null,
       equipment_type: 'Lathe',
     });
+  });
+});
+
+describe('비활성 설비 판단을 RPC(잠금 안)로 넘긴 계약', () => {
+  beforeEach(() => rpc.mockReset());
+
+  it('요청한 대로 p_require_active 를 RPC 에 전달한다', async () => {
+    rpc.mockResolvedValue({ data: { machine: {}, state_changed: false, duration_minutes: null }, error: null });
+
+    await applyMachineUpdate('m1', { current_state: 'INSPECTION' }, null, 'u1', { requireActive: true });
+
+    expect(rpc).toHaveBeenCalledWith(
+      'apply_machine_update',
+      expect.objectContaining({ p_machine_id: 'm1', p_require_active: true })
+    );
+  });
+
+  it('기본값은 false 다 — 관리자 경로(PUT/admin)는 비활성 설비도 계속 수정할 수 있어야 한다', async () => {
+    rpc.mockResolvedValue({ data: { machine: {}, state_changed: false, duration_minutes: null }, error: null });
+
+    await applyMachineUpdate('m1', { name: 'CNC-01' }, null, 'u1');
+
+    expect(rpc).toHaveBeenCalledWith(
+      'apply_machine_update',
+      expect.objectContaining({ p_require_active: false })
+    );
+  });
+
+  it('RPC 의 MACHINE_INACTIVE 를 409 로 옮긴다 (예전 사전 조회와 같은 문구)', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: '55000', message: 'MACHINE_INACTIVE' } });
+
+    await expect(
+      applyMachineUpdate('m1', { current_state: 'INSPECTION' }, null, 'u1', { requireActive: true })
+    ).rejects.toBeInstanceOf(MachineInactiveError);
+
+    const response = machineUpdateErrorResponse(new MachineInactiveError()) as unknown as {
+      status: number;
+      body: { error: string };
+    };
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe('Inactive machines cannot receive operational status changes');
+  });
+
+  it('설비가 없으면 여전히 404 다 — 사전 조회를 없앴다고 404 가 사라지면 안 된다', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'MACHINE_NOT_FOUND' } });
+
+    await expect(
+      applyMachineUpdate('missing', { current_state: 'INSPECTION' }, null, 'u1', { requireActive: true })
+    ).rejects.toBeInstanceOf(MachineNotFoundError);
+
+    const response = machineUpdateErrorResponse(new MachineNotFoundError()) as unknown as { status: number };
+    expect(response.status).toBe(404);
+  });
+
+  it('비활성 오류를 500 으로 흘려보내지 않는다', () => {
+    // MachineInactiveError 를 매핑 목록에 넣지 않으면 라우트의 catch 가 500 을 반환한다.
+    // 사용자에게는 "서버 오류"로 보이고, 실제로는 정상적인 거부다.
+    expect(machineUpdateErrorResponse(new MachineInactiveError())).not.toBeNull();
   });
 });

@@ -309,6 +309,31 @@ Core utility functions:
 - **Service Role Key**: Only use in API routes (`src/app/api/`), never in client components
 - **Admin Operations**: Use `/api/auth/profile-admin` endpoint for bypassing RLS when needed
 
+#### ⚠️ 설비 상태를 쓰려면 advisory lock 하나만 쓴다
+
+`machines` 또는 `downtime_entries` 를 쓰는 함수는 **반드시** 아래 잠금을 먼저 잡는다:
+
+```sql
+perform pg_advisory_xact_lock(hashtextextended(p_machine_id::text, 0));
+```
+
+**키가 같아야 의미가 있다.** advisory lock 은 Postgres 에서 독립된 네임스페이스라
+`SELECT ... FOR UPDATE` 와 **서로를 차단하지 않는다.** `apply_machine_update` 는 행 잠금만,
+andon·정정 RPC 는 advisory 만 써서 — 넷 다 "잠금이 있는" 것처럼 보였지만 실제로는 상호 배제가
+전혀 없었다. 이 때문에 정정 RPC 의 `no_open_downtime` 가드를 통과한 뒤 다른 요청이 상태를
+바꾸면, 트리거가 억제된 채 `current_state` 만 갱신돼 열린 `machine_logs` 와 어긋난 채 남았다.
+
+따라오는 규칙:
+- **판단과 쓰기는 같은 잠금 아래 있어야 한다.** 비활성 여부·현재 상태 같은 조건을 Node 에서
+  먼저 조회하고 RPC 에 넘기면, 그 조회는 트랜잭션 밖이라 조회와 쓰기 사이가 비어 있다.
+  조건 검사는 RPC 안(잠금 확보 후)에 둔다. 거부는 `55000` + `MACHINE_INACTIVE` 규약을 쓴다.
+- **순서는 항상 advisory → 행 잠금.** 모든 경로가 같은 순서라야 데드락이 없다.
+- 트리거 함수는 예외다 — 호출자의 트랜잭션 안에서 돌기 때문에 호출자가 이미 잠금을 쥐고 있다.
+
+`supabase/migrations/__tests__/machineStateLockProtocol.test.ts` 가 마이그레이션 전체를 훑어
+각 함수의 **최종 정의**를 모아 이 규약을 강제한다. 새 함수가 상태를 쓰기 시작하면 그 테스트를
+고치지 않아도 자동으로 검사 대상이 된다.
+
 ### Adding New Features
 1. **Define Types**: Add TypeScript interfaces in `src/types/`
 2. **Create API Route**: If server-side logic needed, add in `src/app/api/`
