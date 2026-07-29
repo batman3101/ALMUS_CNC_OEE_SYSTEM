@@ -6,6 +6,16 @@ import { Machine, MachineLog, ProductionRecord, OEEMetrics, User } from '@/types
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { authFetch } from '@/lib/authFetch';
 import { replayBufferedUpdates } from './realtimeBuffer';
+import { createReadinessGate, type ReadinessGate } from './subscriptionGate';
+
+/**
+ * 구독 준비를 기다리는 상한. 넘으면 스냅샷을 그냥 진행한다.
+ *
+ * 정상적으로는 수백 ms 안에 SUBSCRIBED 가 온다. 이 값은 "Realtime 이 죽었을 때 화면이
+ * 얼마나 늦게 뜨는가"의 상한이고, 포기해도 잃는 것은 **원래 있던 그 유실 창**뿐이다.
+ * 재연결 주기(5초)보다 짧게 잡아, 기다리다 재연결과 겹치지 않게 한다.
+ */
+const SUBSCRIPTION_READY_TIMEOUT_MS = 3000;
 
 // 생산 실적 조회 기간 (초기 조회와 실시간 반영이 동일한 윈도우를 사용해야 배열이 무한히 커지지 않는다)
 const PRODUCTION_WINDOW_DAYS = 7;
@@ -270,6 +280,14 @@ export const useRealtimeData = (
   const pendingRealtimeUpdatesRef = useRef<Array<(prev: RealtimeDataState) => RealtimeDataState>>([]);
   const snapshotAppliedRef = useRef(false);
 
+  // 구독이 **실제로 준비될 때까지** 스냅샷을 미루는 게이트(적대적 재감사 #8).
+  //
+  // 위 버퍼는 "전달됐지만 아직 스냅샷이 없는" 이벤트를 담는다. 그런데 `subscribe()` 가
+  // 비동기라, 스냅샷이 DB 를 읽은 뒤 `SUBSCRIBED` 가 오기 전에 커밋된 변경은 **전달 자체가
+  // 되지 않는다.** 보존할 것이 없으니 버퍼로는 원리적으로 못 막는다. 순서를 바꿔 그 창을
+  // 없애는 수밖에 없다. 자세한 근거는 `subscriptionGate.ts` 주석 참조.
+  const readinessGateRef = useRef<ReadinessGate | null>(null);
+
   /** 스냅샷 적용 전이면 버퍼에 쌓고, 적용된 뒤면 곧바로 반영한다. */
   const applyRealtimeUpdate = useCallback(
     (updater: (prev: RealtimeDataState) => RealtimeDataState) => {
@@ -405,7 +423,27 @@ export const useRealtimeData = (
         : undefined;
       // 구독이 채널 필터로 쓸 수 있게 심고, 곧바로 구독을 연다(스냅샷 조회보다 먼저).
       assignedIdsRef.current = assignedMachineIds;
-      if (afterScopeResolved && isMountedRef.current) afterScopeResolved();
+      if (afterScopeResolved && isMountedRef.current) {
+        afterScopeResolved();
+
+        // 구독이 **실제로 준비된 뒤**에 스냅샷을 조회한다(적대적 재감사 #8).
+        //
+        // 예전에는 setup 호출 직후 곧바로 조회했다. `subscribe()` 는 비동기라 그 시점에
+        // 채널은 아직 열리는 중이고, 스냅샷이 DB 를 읽은 뒤 SUBSCRIBED 가 오기 전에 커밋된
+        // 변경은 **전달 자체가 되지 않는다.** 버퍼는 전달된 이벤트만 보존하므로 이 창은
+        // 버퍼로 못 메운다 — 보존할 것이 없다.
+        const gate = readinessGateRef.current;
+        if (gate) {
+          const outcome = await gate.wait();
+          // 기다리는 동안 더 새 로드가 시작됐을 수 있다.
+          if (sequence !== loadSequenceRef.current) return;
+          if (!isMountedRef.current) return;
+          if (outcome === 'timeout') {
+            // 포기해도 잃는 것은 원래 있던 그 창뿐이다. 빈 화면이 훨씬 나쁘다.
+            console.warn('⚠️ 실시간 구독 준비를 기다리다 시간 초과 — 스냅샷을 먼저 조회합니다');
+          }
+        }
+      }
 
       // 운영자는 담당 설비만 초기 조회한다 — 예전에는 machines·machine_logs 전체를 받아
       // UI 에서만 걸러, 담당 외 데이터가 브라우저(DevTools)에 노출되고 800대에서 전송량이
@@ -531,6 +569,9 @@ export const useRealtimeData = (
     // 설비의 이벤트를 새 스냅샷 위에 재생하면 담당 밖 데이터가 목록에 섞인다. 버려도
     // 유실되지 않는다 — 새 구독은 새 스냅샷 조회보다 먼저 열리므로 그 사이가 비지 않는다.
     pendingRealtimeUpdatesRef.current = [];
+    // 이 세대를 기다리던 로드가 있으면 풀어 준다. 정리된 채널은 SUBSCRIBED 를 주지 않으므로,
+    // 풀지 않으면 그 로드가 타임아웃까지 매달린다(언마운트 시에는 영영).
+    readinessGateRef.current?.cancel();
     channelsRef.current.forEach(channel => {
       try {
         channel.unsubscribe();
@@ -547,6 +588,9 @@ export const useRealtimeData = (
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (!supabaseUrl || supabaseUrl.includes('demo') || supabaseUrl.includes('your_supabase')) {
       console.warn('⚠️ Supabase URL이 설정되지 않아 실시간 구독을 건너뜁니다');
+      // 열 채널이 없으므로 기다릴 것도 없다. 게이트를 비워 두면 스냅샷이 타임아웃만큼
+      // 헛되이 지연된다 — 데모/미설정 환경에서 3초씩 빈 화면이 뜨게 된다.
+      readinessGateRef.current = createReadinessGate(0, SUBSCRIPTION_READY_TIMEOUT_MS);
       return;
     }
 
@@ -557,6 +601,13 @@ export const useRealtimeData = (
     // 지금부터 여는 채널들이 속한 세대. 아래 각 상태 콜백은 자신이 열릴 때의 세대를
     // 클로저로 들고 있다가, 불릴 때 subscriptionGenerationRef.current 와 비교한다.
     const generation = subscriptionGenerationRef.current;
+
+    // 이번 세대에 열 채널 수만큼 게이트를 세운다. 조건부 채널(옵션으로 끈 경우)까지 세면
+    // 오지 않을 SUBSCRIBED 를 기다리다 매번 타임아웃한다 — 게이트가 있으나 마나 해진다.
+    const expectedChannels =
+      1 + (includeMachineLogs ? 1 : 0) + (includeProductionRecords ? 1 : 0);
+    const readinessGate = createReadinessGate(expectedChannels, SUBSCRIPTION_READY_TIMEOUT_MS);
+    readinessGateRef.current = readinessGate;
 
     // 운영자는 담당 설비 이벤트만 받는다 (담당이 소수일 때만 — buildRealtimeInFilter 참고).
     const assignedIds = assignedIdsRef.current;
@@ -605,14 +656,19 @@ export const useRealtimeData = (
         if (status === 'SUBSCRIBED') {
           console.log('✅ Machine logs 실시간 구독 성공');
           updateConnectionStatus('connected');
+          readinessGate.markReady();
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Machine logs 구독 오류:', error);
           updateConnectionStatus('error');
           scheduleReconnect();
+          // 이 채널은 영영 준비되지 않는다. 게이트를 풀지 않으면 스냅샷이 타임아웃까지
+          // 통째로 지연된다 — 한 채널의 실패가 화면 전체를 늦추게 둘 이유가 없다.
+          readinessGate.cancel();
         } else if (status === 'CLOSED') {
           console.warn('⚠️ Machine logs 구독 연결 종료');
           updateConnectionStatus('disconnected');
           scheduleReconnect();
+          readinessGate.cancel();
         }
       });
 
@@ -698,12 +754,16 @@ export const useRealtimeData = (
       .subscribe((status, error) => {
         // machine_logs 채널과 동일한 세대 가드 — 정리된 이전 세대의 콜백은 무시한다.
         if (generation !== subscriptionGenerationRef.current) return;
-        if (status === 'CHANNEL_ERROR') {
+        if (status === 'SUBSCRIBED') {
+          readinessGate.markReady();
+        } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Production records 구독 오류:', error);
           scheduleReconnect();
+          readinessGate.cancel();
         } else if (status === 'CLOSED') {
           console.warn('⚠️ Production records 구독 연결 종료');
           scheduleReconnect();
+          readinessGate.cancel();
         }
       });
 
@@ -755,12 +815,16 @@ export const useRealtimeData = (
       .subscribe((status, error) => {
         // machine_logs 채널과 동일한 세대 가드 — 정리된 이전 세대의 콜백은 무시한다.
         if (generation !== subscriptionGenerationRef.current) return;
-        if (status === 'CHANNEL_ERROR') {
+        if (status === 'SUBSCRIBED') {
+          readinessGate.markReady();
+        } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ Machines 구독 오류:', error);
           scheduleReconnect();
+          readinessGate.cancel();
         } else if (status === 'CLOSED') {
           console.warn('⚠️ Machines 구독 연결 종료');
           scheduleReconnect();
+          readinessGate.cancel();
         }
       });
 

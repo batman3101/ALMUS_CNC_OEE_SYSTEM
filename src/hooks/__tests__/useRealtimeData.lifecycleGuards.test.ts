@@ -32,6 +32,10 @@ channel.on.mockImplementation((_event, _config, handler: PayloadHandler) => {
 });
 channel.subscribe.mockImplementation((cb: StatusCallback) => {
   subscribeCallbacks.push(cb);
+  // 실제 채널은 연결이 서면 SUBSCRIBED 를 준다. 이걸 흉내내지 않으면 훅이 구독 준비를
+  // 기다리다(적대적 재감사 #8 의 게이트) 스냅샷 조회에 도달하지 못한다 — 즉 예전 목은
+  // "영원히 준비되지 않는 채널"이라는 비현실적 상황을 재현하고 있었다.
+  cb('SUBSCRIBED');
   return channel;
 });
 // 실제 unsubscribe() 도 정리 대상 채널의 상태 콜백을 CLOSED 로 발화시킨다.

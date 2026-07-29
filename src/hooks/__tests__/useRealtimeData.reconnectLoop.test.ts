@@ -20,6 +20,9 @@ const channel: { on: jest.Mock; subscribe: jest.Mock; unsubscribe: jest.Mock } =
 channel.on.mockImplementation(() => channel);
 channel.subscribe.mockImplementation((cb: StatusCallback) => {
   subscribeCallbacks.push(cb);
+  // 실제 채널은 연결이 서면 SUBSCRIBED 를 준다(적대적 재감사 #8 의 준비 게이트가 이걸
+  // 기다린다). 이 한 줄이 없으면 훅이 스냅샷 조회에 도달하지 못한다.
+  cb('SUBSCRIBED');
   return channel;
 });
 channel.unsubscribe.mockImplementation(() => {
