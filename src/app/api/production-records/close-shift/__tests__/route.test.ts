@@ -27,20 +27,38 @@ const MACHINE = '11111111-1111-4111-8111-111111111111';
 const WINDOW = { start: new Date('2026-07-17T08:00:00+07:00').getTime(), end: new Date('2026-07-17T20:00:00+07:00').getTime() };
 const req = (b: unknown) => ({ url: 'http://x/api/production-records/close-shift', json: async () => b }) as never;
 
+/** 라우트가 부른 순서를 기록한다 — 지문↔행 조회 순서가 #6 수정의 핵심이라 순서를 고정한다. */
+let callOrder: string[] = [];
+
+const DIGEST = 'digest-abc123';
+
 // F2(재마감 불량 보존)와 quality/oee 파생은 close_shift_upsert RPC(advisory lock) 안으로
 // 이동했다 — 라우트는 production_records 를 직접 읽거나 쓰지 않는다(TOCTOU 차단).
-const wireDb = ({ lastQty = 112, tact = 300 }: { lastQty?: number | null; tact?: number | null } = {}) => {
+const wireDb = (
+  { lastQty = 112, tact = 300, digest = DIGEST as string | null, upsert = { ok: true, preserved_defect: null } as Record<string, unknown> }:
+  { lastQty?: number | null; tact?: number | null; digest?: string | null; upsert?: Record<string, unknown> } = {}
+) => {
   mockFrom.mockImplementation((t: string) => {
     if (t === 'production_progress_reports') return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: lastQty === null ? null : { shift_output_qty: lastQty }, error: null }) }) }) }) }) }) }) };
     if (t === 'machines_with_production_info') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { current_tact_time: tact }, error: null }) }) }) };
     throw new Error(`unexpected ${t}`);
   });
-  mockRpc.mockResolvedValue({ data: { ok: true, preserved_defect: null }, error: null });
+  mockRpc.mockImplementation(async (name: string) => {
+    callOrder.push(`rpc:${name}`);
+    if (name === 'downtime_window_digest') {
+      return digest === null
+        ? { data: null, error: { message: 'digest failed' } }
+        : { data: digest, error: null };
+    }
+    if (name === 'close_shift_upsert_v2') return { data: upsert, error: null };
+    throw new Error(`unexpected rpc ${name}`);
+  });
 };
 
-const rpcPayload = () => {
-  expect(mockRpc).toHaveBeenCalledWith('close_shift_upsert', expect.anything());
-  return mockRpc.mock.calls[0][1] as Record<string, unknown>;
+const upsertPayload = () => {
+  const call = mockRpc.mock.calls.find(c => c[0] === 'close_shift_upsert_v2');
+  expect(call).toBeDefined();
+  return call![1] as Record<string, unknown>;
 };
 
 describe('POST /api/production-records/close-shift', () => {
@@ -48,8 +66,9 @@ describe('POST /api/production-records/close-shift', () => {
     jest.clearAllMocks();
     mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
     mockAssert.mockReturnValue(undefined);
+    callOrder = [];
     mockGetShiftWindow.mockResolvedValue(WINDOW);
-    mockLoadRows.mockResolvedValue([]);      // 비가동 0
+    mockLoadRows.mockImplementation(async () => { callOrder.push('loadRows'); return []; }); // 비가동 0
     mockBreak.mockResolvedValue(110);
   });
 
@@ -57,7 +76,7 @@ describe('POST /api/production-records/close-shift', () => {
     wireDb({ lastQty: 112 });
     const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
     expect(res.status).toBe(201);
-    const p = rpcPayload();
+    const p = upsertPayload();
     expect(p.p_machine_id).toBe(MACHINE);
     expect(p.p_date).toBe('2026-07-17');
     expect(p.p_shift).toBe('A');
@@ -69,7 +88,7 @@ describe('POST /api/production-records/close-shift', () => {
   it('final_qty 를 주면 그 값으로 마감한다 (종이 전사)', async () => {
     wireDb({ lastQty: 112 });
     await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 130 }));
-    expect(rpcPayload().p_output_qty).toBe(130);
+    expect(upsertPayload().p_output_qty).toBe(130);
   });
 
   it('진척도 없고 final_qty 도 없으면 400 (마감할 수량 없음)', async () => {
@@ -90,7 +109,7 @@ describe('POST /api/production-records/close-shift', () => {
   it('정수 컬럼(planned/actual/ideal_runtime)을 반올림해 넘긴다', async () => {
     wireDb({ lastQty: 112, tact: 322 }); // 112*322/60 = 601.07 → 반올림 필요
     await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
-    const p = rpcPayload() as { p_planned_runtime: number; p_actual_runtime: number | null; p_ideal_runtime: number | null };
+    const p = upsertPayload() as { p_planned_runtime: number; p_actual_runtime: number | null; p_ideal_runtime: number | null };
     expect(Number.isInteger(p.p_planned_runtime)).toBe(true);
     expect(p.p_ideal_runtime === null || Number.isInteger(p.p_ideal_runtime)).toBe(true);
     expect(p.p_actual_runtime === null || Number.isInteger(p.p_actual_runtime)).toBe(true);
@@ -101,7 +120,7 @@ describe('POST /api/production-records/close-shift', () => {
     wireDb({ lastQty: 100, tact: null });
     const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
     expect(res.status).toBe(201);
-    const p = rpcPayload();
+    const p = upsertPayload();
     expect(p.p_tact_time_seconds).toBeNull();
     expect(p.p_ideal_runtime).toBeNull();
     expect(p.p_performance).toBeNull();
@@ -109,8 +128,7 @@ describe('POST /api/production-records/close-shift', () => {
   });
 
   it('RPC 실패(ok=false)면 500', async () => {
-    wireDb();
-    mockRpc.mockResolvedValue({ data: { ok: false }, error: null });
+    wireDb({ upsert: { ok: false } });
     const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
     expect(res.status).toBe(500);
   });
@@ -128,9 +146,64 @@ describe('POST /api/production-records/close-shift', () => {
 
   // 자체 감사 #2: 확정 불량보다 작은 output 재마감은 RPC 가 거부(output_lt_defect) → 409.
   it('확정 불량보다 작은 output 재마감은 409', async () => {
-    wireDb();
-    mockRpc.mockResolvedValue({ data: { ok: false, reason: 'output_lt_defect', defect_qty: 8 }, error: null });
+    wireDb({ upsert: { ok: false, reason: 'output_lt_defect', defect_qty: 8 } });
     const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 5 }));
     expect(res.status).toBe(409);
+  });
+
+  // ── Codex 감사 #6: 읽기↔저장 TOCTOU ─────────────────────────────────────
+  //
+  // 라우트는 비가동 원천을 트랜잭션 밖에서 읽어 지표를 계산한 뒤 RPC 로 저장한다.
+  // 그 사이 비가동이 정정되면 원천과 다른 확정 OEE 가 **영구** 저장된다(스냅샷 보존 원칙
+  // 때문에 나중에 원천을 고쳐도 따라오지 않는다). 원천 지문을 잠금 아래에서 대조해 막는다.
+  describe('원천 지문 대조', () => {
+    it('지문을 행 조회보다 **먼저** 읽는다', async () => {
+      // 이 순서가 정확성의 전부다. 뒤집으면(행 먼저, 지문 나중) 그 사이의 변경이 지문에는
+      // 반영되고 행에는 반영되지 않아 RPC 대조가 통과한다 — 낡은 값이 확정 저장되는
+      // 거짓 음성이다. 지금 순서에서는 같은 변경이 지문 불일치를 만들어 409 가 된다.
+      wireDb();
+
+      await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
+
+      expect(callOrder.indexOf('rpc:downtime_window_digest')).toBeGreaterThanOrEqual(0);
+      expect(callOrder.indexOf('loadRows')).toBeGreaterThanOrEqual(0);
+      expect(callOrder.indexOf('rpc:downtime_window_digest'))
+        .toBeLessThan(callOrder.indexOf('loadRows'));
+    });
+
+    it('읽은 지문과 계산에 쓴 시간창을 그대로 RPC 에 넘긴다', async () => {
+      wireDb();
+
+      await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
+
+      const p = upsertPayload();
+      expect(p.p_expected_digest).toBe(DIGEST);
+      // 지문을 계산한 창과 저장에 쓴 창이 다르면 대조가 무의미해진다 — 같은 창을 넘긴다.
+      expect(p.p_window_start).toBe(new Date(WINDOW.start).toISOString());
+      expect(p.p_window_end).toBe(new Date(WINDOW.end).toISOString());
+      const digestCall = mockRpc.mock.calls.find(c => c[0] === 'downtime_window_digest')![1] as Record<string, unknown>;
+      expect(digestCall.p_window_start).toBe(p.p_window_start);
+      expect(digestCall.p_window_end).toBe(p.p_window_end);
+    });
+
+    it('원천이 바뀌었으면 409 + retryable (저장하지 않는다)', async () => {
+      wireDb({ upsert: { ok: false, reason: 'source_changed' } });
+
+      const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
+
+      expect(res.status).toBe(409);
+      // retryable 이 없으면 클라이언트가 재시도하지 않아, 정상 마감이 조용히 실패로 끝난다.
+      expect(await res.json()).toEqual(expect.objectContaining({ retryable: true }));
+    });
+
+    it('지문 조회가 실패하면 500 이고 저장을 시도하지 않는다', async () => {
+      // 대조 재료가 없는 채로 저장하면 이 수정 전과 똑같아진다 — 차라리 실패한다.
+      wireDb({ digest: null });
+
+      const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
+
+      expect(res.status).toBe(500);
+      expect(mockRpc.mock.calls.some(c => c[0] === 'close_shift_upsert_v2')).toBe(false);
+    });
   });
 });
