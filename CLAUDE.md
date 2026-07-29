@@ -444,16 +444,35 @@ vercel --prod
 
 ## Critical System Features
 
-### OEE Daily Aggregation System
-The system includes automated daily OEE aggregation using Supabase Edge Functions and PostgreSQL pg_cron:
-- **Edge Function**: `supabase/functions/daily-oee-aggregation/index.ts` - Performs OEE calculations
-- **Scheduled Execution**:
-  - 8:30 AM daily - aggregates previous day's B shift (20:00-08:00)
-  - 8:30 PM daily - aggregates current day's A shift (08:00-20:00)
-- **Manual Trigger**: Use `OEEAggregationService.triggerDailyAggregation(date)` from `src/utils/oeeAggregation.ts`
-- **Admin UI**: `src/components/admin/OEEAggregationManager.tsx` provides aggregation management interface
-- **Logs Table**: `oee_aggregation_log` tracks execution history and status
-- See `docs/OEE_AGGREGATION_SYSTEM.md` for complete documentation
+### OEE 정합성 보정 Edge Function (⚠ 예약 실행되지 않는다)
+
+**2026-07-29 실측으로 이 절을 전면 정정했다.** 이전 서술은 거의 전부 사실이 아니었고,
+같은 문서 안의 다른 서술(위 "there is no `oee_aggregation_log` table")과도 충돌했다.
+
+| 이전 서술 | 실제 |
+|---|---|
+| pg_cron 으로 매일 08:30 / 20:30 자동 실행 | **pg_cron 미설치**(`installed_version=null`), `cron` 스키마 없음 → **예약 실행 없음** |
+| `OEEAggregationService.triggerDailyAggregation` 으로 수동 실행 | 그 모듈을 **import 하는 곳이 없다** (죽은 코드) |
+| `OEEAggregationManager.tsx` 가 관리 UI 제공 | 어느 페이지에도 **마운트되지 않았다** (죽은 코드) |
+| `oee_aggregation_log` 가 실행 이력 기록 | **그런 테이블은 없다** |
+| "Performs OEE calculations" | 재계산을 **하지 않는다** — 아래 참조 |
+
+**현재 상태**: 함수는 배포되어 있고(`verify_jwt: true`, ACTIVE) 유효한 관리자 JWT 로 HTTP
+호출하면 동작한다. 그러나 **앱 안에 살아있는 호출자가 하나도 없다.**
+
+**함수가 실제로 하는 일**: 산술적으로 반박 불가능한 명제 하나만 적용한다 —
+`output_qty = 0` 이면 `ideal_runtime / performance / quality / oee` 도 0이다.
+작업자 입력값(`planned_runtime`, `actual_runtime`, `output_qty`, `defect_qty`,
+`downtime_minutes`, `availability`)은 **건드리지 않고**, 행을 **INSERT 하지도 않는다**.
+지표를 저장된 입력값으로 재유도하면 이 DB 에서는 곧 역사 덮어쓰기가 되기 때문이다
+(근거는 함수 파일 상단 주석에 있다). `dry_run: true` 로 영향 범위만 확인할 수 있다.
+
+**인가**(2026-07-29 추가): `service_role` 토큰은 통과, 그 외에는 `admin` + `is_active` 를
+요구한다. 토큰 없음·서명 불일치는 플랫폼의 `verify_jwt` 가 401 로 막는다(실측 확인).
+
+- Edge Function: `supabase/functions/daily-oee-aggregation/index.ts`
+- 회귀 검사: `supabase/functions/__tests__/dailyOeeAggregationAuthz.test.ts`
+- ⚠ `docs/OEE_AGGREGATION_SYSTEM.md` 는 아직 옛 서술(pg_cron 스케줄)을 담고 있다.
 
 ### Production Record Input System
 Shift-based production data entry with automatic notifications:
