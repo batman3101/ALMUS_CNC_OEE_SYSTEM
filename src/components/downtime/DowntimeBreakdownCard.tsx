@@ -8,6 +8,7 @@ import { resolveDowntimeReasonLabel } from '@/utils/downtimeReasonLabel';
 import { authFetch } from '@/lib/authFetch';
 import type { DowntimeBreakdownRow } from '@/utils/downtimeBreakdown';
 import type { MachineState } from '@/types';
+import { elapsedMinutesSince } from '@/utils/elapsedMinutes';
 
 const { Text } = Typography;
 
@@ -131,9 +132,7 @@ export const DowntimeBreakdownCard: React.FC<DowntimeBreakdownCardProps> = ({
   }, [machineId, onCorrected, refresh, t]);
   // 경과는 **클립되지 않은** ongoingSince 로 잰다. ongoingRow.start 는 교대 시작으로
   // 잘려 있어서, 이전 교대에서 이어진 비가동의 경과가 실제보다 짧게 나온다.
-  const elapsedMinutes = ongoingSince
-    ? Math.max(0, Math.floor((now - Date.parse(ongoingSince)) / 60000))
-    : null;
+  const elapsedMinutes = ongoingSince ? elapsedMinutesSince(ongoingSince, now) : null;
 
   const renderRow = (row: DowntimeBreakdownRow) => (
     <div
