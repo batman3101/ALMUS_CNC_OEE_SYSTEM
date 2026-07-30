@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
 import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
-import { getShiftWindow, loadDowntimeSourceRows } from '@/lib/shiftDowntime';
+import { getShiftReportingWindow, loadDowntimeSourceRows } from '@/lib/shiftDowntime';
+import { isShiftCloseAllowed } from '@/utils/shiftReportingWindow';
 import { calculateVerifiedDowntimeMinutesForWindow } from '@/app/api/production-records/daily/downtimeCalculation';
 import { computeShiftSnapshot } from '@/lib/shiftMetrics';
 
@@ -45,12 +46,22 @@ export async function POST(request: NextRequest) {
     if (outputQty === null) return NextResponse.json({ error: 'no quantity to close (진척·final_qty 없음)' }, { status: 400 });
 
     // 비가동 = 확정 OEE 와 동일 계약. tact = 뷰.
-    const window = await getShiftWindow(date, shift);
-    if (!window) return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
-    // 마감은 교대 종료 후에만(늦은 마감은 무기한 허용, 이른 마감은 금지). UI 는 현재 교대를
-    // 제외하지만 API 를 직접 치면 진행 중·미래 교대의 확정 record 를 만들 수 있었다(자체 감사 #4).
-    if (window.end > Date.now())
-      return NextResponse.json({ error: 'shift has not ended yet (이른 마감 금지)' }, { status: 400 });
+    const reporting = await getShiftReportingWindow(date, shift);
+    if (!reporting) return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
+    const { window, bufferMinutes } = reporting;
+    // 마감은 **진척 창이 완전히 닫힌 뒤에만**(늦은 마감은 무기한 허용, 이른 마감은 금지).
+    // UI 는 현재 교대를 제외하지만 API 를 직접 치면 진행 중·미래 교대의 확정 record 를
+    // 만들 수 있었다(자체 감사 #4).
+    //
+    // 예전에는 조건이 `window.end > now` 였다. 그런데 진척은 `window.end + 유예(10분)`
+    // 까지 받으므로 그 10분 동안 두 경로가 겹쳤고, 마감이 잠금 **밖에서** 읽어둔 수량을
+    // 그 사이 승인된 더 큰 진척 위에 덮어쓸 수 있었다(적대적 재감사 #5). 같은 판정 함수를
+    // 써서 두 창이 서로소임을 정의상 보장한다.
+    if (!isShiftCloseAllowed(window, bufferMinutes, Date.now()))
+      return NextResponse.json(
+        { error: 'shift reporting window is still open (이른 마감 금지)' },
+        { status: 400 },
+      );
     const windowStartIso = new Date(window.start).toISOString();
     const windowEndIso = new Date(window.end).toISOString();
 

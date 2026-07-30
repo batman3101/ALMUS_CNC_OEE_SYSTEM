@@ -345,6 +345,59 @@ export class SystemSettingsService {
   }
 
   /**
+   * 여러 설정을 **한 트랜잭션**으로 저장한다 (적대적 재감사 #9).
+   *
+   * `updateMultipleSettings` 와 다른 점이 이 메서드의 전부다. 그쪽은
+   * `Promise.all(updates.map(updateSetting))` 이라 부분 실패가 그대로 남는다 — 병렬이라
+   * 어느 것이 남았는지 예측하기도 어렵다. 서로를 해석하는 값들(교대 시작·휴식·전환 유예)이
+   * 반쪽만 반영되면 "설정이 좀 틀린" 게 아니라 **어느 세대의 규칙으로 계산됐는지 알 수 없는**
+   * 상태가 되고, 그 상태로 계산된 OEE 는 나중에 되짚을 수도 없다.
+   *
+   * 실패하면 조용히 일부만 남기지 말고 그대로 실패시킨다. 되돌리기는 DB 트랜잭션이 한다.
+   */
+  async updateSettingsAtomic(
+    updates: SettingUpdate[],
+    changeReason?: string,
+  ): Promise<SettingUpdateResponse> {
+    if (updates.length === 0) return { success: false, error: '저장할 설정이 없습니다.' };
+
+    for (const update of updates) {
+      const validation = this.validateSettingValue(update);
+      if (!validation.isValid) return { success: false, error: validation.error };
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch('/api/system-settings/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        updates: updates.map(u => ({
+          category: u.category,
+          setting_key: u.setting_key,
+          setting_value: typeof u.setting_value === 'string'
+            ? u.setting_value
+            : JSON.stringify(u.setting_value),
+        })),
+        change_reason: changeReason,
+      }),
+    });
+
+    const result = (await response.json().catch(() => null)) as
+      { success?: boolean; error?: string } | null;
+    if (!response.ok || !result?.success) {
+      return { success: false, error: result?.error ?? `HTTP ${response.status}` };
+    }
+
+    // 한 번에 바뀌었으므로 캐시도 한 번만 비운다.
+    this.invalidateCache();
+    for (const update of updates) await this.broadcastSettingChange(update);
+    return { success: true };
+  }
+
+  /**
    * Service Role을 통한 설정 업데이트 (RLS 우회)
    */
   private async updateSettingViaServiceRole(update: SettingUpdate, valueToSave: string): Promise<SettingUpdateResponse> {

@@ -22,7 +22,7 @@ export interface BusinessTimeConfig {
 const DEFAULT_BUSINESS_TIMEZONE = 'Asia/Ho_Chi_Minh';
 const DEFAULT_SHIFT_A_START = '08:00';
 const DEFAULT_SHIFT_B_START = '20:00';
-const DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES = 10;
+import { DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES } from '@/lib/shiftDefaults';
 
 /**
  * **조회 실패와 설정 부재는 다른 것이다.**

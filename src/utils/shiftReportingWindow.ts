@@ -31,3 +31,26 @@ export function classifyReportingWindow(
   if (nowMs >= window.end + graceMs) return 'closed';
   return 'open';
 }
+
+/**
+ * 교대 마감을 받아도 되는가.
+ *
+ * 왜 별도 산술이 아니라 `classifyReportingWindow` 를 **재사용**하는가 — 이게 이 함수의
+ * 존재 이유다. 예전에는 두 규칙이 서로 다른 파일에서 각자 계산했다:
+ *   진척 허용 종료 = window.end + buffer   (이 파일)
+ *   마감 허용 시작 = window.end            (close-shift 라우트)
+ * 그 결과 운영값 기준 **10분간 두 창이 겹쳤고**, 그 사이 승인된 진척 110 을 마감이 읽어둔
+ * 100 이 덮어써 원천과 확정 레코드가 어긋날 수 있었다(적대적 재감사 #5).
+ *
+ * 겹침을 없애는 방법으로 "마감 쪽에도 buffer 를 더한다"를 고를 수도 있었다. 그러면 같은
+ * 산술이 두 곳에 생기고, 언젠가 한쪽만 바뀐다 — 애초의 결함이 정확히 그 모양이었다.
+ * 그래서 마감을 **진척 창이 'closed' 인 것과 같은 말**로 정의한다. 두 창의 서로소 성질이
+ * 정의상 참이 되어, 유예 정책을 어떻게 바꾸든 겹칠 수 없다.
+ */
+export function isShiftCloseAllowed(
+  window: Interval,
+  bufferMinutes: number,
+  nowMs: number,
+): boolean {
+  return classifyReportingWindow(window, bufferMinutes, nowMs) === 'closed';
+}

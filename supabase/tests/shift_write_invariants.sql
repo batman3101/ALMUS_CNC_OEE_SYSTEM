@@ -23,6 +23,12 @@ declare
   v_defect integer;
   r jsonb;
   n integer;
+  -- v2 는 원천 지문 대조를 위해 시간창과 기대 지문을 받는다(20260729160000).
+  v_ws timestamptz := timestamptz '2099-01-01 08:00+07';
+  v_we timestamptz := timestamptz '2099-01-01 20:00+07';
+  v_digest text;
+  v_digest_before text;
+  v_digest_after text;
 begin
   select id into v_machine
   from public.machines
@@ -71,10 +77,23 @@ begin
   where machine_id = v_machine and start_time >= now() - interval '1 minute';
   if n <> 2 then raise exception 'T2f expected 2 log rows per 2 transitions, got %', n; end if;
 
-  -- [T3] close_shift_upsert: F2 보존 원자화 + output_lt_defect + confirm_shift_defect 가드
-  r := public.close_shift_upsert(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930, 1.0, 0.9, 0, 558);
+  -- [T3] close_shift_upsert_v2: F2 보존 원자화 + output_lt_defect + confirm_shift_defect 가드
+  --
+  -- v1 은 20260729170000 에서 제거됐다. 이 스크립트가 v1 을 계속 부르고 있어 운영 스키마에서
+  -- 통째로 실패하고 있었다(적대적 재감사 #7) — 불변조건 검사가 스스로 깨진 채 방치되면
+  -- "검사가 있다"는 사실이 오히려 안전하다는 착각을 만든다.
+  v_digest := public.downtime_window_digest(v_machine, v_ws, v_we);
+  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest);
   if not (r->>'ok')::boolean or r->'preserved_defect' <> 'null'::jsonb then
     raise exception 'T3a first close failed: %', r;
+  end if;
+
+  -- [T3-CAS] 지문이 다르면 저장하지 않는다 (낡은 지표의 확정 저장 방지)
+  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, '__stale_digest__');
+  if (r->>'ok')::boolean or r->>'reason' <> 'source_changed' then
+    raise exception 'T3-CAS stale digest accepted: %', r;
   end if;
 
   select record_id into v_rec_id from public.production_records
@@ -85,12 +104,14 @@ begin
     raise exception 'T3b defect confirm failed: %', r;
   end if;
 
-  r := public.close_shift_upsert(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930, 1.0, 0.9, 0, 558);
+  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest);
   if (r->>'preserved_defect')::integer <> 8 then raise exception 'T3c reclose lost defect: %', r; end if;
   select defect_qty into v_defect from public.production_records where record_id = v_rec_id;
   if v_defect <> 8 then raise exception 'T3d row defect overwritten: %', v_defect; end if;
 
-  r := public.close_shift_upsert(v_machine, date '2099-01-01', 'A', 5, 610, 610, 47, 1.0, 0.08, 0, 558);
+  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 5, 610, 610, 47,
+                                    1.0, 0.08, 0, 558, v_ws, v_we, v_digest);
   if (r->>'ok')::boolean or r->>'reason' <> 'output_lt_defect' then
     raise exception 'T3e output<defect reclose accepted: %', r;
   end if;
@@ -100,6 +121,38 @@ begin
 
   r := public.confirm_shift_defect(v_rec_id, 200);
   if (r->>'ok')::boolean or r->>'reason' <> 'exceeds_output' then raise exception 'T3g exceeds guard missing: %', r; end if;
+
+  -- [T5] 지문이 **사유 변경**을 감지한다 (적대적 재감사 #6)
+  --
+  -- 시각은 그대로 두고 reason 만 바꾼다 — 진행 중 비가동 사유 정정이 정확히 이 모양이다.
+  -- reason 이 계획정지 여부를 정하고 그게 확정 비가동 값을 숫자↔NULL 로 뒤집으므로,
+  -- 지문이 이걸 못 보면 낡은 분류로 계산한 지표가 CAS 를 통과해 저장된다.
+  -- T2 가 만든 실제 andon 기록(현재 시각대)을 그대로 쓴다.
+  v_digest_before := public.downtime_window_digest(
+    v_machine, now() - interval '1 hour', now() + interval '1 hour');
+
+  update public.downtime_entries
+  set reason = case when reason = 'BREAKDOWN_REPAIR' then 'TEMPORARY_STOP' else 'BREAKDOWN_REPAIR' end
+  where machine_id = v_machine and start_time >= now() - interval '1 hour';
+
+  v_digest_after := public.downtime_window_digest(
+    v_machine, now() - interval '1 hour', now() + interval '1 hour');
+
+  if v_digest_before = 'empty' then
+    raise exception 'T5 setup: 창에 비가동 원천이 없어 검사가 무의미하다';
+  end if;
+  if v_digest_before = v_digest_after then
+    raise exception 'T5 지문이 사유 변경을 감지하지 못한다 (before=after=%)', v_digest_before;
+  end if;
+
+  -- [T6] 마감된 교대에는 진척을 받지 않는다 (적대적 재감사 #5)
+  --
+  -- T3 이 2099-01-01 A 의 확정 레코드를 만들었다. 이후의 진척은 원천과 확정 레코드를
+  -- 어긋나게 만들 뿐이고, 레코드가 존재하므로 화면은 재마감을 요구하지도 않는다.
+  r := public.report_shift_progress(v_machine, date '2099-01-01', 'A', 999, null);
+  if (r->>'ok')::boolean or r->>'reason' <> 'already_closed' then
+    raise exception 'T6 마감 후 진척이 수용됨: %', r;
+  end if;
 
   -- [T4] 비활성 설비 andon 거부
   update public.machines set is_active = false where id = v_machine;

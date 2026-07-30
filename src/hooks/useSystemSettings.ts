@@ -4,6 +4,7 @@ import { useSystemSettings as useSystemSettingsContext } from '@/contexts/System
 import { useMemo, useEffect } from 'react';
 import type { Dayjs } from 'dayjs';
 import type { SettingCategory, AllSystemSettings } from '@/types/systemSettings';
+import { resolveBreakMinutes, resolveShiftChangeBufferMinutes } from '@/lib/shiftDefaults';
 import { 
   initializeDateTimeFormatter, 
   getDateTimeFormatter,
@@ -68,18 +69,31 @@ export function useSystemSettings() {
     /**
      * 교대 시간 조회
      */
-    getShiftTimes: () => ({
-      shiftA: {
-        start: context.getSetting('shift', 'shift_a_start') ?? '08:00',
-        end: context.getSetting('shift', 'shift_a_end') ?? '20:00'
-      },
-      shiftB: {
-        start: context.getSetting('shift', 'shift_b_start') ?? '20:00',
-        end: context.getSetting('shift', 'shift_b_end') ?? '08:00'
-      },
-      breakTime: context.getSetting('shift', 'break_time_minutes') ?? 60,
-      bufferTime: context.getSetting('shift', 'shift_change_buffer_minutes') ?? 15
-    }),
+    /**
+     * 교대 시간 조회.
+     *
+     * **종료 시각은 저장값을 읽지 않고 상대 교대의 시작에서 파생한다.**
+     * 서버는 교대 창을 `A = [A시작, B시작)`, `B = [B시작, 다음날 A시작)` 으로 만들고
+     * (`downtimeIntervals.buildShiftWindows`) 저장된 `shift_a_end`/`shift_b_end` 를 **읽지
+     * 않는다**. 그런데 이 훅은 그 저장값을 읽고 있어서, 관리자가 예전 폼으로 A교대 종료를
+     * 19:30 으로 바꿔 두었다면 화면은 19:30 을, 서버 OEE 는 20:00 을 기준으로 계산했다
+     * (적대적 재감사 #9). 같은 화면 안에서 두 숫자가 다른 규칙을 따르는 상태다.
+     *
+     * 이 시스템의 실제 모델은 연속 2교대다 — A가 끝나면 B가 시작한다. 간격이나 중첩은
+     * 표현할 수 없는 개념이므로, 종료 시각은 독립된 설정이 아니라 **파생값**이 맞다.
+     */
+    getShiftTimes: () => {
+      const shiftAStart = context.getSetting('shift', 'shift_a_start') as string | undefined ?? '08:00';
+      const shiftBStart = context.getSetting('shift', 'shift_b_start') as string | undefined ?? '20:00';
+      return {
+        shiftA: { start: shiftAStart, end: shiftBStart },
+        shiftB: { start: shiftBStart, end: shiftAStart },
+        breakTime: resolveBreakMinutes(context.getSetting('shift', 'break_time_minutes') as number | undefined),
+        // 서버 기본값(shiftConfig)과 같은 상수를 쓴다. 예전에는 여기만 15 였다.
+        bufferTime: resolveShiftChangeBufferMinutes(
+          context.getSetting('shift', 'shift_change_buffer_minutes') as number | undefined)
+      };
+    },
 
     /**
      * 알림 설정 조회

@@ -17,7 +17,10 @@ jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { from: (...a: unknown[]) => mockFrom(...a), rpc: (...a: unknown[]) => mockRpc(...a) },
 }));
 jest.mock('@/lib/shiftDowntime', () => ({
-  getShiftWindow: (...a: unknown[]) => mockGetShiftWindow(...a),
+  // 라우트는 이제 유예(buffer)까지 함께 받는다 — 마감 허용 시점을 진척 창과 **같은 판정
+  // 함수**에서 끌어내기 위해서다(적대적 재감사 #5). 창과 유예를 따로 조회하면 그 사이
+  // 설정이 바뀔 때 서로 다른 세대의 값으로 판단하게 된다.
+  getShiftReportingWindow: (...a: unknown[]) => mockGetShiftWindow(...a),
   loadDowntimeSourceRows: (...a: unknown[]) => mockLoadRows(...a),
 }));
 jest.mock('@/lib/plannedRuntime', () => ({ getBreakTimeMinutes: () => mockBreak() }));
@@ -67,7 +70,8 @@ describe('POST /api/production-records/close-shift', () => {
     mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
     mockAssert.mockReturnValue(undefined);
     callOrder = [];
-    mockGetShiftWindow.mockResolvedValue(WINDOW);
+    // WINDOW 는 2026-07-17 로 이미 한참 지난 교대라 유예 10분을 더해도 마감 가능하다.
+    mockGetShiftWindow.mockResolvedValue({ window: WINDOW, bufferMinutes: 10 });
     mockLoadRows.mockImplementation(async () => { callOrder.push('loadRows'); return []; }); // 비가동 0
     mockBreak.mockResolvedValue(110);
   });
@@ -138,10 +142,40 @@ describe('POST /api/production-records/close-shift', () => {
   it('아직 끝나지 않은 교대는 400 (이른 마감 금지)', async () => {
     wireDb();
     const future = Date.now() + 60 * 60 * 1000;
-    mockGetShiftWindow.mockResolvedValue({ start: future - 12 * 3600_000, end: future });
+    mockGetShiftWindow.mockResolvedValue({
+      window: { start: future - 12 * 3600_000, end: future },
+      bufferMinutes: 10,
+    });
     const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10 }));
     expect(res.status).toBe(400);
     expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  // 적대적 재감사 #5: 교대는 끝났지만 **진척 유예가 아직 열려 있는** 10분. 예전에는 이
+  // 구간에서 마감이 허용됐고, 마감이 잠금 밖에서 읽어둔 수량 위로 그 사이 승인된 더 큰
+  // 진척이 얹혀 원천과 확정 레코드가 어긋날 수 있었다.
+  it('교대는 끝났지만 진척 유예가 남아 있으면 400 (겹침 제거)', async () => {
+    wireDb();
+    const end = Date.now() - 5 * 60_000;           // 5분 전에 교대 종료
+    mockGetShiftWindow.mockResolvedValue({
+      window: { start: end - 12 * 3600_000, end },
+      bufferMinutes: 10,                            // 유예는 아직 5분 남음
+    });
+    const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10 }));
+    expect(res.status).toBe(400);
+    // 저장은커녕 지문 조회조차 하지 않는다 — 거부는 가장 앞에서 끝나야 한다.
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('진척 유예가 끝나면 마감할 수 있다', async () => {
+    wireDb();
+    const end = Date.now() - 11 * 60_000;          // 종료 후 11분 = 유예 10분 경과
+    mockGetShiftWindow.mockResolvedValue({
+      window: { start: end - 12 * 3600_000, end },
+      bufferMinutes: 10,
+    });
+    const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10 }));
+    expect(res.status).toBe(201);
   });
 
   // 자체 감사 #2: 확정 불량보다 작은 output 재마감은 RPC 가 거부(output_lt_defect) → 409.

@@ -17,6 +17,8 @@ import {
 } from 'antd';
 import { SaveOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { resolveBreakMinutes, resolveShiftChangeBufferMinutes } from '@/lib/shiftDefaults';
+import { systemSettingsService } from '@/lib/systemSettings';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useShiftSettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
@@ -30,7 +32,9 @@ interface ShiftSettingsTabProps {
 const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange }) => {
   const { token } = theme.useToken();
   const { t } = useLanguage();
-  const { settings, updateSetting } = useShiftSettings();
+  // updateSetting(단건)은 더 쓰지 않는다 — 교대 설정 네 값은 서로를 해석하므로
+  // updateSettingsAtomic 으로 한 트랜잭션에 저장한다(적대적 재감사 #9).
+  const { settings } = useShiftSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -51,8 +55,15 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
       form.setFieldsValue({
         shift_a_start: settings.shift_a_start ? dayjs(settings.shift_a_start, 'HH:mm') : dayjs('08:00', 'HH:mm'),
         shift_b_start: settings.shift_b_start ? dayjs(settings.shift_b_start, 'HH:mm') : dayjs('20:00', 'HH:mm'),
-        break_time_minutes: settings.break_time_minutes || 60,
-        shift_change_buffer_minutes: settings.shift_change_buffer_minutes || 15
+        // `||` 이 아니라 `??` 여야 한다. 관리자가 **명시적으로 0** 을 설정한 경우
+        // (휴식 없음 / 전환 유예 없음) `||` 는 그걸 falsy 로 보고 기본값으로 되돌린다.
+        // 화면은 60·15 를 보여주는데 DB 에는 0 이 들어 있는 상태가 되고, 저장을 누르면
+        // 관리자가 고른 적 없는 값이 저장된다(적대적 재감사 #9).
+        break_time_minutes: resolveBreakMinutes(settings.break_time_minutes),
+        // 기본값 15 는 서버(`src/lib/shiftConfig.ts` = 10)와 달랐다. 설정이 비어 있을 때
+        // 화면과 서버가 서로 다른 값으로 계산하게 된다 — 같은 상수를 쓴다.
+        shift_change_buffer_minutes:
+          resolveShiftChangeBufferMinutes(settings.shift_change_buffer_minutes)
       });
     }
   }, [settings, form]);
@@ -82,17 +93,51 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
         return;
       }
 
-      const updates = Object.entries(processedValues).map(([key, value]) => ({
-        key,
-        value,
-        reason: `Updated shift ${key} setting`
-      }));
+      // 짧은 쪽 교대보다 긴 휴식은 계획가동시간을 0으로 만든다(planned = max(0, 가동−휴식)).
+      // 그러면 availability 가 계산 불가가 되어 OEE 가 통째로 NULL 이 된다 — 저장 전에 막는다.
+      const toMinutes = (hhmm: string) => {
+        const [h, m] = hhmm.split(':').map(Number);
+        return h * 60 + m;
+      };
+      const aStart = toMinutes(processedValues.shift_a_start);
+      const bStart = toMinutes(processedValues.shift_b_start);
+      const shortestShift = Math.min(
+        (bStart - aStart + 1440) % 1440,
+        (aStart - bStart + 1440) % 1440,
+      );
+      const breakMinutes = processedValues.break_time_minutes;
+      const bufferMinutes = processedValues.shift_change_buffer_minutes;
 
-      for (const update of updates) {
-        const success = await updateSetting(update.key, update.value, update.reason);
-        if (!success) {
-          throw new Error(`Failed to update ${update.key}`);
-        }
+      if (!Number.isFinite(breakMinutes) || breakMinutes < 0 || breakMinutes >= shortestShift) {
+        showError(`휴식 시간은 0 이상이고 짧은 교대(${shortestShift}분)보다 작아야 합니다.`);
+        return;
+      }
+      // 유예가 교대 길이를 넘으면 다음 교대가 시작된 뒤에도 이전 교대 진척을 받게 된다.
+      if (
+        bufferMinutes === undefined ||
+        !Number.isFinite(bufferMinutes) ||
+        bufferMinutes < 0 ||
+        bufferMinutes >= shortestShift
+      ) {
+        showError(`교대 전환 유예는 0 이상이고 짧은 교대(${shortestShift}분)보다 작아야 합니다.`);
+        return;
+      }
+
+      // 네 값을 **한 트랜잭션**으로 저장한다(적대적 재감사 #9).
+      //
+      // 예전에는 for 루프로 네 번 따로 저장하고 실패하면 throw 했다. 세 번째에서 실패하면
+      // 앞의 둘은 남고 뒤의 하나는 안 남는다 — 그런데 이 값들은 서로를 해석하는 값이라
+      // 반쪽 상태는 "어느 세대의 규칙으로 계산된 것인지 알 수 없는" 상태가 된다.
+      const result = await systemSettingsService.updateSettingsAtomic(
+        Object.entries(processedValues).map(([key, value]) => ({
+          category: 'shift',
+          setting_key: key,
+          setting_value: value,
+        })),
+        'Updated shift settings',
+      );
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to update shift settings');
       }
 
       showSuccess(t('settings.saveSuccess'));
@@ -134,7 +179,14 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
   const aShiftDuration = calculateShiftDuration(formValues.shift_a_start, aShiftEnd);
   const bShiftDuration = calculateShiftDuration(formValues.shift_b_start, bShiftEnd);
-  const breakTime = formValues.break_time_minutes || 60;
+  // 폼 초기값(65행)과 **같은 규칙**이어야 한다. 여기만 `|| 60` 으로 남겨 뒀더니 브라우저
+  // 테스트에서 바로 드러났다 — 휴식을 0으로 저장한 뒤 입력칸은 0 을 보여주는데 요약은
+  // "교대당 60분", 작업 시간 11시간(=720−60)을 보여줬다. 한 화면 안에서 두 숫자가 서로
+  // 다른 규칙을 따르는 상태다.
+  //
+  // 이 결함의 모양이 이번 감사 전체의 주제다: 같은 규칙이 두 곳에 흩어져 한쪽만 고쳐진다.
+  // 고치는 쪽도 예외가 아니라서, 위를 고칠 때 여기를 같이 세지 않으면 그대로 반복된다.
+  const breakTime = resolveBreakMinutes(formValues.break_time_minutes);
 
   /** 파생된 종료 시각을 입력칸이 아닌 읽기 전용 표시로 보여준다. */
   const derivedEndTime = (value: dayjs.Dayjs | undefined, hint: string) => (

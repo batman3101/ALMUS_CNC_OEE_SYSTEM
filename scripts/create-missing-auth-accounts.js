@@ -110,8 +110,11 @@ async function createMissingAuthAccounts() {
 
   console.log('🎉 모든 계정 생성 완료!');
   console.log('\n📋 로그인 정보:');
-  console.log('임시 비밀번호: cncoee123!');
-  console.log('모든 사용자는 이 비밀번호로 로그인할 수 있습니다.');
+  // 값을 찍지 않는다 — 값을 아는 사람이 실행하는 스크립트이고, 출력은 CI 로그·터미널
+  // 스크롤백·화면 공유로 남는다. 18행에서 이미 env 로 옮긴 비밀번호를 여기서 다시
+  // 평문으로 뱉으면 옮긴 의미가 없다(실제로 그렇게 남아 있었다).
+  console.log('임시 비밀번호: SEED_USER_PASSWORD 환경변수에 설정한 값');
+  console.log('모든 사용자는 그 비밀번호로 로그인할 수 있습니다.');
 }
 
 // 실행

@@ -15,7 +15,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "clean": "rm -rf .next node_modules/.cache",
-    "check:migrations": "node scripts/check-migrations.mjs"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "check:grants": "node scripts/check-anon-grants.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
