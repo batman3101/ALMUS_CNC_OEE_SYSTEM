@@ -23,6 +23,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useAdminTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
+import { useAuth } from '@/contexts/AuthContext';
+import { canManageAccountWithRole, type UserRole } from '@/lib/pageAccess';
 import type { User } from '@/types';
 import UserForm from './UserForm';
 
@@ -36,6 +38,8 @@ const UserManagement: React.FC = () => {
   const { t } = useAdminTranslation();
   const { message } = App.useApp();
   const { loading, fetchUsers, deleteUser } = useAdminOperations();
+  const { user: actor } = useAuth();
+  const actorRole = actor?.role as UserRole | undefined;
   const [users, setUsers] = useState<UserWithProfile[]>([]);
   const [searchText, setSearchText] = useState('');
   const [formVisible, setFormVisible] = useState(false);
@@ -163,31 +167,42 @@ const UserManagement: React.FC = () => {
     {
       title: t('table.columns.actions'),
       key: 'actions',
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            {t('table.actions.edit')}
-          </Button>
-          <Popconfirm
-            title={t('userManagement.confirmDelete')}
-            onConfirm={() => handleDelete(record.id)}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-          >
+      render: (_, record) => {
+        // 관리자(engineer)는 시스템 관리자 계정을 편집·삭제할 수 없다. 이메일만 바꿔도
+        // 그 주소로 비밀번호를 재설정해 그 계정이 될 수 있고, 지울 수 있으면 시스템
+        // 관리자를 전부 없애 아무도 설정에 못 들어가게 만들 수 있기 때문이다.
+        // 서버(`assertCanManageAccount`)가 같은 규칙으로 거절하므로 여기 비활성은 안내다.
+        const manageable = canManageAccountWithRole(actorRole, record.role as UserRole);
+
+        return (
+          <Space>
             <Button
               type="link"
-              danger
-              icon={<DeleteOutlined />}
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              disabled={!manageable}
             >
-              {t('table.actions.delete')}
+              {t('table.actions.edit')}
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title={t('userManagement.confirmDelete')}
+              onConfirm={() => handleDelete(record.id)}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              disabled={!manageable}
+            >
+              <Button
+                type="link"
+                danger
+                icon={<DeleteOutlined />}
+                disabled={!manageable}
+              >
+                {t('table.actions.delete')}
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 

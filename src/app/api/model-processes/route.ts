@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 // POST /api/model-processes - 새로운 공정 생성 (관리자용)
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
     const body = await request.json();
     
     const { model_id, process_name, process_order, tact_time_seconds = 120 } = body;

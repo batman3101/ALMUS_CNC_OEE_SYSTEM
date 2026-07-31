@@ -27,7 +27,7 @@ export async function PUT(
 ) {
   try {
     const { machineId } = await params;
-    const { userId } = await requireUser(request, ['admin']);
+    const { userId } = await requireUser(request, ['admin', 'engineer']);
 
     const body = await request.json();
 
@@ -72,7 +72,7 @@ export async function DELETE(
 ) {
   try {
     const { machineId } = await params;
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
 
     // 생산·비가동·상태 이력 보존을 위해 물리 삭제하지 않는다.
     const { data: deleted, error } = await supabaseAdmin

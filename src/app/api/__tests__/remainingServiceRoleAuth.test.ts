@@ -85,19 +85,21 @@ describe('remaining service-role route guards', () => {
     mockRequireUser.mockRejectedValue({ message: '인증이 필요합니다', status: 401 });
   });
 
+  // 2026-07-31 3등급 체계: 관리자(engineer)는 '설정'을 제외한 모든 페이지 CRUD 다.
+  // 설비 관리는 관리자에게 열리고, 설정 화면이 쓰는 이미지 업로드는 시스템 관리자에 남는다.
   it.each([
-    ['admin machines', adminMachines.GET, undefined],
-    ['machine template', machineTemplate.GET, undefined],
-    ['user profiles', userProfiles.GET, undefined],
-    ['image upload', imageUpload.POST, undefined],
-  ])('%s requires an admin before privileged work', async (_name, handler, context) => {
+    ['admin machines', adminMachines.GET, undefined, ['admin', 'engineer']],
+    ['machine template', machineTemplate.GET, undefined, ['admin', 'engineer']],
+    ['user profiles', userProfiles.GET, undefined, ['admin']],
+    ['image upload', imageUpload.POST, undefined, ['admin']],
+  ])('%s requires a manager role before privileged work', async (_name, handler, context, roles) => {
     const request = makeRequest();
 
     await expect(invoke(handler, request, context)).resolves.toEqual({
       body: { success: false, error: '인증이 필요합니다' },
       status: 401,
     });
-    expect(mockRequireUser).toHaveBeenCalledWith(request, ['admin']);
+    expect(mockRequireUser).toHaveBeenCalledWith(request, roles);
     expect(request.formData).not.toHaveBeenCalled();
     expect(mockFrom).not.toHaveBeenCalled();
   });
@@ -124,14 +126,15 @@ describe('remaining service-role route guards', () => {
   it.each([
     ['process creation', processCollection.POST],
     ['model creation', modelCollection.POST],
-  ])('%s requires an admin before reading the request body', async (_name, handler) => {
+  ])('%s requires a manager role before reading the request body', async (_name, handler) => {
     const request = makeRequest();
 
     await expect(invoke(handler, request)).resolves.toEqual({
       body: { success: false, error: '인증이 필요합니다' },
       status: 401,
     });
-    expect(mockRequireUser).toHaveBeenCalledWith(request, ['admin']);
+    // 모델 정보는 관리자 페이지 중 하나다 — 등록도 관리자가 한다.
+    expect(mockRequireUser).toHaveBeenCalledWith(request, ['admin', 'engineer']);
     expect(request.json).not.toHaveBeenCalled();
     expect(mockFrom).not.toHaveBeenCalled();
   });

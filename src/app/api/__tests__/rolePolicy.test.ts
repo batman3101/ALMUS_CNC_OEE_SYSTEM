@@ -11,11 +11,19 @@
  *  - requireUser 가 없는 메서드는 'NONE' 으로 명시(사유는 EXEMPT_METHODS 주석).
  *  - 파일 전체에 requireUser 가 없으면 EXEMPT 에 사유와 함께 둔다.
  *
- * 정책 결정 기록: engineer 의 생산 데이터 쓰기 허용은 2026-07-20 사용자 확정(CLAUDE.md).
- * 삭제·설정·사용자 관리는 admin 전용.
+ * 정책 결정 기록
+ *  - 2026-07-20: engineer 의 생산 데이터 쓰기 허용(CLAUDE.md).
+ *  - 2026-07-31: 3등급 체계 확정. **관리자(engineer)는 '설정'을 제외한 모든 페이지 CRUD**.
+ *    그래서 설비 관리·모델 등록·기록 삭제·사용자 관리가 admin 전용에서 admin+engineer 로
+ *    넓어졌다. `system-settings` 쓰기와 `upload/image`(설정의 회사 로고), 그리고 최초
+ *    관리자 생성(`admin/setup-real-user`)만 admin 전용으로 남는다.
+ *    단, 사용자 관리 안에서 **역할 변경과 admin 계정 취급**은 여전히 admin 전용이다 —
+ *    라우트 단위로는 표현할 수 없어 `@/lib/pageAccess` + `assertCanManageAccount` 가 맡고,
+ *    `src/lib/__tests__/pageAccess.test.ts` 가 검사한다.
  */
 import fs from 'fs';
 import path from 'path';
+import { USER_MANAGEMENT_ROLES } from '@/lib/pageAccess';
 
 const A = 'admin';
 const AE = 'admin+engineer';
@@ -24,34 +32,37 @@ const NONE = 'NONE'; // 그 메서드에 requireUser 가 없음(405 스텁 등)
 
 // route(디렉터리 경로) → { HTTP메서드: 정렬된 역할 문자열('+' 결합) 또는 'NONE' }
 const POLICY: Record<string, Record<string, string>> = {
-  'admin/machines': { GET: A, POST: A },
-  'admin/machines/[machineId]': { PUT: A, DELETE: A },
-  'admin/machines/bulk-upload': { POST: A },
-  'admin/machines/template': { GET: A },
+  'admin/machines': { GET: AE, POST: AE },
+  'admin/machines/[machineId]': { PUT: AE, DELETE: AE },
+  'admin/machines/bulk-upload': { POST: AE },
+  'admin/machines/template': { GET: AE },
+  // 최초 시스템 관리자 계정 생성 — 사용자 관리와 달리 등급을 만들어내는 부트스트랩이다.
   'admin/setup-real-user': { POST: A, GET: A },
-  'admin/users': { GET: A, POST: A, DELETE: A },
-  'admin/users/[userId]': { PUT: A, DELETE: A },
+  'admin/users': { GET: AE, POST: AE, DELETE: AE },
+  'admin/users/[userId]': { PUT: AE, DELETE: AE },
   'alerts': { GET: AE, POST: AE },
   'auth/profile-admin': { GET: AEO },
   'downtime-analysis': { GET: AE },
   'downtime-entries': { POST: AEO, GET: AEO },
   'downtime-entries/[id]': { DELETE: AEO, PATCH: AEO },
   'machine-status-descriptions': { GET: AEO },
-  'machines': { GET: AEO, POST: A, DELETE: A },
-  'machines/[machineId]': { GET: AEO, PUT: A, PATCH: AEO },
+  'machines': { GET: AEO, POST: AE, DELETE: AE },
+  'machines/[machineId]': { GET: AEO, PUT: AE, PATCH: AEO },
   'machines/[machineId]/downtime': { GET: AEO, PATCH: AEO, POST: AEO },
   'machines/[machineId]/oee': { GET: AEO },
   'machines/[machineId]/production': { GET: AEO },
-  'model-processes': { GET: AEO, POST: A },
+  'model-processes': { GET: AEO, POST: AE },
   'model-processes/[id]': { GET: AEO },
   'oee-data': { GET: AEO },
   'oee-data/aggregated': { GET: AE },
   'oee-data/by-machine': { GET: AE },
-  'product-models': { GET: AEO, POST: A },
+  'product-models': { GET: AEO, POST: AE },
   'product-models/[id]': { GET: AEO },
   'production-progress': { POST: AEO, GET: AEO },
   'production-records': { GET: AEO, POST: AEO },
-  'production-records/[recordId]': { GET: AEO, PUT: AEO, DELETE: A, PATCH: AEO },
+  // DELETE 는 2026-07-31 부터 관리자도 한다 ('설정 제외 모든 페이지 CRUD'의 D).
+  // 사용자(operator)는 읽기/쓰기/수정까지만이므로 여전히 제외된다.
+  'production-records/[recordId]': { GET: AEO, PUT: AEO, DELETE: AE, PATCH: AEO },
   'production-records/[recordId]/defect': { PATCH: AEO },
   'production-records/close-shift': { POST: AEO },
   'production-records/daily': { POST: AEO },
@@ -89,7 +100,16 @@ function routeKey(file: string): string {
   return path.relative(API_ROOT, path.dirname(file)).split(path.sep).join('/');
 }
 
-/** 파일을 export 함수(메서드) 블록으로 잘라, 각 블록의 requireUser 역할을 뽑는다. */
+/**
+ * `requireUser` 를 감싼 헬퍼는 역할 배열이 소스에 안 보인다. 원장이 그걸 'NONE'(인증 없음)
+ * 으로 읽으면, 실제로는 보호되는 라우트가 무방비로 기록되어 원장이 거짓말을 하게 된다.
+ * 그래서 헬퍼 이름을 **실제 역할 목록에서 해석**한다 — 목록이 바뀌면 여기도 따라 바뀐다.
+ */
+const GUARD_HELPERS: Record<string, string> = {
+  requireUserManager: [...USER_MANAGEMENT_ROLES].sort().join('+'),
+};
+
+/** 파일을 export 함수(메서드) 블록으로 잘라, 각 블록의 인가 검사 역할을 뽑는다. */
 function extractByMethod(source: string): Record<string, string> {
   const re = new RegExp(`export\\s+(?:async\\s+)?function\\s+(${METHODS.join('|')})\\b`, 'g');
   const marks: Array<{ method: string; idx: number }> = [];
@@ -98,6 +118,15 @@ function extractByMethod(source: string): Record<string, string> {
   for (let i = 0; i < marks.length; i++) {
     const end = i + 1 < marks.length ? marks[i + 1].idx : source.length;
     const block = source.slice(marks[i].idx, end);
+
+    const helper = Object.keys(GUARD_HELPERS).find(name =>
+      new RegExp(`\\b${name}\\(\\s*request\\s*\\)`).test(block)
+    );
+    if (helper) {
+      result[marks[i].method] = GUARD_HELPERS[helper];
+      continue;
+    }
+
     const rm = block.match(/requireUser\(\s*request\s*,\s*\[([^\]]*)\]/);
     result[marks[i].method] = rm
       ? rm[1].split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean).sort().join('+')

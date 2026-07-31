@@ -105,3 +105,25 @@
   background-color: rgba(0, 0, 0, 0.85);
   border-radius: 6px;
 }
+
+/* ── 권한 없는 메뉴 ──────────────────────────────────────────────────────────
+   모든 역할이 같은 메뉴 목록을 본다. 권한이 없는 항목은 사라지지 않고 잠긴 채 남는다.
+   antd 의 disabled 색만으로는 "고장" 과 구분되지 않아서 자물쇠를 함께 둔다. */
+.lockedLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lockIcon {
+  flex: none;
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+/* 잠긴 항목도 라벨은 읽혀야 한다 — antd 기본 disabled 대비는 어두운 사이드바에서 너무 낮다. */
+.sidebar :global(.ant-menu-dark .ant-menu-item-disabled) {
+  color: rgba(255, 255, 255, 0.38) !important;
+  cursor: not-allowed;
+}

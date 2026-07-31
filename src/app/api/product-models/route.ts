@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 // POST /api/product-models - 새로운 제품 모델 생성 (관리자용)
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
     const body = await request.json();
     
     const { model_name, description, is_active = true } = body;

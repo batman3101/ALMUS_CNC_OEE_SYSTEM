@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import {
+  canChangeUserRole,
+  canManageAccountWithRole,
+  USER_MANAGEMENT_ROLES,
+} from '@/lib/pageAccess';
 
 /**
  * API Route 인증/인가 헬퍼 (서버 전용).
@@ -87,11 +92,83 @@ function isUserRole(value: unknown): value is UserRole {
   return value === 'admin' || value === 'engineer' || value === 'operator';
 }
 
+/** 요청 본문의 역할 값을 검증한다. 알 수 없는 값은 통과시키지 않는다. */
+export function parseUserRole(value: unknown): UserRole {
+  if (!isUserRole(value)) {
+    throw new ApiAuthError('유효하지 않은 사용자 역할입니다', 403);
+  }
+  return value;
+}
+
 /** 운영자는 관리자에게 배정된 설비만 변경할 수 있다. */
 export function assertMachineAccess(user: AuthenticatedUser, machineId: string): void {
   if (user.role === 'operator' && !user.assignedMachineIds.includes(machineId)) {
     throw new ApiAuthError('담당 설비에 대한 권한이 없습니다', 403);
   }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 사용자 관리 인가 (서버 강제)
+ *
+ * 화면에서 버튼을 감추는 것은 경계가 아니다. `/admin` 에 정상 접근하는 관리자라면
+ * 브라우저 콘솔에서 `POST /api/admin/users` 를 그대로 부를 수 있으므로, UI 제한만으로는
+ * "관리자는 역할을 못 바꾼다"가 참이 되지 않는다. 규칙은 `@/lib/pageAccess` 한 곳에
+ * 있고 화면과 이 서버 층이 **같은 함수**를 부른다.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** 사용자 관리 API 의 공통 진입 검사. 시스템 관리자 + 관리자만 통과한다. */
+export function requireUserManager(request: NextRequest): Promise<AuthenticatedUser> {
+  return requireUser(request, [...USER_MANAGEMENT_ROLES]);
+}
+
+/**
+ * 대상 계정의 **현재 역할**을 읽는다. 인가 판단의 재료이므로 요청 본문이 아니라 DB 에서
+ * 가져온다 — 본문의 role 은 호출자가 마음대로 적을 수 있고, 그걸 믿으면 검사 자체가
+ * 무의미해진다(관리자가 admin 계정을 지우면서 본문에 role:'operator' 를 적는 식).
+ */
+export async function fetchAccountRole(userId: string): Promise<UserRole> {
+  const { data, error } = await supabaseAdmin
+    .from('user_profiles')
+    .select('role')
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !data?.role || !isUserRole(data.role)) {
+    throw new ApiAuthError('대상 사용자를 찾을 수 없습니다', 403);
+  }
+  return data.role;
+}
+
+/**
+ * `actor` 가 `targetRole` 계정을 생성·삭제·수정해도 되는가.
+ *
+ * 관리자(engineer)에게 admin 계정을 열면 승격 경로가 남는다 — 새 admin 계정을 만들어 그
+ * 비밀번호로 로그인하거나, 기존 admin 의 이메일을 자기 것으로 바꿔 비밀번호를 재설정하면
+ * 역할 변경과 결과가 같다. 그래서 admin 계정은 **손대는 것 자체**를 막는다.
+ */
+export function assertCanManageAccount(actor: UserRole, targetRole: UserRole): void {
+  if (!canManageAccountWithRole(actor, targetRole)) {
+    throw new ApiAuthError('시스템 관리자 계정은 시스템 관리자만 관리할 수 있습니다', 403);
+  }
+}
+
+/** 역할 변경 요청인지 판별하고, 맞다면 시스템 관리자만 통과시킨다. */
+export function assertCanAssignRole(
+  actor: UserRole,
+  currentRole: UserRole,
+  nextRole: unknown
+): void {
+  if (nextRole === undefined || nextRole === null) return;
+  if (!isUserRole(nextRole)) {
+    throw new ApiAuthError('유효하지 않은 사용자 역할입니다', 403);
+  }
+  // 바꾸지 않는 요청은 통과. 편집 화면이 role 을 항상 함께 보내기 때문에, 변경 여부를
+  // 보지 않으면 관리자는 이름 하나도 고칠 수 없게 된다.
+  if (nextRole === currentRole) return;
+  if (!canChangeUserRole(actor)) {
+    throw new ApiAuthError('역할 변경은 시스템 관리자만 할 수 있습니다', 403);
+  }
+  assertCanManageAccount(actor, nextRole);
 }
 
 /** 인증/인가 예외를 기존 API 응답 모양으로 변환한다. */

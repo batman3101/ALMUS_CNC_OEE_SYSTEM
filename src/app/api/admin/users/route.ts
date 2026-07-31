@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import {
+  apiAuthErrorResponse,
+  assertCanManageAccount,
+  fetchAccountRole,
+  parseUserRole,
+  requireUserManager,
+} from '@/lib/apiAuth';
 import { redactSecrets } from '@/lib/redactSecrets';
 
 // GET /api/admin/users - 모든 사용자 목록 조회
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUserManager(request);
 
     // Get user profiles
     const { data: profiles, error: profileError } = await supabaseAdmin
@@ -54,12 +60,17 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/users - 새 사용자 생성
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    const actor = await requireUserManager(request);
 
     const body = await request.json();
     // 본문에는 관리자가 방금 입력한 평문 비밀번호가 들어 있다 — 절대 그대로 찍지 않는다.
     console.log('🔍 받은 요청 데이터:', JSON.stringify(redactSecrets(body), null, 2));
     const { email, password, name, role, assigned_machines } = body;
+
+    // 관리자(engineer)는 계정을 만들 수 있지만 **시스템 관리자 계정은 못 만든다**.
+    // 만들 수 있으면 그 비밀번호로 로그인해 설정에 도달하므로 역할 변경과 같아진다.
+    // 인증 계정을 만들기 **전에** 검사한다 — 뒤에 하면 롤백해야 할 계정이 먼저 생긴다.
+    assertCanManageAccount(actor.role, parseUserRole(role));
 
     let authUserId = null;
 
@@ -140,7 +151,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/admin/users - 사용자 삭제
 export async function DELETE(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    const actor = await requireUserManager(request);
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
@@ -151,6 +162,10 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // 대상의 역할은 **DB 에서** 읽는다. 관리자는 시스템 관리자 계정을 지울 수 없다 —
+    // 지울 수 있으면 시스템 관리자를 전부 없애 아무도 설정에 못 들어가게 만들 수 있다.
+    assertCanManageAccount(actor.role, await fetchAccountRole(userId));
 
     // Delete user profile first
     const { error: profileError } = await supabaseAdmin

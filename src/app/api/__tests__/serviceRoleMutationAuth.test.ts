@@ -114,14 +114,16 @@ describe('service-role mutation route guards', () => {
   it.each([
     ['production DELETE', () => productionItem.DELETE(request() as never, { params: Promise.resolve({ recordId: 'record-1' }) })],
     ['machine PUT', () => machineItem.PUT(request() as never, { params: Promise.resolve({ machineId: 'machine-1' }) })],
-  ])('requires admin role for destructive/configuration operation: %s', async (_name, invoke) => {
+  ])('requires a manager role for destructive/configuration operation: %s', async (_name, invoke) => {
     mockRequireUser.mockResolvedValue({
       userId: 'admin-1', role: 'admin', assignedMachineIds: [],
     });
 
     await invoke();
 
-    expect(mockRequireUser).toHaveBeenCalledWith(expect.anything(), ['admin']);
+    // 2026-07-31: 관리자(engineer)도 '설정 제외 모든 페이지 CRUD' 이므로 기록 삭제와
+    // 설비 수정을 한다. 사용자(operator)는 읽기/쓰기/수정까지라 여전히 빠진다.
+    expect(mockRequireUser).toHaveBeenCalledWith(expect.anything(), ['admin', 'engineer']);
   });
 
   it('rejects an operator changing an unassigned machine state', async () => {

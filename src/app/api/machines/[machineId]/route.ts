@@ -93,7 +93,7 @@ export async function PUT(
 ) {
   try {
     const { machineId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin']);
+    const authenticatedUser = await requireUser(request, ['admin', 'engineer']);
     console.log('PUT /api/machines/[machineId] called with id:', machineId);
 
     const body = await request.json();

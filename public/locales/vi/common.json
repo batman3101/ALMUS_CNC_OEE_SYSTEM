@@ -34,7 +34,8 @@
     "analytics": "Phân tích",
     "operatorView": "Xem màn hình vận hành",
     "management": "Quản lý người dùng và thiết bị",
-    "settings": "Cài đặt"
+    "settings": "Cài đặt",
+    "restrictedTo": "Chỉ dành cho {{roles}}"
   },
   "auth": {
     "login": "Đăng nhập",

@@ -4,7 +4,6 @@ import React from 'react';
 import { Typography, App as AntdApp } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import ProductionRecordList from '@/components/production/ProductionRecordList';
-import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
@@ -29,12 +28,11 @@ function ProductionRecordsContent() {
   );
 }
 
+// 접근 권한은 `@/lib/pageAccess` 의 표 한 곳에만 있다 (`AppLayout` 이 적용).
 export default function ProductionRecordsPage() {
   return (
-    <ProtectedRoute allowedRoles={['admin', 'engineer', 'operator']}>
-      <AntdApp>
-        <ProductionRecordsContent />
-      </AntdApp>
-    </ProtectedRoute>
+    <AntdApp>
+      <ProductionRecordsContent />
+    </AntdApp>
   );
 }

@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
 // POST /api/machines - 새 설비 추가
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
     console.log('POST /api/machines called');
     
     const body = await request.json();
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/machines - 설비 삭제 (여러 개 동시 삭제 가능)
 export async function DELETE(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
     console.log('DELETE /api/machines called');
     
     const body = await request.json();
