@@ -39,6 +39,25 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const isLoginPage = pathname === '/login';
   const isOperatorConsolePage = pathname === '/operator-view' || (pathname === '/dashboard' && user?.role === 'operator');
 
+  /**
+   * 세션이 끊겨 로그인 화면으로 전환되면 떠 있던 도메인 토스트를 걷는다.
+   *
+   * 만료 시점에 이미 날아간 요청들의 `catch` 는 그대로 실행되고, 그 안에서
+   * `message.error('대시보드 데이터를 불러오는데 실패했습니다')` 같은 토스트가 뜬다.
+   * 원인은 데이터가 아니라 로그인인데 화면에는 두 이야기가 겹쳐 보인다 — 프리뷰에서 실제로
+   * 만료 안내 위에 그 토스트가 겹쳐 뜨는 것을 확인했다.
+   *
+   * ⚠️ 이건 **증상 정리**이지 근본 해결이 아니다. 저장소에는 실패를 도메인 언어로 옮겨
+   * 적는 자리가 83곳 있고(`message.error` 호출), 각자 원인을 구분하지 않는다. 전환 직후
+   * 늦게 도착한 토스트는 여전히 잠깐 보일 수 있다. 제대로 고치려면 공용 오류 보고 헬퍼로
+   * 그 83곳을 쓸어야 하는데, 그건 별도 작업이다.
+   */
+  useEffect(() => {
+    if (!user && authError) {
+      message.destroy();
+    }
+  }, [user, authError, message]);
+
   // 태블릿에서는 콘텐츠 폭을 확보하고, 운영자 콘솔에서는 데스크톱도 아이콘 레일로 시작한다.
   useEffect(() => {
     if (screens.lg === undefined) return;
@@ -102,23 +121,26 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     }
     return (
       <div className={styles.gateScreen}>
-        <div className={styles.gateCard}>
-          {/*
-            왜 여기서 오류를 보여주는가 — 세션이 만료되면 화면이 갑자기 로그인 폼으로
-            바뀐다. 이유를 말해 주지 않으면 사용자는 무슨 일이 났는지 알 수 없다.
-            예전에는 그 이유가 각 패널의 도메인 오류("비가동 내역을 불러오지 못했습니다")로
-            새어 나왔고, 그래서 데이터가 깨진 줄 알고 새로고침만 반복하게 됐다.
-          */}
-          {authError && (
-            <Alert
-              message={authError}
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
-          )}
-          <LoginForm />
-        </div>
+        {/*
+          왜 오류를 보여주는가 — 세션이 만료되면 화면이 갑자기 로그인 폼으로 바뀐다.
+          이유를 말해 주지 않으면 사용자는 무슨 일이 났는지 알 수 없다. 예전에는 그 이유가
+          각 패널의 도메인 오류("비가동 내역을 불러오지 못했습니다")로 새어 나왔고, 그래서
+          데이터가 깨진 줄 알고 새로고침만 반복하게 됐다.
+
+          왜 배너인가 — LoginForm 은 스스로 `minHeight: 100vh` 로 화면 전체를 차지하며
+          가운데 정렬한다. 그 위에 폭 400px 짜리 컨테이너를 씌우고 그 안에 안내를 넣었더니
+          안내가 화면 꼭대기로, 폼은 한참 아래 가운데로 갈라졌다. 폼의 레이아웃과 다투는
+          대신 상단 배너로 띄운다.
+        */}
+        {authError && (
+          <Alert
+            className={styles.gateAlert}
+            message={authError}
+            type="warning"
+            showIcon
+          />
+        )}
+        <LoginForm />
       </div>
     );
   }
