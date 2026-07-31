@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, Dropdown, Typography, Grid, Spin, App, Result } from 'antd';
+import { Layout, Button, Dropdown, Typography, Grid, Spin, App, Result, Alert } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -31,7 +31,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useLanguage();
-  const { user, logout, loading } = useAuth();
+  const { user, logout, loading, error: authError } = useAuth();
   const { message } = App.useApp();
   const screens = useBreakpoint();
 
@@ -103,6 +103,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     return (
       <div className={styles.gateScreen}>
         <div className={styles.gateCard}>
+          {/*
+            왜 여기서 오류를 보여주는가 — 세션이 만료되면 화면이 갑자기 로그인 폼으로
+            바뀐다. 이유를 말해 주지 않으면 사용자는 무슨 일이 났는지 알 수 없다.
+            예전에는 그 이유가 각 패널의 도메인 오류("비가동 내역을 불러오지 못했습니다")로
+            새어 나왔고, 그래서 데이터가 깨진 줄 알고 새로고침만 반복하게 됐다.
+          */}
+          {authError && (
+            <Alert
+              message={authError}
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
           <LoginForm />
         </div>
       </div>

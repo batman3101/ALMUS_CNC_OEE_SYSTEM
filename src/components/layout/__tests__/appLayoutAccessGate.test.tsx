@@ -23,9 +23,15 @@ jest.mock('next/navigation', () => ({
 }));
 
 const mockUser = jest.fn<{ role: UserRole; name: string } | null, []>();
+const mockAuthError = jest.fn<string | null, []>();
 
 jest.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ user: mockUser(), logout: jest.fn(), loading: false }),
+  useAuth: () => ({
+    user: mockUser(),
+    logout: jest.fn(),
+    loading: false,
+    error: mockAuthError(),
+  }),
 }));
 
 jest.mock('@/contexts/LanguageContext', () => ({
@@ -47,9 +53,10 @@ jest.mock('../ThemeToggle', () => ({ __esModule: true, default: () => null }));
 
 const PAGE = 'PAGE_CONTENT';
 
-const renderAt = (pathname: string, role: UserRole | null) => {
+const renderAt = (pathname: string, role: UserRole | null, authError: string | null = null) => {
   mockPathname.mockReturnValue(pathname);
   mockUser.mockReturnValue(role ? { role, name: '테스트' } : null);
+  mockAuthError.mockReturnValue(authError);
   return render(
     <App>
       <AppLayout>
@@ -136,6 +143,30 @@ describe('AppLayout 접근 관문', () => {
     it('공개 경로(/)는 그대로 통과시킨다', () => {
       renderAt('/', null);
       expect(screen.getByText(PAGE)).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 세션이 만료되면 화면이 갑자기 로그인 폼으로 바뀐다. 이유를 말해 주지 않으면 사용자는
+   * 무슨 일이 났는지 알 수 없다.
+   *
+   * 실제로 운영에서 09:03~09:07 사이 모든 요청이 401 이었는데, 화면은 "비가동 내역을
+   * 불러오지 못했습니다" 를 띄웠다 — 각 패널이 401 을 자기 도메인 언어로 옮겨 적었기
+   * 때문이다. 사용자는 데이터가 깨진 줄 알고 새로고침만 반복하게 된다.
+   */
+  describe('세션 만료 안내', () => {
+    it('만료 메시지가 로그인 화면에 함께 뜬다', () => {
+      renderAt('/dashboard', null, '세션이 만료되었습니다. 다시 로그인해 주세요.');
+      expect(screen.getByTestId('login-form')).toBeInTheDocument();
+      expect(screen.getByText('세션이 만료되었습니다. 다시 로그인해 주세요.')).toBeInTheDocument();
+      // 도메인 화면은 애초에 그려지지 않는다 — 오류 카드가 나올 자리가 없다.
+      expect(screen.queryByText(PAGE)).not.toBeInTheDocument();
+    });
+
+    it('보여줄 오류가 없으면 안내 없이 로그인 폼만 뜬다', () => {
+      renderAt('/dashboard', null, null);
+      expect(screen.getByTestId('login-form')).toBeInTheDocument();
+      expect(document.querySelector('.ant-alert')).toBeNull();
     });
   });
 });
