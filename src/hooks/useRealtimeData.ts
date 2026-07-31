@@ -76,40 +76,44 @@ interface OeeDataPage {
 }
 
 /** API의 명시적 페이지 계약을 끝까지 따라가 Supabase max_rows 절삭을 피한다. */
-export const fetchAllRecentProductionRecords = async (machineIds?: string[]): Promise<ProductionRecord[]> => {
+/**
+ * 최근 창의 생산 실적을 모두 가져온다. 스코프는 **서버가** 건다.
+ *
+ * 예전에는 운영자일 때 담당 설비 배열을 받아 **설비마다 한 번씩** 이 API 를 불렀다.
+ * `/api/oee-data` 가 운영자에게 `machine_id` 를 필수로 요구했기 때문이다. 그런데 이
+ * 프로젝트의 운영자는 전원 800대를 배정받으므로 **800번의 순차 요청**이 됐고, 요청당
+ * 200ms 만 잡아도 160초다 — 운영자 대시보드가 사실상 뜨지 않았다.
+ *
+ * 이제 라우트가 담당 설비 목록으로 직접 좁힌다(2026-07-31). 호출자는 스코프를 몰라도
+ * 되고, 요청은 한 벌의 페이지네이션으로 끝난다.
+ *
+ * `include_statistics` 를 요청하지 않는 이유: 이 함수는 `oee_data` 행만 쓰고 통계 묶음은
+ * 읽지 않는다. 게다가 담당 설비 스코프에서는 통계 RPC 가 설비를 하나만 받아 계산할 수
+ * 없다(라우트가 400 으로 거절한다). `total` 은 통계 없이도 정확히 내려온다.
+ */
+export const fetchAllRecentProductionRecords = async (): Promise<ProductionRecord[]> => {
   const pageLimit = 5000;
   const records: ProductionRecord[] = [];
+  let offset = 0;
+  let knownTotal = 0;
 
-  // undefined는 관리자/엔지니어의 전체 조회, []는 담당 설비가 없는 운영자의 빈 결과다.
-  // 운영자는 각 담당 설비를 단일 machine_id로 조회해야 서버의 assigned-machine 검사를
-  // 우회하지 않으면서 여러 담당 설비를 모두 볼 수 있다.
-  const scopes: Array<string | undefined> = machineIds === undefined
-    ? [undefined]
-    : [...new Set(machineIds)];
-
-  for (const machineId of scopes) {
-    let offset = 0;
-    let knownTotal = 0;
-
-    while (true) {
-      const params = new URLSearchParams({
-        start_date: getProductionWindowStart(),
-        end_date: new Date().toISOString().split('T')[0],
-        limit: String(pageLimit),
-        offset: String(offset),
-        include_statistics: offset === 0 ? 'true' : 'false',
-        ...(machineId ? { machine_id: machineId } : {}),
-        ...(offset > 0 ? { known_total: String(knownTotal) } : {})
-      });
-      const response = await authFetch(`/api/oee-data?${params}`);
-      if (!response.ok) throw new Error(`OEE data HTTP ${response.status}`);
-      const page = await response.json() as OeeDataPage;
-      records.push(...(page.oee_data || []));
-      knownTotal = page.pagination?.total ?? records.length;
-      if (!page.pagination?.has_more) break;
-      if (!page.pagination.returned) throw new Error('OEE data pagination made no progress');
-      offset += page.pagination.returned;
-    }
+  while (true) {
+    const params = new URLSearchParams({
+      start_date: getProductionWindowStart(),
+      end_date: new Date().toISOString().split('T')[0],
+      limit: String(pageLimit),
+      offset: String(offset),
+      include_statistics: 'false',
+      ...(offset > 0 ? { known_total: String(knownTotal) } : {})
+    });
+    const response = await authFetch(`/api/oee-data?${params}`);
+    if (!response.ok) throw new Error(`OEE data HTTP ${response.status}`);
+    const page = await response.json() as OeeDataPage;
+    records.push(...(page.oee_data || []));
+    knownTotal = page.pagination?.total ?? records.length;
+    if (!page.pagination?.has_more) break;
+    if (!page.pagination.returned) throw new Error('OEE data pagination made no progress');
+    offset += page.pagination.returned;
   }
 
   return records;
@@ -392,16 +396,16 @@ export const useRealtimeData = (
         return profileError ? null : profile;
       };
 
-      const fetchRecentMachineLogs = async (scopeIds?: string[]): Promise<MachineLog[]> => {
+      // 스코프는 RLS 가 건다 (위 machinesQuery 주석 참고).
+      const fetchRecentMachineLogs = async (): Promise<MachineLog[]> => {
         const pageSize = 1000;
         const recent: MachineLog[] = [];
         for (let offset = 0; offset < MAX_LOGS; offset += pageSize) {
-          let query = supabase
+          const query = supabase
             .from('machine_logs')
             .select('*')
             .not('end_time', 'is', null)
             .gte('start_time', getLogWindowStart());
-          if (scopeIds !== undefined) query = query.in('machine_id', scopeIds);
           const { data, error } = await query
             .order('start_time', { ascending: false })
             .range(offset, Math.min(offset + pageSize - 1, MAX_LOGS - 1));
@@ -445,27 +449,32 @@ export const useRealtimeData = (
         }
       }
 
-      // 운영자는 담당 설비만 초기 조회한다 — 예전에는 machines·machine_logs 전체를 받아
-      // UI 에서만 걸러, 담당 외 데이터가 브라우저(DevTools)에 노출되고 800대에서 전송량이
-      // 컸다(자체 감사 후속 #4). productionRecords 는 이미 담당별로 조회 중이었다.
-      // (RLS 가 authenticated 전체 조회를 아직 허용하므로 이 클라이언트 스코프가 방어선이다)
-      let machinesQuery = supabase.from('machines').select('*').eq('is_active', true);
-      if (assignedMachineIds !== undefined) machinesQuery = machinesQuery.in('id', assignedMachineIds);
+      // 스코프는 **DB 가 건다.** 클라이언트에서 다시 걸지 않는다.
+      //
+      // 예전 주석은 "RLS 가 authenticated 전체 조회를 아직 허용하므로 이 클라이언트
+      // 스코프가 방어선"이라고 적혀 있었다. 그건 2026-07-29 마이그레이션
+      // (20260729140000_scope_operational_reads)이 machines·machine_logs·
+      // production_records 에 `Scoped read` 정책을 붙이면서 사실이 아니게 됐다. 지금은
+      // 운영자에게 담당 설비 행만 돌아온다 — 정책이 `current_user_machines()` 로 좁힌다.
+      //
+      // 그런데 필터가 남아 있는 동안 방어가 두 겹이 된 게 아니라 **요청이 깨졌다.**
+      // `.in('id', 800개)` 는 URL 이 약 30 KB 가 되고 게이트웨이가 400 으로 거절한다
+      // (근거는 `@/lib/idFilter`). 운영자 대시보드가 뜨지 않던 원인 중 하나다.
+      // 서비스 롤(RLS 우회)을 쓰는 API 라우트에서는 여전히 명시적 스코프가 필요하지만,
+      // 여기 브라우저 클라이언트는 anon 키라 RLS 아래에 있다.
+      const machinesQuery = supabase.from('machines').select('*').eq('is_active', true);
 
-      const openLogsQuery = () => {
-        let q = supabase.from('machine_logs').select('*').is('end_time', null)
+      const openLogsQuery = () =>
+        supabase.from('machine_logs').select('*').is('end_time', null)
           .order('start_time', { ascending: false });
-        if (assignedMachineIds !== undefined) q = q.in('machine_id', assignedMachineIds);
-        return q;
-      };
 
       const [machinesResult, openLogsResult, recentMachineLogs, productionRecords] = await Promise.all([
         machinesQuery,
         // 쓰지 않을 데이터는 받지 않는다. 가장 빠른 조회는 실행하지 않는 조회다.
         includeMachineLogs ? openLogsQuery() : Promise.resolve({ data: [] as MachineLog[], error: null }),
-        includeMachineLogs ? fetchRecentMachineLogs(assignedMachineIds) : Promise.resolve([] as MachineLog[]),
+        includeMachineLogs ? fetchRecentMachineLogs() : Promise.resolve([] as MachineLog[]),
         includeProductionRecords
-          ? fetchAllRecentProductionRecords(assignedMachineIds)
+          ? fetchAllRecentProductionRecords()
           : Promise.resolve([] as ProductionRecord[])
       ]);
       // 더 새 로드가 이미 시작됐다 — 이 결과로 상태를 덮지 않는다(늦게 끝난 옛 로드가
