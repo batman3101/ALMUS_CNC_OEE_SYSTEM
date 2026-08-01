@@ -22,6 +22,7 @@ import { systemSettingsService } from '@/lib/systemSettings';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useShiftSettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
@@ -36,6 +37,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
   // updateSettingsAtomic 으로 한 트랜잭션에 저장한다(적대적 재감사 #9).
   const { settings } = useShiftSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -144,7 +146,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving shift settings:', error);
-      showError(t('settings.saveError'));
+      reportFailure(t('settings.saveError'), error);
     } finally {
       setLoading(false);
     }

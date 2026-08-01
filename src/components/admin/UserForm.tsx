@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, Select, Transfer, App } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import { useAuth } from '@/contexts/AuthContext';
 import { assignableRoles, canChangeUserRole, type UserRole } from '@/lib/pageAccess';
 import type { User } from '@/types';
@@ -36,6 +37,7 @@ const UserForm: React.FC<UserFormProps> = ({
   user
 }) => {
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const { t } = useTranslation();
   const { user: actor } = useAuth();
   const actorRole = actor?.role as UserRole | undefined;
@@ -110,7 +112,7 @@ const UserForm: React.FC<UserFormProps> = ({
       onSuccess();
     } catch (error) {
       console.error('Error saving user:', error);
-      message.error(t('admin:userManagement.saveError'));
+      reportFailure(t('admin:userManagement.saveError'), error);
     }
   };
 

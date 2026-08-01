@@ -45,6 +45,7 @@ import {
   getShiftAt,
   totalMinutes,
 } from '@/utils/downtimeIntervals';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -113,6 +114,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
   const { t } = useDataInputTranslation();
   const { machines, loading: machinesLoading, error: machinesError } = useMachines();
   const { message, modal } = App.useApp();
+  const reportFailure = useFailureReport();
   const {
     getShiftTimes,
     getCompanyInfo,
@@ -434,7 +436,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
           }
         } catch (error) {
           console.error('Error deleting production record:', error);
-          message.error(t('messages.recordDeleteFailed'));
+          reportFailure(t('messages.recordDeleteFailed'), error);
         } finally {
           setLoading(false);
         }
@@ -649,7 +651,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
           error: errorMessage
         }));
 
-        message.error(`${t('messages.machineInfoLoadFailed')}: ${errorMessage}`);
+        reportFailure(`${t('messages.machineInfoLoadFailed')}: ${errorMessage}`, error);
       }
     }
   };
@@ -734,7 +736,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       // 화면 합계는 신뢰할 수 없으므로 실패를 표시한다. 생산 저장 시에는 이 값을 보내지
       // 않고 서버가 DB 원본을 다시 읽으므로 생산수량 입력 자체는 계속 가능하다.
       setDowntimeLoadFailed(prev => ({ ...prev, [shift]: true }));
-      message.error(t('downtime.loadFailed'));
+      reportFailure(t('downtime.loadFailed'), error);
 
       if (shift === 'DAY') {
         setDayShiftData(prev => ({
@@ -904,7 +906,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error adding downtime entry:', error);
-      message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
+      reportFailure(`${t('messages.saveFailed')}: ${errorMessage}`, error);
       void loadDowntimeEntries(selectedMachineId, selectedDate, activeShift);
     } finally {
       setDowntimeSubmitting(false);
@@ -932,7 +934,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       message.success(t('messages.downtimeAdded'));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
+      reportFailure(`${t('messages.saveFailed')}: ${errorMessage}`, error);
       if (selectedMachineId) {
         void loadDowntimeEntries(selectedMachineId, selectedDate, activeShift);
       }
@@ -977,7 +979,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       message.success(t('messages.downtimeDeleted'));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
+      reportFailure(`${t('messages.saveFailed')}: ${errorMessage}`, error);
       void loadDowntimeEntries(selectedMachineId, selectedDate, activeShift);
     } finally {
       setDowntimeSubmitting(false);
@@ -1219,7 +1221,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('Error saving data:', error);
-      message.error(`${t('messages.saveFailed')}: ${errorMessage}`);
+      reportFailure(`${t('messages.saveFailed')}: ${errorMessage}`, error);
     } finally {
       savingRef.current = false;
       setLoading(false);

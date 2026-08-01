@@ -28,6 +28,7 @@ import {
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface';
 import { useAdminTranslation } from '@/hooks/useTranslation';
 import { authFetch } from '@/lib/authFetch';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -64,6 +65,7 @@ interface UploadResult {
 
 const MachinesBulkUpload: React.FC = () => {
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const { t } = useAdminTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
@@ -104,7 +106,7 @@ const MachinesBulkUpload: React.FC = () => {
       message.success(t('bulkUpload.messages.templateDownloaded'));
     } catch (error) {
       console.error('Template download error:', error);
-      message.error(t('bulkUpload.messages.templateDownloadError'));
+      reportFailure(t('bulkUpload.messages.templateDownloadError'), error);
     }
   };
 
@@ -141,11 +143,11 @@ const MachinesBulkUpload: React.FC = () => {
           setValidationErrors(result.validation_errors);
           setCurrentStep(1); // 검증 결과 단계로 이동
         }
-        message.error(result.error || t('bulkUpload.messages.previewError'));
+        reportFailure(result.error || t('bulkUpload.messages.previewError'), response);
       }
     } catch (error) {
       console.error('Preview error:', error);
-      message.error(t('bulkUpload.messages.previewCatchError'));
+      reportFailure(t('bulkUpload.messages.previewCatchError'), error);
     } finally {
       setUploading(false);
     }
@@ -180,11 +182,11 @@ const MachinesBulkUpload: React.FC = () => {
         if (result.validation_errors) {
           setValidationErrors(result.validation_errors);
         }
-        message.error(result.error || t('bulkUpload.messages.uploadError'));
+        reportFailure(result.error || t('bulkUpload.messages.uploadError'), response);
       }
     } catch (error) {
       console.error('Upload error:', error);
-      message.error(t('bulkUpload.messages.uploadCatchError'));
+      reportFailure(t('bulkUpload.messages.uploadCatchError'), error);
     } finally {
       setConfirming(false);
     }

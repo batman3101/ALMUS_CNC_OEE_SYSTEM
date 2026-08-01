@@ -19,6 +19,7 @@ import { useGeneralSettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
 import type { UploadFile, UploadChangeParam } from 'antd/es/upload/interface';
 import { authFetch } from '@/lib/authFetch';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
@@ -30,6 +31,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
   const { t } = useLanguage();
   const { settings, updateMultipleSettings } = useGeneralSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -103,7 +105,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
     } catch (error) {
       console.error('일반 설정 저장 오류:', error);
       const errorMessage = error instanceof Error ? error.message : t('settings.saveError');
-      showError(errorMessage);
+      reportFailure(errorMessage, error);
     } finally {
       setLoading(false);
     }
@@ -167,7 +169,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
     } catch (error) {
       console.error('로고 업로드 오류:', error);
       const errorMessage = error instanceof Error ? error.message : t('settings.general.logoUploadError');
-      showError(errorMessage);
+      reportFailure(errorMessage, error);
       return false;
     } finally {
       setUploadingLogo(false);

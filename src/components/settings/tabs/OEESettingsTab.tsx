@@ -19,6 +19,7 @@ import { SaveOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useOEESettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
@@ -31,6 +32,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
   const { t } = useLanguage();
   const { settings, updateSetting } = useOEESettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -82,7 +84,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving OEE settings:', error);
-      showError(t('settings.saveError'));
+      reportFailure(t('settings.saveError'), error);
     } finally {
       setLoading(false);
     }

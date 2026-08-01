@@ -19,6 +19,7 @@ import { SaveOutlined, BellOutlined, MailOutlined, SoundOutlined } from '@ant-de
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useNotificationSettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
@@ -30,6 +31,7 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
   const { t } = useLanguage();
   const { settings, updateSetting } = useNotificationSettings();
   const { success: showSuccess, error: showError, warning: showWarning, contextHolder } = useMessage();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
@@ -86,7 +88,7 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving notification settings:', error);
-      showError(t('settings.saveError'));
+      reportFailure(t('settings.saveError'), error);
     } finally {
       setLoading(false);
     }

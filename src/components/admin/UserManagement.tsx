@@ -23,6 +23,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useAdminTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import { useAuth } from '@/contexts/AuthContext';
 import { canManageAccountWithRole, type UserRole } from '@/lib/pageAccess';
 import type { User } from '@/types';
@@ -37,6 +38,7 @@ interface UserWithProfile extends User {
 const UserManagement: React.FC = () => {
   const { t } = useAdminTranslation();
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const { loading, fetchUsers, deleteUser } = useAdminOperations();
   const { user: actor } = useAuth();
   const actorRole = actor?.role as UserRole | undefined;
@@ -51,7 +53,7 @@ const UserManagement: React.FC = () => {
       setUsers(usersData);
     } catch (error) {
       console.error('Error fetching users:', error);
-      message.error(t('userManagement.saveError'));
+      reportFailure(t('userManagement.saveError'), error);
     }
   };
 
@@ -66,7 +68,7 @@ const UserManagement: React.FC = () => {
       loadUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
-      message.error(t('userManagement.deleteError'));
+      reportFailure(t('userManagement.deleteError'), error);
     }
   };
 

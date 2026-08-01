@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSystemSettings } from './useSystemSettings';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { App } from 'antd';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 export interface ThemeToggleState {
   isDark: boolean;
@@ -20,6 +21,7 @@ export function useThemeToggle() {
   const { themeMode, setThemeMode } = useUserPreferences();
   const { getDisplaySettings } = useSystemSettings();
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
 
   const [state, setState] = useState<ThemeToggleState>({
     isDark: false,
@@ -75,13 +77,13 @@ export function useThemeToggle() {
       }));
 
       if (showMessage) {
-        message.error(errorMessage);
+        reportFailure(errorMessage, error);
       }
 
       console.error('Theme toggle error:', error);
       return false;
     }
-  }, [currentIsDark, setThemeMode, message]);
+  }, [currentIsDark, setThemeMode, message, reportFailure]);
 
   /**
    * 특정 테마로 설정

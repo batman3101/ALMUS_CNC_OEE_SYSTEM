@@ -18,6 +18,7 @@ import {
 import { UserAddOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useAdminTranslation } from '@/hooks/useTranslation';
 import { authFetch } from '@/lib/authFetch';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -44,6 +45,7 @@ interface SetupUserData {
 
 const SetupUserPage: React.FC = () => {
   const { t } = useAdminTranslation();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [authUsers, setAuthUsers] = useState<AuthUser[]>([]);
@@ -60,11 +62,11 @@ const SetupUserPage: React.FC = () => {
         setAuthUsers(data.authUsers);
         message.success(t('setupUser.messages.usersFound', { count: data.totalCount }));
       } else {
-        message.error(t('setupUser.messages.fetchUsersFailed'));
+        reportFailure(t('setupUser.messages.fetchUsersFailed'), response);
       }
     } catch (error) {
       console.error('Error fetching auth users:', error);
-      message.error(t('setupUser.messages.fetchUsersFailed'));
+      reportFailure(t('setupUser.messages.fetchUsersFailed'), error);
     } finally {
       setFetchingUsers(false);
     }
@@ -89,11 +91,11 @@ const SetupUserPage: React.FC = () => {
         form.resetFields();
         fetchAuthUsers(); // 목록 새로고침
       } else {
-        message.error(data.error || t('setupUser.messages.userRegisterFailed'));
+        reportFailure(data.error || t('setupUser.messages.userRegisterFailed'), response);
       }
     } catch (error) {
       console.error('Error setting up user:', error);
-      message.error(t('setupUser.messages.userRegisterError'));
+      reportFailure(t('setupUser.messages.userRegisterError'), error);
     } finally {
       setLoading(false);
     }

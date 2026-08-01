@@ -12,6 +12,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { canAccessPath, isPublicPath, type UserRole } from '@/lib/pageAccess';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import LoginForm from '@/components/auth/LoginForm';
 import Sidebar from './Sidebar';
 import LanguageToggle from './LanguageToggle';
@@ -33,6 +34,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { t } = useLanguage();
   const { user, logout, loading, error: authError } = useAuth();
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const screens = useBreakpoint();
 
   // 로그인 페이지인지 확인
@@ -40,17 +42,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const isOperatorConsolePage = pathname === '/operator-view' || (pathname === '/dashboard' && user?.role === 'operator');
 
   /**
-   * 세션이 끊겨 로그인 화면으로 전환되면 떠 있던 도메인 토스트를 걷는다.
+   * 세션이 끊겨 로그인 화면으로 전환되면 **이미 떠 있는** 토스트를 걷는다.
    *
-   * 만료 시점에 이미 날아간 요청들의 `catch` 는 그대로 실행되고, 그 안에서
-   * `message.error('대시보드 데이터를 불러오는데 실패했습니다')` 같은 토스트가 뜬다.
-   * 원인은 데이터가 아니라 로그인인데 화면에는 두 이야기가 겹쳐 보인다 — 프리뷰에서 실제로
-   * 만료 안내 위에 그 토스트가 겹쳐 뜨는 것을 확인했다.
+   * 늦게 도착하는 토스트는 여기서 막지 않는다 — 그건 `@/lib/errorReporting` 이 판정한다.
+   * 요청 실패를 도메인 언어로 옮겨 적는 자리는 전부 `useFailureReport` 를 지나고, 그
+   * 헬퍼는 세션이 끝난 상태면 아무 말도 하지 않는다. 예전에는 그 판정이 어디에도 없어
+   * "대시보드 데이터를 불러오는데 실패했습니다" 가 만료 안내 위에 겹쳐 떴다.
    *
-   * ⚠️ 이건 **증상 정리**이지 근본 해결이 아니다. 저장소에는 실패를 도메인 언어로 옮겨
-   * 적는 자리가 83곳 있고(`message.error` 호출), 각자 원인을 구분하지 않는다. 전환 직후
-   * 늦게 도착한 토스트는 여전히 잠깐 보일 수 있다. 제대로 고치려면 공용 오류 보고 헬퍼로
-   * 그 83곳을 쓸어야 하는데, 그건 별도 작업이다.
+   * 그래도 이 `destroy` 가 남아 있는 이유는, **만료 이전에 이미 화면에 올라와 있던**
+   * 토스트는 판정을 거칠 기회가 없었기 때문이다. 예를 들어 만료 3초 전에 뜬 네트워크
+   * 오류 토스트는 그대로 남아 로그인 화면 위에 떠 있게 된다. 그건 지금 화면이 하는
+   * 이야기와 무관하므로 여기서 걷는다.
    */
   useEffect(() => {
     if (!user && authError) {
@@ -73,7 +75,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       message.success(t('auth.logoutSuccess'));
     } catch (error) {
       console.error('Logout error:', error);
-      message.error(t('auth.logoutFailed'));
+      reportFailure(t('auth.logoutFailed'), error);
     }
   };
 

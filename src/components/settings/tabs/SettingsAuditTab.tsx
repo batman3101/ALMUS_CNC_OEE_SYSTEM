@@ -11,7 +11,6 @@ import {
   DatePicker, 
   Select,
   Input,
-  message,
   Tooltip,
   Modal
 } from 'antd';
@@ -25,6 +24,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { systemSettingsService } from '@/lib/systemSettings';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import type { SystemSettingAudit } from '@/types/systemSettings';
 
 const { Title, Text } = Typography;
@@ -33,6 +33,7 @@ const { Option } = Select;
 
 const SettingsAuditTab: React.FC = () => {
   const { t } = useLanguage();
+  const reportFailure = useFailureReport();
   const [auditData, setAuditData] = useState<SystemSettingAudit[]>([]);
   const [loading, setLoading] = useState(false);
   const [filteredData, setFilteredData] = useState<SystemSettingAudit[]>([]);
@@ -55,11 +56,11 @@ const SettingsAuditTab: React.FC = () => {
         setAuditData(response.data);
         setFilteredData(response.data);
       } else {
-        message.error(response.error || t('settings.audit.loadError'));
+        reportFailure(response.error || t('settings.audit.loadError'), response);
       }
     } catch (error) {
       console.error('Error loading audit data:', error);
-      message.error(t('settings.audit.loadError'));
+      reportFailure(t('settings.audit.loadError'), error);
     } finally {
       setLoading(false);
     }

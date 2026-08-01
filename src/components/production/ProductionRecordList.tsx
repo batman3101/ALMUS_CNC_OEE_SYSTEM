@@ -30,6 +30,7 @@ import { useMachines } from '@/hooks/useMachines';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
 import { formatMachineLocation } from '@/utils/machineLocation';
 import { authFetch } from '@/lib/authFetch';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -66,6 +67,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
   const { t } = useDataInputTranslation();
   const { machines, loading: machinesLoading } = useMachines();
   const { message: messageApi } = App.useApp();
+  const reportFailure = useFailureReport();
   const { token } = theme.useToken();
 
   // 상태
@@ -135,7 +137,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
         return;
       }
       console.error('Error fetching production records:', error);
-      messageApi.error(t('recordList.loadError'));
+      reportFailure(t('recordList.loadError'), error);
     } finally {
       if (requestId === fetchRequestSeqRef.current) {
         setLoading(false);
@@ -201,7 +203,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       }
     } catch (error) {
       console.error('Error updating production record:', error);
-      messageApi.error(t('messages.saveFailed'));
+      reportFailure(t('messages.saveFailed'), error);
     } finally {
       setSaving(false);
     }
@@ -230,7 +232,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       }
     } catch (error) {
       console.error('Error deleting production record:', error);
-      messageApi.error(t('messages.recordDeleteFailed'));
+      reportFailure(t('messages.recordDeleteFailed'), error);
     } finally {
       setLoading(false);
     }

@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons';
 import { useRealtimeMachines } from '@/hooks/useRealtimeMachines';
 import { MachineState } from '@/types';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -41,6 +42,7 @@ const machineStates: { value: MachineState; label: string; icon: React.ReactNode
 
 export const RealtimeTestPanel: React.FC = () => {
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const { 
     machines, 
     loading, 
@@ -57,12 +59,12 @@ export const RealtimeTestPanel: React.FC = () => {
       if (success) {
         message.success('설비 상태가 변경되었습니다.');
       } else {
-        message.error(`설비 상태 변경에 실패했습니다: ${error || '알 수 없는 오류'}`);
+        reportFailure(`설비 상태 변경에 실패했습니다: ${error || '알 수 없는 오류'}`);
       }
     } catch (err: unknown) {
       console.error('Status change error:', err);
       const errMessage = err instanceof Error ? err.message : '알 수 없는 오류';
-      message.error(`오류가 발생했습니다: ${errMessage}`);
+      reportFailure(`오류가 발생했습니다: ${errMessage}`, err);
     }
   };
 

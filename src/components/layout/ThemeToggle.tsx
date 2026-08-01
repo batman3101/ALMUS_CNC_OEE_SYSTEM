@@ -5,6 +5,7 @@ import { Button, Grid, Tooltip, App } from 'antd';
 import { SunOutlined, MoonOutlined } from '@ant-design/icons';
 import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { useBreakpoint } = Grid;
 
@@ -22,6 +23,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
   const { themeMode, setThemeMode } = useUserPreferences();
   const { t } = useLanguage();
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const screens = useBreakpoint();
 
   const isDark = themeMode === 'dark';
@@ -34,9 +36,9 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
       message.success(newMode === 'dark' ? t('theme.changedToDark') : t('theme.changedToLight'));
     } catch (error) {
       console.error('Theme toggle error:', error);
-      message.error(t('theme.changeError'));
+      reportFailure(t('theme.changeError'), error);
     }
-  }, [isDark, setThemeMode, message, t]);
+  }, [isDark, setThemeMode, message, reportFailure, t]);
 
   // 토글 버튼 컨텐츠
   const buttonContent = (

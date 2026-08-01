@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, Switch, Select, message } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import { supabase } from '@/lib/supabase';
 import type { Machine } from '@/types';
 
@@ -43,6 +44,7 @@ const MachineForm: React.FC<MachineFormProps> = ({
   machine
 }) => {
   const { t } = useTranslation();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm<MachineFormData>();
   const { loading, createMachine, updateMachine } = useAdminOperations();
   const [productModels, setProductModels] = useState<ProductModel[]>([]);
@@ -67,7 +69,7 @@ const MachineForm: React.FC<MachineFormProps> = ({
       setProductModels(data || []);
     } catch (error) {
       console.error('Error fetching product models:', error);
-      message.error(t('admin:machineManagement.fetchModelsError'));
+      reportFailure(t('admin:machineManagement.fetchModelsError'), error);
     } finally {
       setModelsLoading(false);
     }
@@ -93,7 +95,7 @@ const MachineForm: React.FC<MachineFormProps> = ({
       }
     } catch (error) {
       console.error('Error fetching model processes:', error);
-      message.error(t('admin:machineManagement.fetchProcessesError'));
+      reportFailure(t('admin:machineManagement.fetchProcessesError'), error);
     } finally {
       setProcessesLoading(false);
     }
@@ -165,7 +167,7 @@ const MachineForm: React.FC<MachineFormProps> = ({
       onSuccess();
     } catch (error) {
       console.error('Error saving machine:', error);
-      message.error(t('admin:machineManagement.saveError'));
+      reportFailure(t('admin:machineManagement.saveError'), error);
     }
   };
 

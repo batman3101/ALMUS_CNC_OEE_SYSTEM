@@ -33,6 +33,7 @@ import {
   summarizeAggregationResults
 } from '@/utils/oeeAggregation';
 import { useAdminTranslation } from '@/hooks/useTranslation';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 interface OEEAggregationManagerProps {
   className?: string;
@@ -40,6 +41,7 @@ interface OEEAggregationManagerProps {
 
 const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className }) => {
   const { t } = useAdminTranslation();
+  const reportFailure = useFailureReport();
 
   // 상태 관리
   const [loading, setLoading] = useState(false);
@@ -85,7 +87,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
       setLogs(logData);
     } catch (error) {
       console.error('Error loading aggregation logs:', error);
-      message.error(t('aggregation.messages.loadLogsFailed'));
+      reportFailure(t('aggregation.messages.loadLogsFailed'), error);
     }
   };
 
@@ -111,11 +113,11 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
         loadAggregationLogs();
         findMissingAggregations();
       } else {
-        message.error(t('aggregation.messages.singleFailed', { error: result.error }));
+        reportFailure(t('aggregation.messages.singleFailed', { error: result.error }), result);
       }
     } catch (error) {
       console.error('Error triggering aggregation:', error);
-      message.error(t('aggregation.messages.executionError'));
+      reportFailure(t('aggregation.messages.executionError'), error);
     } finally {
       setLoading(false);
     }
@@ -161,7 +163,7 @@ const OEEAggregationManager: React.FC<OEEAggregationManagerProps> = ({ className
       findMissingAggregations();
     } catch (error) {
       console.error('Error in batch aggregation:', error);
-      message.error(t('aggregation.messages.batchError'));
+      reportFailure(t('aggregation.messages.batchError'), error);
     }
   };
 
