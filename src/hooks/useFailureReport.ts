@@ -25,6 +25,17 @@ import { shouldReportFailure } from '@/lib/errorReporting';
  * antd 정적 `message` 는 `ConfigProvider` 의 테마·로케일 컨텍스트를 못 받아 경고를 낸다.
  * `App.useApp()` 인스턴스를 쓰면 `providers.tsx` 의 `<App>` 아래에서 올바르게 렌더된다.
  *
+ * ## 의존성 배열에 넣어도 되는가 — 된다
+ *
+ * 네 곳에서 이 함수를 의존성 배열에 넣었고, 그중 `app/reports/page.tsx` 의 effect 는
+ * 설비 목록을 네트워크로 가져온다. 이 함수의 identity 가 불안정하면 그 effect 가 상위
+ * 리렌더마다 다시 돌아 요청이 늘어난다.
+ *
+ * 안전한 이유는 antd 가 `App.useApp()` 의 `message` 를 `useMemo` 로 고정하기 때문이다 —
+ * `providers.tsx` 처럼 `notification={{...}}` 을 인라인 리터럴로 넘겨도 유지된다.
+ * **이건 우리 코드가 아니라 antd 의 성질**이라 버전이 올라가면 조용히 깨질 수 있다.
+ * `__tests__/useFailureReportStability.test.tsx` 가 실제 렌더로 그걸 지킨다.
+ *
  * ## 사용
  *
  * ```ts
