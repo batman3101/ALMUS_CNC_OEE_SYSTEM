@@ -5,7 +5,7 @@ import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 // GET /api/admin/machines - 모든 설비 목록 조회 (활성/비활성 모두)
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
 
     // JOIN 쿼리를 사용한 단일 쿼리로 최적화 (N+1 쿼리 문제 해결)
     const { data: machines, error } = await supabaseAdmin
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   try {
     // 이 라우트는 서비스 롤(RLS 우회)로 동작하고 middleware 는 /api 를 건너뛰므로,
     // 세션·역할 검사를 하지 않으면 누구나 설비를 생성할 수 있다.
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
 
     const body = await request.json();
     const { name, location, equipment_type, production_model_id, current_process_id, is_active } = body;

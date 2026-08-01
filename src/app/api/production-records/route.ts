@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
 import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { chunkIdsForInFilter } from '@/lib/idFilter';
 import {
   calculateOeeMetrics,
   DEFAULT_CAVITY,
@@ -78,72 +79,89 @@ export async function GET(request: NextRequest) {
 
     if (machineId) assertMachineAccess(authenticatedUser, machineId);
 
-    // 기본 쿼리 생성
-    let query = supabaseAdmin
-      .from('production_records')
-      .select(`
-        *,
-        machines!inner(
-          id,
-          name,
-          location
-        )
-      `, { count: 'exact' })
-      .order('date', { ascending: false })
-      // (machine_id, date, shift)가 유니크하므로 date만으로는 정렬이 불안정함 → record_id로 tiebreak
-      .order('record_id', { ascending: false });
+    /**
+     * 운영자 스코프를 여러 요청으로 나눠 보낸다.
+     *
+     * `.in('machine_id', 800개)` 는 URL 이 약 30 KB 가 되어 게이트웨이가 400 으로 거절한다
+     * (근거는 `@/lib/idFilter`). 이 프로젝트의 운영자는 전원 800대를 배정받으므로
+     * **이 라우트는 운영자에게 늘 500 이었다** — 생산 기록 관리 페이지가 열리지 않았다.
+     *
+     * 청크는 machine_id 로 나뉘어 **서로소**다. 그래서
+     *   · 전체 건수 = 청크별 count 의 합 (중복 없음)
+     *   · 어떤 청크의 k번째 행보다 앞설 수 있는 행은 각 청크의 앞쪽 k개뿐
+     * 이 성립한다. 정렬이 (date desc, record_id desc) 로 **전순서**라 병합이 유일하게
+     * 결정된다. 따라서 청크마다 앞에서 `page*limit` 개만 받아 병합·정렬한 뒤 잘라내면
+     * 한 번에 조회한 것과 같은 결과가 나온다.
+     *
+     * 대가는 깊은 페이지에서 전송량이 청크 수만큼 늘어나는 것이다(청크 4개 · limit 100 ·
+     * 1페이지 = 400행). 대안인 "Node 에서 전량 정렬"은 이 테이블이 32만 행이라 불가능하고,
+     * RPC 로 옮기려면 마이그레이션이 필요하다.
+     */
+    const scopeChunks: Array<string[] | null> =
+      !machineId && authenticatedUser.role === 'operator'
+        ? chunkIdsForInFilter(authenticatedUser.assignedMachineIds)
+        : [null];
 
-    // 필터 적용
-    if (machineId) {
-      query = query.eq('machine_id', machineId);
-    } else if (authenticatedUser.role === 'operator') {
-      if (authenticatedUser.assignedMachineIds.length === 0) {
-        return NextResponse.json({
-          records: [],
-          shift_states: [],
-          pagination: { page, limit, total: 0, pages: 0 }
-        });
-      }
-      query = query.in('machine_id', authenticatedUser.assignedMachineIds);
+    const buildQuery = (scope: string[] | null) => {
+      let q = supabaseAdmin
+        .from('production_records')
+        .select(`
+          *,
+          machines!inner(
+            id,
+            name,
+            location
+          )
+        `, { count: 'exact' })
+        .order('date', { ascending: false })
+        // (machine_id, date, shift)가 유니크하므로 date만으로는 정렬이 불안정함 → record_id로 tiebreak
+        .order('record_id', { ascending: false });
+      if (scope) q = q.in('machine_id', scope);
+      if (machineId) q = q.eq('machine_id', machineId);
+      if (startDate) q = q.gte('date', startDate);
+      if (endDate) q = q.lte('date', endDate);
+      if (shift) q = q.eq('shift', shift);
+      // 청크마다 **앞에서부터** 이 페이지에 닿을 수 있는 만큼만 받는다. 스코프가 하나면
+      // (관리자·엔지니어·설비 지정) 청크가 1개라 예전과 똑같이 그 페이지만 받는다.
+      return q.range(0, page * limit - 1);
+    };
+
+    if (!machineId && authenticatedUser.role === 'operator' && scopeChunks.length === 0) {
+      return NextResponse.json({
+        records: [],
+        shift_states: [],
+        pagination: { page, limit, total: 0, pages: 0 }
+      });
     }
 
-    if (startDate) {
-      query = query.gte('date', startDate);
+    const pages = await Promise.all(scopeChunks.map(scope => buildQuery(scope)));
+
+    const tableMissing = pages.find(p => p.error?.code === '42P01');
+    if (tableMissing) {
+      return NextResponse.json({
+        records: [],
+        pagination: { page, limit, total: 0, pages: 0 }
+      });
+    }
+    const failed = pages.find(p => p.error);
+    if (failed) {
+      console.error('Error fetching production records:', failed.error);
+      throw failed.error;
     }
 
-    if (endDate) {
-      query = query.lte('date', endDate);
+    const count = pages.reduce((sum, p) => sum + (p.count ?? 0), 0);
+    // 청크가 하나면 정렬은 DB 가 이미 끝냈다. 여럿일 때만 병합한다 — 비교 함수는 DB 의
+    // ORDER BY (date desc, record_id desc)와 **같은 말**이어야 한다. 달라지면 페이지 경계에서
+    // 행이 사라지거나 중복된다.
+    const merged = pages.flatMap(p => p.data ?? []);
+    if (scopeChunks.length > 1) {
+      merged.sort((a, b) =>
+        a.date === b.date
+          ? String(b.record_id).localeCompare(String(a.record_id))
+          : String(b.date).localeCompare(String(a.date))
+      );
     }
-
-    if (shift) {
-      query = query.eq('shift', shift);
-    }
-
-    // 페이지네이션 적용
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-    query = query.range(from, to);
-
-    const { data: records, error, count } = await query;
-
-    if (error) {
-      console.error('Error fetching production records:', error);
-      
-      // 테이블이 없는 경우 빈 배열 반환
-      if (error.code === '42P01') {
-        return NextResponse.json({
-          records: [],
-          pagination: {
-            page,
-            limit,
-            total: 0,
-            pages: 0
-          }
-        });
-      }
-      
-      throw error;
-    }
+    const records = merged.slice((page - 1) * limit, page * limit);
 
     // ✅ 실제 Supabase 데이터 그대로 반환 (OEE 필드 포함)
     const formattedRecords = (records || []).map(record => ({

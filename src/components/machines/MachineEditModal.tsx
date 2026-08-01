@@ -22,6 +22,7 @@ import { Machine, MachineProductModel, MachineProcessInfo, unwrapJoin } from '@/
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 import { authFetch } from '@/lib/authFetch';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Option } = Select;
 
@@ -74,6 +75,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
     isLoading: statusLoading
   } = useMachineStatusTranslations(currentLanguage);
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm<EditFormData>();
   const [loading, setLoading] = useState(false);
   const [productModels, setProductModels] = useState<MachineProductModel[]>([]);
@@ -206,7 +208,7 @@ const MachineEditModal: React.FC<MachineEditModalProps> = ({
     } catch (error: unknown) {
       console.error('Error updating machine:', error);
       const errMessage = error instanceof Error ? error.message : String(error);
-      message.error(`${t('edit.errorMessage')}: ${errMessage}`);
+      reportFailure(`${t('edit.errorMessage')}: ${errMessage}`, error);
     } finally {
       setLoading(false);
     }

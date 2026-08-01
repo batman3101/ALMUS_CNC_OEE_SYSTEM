@@ -4,6 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, Select, Transfer, App } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
+import { useFailureReport } from '@/hooks/useFailureReport';
+import { useAuth } from '@/contexts/AuthContext';
+import { assignableRoles, canChangeUserRole, type UserRole } from '@/lib/pageAccess';
 import type { User } from '@/types';
 
 interface UserFormProps {
@@ -34,7 +37,10 @@ const UserForm: React.FC<UserFormProps> = ({
   user
 }) => {
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const { t } = useTranslation();
+  const { user: actor } = useAuth();
+  const actorRole = actor?.role as UserRole | undefined;
   const [form] = Form.useForm<UserFormData>();
   const { loading, createUser, updateUser, fetchMachines } = useAdminOperations();
   const [transferData, setTransferData] = useState<TransferItem[]>([]);
@@ -106,7 +112,7 @@ const UserForm: React.FC<UserFormProps> = ({
       onSuccess();
     } catch (error) {
       console.error('Error saving user:', error);
-      message.error(t('admin:userManagement.saveError'));
+      reportFailure(t('admin:userManagement.saveError'), error);
     }
   };
 
@@ -114,11 +120,27 @@ const UserForm: React.FC<UserFormProps> = ({
     setTargetKeys(newTargetKeys.map(String));
   };
 
-  const roleOptions = [
-    { value: 'admin', label: t('admin:roles.admin') },
-    { value: 'engineer', label: t('admin:roles.engineer') },
-    { value: 'operator', label: t('admin:roles.operator') }
-  ];
+  /**
+   * 선택 가능한 역할은 **로그인한 사람이 누구인가**에 달려 있다.
+   *
+   * 관리자(engineer)에게 '시스템 관리자'를 선택지로 주면, 그 계정을 만들어 로그인하는
+   * 것으로 자기 등급을 올릴 수 있다 — 역할 변경을 막아 둔 의미가 사라진다. 서버도 같은
+   * 규칙(`assertCanManageAccount`)으로 거절하므로 여기서 감추는 것은 **안내**이지
+   * 방어가 아니다. 둘 다 `@/lib/pageAccess` 의 같은 함수를 부른다.
+   */
+  const roleLabels: Record<UserRole, string> = {
+    admin: t('admin:roles.admin'),
+    engineer: t('admin:roles.engineer'),
+    operator: t('admin:roles.operator'),
+  };
+  const roleOptions = assignableRoles(actorRole).map((role) => ({
+    value: role,
+    label: roleLabels[role],
+  }));
+
+  // 기존 계정의 역할 변경은 시스템 관리자만 할 수 있다. 새 계정 생성은 위 선택지로 이미
+  // 좁혀져 있으므로 잠그지 않는다 — 잠그면 관리자가 계정을 아예 만들 수 없다.
+  const roleLocked = isEditing && !canChangeUserRole(actorRole);
 
   const selectedRole = Form.useWatch('role', form);
   // 모든 역할에서 담당 설비 할당 항상 표시
@@ -183,6 +205,7 @@ const UserForm: React.FC<UserFormProps> = ({
           <Select
             placeholder={t('admin:userManagement.form.selectRole')}
             options={roleOptions}
+            disabled={roleLocked}
           />
         </Form.Item>
 

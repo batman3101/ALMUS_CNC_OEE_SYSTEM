@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { format } from 'date-fns';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { chunkIdsForInFilter } from '@/lib/idFilter';
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
@@ -126,10 +127,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    if (user.role === 'operator') {
-      // 운영자 화면은 담당 설비별로 이 API를 호출한다. 필터 없는 원시 전체 조회는
-      // 클라이언트에서 나중에 걸러도 이미 다른 설비 데이터가 노출되므로 허용하지 않는다.
-      assertMachineAccess(user, machineId || '');
+    /**
+     * 운영자 스코프.
+     *
+     * 예전에는 `assertMachineAccess(user, machineId || '')` 로 **machine_id 를 필수**로
+     * 만들었다. 그래서 운영자 화면은 담당 설비마다 이 API 를 한 번씩 불러야 했고,
+     * 이 프로젝트의 운영자는 전원 800대를 배정받으므로 **800번의 순차 요청**이 됐다.
+     * 요청당 200ms 만 잡아도 160초 — 운영자 대시보드가 사실상 뜨지 않았다.
+     *
+     * 다른 라우트(`/api/machines`, `/api/production-records`)는 이미 서버에서 스코프를
+     * 건다. 여기만 클라이언트에 떠넘긴 탓에 같은 문제를 두 방식으로 풀고 있었다.
+     * 이제 여기서도 서버가 건다 — 담당 설비 목록을 `.in()` 으로, URL 한계를 넘지 않게
+     * 잘라서(`@/lib/idFilter`).
+     */
+    const scopeChunks: Array<string[] | null> = (() => {
+      if (user.role !== 'operator') return [null];
+      if (machineId) {
+        assertMachineAccess(user, machineId);
+        return [null];
+      }
+      return chunkIdsForInFilter(user.assignedMachineIds);
+    })();
+
+    // 담당 설비 목록으로 좁히는 경로인가. 이때만 청크 병합과 count 합산이 필요하다.
+    const isChunkedScope = scopeChunks[0] !== null;
+
+    // 통계(평균 묶음)는 `analytics_oee_records_summary` 가 SQL 에서 계산하는데, 그 RPC 는
+    // 설비를 **하나**만 받는다(p_machine_id). 담당 설비 목록으로는 표현할 수 없다.
+    //
+    // 청크별로 계산해 합치는 것은 틀린다 — 평균의 평균은 평균이 아니다. 조용히 틀린
+    // 숫자를 내느니 이 조합을 거절한다. RPC 에 설비 목록 인자를 추가하려면 마이그레이션이
+    // 필요하다. `total` 은 아래에서 청크별 count 합으로 정확히 구하므로(청크는 서로소)
+    // 페이지네이션은 통계 없이도 정상 동작한다.
+    if (includeStatistics && isChunkedScope) {
+      return NextResponse.json(
+        { error: 'include_statistics requires machine_id for operators' },
+        { status: 400 }
+      );
     }
 
     // 실제 적용되는 날짜 범위를 먼저 확정한다.
@@ -188,14 +222,18 @@ export async function GET(request: NextRequest) {
       avg_oee_excluding_impossible: 0,
       avg_quality_excluding_impossible: 0,
     };
-    const totalRecords = includeStatistics
+    const summaryTotal = includeStatistics
       ? Number(summary.total_records) || 0
       : knownTotal;
 
     // 원시 행은 요청한 페이지만 가져온다.
-    let query = supabaseAdmin
-      .from('production_records')
-      .select(`
+    // 운영자 스코프가 여러 청크로 나뉘면 청크마다 앞에서 (offset+limit) 개까지 받아
+    // 병합·정렬한 뒤 잘라낸다 — 청크는 machine_id 로 서로소이고 정렬이 전순서라
+    // 결과가 한 번에 조회한 것과 같다. (같은 근거는 production-records 라우트 참고)
+    const buildRowQuery = (scope: string[] | null) => {
+      let query = supabaseAdmin
+        .from('production_records')
+        .select(`
         record_id,
         machine_id,
         date,
@@ -212,34 +250,54 @@ export async function GET(request: NextRequest) {
         downtime_minutes,
         created_at,
         machines!inner(name)
-      `)
-      .gte('date', effectiveStartDate)
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false })
-      // record_id 로 마지막 정렬 기준을 고정한다. (date, created_at) 이 같은 행이
-      // 여러 개 있으면 순서가 불안정해져 페이지 간 행이 중복/누락될 수 있다.
-      .order('record_id', { ascending: false })
-      .range(offset, offset + limit - 1);
+      `, isChunkedScope ? { count: 'exact' } : undefined)
+        .gte('date', effectiveStartDate)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        // record_id 로 마지막 정렬 기준을 고정한다. (date, created_at) 이 같은 행이
+        // 여러 개 있으면 순서가 불안정해져 페이지 간 행이 중복/누락될 수 있다.
+        .order('record_id', { ascending: false })
+        // 청크가 하나면 예전과 같이 그 페이지만 받는다.
+        .range(scope ? 0 : offset, offset + limit - 1);
 
-    if (effectiveEndDate) {
-      query = query.lte('date', effectiveEndDate);
-    }
-    if (machineId) {
-      query = query.eq('machine_id', machineId);
-    }
-    if (shift) {
-      query = query.eq('shift', shift);
-    }
+      if (effectiveEndDate) query = query.lte('date', effectiveEndDate);
+      if (machineId) query = query.eq('machine_id', machineId);
+      if (shift) query = query.eq('shift', shift);
+      if (scope) query = query.in('machine_id', scope);
+      return query;
+    };
 
-    const { data: productionData, error } = await query;
+    const rowPages = await Promise.all(scopeChunks.map(scope => buildRowQuery(scope)));
+    const rowError = rowPages.find(p => p.error)?.error;
 
-    if (error) {
-      console.error('Database error:', error);
+    if (rowError) {
+      console.error('Database error:', rowError);
       return NextResponse.json(
         { error: 'Failed to fetch production data' },
         { status: 500 }
       );
     }
+
+    const mergedRows = rowPages.flatMap(p => p.data ?? []);
+    // 비교 함수는 위 ORDER BY 와 **같은 말**이어야 한다. 달라지면 페이지 경계에서
+    // 행이 사라지거나 중복된다.
+    if (scopeChunks.length > 1) {
+      mergedRows.sort((a, b) =>
+        a.date !== b.date ? String(b.date).localeCompare(String(a.date))
+        : a.created_at !== b.created_at ? String(b.created_at).localeCompare(String(a.created_at))
+        : String(b.record_id).localeCompare(String(a.record_id))
+      );
+    }
+    const productionData = isChunkedScope
+      ? mergedRows.slice(offset, offset + limit)
+      : mergedRows;
+
+    // 담당 설비 스코프에서는 청크별 count 를 합해 전체 건수를 구한다. 청크는 machine_id 로
+    // 서로소이므로 합이 곧 정확한 총계다. `has_more` 가 이 값에 의존하므로 여기를 비우면
+    // 호출자는 첫 페이지만 받고 **조용히 멈춘다** — 통계를 막았다고 총계까지 비우면 안 된다.
+    const totalRecords = isChunkedScope
+      ? rowPages.reduce((sum, p) => sum + (p.count ?? 0), 0)
+      : summaryTotal;
 
     const oeeData = (productionData || []).map(record => ({
       id: record.record_id,

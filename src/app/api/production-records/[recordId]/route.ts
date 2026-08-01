@@ -379,7 +379,7 @@ export async function DELETE(
 ) {
   try {
     const { recordId } = await params;
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
     console.log('DELETE /api/production-records/[recordId] called with id:', recordId);
 
     // 생산실적만 삭제하고 해당 교대 상태를 MISSING으로 기록한다.

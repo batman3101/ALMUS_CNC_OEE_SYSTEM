@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Table, Progress, Alert, Space, Button, Spin, message, Badge, Drawer, List, Empty, Typography, Tag, Tooltip, Modal } from 'antd';
+import { Row, Col, Card, Statistic, Table, Progress, Alert, Space, Button, Spin, Badge, Drawer, List, Empty, Typography, Tag, Tooltip, Modal } from 'antd';
 import { 
   DashboardOutlined, 
   DesktopOutlined, 
@@ -24,6 +24,7 @@ import { useDateRange } from '@/contexts/DateRangeContext';
 import { fetchMachines } from '@/lib/machinesCache';
 import { formatMachineLocation } from '@/utils/machineLocation';
 import { authFetch } from '@/lib/authFetch';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 // 대시보드가 지원하는 최대 기간(최근 30일 프리셋)을 커버하는 행수 상한.
 // 설비 800대 × 2교대 × 30일 ≈ 48,000행이므로 50,000행이면 프리셋 전 구간이 잘리지 않는다.
@@ -62,6 +63,7 @@ interface AdminOeeAnalytics {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const { t, i18n } = useDashboardTranslation();
   const isClient = useClientOnly();
+  const reportFailure = useFailureReport();
   const {
     notifications,
     acknowledgeNotification,
@@ -322,7 +324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      message.error('대시보드 데이터를 불러오는데 실패했습니다');
+      reportFailure('대시보드 데이터를 불러오는데 실패했습니다', error);
       if (onError) {
         onError(error as Error);
       }
@@ -517,7 +519,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       }
       // 에러 시 빈 데이터와 에러 메시지 반환
       const errorMessage = (error as Error).message || '데이터를 불러오는데 실패했습니다';
-      message.error(errorMessage);
+      reportFailure(errorMessage, error);
       
       return {
         overallMetrics: null,

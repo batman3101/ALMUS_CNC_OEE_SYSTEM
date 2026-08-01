@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { Card, Button, Space, App } from 'antd';
 import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { useReportsTranslation } from '@/hooks/useTranslation';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import { OEEMetrics, Machine, ProductionRecord } from '@/types';
 
 // jsPDF/xlsx/html2canvas are only needed once the user opens the export
@@ -34,6 +35,7 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
 }) => {
   const { t } = useReportsTranslation();
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [exportType, setExportType] = useState<'pdf' | 'excel'>('pdf');
   const [loading, setLoading] = useState(false);
@@ -91,7 +93,7 @@ export const ReportGenerator: React.FC<ReportGeneratorProps> = ({
     } catch (error: unknown) {
       console.error('보고서 생성 실패:', error);
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
-      message.error(`보고서 생성 중 오류가 발생했습니다: ${errorMessage}`);
+      reportFailure(`보고서 생성 중 오류가 발생했습니다: ${errorMessage}`, error);
     } finally {
       setLoading(false);
     }

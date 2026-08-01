@@ -5,6 +5,7 @@ import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { User, AuthContextType } from '@/types';
 import { log, LogCategories } from '@/lib/logger';
+import { onSessionExpired, resetSessionExpiryNotice } from '@/lib/sessionExpiry';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -19,6 +20,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   
   // 컴포넌트 마운트 상태를 추적하는 ref (메모리 누수 방지)
   const isMountedRef = useRef(true);
+  // 이번 로그아웃이 "세션 만료"인지 "사용자가 누른 로그아웃"인지 구분한다.
+  // 둘 다 SIGNED_OUT 이벤트를 내지만 보여줄 메시지가 다르다.
+  const sessionExpiredRef = useRef(false);
   
   // 로딩 타임아웃 관리를 위한 ref
   const loadingTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -190,12 +194,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
+  /**
+   * "세션이 다시 살아났다" 를 처리하는 **한 곳**.
+   *
+   * 만료 표식은 두 개인데 하는 일이 다르다.
+   * - `resetSessionExpiryNotice()` — 모듈 상태. 다음 만료를 다시 알릴 수 있게 하고,
+   *   `isSessionExpired()` 를 거짓으로 되돌려 **실패 보고를 다시 열어 준다**
+   *   (`@/lib/errorReporting`).
+   * - `sessionExpiredRef` — 이 컴포넌트 표식. SIGNED_OUT 핸들러가 만료 안내를 지우지
+   *   않도록 막는다.
+   *
+   * 예전에는 이 둘을 `login()` 에서만 껐다. 그래서 **이 탭에서 로그인하지 않고** 세션이
+   * 돌아오는 경로 — 다른 탭에서 로그인해 SIGNED_IN 이 전파되거나, 토큰이 뒤늦게
+   * 갱신되는 경우 — 에서는 `user` 만 복구되고 표식은 켜진 채 남았다. 화면은 멀쩡한데
+   * 그 탭의 실패 토스트가 새로고침 전까지 전부 침묵했다. 고치려던 증상("화면이 사실을
+   * 말하지 않는다")이 정확히 뒤집힌 모양으로 되살아난 것이다.
+   *
+   * 그래서 표식을 끄는 자리를 로그인 함수가 아니라 **세션이 확정되는 지점**으로 옮긴다.
+   */
+  const markSessionRecovered = useCallback(() => {
+    resetSessionExpiryNotice();
+    sessionExpiredRef.current = false;
+  }, []);
+
   // 로그인 함수 (향상된 디버깅과 오류 처리)
   // fetchUserProfile, safeSetState가 고정 identity이므로 login도 고정 identity를 유지한다
   const login = useCallback(async (email: string, password: string): Promise<void> => {
     try {
       console.log('🔑 로그인 시도:', { email });
       setError(null); // 이전 오류 초기화
+      // 시도 시점에도 한 번 연다 — 실패해도 화면에는 로그인 폼뿐이라 해로울 게 없고,
+      // 성공 경로는 아래 SIGNED_IN 에서 markSessionRecovered 가 다시 확정한다.
+      markSessionRecovered();
 
       // 실제 Supabase 인증 사용
       console.log('📊 Supabase 로그인 시도...');
@@ -251,7 +281,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       throw error;
     }
-  }, [fetchUserProfile, safeSetState]);
+  }, [fetchUserProfile, markSessionRecovered, safeSetState]);
 
   // 로그아웃 함수
   // safeSetState가 고정 identity이므로 logout도 고정 identity를 유지한다
@@ -387,6 +417,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initializeAuth();
 
+    /**
+     * 세션이 끝났다는 신호를 받으면 **인증 상태를 사실대로 되돌린다.**
+     *
+     * 예전에는 토큰이 만료돼도 `user` 가 남아 있어 화면이 계속 폴링했고, 각 패널이 401 을
+     * 자기 도메인 언어("비가동 내역을 불러오지 못했습니다")로 옮겨 적었다. 사용자는
+     * 데이터가 깨진 줄 알고 새로고침만 반복하게 된다 — 실제로 운영에서 4분간 그랬다.
+     *
+     * `user` 를 비우면 AppLayout 이 로그인 화면으로 전환하면서 이 메시지를 함께 보여준다.
+     * signOut 은 남은 토큰을 정리하는 것뿐이라 실패해도 화면 전환에는 영향이 없다.
+     */
+    const unsubscribeExpiry = onSessionExpired(() => {
+      log.warn('세션 만료 감지 — 로그인 화면으로 전환', {}, LogCategories.AUTH);
+      // 아래 signOut 이 SIGNED_OUT 이벤트를 일으키고, 그 핸들러는 error 를 비운다.
+      // 이 표식이 없으면 방금 띄운 만료 안내가 곧바로 지워져 다시 "이유 없는 로그인 화면"이
+      // 된다 — 고치려던 증상 그대로다.
+      sessionExpiredRef.current = true;
+      safeSetState(() => setUser(null));
+      safeSetState(() => setError('세션이 만료되었습니다. 다시 로그인해 주세요.'));
+      void supabase.auth.signOut().catch(() => { /* 토큰 정리 실패는 화면 전환을 막지 않는다 */ });
+    });
+
     // Supabase 인증 상태 변경 리스너 (항상 활성화)
     const { data } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -402,6 +453,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.log('✅ SIGNED_IN 이벤트 - 프로필 로딩 중...');
             const userProfile = await fetchUserProfile(session.user, session.access_token);
             if (userProfile) {
+              markSessionRecovered();
               safeSetState(() => setUser(userProfile));
               safeSetState(() => setError(null));
             } else {
@@ -413,11 +465,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           } else if (event === 'SIGNED_OUT') {
             console.log('🚪 SIGNED_OUT 이벤트 - 사용자 로그아웃');
             safeSetState(() => setUser(null));
-            safeSetState(() => setError(null));
+            // 만료 때문에 로그아웃된 경우에는 안내를 남긴다. 스스로 로그아웃한 사용자에게는
+            // 보여줄 오류가 없다.
+            if (!sessionExpiredRef.current) {
+              safeSetState(() => setError(null));
+            }
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
             console.log('🔄 TOKEN_REFRESHED 이벤트 - 프로필 재로딩');
             const userProfile = await fetchUserProfile(session.user, session.access_token);
             if (userProfile) {
+              markSessionRecovered();
               safeSetState(() => setUser(userProfile));
               safeSetState(() => setError(null));
             } else {
@@ -456,10 +513,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (subscription) {
         subscription.unsubscribe();
       }
+
+      // 세션 만료 구독 정리 — 남겨 두면 언마운트된 프로바이더가 계속 상태를 쓰려 한다.
+      unsubscribeExpiry();
     };
     // fetchUserProfile/safeSetState는 고정 identity([] deps)이므로 추가해도 마운트 1회 실행 의미는 유지된다.
     // setLoadingTimeout은 기존과 동일하게 의도적으로 제외한다 (매 렌더 재생성되는 함수라 넣으면 매 렌더 재구독됨).
-  }, [fetchUserProfile, safeSetState]);
+  }, [fetchUserProfile, markSessionRecovered, safeSetState]);
 
   // login/logout은 이제 고정 identity를 가지므로, 이 value는 user/loading/error가
   // 실제로 바뀔 때만 새 identity를 얻는다 (구독 중인 모든 useAuth() 소비자의 불필요한 재렌더링 방지)

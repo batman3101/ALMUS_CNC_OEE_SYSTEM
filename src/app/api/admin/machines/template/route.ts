@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/admin/machines/template - Excel 템플릿 다운로드
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
 
     // Excel 템플릿 생성
     const excelBuffer = createMachineTemplate();

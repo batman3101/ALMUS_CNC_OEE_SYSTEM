@@ -34,7 +34,8 @@
     "analytics": "분석",
     "operatorView": "운영자 화면 보기",
     "management": "사용자 및 설비 관리",
-    "settings": "설정"
+    "settings": "설정",
+    "restrictedTo": "{{roles}} 전용"
   },
   "common": {
     "confirm": "확인",

@@ -26,6 +26,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useAdminTranslation } from '@/hooks/useTranslation';
 import { useAdminOperations } from '@/hooks/useAdminOperations';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import { formatMachineLocation } from '@/utils/machineLocation';
 import type { Machine } from '@/types';
 import MachineForm from './MachineForm';
@@ -36,6 +37,7 @@ const { Search } = Input;
 const MachineManagement: React.FC = () => {
   const { t } = useAdminTranslation();
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const { loading, fetchMachines, deleteMachine, updateMachine } = useAdminOperations();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -50,7 +52,7 @@ const MachineManagement: React.FC = () => {
       setMachines(data);
     } catch (error) {
       console.error('Error fetching machines:', error);
-      message.error(t('machineManagement.saveError'));
+      reportFailure(t('machineManagement.saveError'), error);
     }
   };
 
@@ -65,7 +67,7 @@ const MachineManagement: React.FC = () => {
       loadMachines();
     } catch (error) {
       console.error('Error deleting machine:', error);
-      message.error(t('machineManagement.deleteError'));
+      reportFailure(t('machineManagement.deleteError'), error);
     }
   };
 
@@ -78,7 +80,7 @@ const MachineManagement: React.FC = () => {
       loadMachines();
     } catch (error) {
       console.error('Error updating machine status:', error);
-      message.error(t('machineManagement.saveError'));
+      reportFailure(t('machineManagement.saveError'), error);
     }
   };
 

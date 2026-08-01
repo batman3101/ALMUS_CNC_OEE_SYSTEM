@@ -5,6 +5,7 @@ import { Modal, Form, InputNumber, Button, message, Space, Typography, Divider, 
 import { Machine } from '@/types';
 import { z } from 'zod';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
@@ -61,6 +62,7 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
 }) => {
   const { t } = useMachinesTranslation();
   const { token } = theme.useToken();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm<ProductionInputData>();
   const [loading, setLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -136,12 +138,12 @@ const ProductionRecordInput: React.FC<ProductionRecordInputProps> = memo(({
         if (process.env.NODE_ENV === 'development') {
           console.error('생산 실적 입력 오류:', error);
         }
-        message.error(t('productionInput.errorMessage'));
+        reportFailure(t('productionInput.errorMessage'), error);
       }
     } finally {
       setLoading(false);
     }
-  }, [productionInputSchema, onSubmit, t, form, onClose]);
+  }, [productionInputSchema, onSubmit, reportFailure, t, form, onClose]);
 
   const handleCancel = useCallback(() => {
     form.resetFields();

@@ -19,6 +19,7 @@ import { FileExcelOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { ReportTemplates, assertReportExportReady } from './ReportTemplates';
 import { Machine, ProductionRecord } from '@/types';
 import { OEEMetrics } from '@/types/reports';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -82,6 +83,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const reportFailure = useFailureReport();
 
   const handleExport = async () => {
     try {
@@ -190,7 +192,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
       onCancel();
     } catch (error) {
       console.error('보고서 생성 실패:', error);
-      message.error(error instanceof Error ? error.message : '보고서 생성 중 오류가 발생했습니다.');
+      reportFailure(error instanceof Error ? error.message : '보고서 생성 중 오류가 발생했습니다.', error);
     } finally {
       setLoading(false);
     }

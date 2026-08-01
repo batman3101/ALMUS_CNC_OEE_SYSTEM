@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { ReportGenerator } from './ReportGenerator';
 import { useReportsTranslation } from '@/hooks/useTranslation';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import { Machine, ProductionRecord } from '@/types';
 import { OEEMetrics } from '@/types/reports';
 import { ReportUtils } from '@/utils/reportUtils';
@@ -160,6 +161,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 }) => {
   const { t } = useReportsTranslation();
   const { message } = App.useApp();
+  const reportFailure = useFailureReport();
   const [loading, setLoading] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
@@ -231,7 +233,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
       setPreviewModalVisible(true);
     } catch (error) {
       console.error('미리보기 생성 실패:', error);
-      message.error(error instanceof Error ? error.message : '미리보기 생성 중 오류가 발생했습니다.');
+      reportFailure(error instanceof Error ? error.message : '미리보기 생성 중 오류가 발생했습니다.', error);
     } finally {
       setLoading(false);
     }
@@ -268,7 +270,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
       message.success(`${template} ${type.toUpperCase()} 보고서가 생성되었습니다.`);
     } catch (error) {
       console.error('보고서 생성 실패:', error);
-      message.error(error instanceof Error ? error.message : '보고서 생성 중 오류가 발생했습니다.');
+      reportFailure(error instanceof Error ? error.message : '보고서 생성 중 오류가 발생했습니다.', error);
     } finally {
       setLoading(false);
     }

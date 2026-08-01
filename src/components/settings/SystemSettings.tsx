@@ -31,6 +31,7 @@ import ShiftSettingsTab from './tabs/ShiftSettingsTab';
 import NotificationSettingsTab from './tabs/NotificationSettingsTab';
 import DisplaySettingsTab from './tabs/DisplaySettingsTab';
 import SettingsAuditTab from './tabs/SettingsAuditTab';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 const { confirm } = Modal;
@@ -38,7 +39,9 @@ const { confirm } = Modal;
 const SystemSettings: React.FC = () => {
   const { t, language } = useLanguage();
   const { user } = useAuth();
-  const { success: showSuccess, error: showError, contextHolder } = useMessage();
+  // 실패 보고는 전부 reportFailure 로 나갔다 — 여기 남은 건 성공 안내뿐이다.
+  const { success: showSuccess, contextHolder } = useMessage();
+  const reportFailure = useFailureReport();
   const {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     settings,
@@ -151,7 +154,7 @@ const SystemSettings: React.FC = () => {
       setHasUnsavedChanges(false);
     } catch (error) {
       console.error('Error refreshing settings:', error);
-      showError(t('settings.refreshError'));
+      reportFailure(t('settings.refreshError'), error);
     }
   };
 
@@ -171,11 +174,11 @@ const SystemSettings: React.FC = () => {
             showSuccess(t('settings.resetAllSuccess'));
             setHasUnsavedChanges(false);
           } else {
-            showError(t('settings.resetAllError'));
+            reportFailure(t('settings.resetAllError'));
           }
         } catch (error) {
           console.error('Error resetting all settings:', error);
-          showError(t('settings.resetAllError'));
+          reportFailure(t('settings.resetAllError'), error);
         }
       },
     });

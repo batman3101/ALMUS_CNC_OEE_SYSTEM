@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import {
+  apiAuthErrorResponse,
+  assertCanAssignRole,
+  assertCanManageAccount,
+  fetchAccountRole,
+  requireUserManager,
+} from '@/lib/apiAuth';
 
 // PUT /api/admin/users/[userId] - 사용자 정보 수정
 export async function PUT(
@@ -8,11 +14,20 @@ export async function PUT(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    await requireUser(request, ['admin']);
+    const actor = await requireUserManager(request);
 
     const { userId } = await params;
     const body = await request.json();
     const { email, name, role, assigned_machines, currentEmail } = body;
+
+    // 두 가지를 따로 본다.
+    //  1. 이 계정을 손대도 되는가 — 관리자는 시스템 관리자 계정을 편집할 수 없다.
+    //     이메일만 바꿔도 그 주소로 비밀번호를 재설정해 그 계정이 될 수 있기 때문이다.
+    //  2. 역할을 바꾸려 하는가 — 역할 변경은 시스템 관리자 전용이다.
+    // 현재 역할은 본문이 아니라 DB 에서 읽는다(본문은 호출자가 지어낼 수 있다).
+    const currentRole = await fetchAccountRole(userId);
+    assertCanManageAccount(actor.role, currentRole);
+    assertCanAssignRole(actor.role, currentRole, role);
 
     let profileUpdated = false;
     let authUpdated = false;
@@ -88,9 +103,12 @@ export async function DELETE(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    await requireUser(request, ['admin']);
+    const actor = await requireUserManager(request);
 
     const { userId } = await params;
+    // 관리자는 시스템 관리자 계정을 지울 수 없다 — 전부 지우면 아무도 설정에 못 들어간다.
+    assertCanManageAccount(actor.role, await fetchAccountRole(userId));
+
     let profileDeleted = false;
     let authDeleted = false;
 

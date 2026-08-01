@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { systemSettingsService, mapDbKeyToCodeKey } from '@/lib/systemSettings';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import type {
   AllSystemSettings,
   SettingUpdate,
@@ -44,6 +45,8 @@ interface SystemSettingsProviderProps {
 }
 
 export function SystemSettingsProvider({ children }: SystemSettingsProviderProps) {
+  // providers.tsx 에서 AuthProvider 안쪽에 있으므로 인증 상태를 읽을 수 있다.
+  const { user, loading: authLoading } = useAuth();
   const [settings, setSettings] = useState<Partial<AllSystemSettings>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -242,11 +245,31 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
   }, []);
 
   /**
-   * 초기 설정 로드
+   * 초기 설정 로드 — **로그인이 끝난 뒤에만** 조회한다.
+   *
+   * 예전에는 마운트 즉시 조회했다. 그런데 그 시점에는 Supabase 세션 복원이 아직 끝나지
+   * 않아 요청이 **익명 역할**로 나갔고, 2026-07-29 에 익명 권한을 회수한 뒤로는 매번
+   * `42501 permission denied for table system_settings` 가 콘솔에 찍혔다(실측: 익명 401,
+   * 로그인 세션 200 — 같은 URL). 조회가 실패했으므로 설정도 못 받았다.
+   *
+   * 없는 권한으로 두드려 보고 실패를 기록하는 대신, 조회할 수 있게 된 뒤에 조회한다.
+   *
+   * ⚠️ 로그인 전에는 설정이 비어 있고 화면은 기본값을 쓴다. 로그인 페이지의 회사명도
+   * 마찬가지다 — 회수 이후로 이미 그랬고(요청이 실패했으므로), 이 변경은 그 사실을
+   * 오류 없이 드러낼 뿐이다. 로그인 화면에 설정된 브랜딩을 띄우려면 회사 정보만 내려주는
+   * 좁은 공개 엔드포인트가 필요하다 — 설정 테이블 전체를 익명에 다시 여는 것은 답이 아니다.
    */
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      // 로그인하지 않은 상태는 "아직 모름"이 아니라 "받을 수 없음"이다. 로딩을 끝내지
+      // 않으면 로그인 화면이 스피너에 갇힌다.
+      setSettings({});
+      setIsLoading(false);
+      return;
+    }
     loadSettings();
-  }, [loadSettings]);
+  }, [authLoading, user, loadSettings]);
 
   /**
    * 에러 자동 클리어

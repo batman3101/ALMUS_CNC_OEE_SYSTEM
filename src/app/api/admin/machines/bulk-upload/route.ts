@@ -31,7 +31,7 @@ interface BulkUploadResult {
 // POST /api/admin/machines/bulk-upload - Excel 파일로 설비 일괄 등록
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
 
     console.log('Content-Type:', request.headers.get('content-type'));
     const formData = await request.formData();

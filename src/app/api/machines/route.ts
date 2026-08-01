@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MACHINE_STATES, isMachineState } from '@/types';
 import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { chunkIdsForInFilter } from '@/lib/idFilter';
 
 // 입력값 검증 및 보안 함수들
 const VALID_LOCATIONS = ['라인1', '라인2', '라인3', '라인4', 'A동', 'B동', 'C동', '조립라인', '검사라인', '포장라인'];
@@ -86,11 +87,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, machines: [], count: 0 });
     }
 
+    // 운영자 스코프는 아이디 목록을 **여러 요청으로 나눠** 보낸다.
+    //
+    // `.in('id', 800개)` 는 URL 이 약 30 KB 가 되어 게이트웨이가 400 Bad Request 로 거절한다
+    // (실측 경계: 650개 24,125자 → 200 / 700개 25,975자 → 400). 이 프로젝트의 운영자는
+    // 전원 800대를 배정받으므로 **운영자의 이 요청은 늘 실패하고 있었다** — 운영자
+    // 대시보드가 통째로 뜨지 않던 원인이다. 자세한 근거는 `@/lib/idFilter`.
+    //
+    // `null` 은 "스코프 없음"(관리자·엔지니어)이고 청크 배열은 운영자다. 담당 0대인
+    // 운영자는 위에서 이미 빈 결과로 돌아갔으므로 여기서 빈 청크는 나오지 않는다.
+    const idChunks: Array<string[] | null> = authenticatedUser.role === 'operator'
+      ? chunkIdsForInFilter(authenticatedUser.assignedMachineIds)
+      : [null];
+
     const pageSize = 1000;
     const machines: unknown[] = [];
-    for (let from = 0; ; from += pageSize) {
-      let query = supabaseAdmin
-        .from('machines')
+    for (const idChunk of idChunks) {
+      for (let from = 0; ; from += pageSize) {
+        let query = supabaseAdmin
+          .from('machines')
         .select(`
           id,
           name,
@@ -114,24 +129,23 @@ export async function GET(request: NextRequest) {
             tact_time_seconds
           )
         `)
-        .order('name', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1);
+          .order('name', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
 
-      if (isActive !== 'false') query = query.eq('is_active', true);
-      if (validatedLocation) query = query.eq('location', validatedLocation);
-      if (validatedCurrentState) query = query.eq('current_state', validatedCurrentState);
-      if (authenticatedUser.role === 'operator') {
-        query = query.in('id', authenticatedUser.assignedMachineIds);
-      }
+        if (isActive !== 'false') query = query.eq('is_active', true);
+        if (validatedLocation) query = query.eq('location', validatedLocation);
+        if (validatedCurrentState) query = query.eq('current_state', validatedCurrentState);
+        if (idChunk) query = query.in('id', idChunk);
 
-      const { data, error } = await query;
-      if (error) {
-        console.error('Supabase query error:', error);
-        throw error;
+        const { data, error } = await query;
+        if (error) {
+          console.error('Supabase query error:', error);
+          throw error;
+        }
+        machines.push(...(data || []));
+        if (!data || data.length < pageSize) break;
       }
-      machines.push(...(data || []));
-      if (!data || data.length < pageSize) break;
     }
 
     console.log(`Successfully fetched ${machines.length} machines`);
@@ -161,7 +175,7 @@ export async function GET(request: NextRequest) {
 // POST /api/machines - 새 설비 추가
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
     console.log('POST /api/machines called');
     
     const body = await request.json();
@@ -306,7 +320,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/machines - 설비 삭제 (여러 개 동시 삭제 가능)
 export async function DELETE(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    await requireUser(request, ['admin', 'engineer']);
     console.log('DELETE /api/machines called');
     
     const body = await request.json();

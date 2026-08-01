@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Typography, message } from 'antd';
+import { Typography } from 'antd';
 import { format, subDays } from 'date-fns';
 import { ReportDashboard } from '@/components/reports';
 import { useReportsTranslation } from '@/hooks/useTranslation';
@@ -9,6 +9,7 @@ import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecor
 import { fetchMachines } from '@/lib/machinesCache';
 import { MAX_REPORT_TEMPLATE_DAYS } from '@/utils/reportRange';
 import { Machine } from '@/types';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title } = Typography;
 
@@ -18,6 +19,7 @@ const DEFAULT_REPORT_WINDOW_DAYS = MAX_REPORT_TEMPLATE_DAYS;
 const REPORT_BROWSER_RECORD_LIMIT = 50000;
 export default function ReportsPage() {
   const { t } = useReportsTranslation();
+  const reportFailure = useFailureReport();
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
   // 보고서 기간 필터 (ReportDashboard의 RangePicker가 갱신) — 조회/필터링의 단일 기준
@@ -62,14 +64,14 @@ export default function ReportsPage() {
         setMachines(data);
       } catch (error) {
         console.error('Error fetching machines:', error);
-        message.error(t('errors.fetchMachinesFailed'));
+        reportFailure(t('errors.fetchMachinesFailed'), error);
       } finally {
         setLoading(false);
       }
     };
 
     loadMachines();
-  }, [t]);
+  }, [reportFailure, t]);
 
   return (
     <div>

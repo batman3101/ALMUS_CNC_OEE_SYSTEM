@@ -27,6 +27,7 @@ import {
 import { createSupabaseClient } from '@/lib/supabase';
 import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import type { ProductModel, ModelProcess } from '@/types/modelInfo';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -34,6 +35,7 @@ const { TextArea } = Input;
 type ModelInfoManagerProps = Record<string, never>;
 
 const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
+  const reportFailure = useFailureReport();
   const { t } = useModelInfoTranslation();
   const [models, setModels] = useState<ProductModel[]>([]);
   const [processes, setProcesses] = useState<ModelProcess[]>([]);
@@ -62,7 +64,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       setModels(data || []);
     } catch (error) {
       console.error('모델 조회 오류:', error);
-      message.error(t('messages.modelLoadFailed'));
+      reportFailure(t('messages.modelLoadFailed'), error);
     } finally {
       setLoading(false);
     }
@@ -89,7 +91,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       setProcesses(data || []);
     } catch (error) {
       console.error('공정 조회 오류:', error);
-      message.error(t('에러.공정목록조회실패'));
+      reportFailure(t('에러.공정목록조회실패'), error);
     }
   };
 
@@ -136,7 +138,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
         message.error(t('messages.modelNameExists'));
       } else {
-        message.error(t('messages.modelSaveFailed'));
+        reportFailure(t('messages.modelSaveFailed'), error);
       }
     }
   };
@@ -188,7 +190,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
         message.error(t('에러.중복공정명'));
       } else {
-        message.error(t('에러.공정저장실패'));
+        reportFailure(t('에러.공정저장실패'), error);
       }
     }
   };
@@ -206,7 +208,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       fetchModels();
     } catch (error) {
       console.error('모델 삭제 오류:', error);
-      message.error(t('에러.모델삭제실패'));
+      reportFailure(t('에러.모델삭제실패'), error);
     }
   };
 
@@ -223,7 +225,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       fetchProcesses();
     } catch (error) {
       console.error('공정 삭제 오류:', error);
-      message.error(t('에러.공정삭제실패'));
+      reportFailure(t('에러.공정삭제실패'), error);
     }
   };
 

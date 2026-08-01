@@ -12,16 +12,40 @@ import {
   UserOutlined,
   AppstoreOutlined,
   FileTextOutlined,
-  LineChartOutlined
+  LineChartOutlined,
+  LockOutlined
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useRouter, usePathname } from 'next/navigation';
+import {
+  canAccessPath,
+  findPageAccess,
+  getNavEntries,
+  type UserRole
+} from '@/lib/pageAccess';
 import styles from './Sidebar.module.css';
 
 const { Sider } = Layout;
 const { useBreakpoint } = Grid;
+
+/**
+ * 경로별 아이콘. 권한 표(`@/lib/pageAccess`)에 아이콘을 섞지 않는 이유는, 그 표를 React 를
+ * 모르는 곳(테스트·서버)에서도 읽기 때문이다. 표는 규칙만, 여기는 표현만 담당한다.
+ */
+const NAV_ICONS: Record<string, React.ReactNode> = {
+  '/dashboard': <DashboardOutlined />,
+  '/machines': <DesktopOutlined />,
+  '/data-input': <EditOutlined />,
+  '/production-records': <FileTextOutlined />,
+  '/model-info': <AppstoreOutlined />,
+  '/reports': <BarChartOutlined />,
+  '/analytics': <LineChartOutlined />,
+  '/operator-view': <DesktopOutlined />,
+  '/admin': <UserOutlined />,
+  '/settings': <SettingOutlined />,
+};
 
 interface SidebarProps {
   collapsed: boolean;
@@ -38,136 +62,55 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   
   const companyInfo = getCompanyInfo();
 
-  // 사용자 역할 (기본값: operator)
-  const userRole = user?.role || 'operator';
+  const userRole = user?.role as UserRole | undefined;
 
-  // 역할별 메뉴 아이템 정의
-  const getMenuItems = () => {
-    const menuItems = [
-      {
-        key: '/dashboard',
-        icon: <DashboardOutlined />,
-        label: t('nav.dashboard'),
-      },
-    ];
+  /**
+   * 메뉴 **목록 자체는 역할과 무관하게 동일**하다. 달라지는 것은 각 항목이 눌리는지뿐이다.
+   *
+   * 예전에는 역할마다 다른 배열을 만들었고, 그래서 사이드바가 사실상 두 번째 권한 규칙이
+   * 되어 페이지 가드와 어긋났다(운영자는 `/operator-view` 가 메뉴에 없었고, 엔지니어는
+   * 접근 가능한 `/analytics` 가 메뉴에 없었다). 이제 목록과 허용 여부 둘 다
+   * `@/lib/pageAccess` 한 곳에서 나온다.
+   */
+  const getMenuItems = () =>
+    getNavEntries().map((entry) => {
+      const allowed = canAccessPath(userRole, entry.path);
+      const label = t(entry.labelKey!);
 
-    // 역할별 메뉴 아이템 추가
-    switch (userRole) {
-      case 'operator':
-        menuItems.push(
-          {
-            key: '/machines',
-            icon: <DesktopOutlined />,
-            label: t('nav.myMachines'),
-          },
-          {
-            key: '/data-input',
-            icon: <EditOutlined />,
-            label: t('nav.dataInput'),
-          },
-          {
-            key: '/production-records',
-            icon: <FileTextOutlined />,
-            label: t('nav.productionRecords'),
-          }
-        );
-        break;
-        
-      case 'engineer':
-        menuItems.push(
-          {
-            key: '/machines',
-            icon: <DesktopOutlined />,
-            label: t('nav.machines'),
-          },
-          {
-            key: '/data-input',
-            icon: <EditOutlined />,
-            label: t('nav.dataInput'),
-          },
-          {
-            key: '/production-records',
-            icon: <FileTextOutlined />,
-            label: t('nav.productionRecords'),
-          },
-          {
-            key: '/model-info',
-            icon: <AppstoreOutlined />,
-            label: t('nav.modelInfo'),
-          },
-          {
-            key: '/reports',
-            icon: <BarChartOutlined />,
-            label: t('nav.reports'),
-          }
-        );
-        break;
-        
-      case 'admin':
-        menuItems.push(
-          {
-            key: '/machines',
-            icon: <DesktopOutlined />,
-            label: t('nav.machines'),
-          },
-          {
-            key: '/data-input',
-            icon: <EditOutlined />,
-            label: t('nav.dataInput'),
-          },
-          {
-            key: '/production-records',
-            icon: <FileTextOutlined />,
-            label: t('nav.productionRecords'),
-          },
-          {
-            key: '/model-info',
-            icon: <AppstoreOutlined />,
-            label: t('nav.modelInfo'),
-          },
-          {
-            key: '/reports',
-            icon: <BarChartOutlined />,
-            label: t('nav.reports'),
-          },
-          {
-            key: '/analytics',
-            icon: <LineChartOutlined />,
-            label: t('nav.analytics'),
-          },
-          // 관리자는 엔지니어 화면(/analytics)은 볼 수 있지만 운영자 화면은 볼 수 없었다.
-          // DashboardRouter 가 역할로만 분기해 도달할 URL 이 없었기 때문이다.
-          {
-            key: '/operator-view',
-            icon: <DesktopOutlined />,
-            label: t('nav.operatorView'),
-          },
-          {
-            key: '/admin',
-            icon: <UserOutlined />,
-            label: t('nav.management'),
-          }
-        );
-        break;
-        
-      default:
-        // 기본적으로 대시보드만 표시
-        break;
-    }
-
-    // 공통 설정 메뉴 (모든 역할에 표시)
-    menuItems.push({
-      key: '/settings',
-      icon: <SettingOutlined />,
-      label: t('nav.settings'),
+      return {
+        key: entry.path,
+        icon: NAV_ICONS[entry.path] ?? <DashboardOutlined />,
+        disabled: !allowed,
+        // 접힌 상태에서 antd 가 띄우는 툴팁이자 펼친 상태의 네이티브 title.
+        // 왜 잠겼는지 말해 주지 않으면 사용자는 고장으로 읽는다.
+        title: allowed ? label : `${label} — ${lockHint(entry.roles)}`,
+        label: allowed ? (
+          label
+        ) : (
+          <span className={styles.lockedLabel}>
+            {label}
+            <LockOutlined className={styles.lockIcon} />
+          </span>
+        ),
+      };
     });
 
-    return menuItems;
+  /** "시스템 관리자 전용" 처럼 필요한 등급을 사람 말로 적는다. */
+  const lockHint = (roles: readonly UserRole[]): string => {
+    const names = roles.map((role) => t(`auth:roles.${role}`));
+    return t('nav.restrictedTo', { roles: names.join(' · ') });
   };
 
   const handleMenuClick = ({ key }: { key: string }) => {
+    // disabled 항목은 antd 가 onClick 을 부르지 않지만, 규칙을 화면 상태에 맡기지 않는다.
+    if (!canAccessPath(userRole, key)) return;
     router.push(key);
   };
+
+  // 선택 표시는 **현재 경로가 속한 메뉴 항목**을 따른다. `/machines/bulk-upload` 에서는
+  // '설비 현황'이 선택된 것으로 보여야 한다 (예전에는 /dashboard 만 특별 취급했다).
+  const activeEntry = findPageAccess(pathname);
+  const selectedKey = activeEntry?.labelKey ? activeEntry.path : pathname;
 
   return (
     <Sider 
@@ -201,7 +144,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
       <Menu
         theme="dark"
         mode="inline"
-        selectedKeys={[pathname.startsWith('/dashboard') ? '/dashboard' : pathname]}
+        selectedKeys={[selectedKey]}
         items={getMenuItems()}
         onClick={handleMenuClick}
         className={`${styles.menu} ${!screens.lg ? styles.menuMobile : ''}`}

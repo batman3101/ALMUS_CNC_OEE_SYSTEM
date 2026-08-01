@@ -22,6 +22,7 @@ import type { Color } from 'antd/es/color-picker';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
@@ -33,7 +34,9 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
   const { token } = theme.useToken();
   const { t } = useLanguage();
   const { settings, updateSetting } = useDisplaySettings();
-  const { success: showSuccess, error: showError, contextHolder } = useMessage();
+  // 실패 보고는 전부 reportFailure 로 나갔다 — 여기 남은 건 성공 안내뿐이다.
+  const { success: showSuccess, contextHolder } = useMessage();
+  const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -95,7 +98,7 @@ const DisplaySettingsTab: React.FC<DisplaySettingsTabProps> = ({ onSettingsChang
       onSettingsChange?.();
     } catch (error) {
       console.error('Error saving display settings:', error);
-      showError(t('settings.saveError'));
+      reportFailure(t('settings.saveError'), error);
     } finally {
       setLoading(false);
     }

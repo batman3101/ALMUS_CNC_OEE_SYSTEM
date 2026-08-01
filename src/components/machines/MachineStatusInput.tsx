@@ -28,6 +28,7 @@ import { ko, vi } from 'date-fns/locale';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { useMachineStatusTranslations } from '@/hooks/useMachineStatusTranslations';
 import { supabase } from '@/lib/supabase';
+import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -65,6 +66,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
   onStatusChange,
   language = 'ko'
 }) => {
+  const reportFailure = useFailureReport();
   const { t, i18n } = useMachinesTranslation();
   const currentLanguage = (i18n?.language as 'ko' | 'vi') || language;
   const { 
@@ -215,7 +217,7 @@ const MachineStatusInput: React.FC<MachineStatusInputProps> = ({
           message.success(t('statusChange.successMessage'));
           onClose();
         } catch {
-          message.error(t('statusChange.errorMessage'));
+          reportFailure(t('statusChange.errorMessage'));
         } finally {
           setLoading(false);
         }
