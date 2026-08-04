@@ -35,6 +35,9 @@ jest.mock('@/lib/apiAuth', () => ({
 const mockQuery = {
   select: jest.fn(),
   eq: jest.fn(),
+  // 생산실적 수정은 읽은 스냅샷과 대조하는 조건부 UPDATE 를 쓴다. NULL 컬럼은 `.eq` 로
+  // 비교할 수 없어 `.is` 로 걸므로, 모킹도 그 체인을 알아야 한다.
+  is: jest.fn(),
   in: jest.fn(),
   single: jest.fn(),
   maybeSingle: jest.fn(),
@@ -372,8 +375,9 @@ describe('service-role mutation route guards', () => {
           downtime_minutes: null, availability: null, performance: null, quality: 1, oee: null,
         },
         error: null,
-      })
-      .mockResolvedValueOnce({ data: { record_id: 'record-1' }, error: null });
+      });
+    // 조건부 UPDATE 는 `.maybeSingle()` 로 끝난다 — 갱신된 행이 없으면(동시 수정) null 이다.
+    mockQuery.maybeSingle.mockResolvedValueOnce({ data: { record_id: 'record-1' }, error: null });
 
     const response = await productionItem.PUT(
       request({ output_qty: 20, defect_qty: 1 }) as never,
@@ -408,8 +412,8 @@ describe('service-role mutation route guards', () => {
           downtime_minutes: null, availability: null, performance: null, quality: null, oee: null,
         },
         error: null,
-      })
-      .mockResolvedValueOnce({ data: { record_id: 'record-2' }, error: null });
+      });
+    mockQuery.maybeSingle.mockResolvedValueOnce({ data: { record_id: 'record-2' }, error: null });
 
     const response = await productionItem.PATCH(
       request({ output_qty: 5, defect_qty: 0 }) as never,
@@ -441,9 +445,11 @@ describe('service-role mutation route guards', () => {
           downtime_minutes: null, availability: null, performance: null, quality: null, oee: null,
         },
         error: null,
-      })
+      });
+    // 순서대로 ① 설비 tact 조회(미확인 → null) ② 조건부 UPDATE 결과
+    mockQuery.maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({ data: { record_id: 'record-3' }, error: null });
-    mockQuery.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
 
     const response = await productionItem.PATCH(
       request({ output_qty: 5, defect_qty: 0, actual_runtime: 100 }) as never,
