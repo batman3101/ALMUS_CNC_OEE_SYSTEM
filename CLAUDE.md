@@ -226,7 +226,7 @@ Routes are organized by feature and follow RESTful conventions:
   - `daily/` - Daily production summaries
 - **oee-data/**: OEE metrics queries
   - Returns raw `production_records` rows, so it is **paginated**: `limit` (default 1000, max 5000) + `offset`, with a `pagination` block (`total`, `returned`, `has_more`) in the response.
-  - `statistics` is computed in SQL over the **entire** filtered set (`analytics_oee_records_summary` RPC), not over the returned page. Never average the returned rows — a yearly query matches ~325k rows and you will only ever hold a page of them.
+  - `statistics` is computed in SQL over the **entire** filtered set (`analytics_oee_records_summary` RPC), not over the returned page. Never average the returned rows — a yearly query matches far more rows than one page holds, and you will only ever hold a page of them.
   - `aggregated/` - Aggregated OEE data (rolled up server-side; use this when you want trends, not rows)
 - **system-settings/**: Settings CRUD by category
   - `[category]/` - Category-specific settings
@@ -242,10 +242,27 @@ API Route Patterns:
 - **RLS Bypass**: Service Role Key bypasses RLS for admin operations in API routes
 
 #### ⚠️ PostgREST silently truncates large queries
-PostgREST enforces a `max-rows` cap (**100,000** on this project). A `select()` without `.limit()` that matches more rows returns exactly 100,000 of them **with a 200 status and no warning** — the response looks complete. `production_records` holds ~325k rows, so any unbounded query over it is silently wrong.
+PostgREST enforces a `max-rows` cap (**100,000** on this project). A `select()` without `.limit()` that matches more rows returns exactly 100,000 of them **with a 200 status and no warning** — the response looks complete.
+
+**Current headroom (measured 2026-08-04):** `production_records` holds **32,736 rows** and grows
+**~1,423 rows/day** (800 machines × 2 shifts, 2026-07-11 onward). That is roughly **47 days** of
+headroom before an unbounded query over the whole table starts truncating silently.
+
+Do not read that as "we have time". Read it as: the cap is a date, not a hypothetical, and the
+failure when it arrives is invisible. Also, *filtered* queries hit it far earlier than the table
+total suggests — any query whose predicate matches more than 100,000 rows truncates, and a
+multi-year range over this table will.
+
+> Earlier revisions of this file claimed ~325k rows. That was wrong by 10× and it caused a real
+> misjudgement: the 2026-08-04 audit rated a pagination defect HIGH on the premise that deep pages
+> already return empty, which they do not at the current row count. **Re-measure before citing a
+> row count as a reason.**
 
 Two rules follow:
-1. **Never aggregate in Node over an unbounded query.** To average 325k rows you must first transfer them, which re-triggers the cap — so the average is computed on a slice and reported as if it covered everything. Aggregate in SQL instead (see the `analytics_*` RPCs in `supabase/migrations/`), which returns the statistic without transferring the rows.
+1. **Never aggregate in Node over an unbounded query.** To average the table you must first
+   transfer it, which re-triggers the cap — so the average is computed on a slice and reported as
+   if it covered everything. Aggregate in SQL instead (see the `analytics_*` RPCs in
+   `supabase/migrations/`), which returns the statistic without transferring the rows.
 2. **If you return raw rows, paginate explicitly** and expose `total` / `has_more` so callers can *see* the boundary. An invisible cap is a correctness bug; a visible one is just a page.
 
 ### Error Handling & Logging
