@@ -214,35 +214,36 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
   }, [loadSettings]);
 
   /**
-   * 실시간 설정 변경 구독
+   * 실시간 설정 변경 구독.
+   *
+   * ## broadcast 는 **신호로만** 쓴다 — 값은 싣고 오더라도 믿지 않는다
+   *
+   * 예전에는 payload 의 `category`/`key`/`value` 를 그대로 전역 설정에 넣었다. 이 채널은
+   * private 설정 없이 열려 있어서, 프로젝트가 public channel 을 허용하는 구성이라면 아무나
+   * 같은 토픽으로 `setting_changed` 를 쏘아 교대 시작 시각·휴식 시간·OEE 임계값을 **화면에서만**
+   * 바꿀 수 있었다. DB 는 안전하다(`system_settings` 는 authenticated 에게 SELECT 만, 쓰기는
+   * `is_admin()` 정책). 훼손되는 것은 **화면이 믿는 값**이고, 그건 계획가동·성능 계산의
+   * 전제라 화면마다 다른 숫자를 보게 된다.
+   *
+   * 그래서 payload 를 읽지 않고 "무언가 바뀌었다"는 사실만 받아 **DB 에서 다시 읽는다.**
+   * 위조된 신호가 할 수 있는 최대치가 "불필요한 재조회 한 번"으로 줄어든다 — 그건 손해가
+   * 아니다. 채널을 private 으로 만드는 방법도 있지만, 값을 믿지 않는 쪽이 프로젝트의
+   * Realtime 설정에 의존하지 않아 더 확실하다.
+   *
+   * 재조회는 `loadSettings` 가 하며, 그 안에서 인증·권한을 다시 거친다.
    */
   useEffect(() => {
     const channel = supabase
       .channel('system_settings_changes')
-      .on('broadcast', { event: 'setting_changed' }, (payload) => {
-        const { category, key, value } = payload.payload as {
-          category: SettingCategory;
-          key: string;
-          value: unknown;
-        };
-
-        // 브로드캐스트도 DB 의 canonical key 를 실어 나르므로 코드 키로 매핑해서 반영한다.
-        setSettings(prev => {
-          const categorySettings: Record<string, unknown> = { ...prev[category] };
-          categorySettings[mapDbKeyToCodeKey(category, key)] = value;
-          return {
-            ...prev,
-            [category]: categorySettings
-          } as Partial<AllSystemSettings>;
-        });
-        setLastUpdated(new Date());
+      .on('broadcast', { event: 'setting_changed' }, () => {
+        void loadSettings();
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadSettings]);
 
   /**
    * 초기 설정 로드 — **로그인이 끝난 뒤에만** 조회한다.
