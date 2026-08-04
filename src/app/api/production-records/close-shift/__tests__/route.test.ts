@@ -53,13 +53,13 @@ const wireDb = (
         ? { data: null, error: { message: 'digest failed' } }
         : { data: digest, error: null };
     }
-    if (name === 'close_shift_upsert_v2') return { data: upsert, error: null };
+    if (name === 'close_shift_upsert_v3') return { data: upsert, error: null };
     throw new Error(`unexpected rpc ${name}`);
   });
 };
 
 const upsertPayload = () => {
-  const call = mockRpc.mock.calls.find(c => c[0] === 'close_shift_upsert_v2');
+  const call = mockRpc.mock.calls.find(c => c[0] === 'close_shift_upsert_v3');
   expect(call).toBeDefined();
   return call![1] as Record<string, unknown>;
 };
@@ -237,7 +237,67 @@ describe('POST /api/production-records/close-shift', () => {
       const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A' }));
 
       expect(res.status).toBe(500);
-      expect(mockRpc.mock.calls.some(c => c[0] === 'close_shift_upsert_v2')).toBe(false);
+      expect(mockRpc.mock.calls.some(c => c[0] === 'close_shift_upsert_v3')).toBe(false);
+    });
+  });
+
+  /**
+   * 진척보다 낮은 마감.
+   *
+   * 진척 보고는 누적이라 줄어들 수 없다(감소는 409). 그런데 마감은 같은 규칙을 따르지 않아
+   * `final_qty` 로 진척보다 작은 값을 보내면 그대로 확정됐고, 진척 이력과 확정 실적이 어긋난
+   * 채 남았다 — 확정 레코드가 생기므로 마감 대기 목록에서도 사라져 아무도 다시 보지 못했다.
+   *
+   * 현장에서 실제로 일어날 수 있는 일이라(진척 오입력을 종이 카운트로 정정) **막지 않고**
+   * 사유를 받아 감사 기록에 남기기로 했다(사용자 확정 2026-08-04).
+   *
+   * 판정은 RPC 가 잠금 아래에서 한다. 라우트는 사유를 **그대로 넘기기만** 해야 한다 —
+   * 여기서 진척을 읽어 미리 비교하면 그 읽기와 저장 사이에 새 진척이 들어와, 사유가
+   * 필요한 마감이 사유 없이 통과할 수 있다.
+   */
+  describe('진척보다 낮은 마감', () => {
+    it('사유를 그대로 RPC 에 넘긴다', async () => {
+      wireDb();
+
+      await POST(req({
+        machine_id: MACHINE, date: '2026-07-17', shift: 'A',
+        final_qty: 10, below_progress_reason: '진척 오입력, 종이 카운트로 정정',
+      }));
+
+      expect(upsertPayload()).toEqual(expect.objectContaining({
+        p_output_qty: 10,
+        p_below_progress_reason: '진척 오입력, 종이 카운트로 정정',
+      }));
+    });
+
+    it('사유가 없으면 null 로 넘겨 RPC 가 판정하게 한다', async () => {
+      wireDb();
+
+      await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10 }));
+
+      expect(upsertPayload()).toEqual(expect.objectContaining({ p_below_progress_reason: null }));
+    });
+
+    it('감사 기록의 주체로 요청자를 넘긴다', async () => {
+      wireDb();
+
+      await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10 }));
+
+      // 서비스 롤로 부르므로 RPC 안에서 auth.uid() 를 쓸 수 없다 — 라우트가 실어 줘야 한다.
+      expect(upsertPayload()).toEqual(expect.objectContaining({ p_actor_id: 'op-1' }));
+    });
+
+    it('사유가 필요하다는 RPC 응답을 409 + 마지막 진척값으로 전한다', async () => {
+      wireDb({ upsert: { ok: false, reason: 'below_progress_needs_reason', last_progress_qty: 112 } });
+
+      const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10 }));
+
+      // 500 이면 화면이 "저장 실패"만 띄우고 사유를 물을 수 없다.
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual(expect.objectContaining({
+        error: 'below_progress_needs_reason',
+        last_progress_qty: 112,
+      }));
     });
   });
 });
