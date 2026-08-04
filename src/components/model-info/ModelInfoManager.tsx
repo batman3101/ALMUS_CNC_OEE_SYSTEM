@@ -25,9 +25,40 @@ import {
   SettingOutlined
 } from '@ant-design/icons';
 import { createSupabaseClient } from '@/lib/supabase';
+import { authFetch } from '@/lib/authFetch';
 import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import type { ProductModel, ModelProcess } from '@/types/modelInfo';
 import { useFailureReport } from '@/hooks/useFailureReport';
+
+/**
+ * 마스터 쓰기는 서버 API 만 거친다.
+ *
+ * 브라우저에서 `supabase.from('product_models').update(...)` 로 직접 쓰던 시절에는 규칙이
+ * 두 벌이었다 — API 는 admin/engineer 를 요구하고 계정 활성 여부도 봤지만, 실제로 쓰이던
+ * 경로(PostgREST + RLS)는 역할만 보고 `is_active` 를 보지 않았다. 규칙이 둘이면 **약한 쪽이
+ * 진짜 규칙**이 된다. 읽기는 그대로 RLS 아래에서 하고, 쓰기만 서버로 모은다.
+ */
+class MasterWriteError extends Error {
+  constructor(readonly kind: 'duplicate' | 'failed') {
+    super(kind);
+    this.name = 'MasterWriteError';
+  }
+}
+
+async function writeMaster(url: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) {
+  const response = await authFetch(url, {
+    method,
+    ...(body === undefined
+      ? {}
+      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  });
+
+  if (response.ok) return;
+
+  // 이름 중복은 사용자가 고칠 수 있는 입력 오류라 별도로 구분한다.
+  if (response.status === 409) throw new MasterWriteError('duplicate');
+  throw new MasterWriteError('failed');
+}
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -104,28 +135,16 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   // 모델 저장
   const handleSaveModel = async (values: { model_name: string; description?: string }) => {
     try {
-      if (editingModel) {
-        // 수정
-        const { error } = await supabase
-          .from('product_models')
-          .update({
-            model_name: values.model_name,
-            description: values.description
-          })
-          .eq('id', editingModel.id);
+      const payload = {
+        model_name: values.model_name,
+        description: values.description
+      };
 
-        if (error) throw error;
+      if (editingModel) {
+        await writeMaster(`/api/product-models/${editingModel.id}`, 'PUT', payload);
         message.success(t('messages.modelUpdated'));
       } else {
-        // 추가
-        const { error } = await supabase
-          .from('product_models')
-          .insert({
-            model_name: values.model_name,
-            description: values.description
-          });
-
-        if (error) throw error;
+        await writeMaster('/api/product-models', 'POST', payload);
         message.success(t('messages.modelAdded'));
       }
 
@@ -135,7 +154,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       fetchModels();
     } catch (error: unknown) {
       console.error('모델 저장 오류:', error);
-      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+      if (error instanceof MasterWriteError && error.kind === 'duplicate') {
         message.error(t('messages.modelNameExists'));
       } else {
         reportFailure(t('messages.modelSaveFailed'), error);
@@ -147,37 +166,26 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   const handleSaveProcess = async (values: { process_name: string; tact_time_seconds: number; process_order?: number; cavity_count?: number }) => {
     try {
       if (editingProcess) {
-        // 수정
-        const { error } = await supabase
-          .from('model_processes')
-          .update({
-            process_name: values.process_name,
-            tact_time_seconds: values.tact_time_seconds,
-            process_order: values.process_order,
-            cavity_count: values.cavity_count || 1
-          })
-          .eq('id', editingProcess.id);
-
-        if (error) throw error;
+        await writeMaster(`/api/model-processes/${editingProcess.id}`, 'PUT', {
+          process_name: values.process_name,
+          tact_time_seconds: values.tact_time_seconds,
+          process_order: values.process_order,
+          cavity_count: values.cavity_count || 1
+        });
         message.success(t('메시지.공정수정완료'));
       } else {
-        // 추가
         if (!selectedModel) {
           message.error(t('에러.모델선택필요'));
           return;
         }
 
-        const { error } = await supabase
-          .from('model_processes')
-          .insert({
-            model_id: selectedModel.id,
-            process_name: values.process_name,
-            tact_time_seconds: values.tact_time_seconds,
-            process_order: values.process_order || 1,
-            cavity_count: values.cavity_count || 1
-          });
-
-        if (error) throw error;
+        await writeMaster('/api/model-processes', 'POST', {
+          model_id: selectedModel.id,
+          process_name: values.process_name,
+          tact_time_seconds: values.tact_time_seconds,
+          process_order: values.process_order || 1,
+          cavity_count: values.cavity_count || 1
+        });
         message.success(t('메시지.공정생성완료'));
       }
 
@@ -187,7 +195,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       fetchProcesses();
     } catch (error: unknown) {
       console.error('공정 저장 오류:', error);
-      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+      if (error instanceof MasterWriteError && error.kind === 'duplicate') {
         message.error(t('에러.중복공정명'));
       } else {
         reportFailure(t('에러.공정저장실패'), error);
@@ -195,15 +203,10 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     }
   };
 
-  // 모델 삭제
+  // 모델 삭제 (서버에서 비활성화 — 과거 기록이 이 모델을 가리키므로 행은 남긴다)
   const handleDeleteModel = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('product_models')
-        .update({ is_active: false })
-        .eq('id', id);
-
-      if (error) throw error;
+      await writeMaster(`/api/product-models/${id}`, 'DELETE');
       message.success(t('모델삭제완료'));
       fetchModels();
     } catch (error) {
@@ -215,12 +218,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   // 공정 삭제
   const handleDeleteProcess = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('model_processes')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await writeMaster(`/api/model-processes/${id}`, 'DELETE');
       message.success(t('공정삭제완료'));
       fetchProcesses();
     } catch (error) {

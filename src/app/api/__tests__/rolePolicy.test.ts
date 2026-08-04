@@ -52,12 +52,14 @@ const POLICY: Record<string, Record<string, string>> = {
   'machines/[machineId]/oee': { GET: AEO },
   'machines/[machineId]/production': { GET: AEO },
   'model-processes': { GET: AEO, POST: AE },
-  'model-processes/[id]': { GET: AEO },
+  // 쓰기는 admin+engineer. 2026-08-04 감사 이후 마스터 편집이 브라우저 직접 쓰기에서
+  // 이 API 로 옮겨 왔다 — 예전에는 RLS 만이 유일한 관문이었고 계정 활성 여부를 보지 않았다.
+  'model-processes/[id]': { GET: AEO, PUT: AE, DELETE: AE },
   'oee-data': { GET: AEO },
   'oee-data/aggregated': { GET: AE },
   'oee-data/by-machine': { GET: AE },
   'product-models': { GET: AEO, POST: AE },
-  'product-models/[id]': { GET: AEO },
+  'product-models/[id]': { GET: AEO, PUT: AE, DELETE: AE },
   'production-progress': { POST: AEO, GET: AEO },
   'production-records': { GET: AEO, POST: AEO },
   // DELETE 는 2026-07-31 부터 관리자도 한다 ('설정 제외 모든 페이지 CRUD'의 D).
