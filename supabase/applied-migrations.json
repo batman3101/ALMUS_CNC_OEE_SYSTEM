@@ -1,6 +1,6 @@
 {
   "note": "운영(wmtkkefsorrdlzprhlpr) 적용 원장 — MCP list_migrations 스냅샷. 파일명 타임스탬프와 적용 version 이 다르므로(런북 0절, db push 금지) 이름 기준으로 대조한다. 갱신: 마이그레이션을 적용한 세션이 applied 배열과 hashes(적용 시점 파일 sha256-16) 를 함께 갱신한다. 검사: npm run check:migrations (미적용 = 실패, 적용 후 파일 내용 드리프트 = 경고).",
-  "snapshot_at": "2026-07-28",
+  "snapshot_at": "2026-08-04T08:58:20.000Z",
   "hashes": {
     "20251116070000_create_system_settings_audit_table": "02a1488bae1ef176",
     "20251116070100_create_recent_settings_changes_view": "d6add6dc43c42a32",
@@ -51,7 +51,9 @@
     "20260729200000_enforce_write_boundary": "68543d095c7ad400",
     "20260729210000_close_shift_source_completeness": "b13cb9bc6b92a9dc",
     "20260729220000_settings_batch_update": "2cd2dd9f31d7105c",
-    "20260729230000_revoke_public_execute_sweep": "c4b90bc6168e3358"
+    "20260729230000_revoke_public_execute_sweep": "c4b90bc6168e3358",
+    "20260804100000_delete_production_record_lock": "002cc83fa93ec879",
+    "20260804110000_master_write_boundary": "42bd1e66872699a2"
   },
   "applied": [
     {
@@ -377,6 +379,14 @@
     {
       "version": "20260729125500",
       "name": "revoke_public_execute_sweep"
+    },
+    {
+      "version": "20260804085839",
+      "name": "delete_production_record_lock"
+    },
+    {
+      "version": "20260804085911",
+      "name": "master_write_boundary"
     }
   ],
   "file_matches": {
