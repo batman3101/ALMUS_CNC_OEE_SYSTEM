@@ -1,0 +1,63 @@
+-- 대체된 설계의 잔해인 `oee_calculations` 를 제거한다. (사용자 확정 2026-08-04)
+--
+-- ## 이 표는 무엇이었나
+--
+-- 설비 × 날짜 하나당 한 행을 담는 **일별 OEE 미리계산(rollup) 테이블**이었다. 야간 배치가
+-- 하루치 OEE 를 계산해 넣어 두면 대시보드가 `production_records` 를 훑지 않고 이 표만 읽는
+-- 설계다. 두 인덱스(`calculation_date`, `machine_id`)도 정확히 그 조회 패턴용이다.
+--
+-- 마이그레이션 원장보다 먼저 만들어졌다 — 가장 오래된 마이그레이션(20250820034518)이 이미
+-- 존재하는 이 표에 FK 만 추가하는 내용이므로, 최초 스키마에 있었다.
+--
+-- ## 왜 비어 있나
+--
+-- 그 배치가 끝내 동작한 적이 없다. `docs/OEE_AGGREGATION_SYSTEM.md` 가 설명하는 cron
+-- 마이그레이션(20241211000000_setup_daily_oee_cron.sql)은 **저장소에 존재하지 않고**,
+-- `pg_cron` 도 설치돼 있지 않다. 살아남은 Edge Function 은 rollup 을 쓰지 않고
+-- `output_qty = 0` 인 행의 파생 지표만 0 으로 맞출 뿐이며 호출자도 없다.
+--
+-- ## 무엇이 대신하고 있나
+--
+--   1. `analytics_*` RPC (2026-07-13) — 집계를 SQL 안에서 그때그때 계산한다.
+--      CLAUDE.md 가 규칙으로 정한 방식이다.
+--   2. `production_records` 자체가 교대별 OEE 를 스냅샷으로 들고 있다.
+--
+-- 미리계산 층이 필요 없어졌다. 설계가 교체됐고 표만 남은 것이다.
+--
+-- ## 왜 남겨 두지 않는가
+--
+-- 비어 있는 표가 조용한 것이 아니었다. `authenticated` 에게 `ALL` 정책이 열려 있어
+-- **운영자를 포함한 모든 로그인 사용자가 자유롭게 쓸 수 있었다**(20260804110000 에서 닫음).
+-- 아무도 읽지 않으니 누가 무엇을 넣어도 티가 나지 않고, 다음 감사자는 `oee`·`availability`
+-- 컬럼을 보고 "이게 진짜 지표 테이블인가" 하고 시간을 쓴다. 죽은 스키마는 다음 사람의
+-- 판단을 흐린다.
+--
+-- ## 제거 전 확인 (2026-08-04 실측)
+--
+--   행 수                         0
+--   앱 코드 참조                  0  (자동 생성 타입 정의 2곳은 스키마 거울일 뿐)
+--   이 표에 의존하는 뷰            0
+--   본문에 이 표를 쓰는 함수       0
+--   트리거                        없음
+--
+-- ## 되돌리려면
+--
+-- 되돌릴 데이터는 없다(0행). 구조가 다시 필요해지면 아래가 제거 시점의 정의다:
+--
+--   create table public.oee_calculations (
+--     id               uuid primary key default gen_random_uuid(),
+--     machine_id       uuid not null references public.machines(id)
+--                        on update cascade on delete cascade,
+--     calculation_date date,
+--     availability     numeric,
+--     performance      numeric,
+--     quality          numeric,
+--     oee              numeric,
+--     created_at       timestamptz default now()
+--   );
+--   create index idx_oee_calculations_date       on public.oee_calculations(calculation_date);
+--   create index idx_oee_calculations_machine_id on public.oee_calculations(machine_id);
+--
+-- 다만 다시 만들기 전에 `analytics_*` RPC 로 충분한지 먼저 볼 것 — 그게 이 표를 대체한 이유다.
+
+drop table if exists public.oee_calculations;

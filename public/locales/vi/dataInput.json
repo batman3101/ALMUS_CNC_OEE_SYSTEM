@@ -11,7 +11,7 @@
   "machineInfo": {
     "equipmentModel": "Mô hình thiết bị",
     "machineProcess": "Công đoạn máy",
-    "tactTime": "Thời gian Tact", 
+    "tactTime": "Thời gian Tact",
     "equipmentSelection": "Lựa chọn thiết bị",
     "formalOperation": "Vận hành chính thức",
     "productionModel": "Mô hình sản xuất",
@@ -25,7 +25,7 @@
   "schedule": {
     "dayShiftBaseTime": "Thời gian cơ bản ca ngày",
     "nightShiftBaseTime": "Thời gian cơ bản ca đêm",
-    "dailyTotalCapa": "Tổng CAPA hàng ngày", 
+    "dailyTotalCapa": "Tổng CAPA hàng ngày",
     "minutes": "phút",
     "pieces": "cái",
     "rateProduct": "sản phẩm đạt chuẩn"
@@ -33,9 +33,9 @@
   "dataEntry": {
     "shiftDataInput": "Nhập dữ liệu sản xuất theo ca",
     "production": "Sản xuất",
-    "actualProduction": "Sản phẩm thực tế", 
+    "actualProduction": "Sản phẩm thực tế",
     "defects": "Số lượng lỗi",
-    "downtimeHours": "Thời gian ngừng hoạt động", 
+    "downtimeHours": "Thời gian ngừng hoạt động",
     "dayShift": "Ca ngày",
     "nightShift": "Ca đêm",
     "startTime": "Thời gian bắt đầu",
@@ -43,7 +43,7 @@
     "downtime": "Thời gian dừng",
     "work": "Công việc",
     "operation": "Vận hành",
-    "reason": "Lý do", 
+    "reason": "Lý do",
     "totalDowntime": "Tổng thời gian ngừng hoạt động",
     "saveProductionData": "Lưu dữ liệu sản xuất",
     "operator": "Người vận hành",
@@ -69,9 +69,9 @@
     "workingZeroConfirmed": "Xác nhận làm việc, sản lượng 0"
   },
   "downtime": {
-    "addDowntime": "Thêm thời gian ngừng hoạt động", 
+    "addDowntime": "Thêm thời gian ngừng hoạt động",
     "downtimeTitle": "Thời gian ngừng hoạt động",
-    "selectStartTime": "Chọn thời gian bắt đầu", 
+    "selectStartTime": "Chọn thời gian bắt đầu",
     "selectEndTime": "Chọn thời gian kết thúc",
     "selectReason": "Chọn lý do",
     "detailDescription": "Mô tả chi tiết",
@@ -183,7 +183,8 @@
     "loadFailedTitle": "Không thể tải bản ghi sản xuất hiện có",
     "loadFailedDescription": "Việc coi lỗi tải là không có dữ liệu có thể xóa dữ liệu ca hiện có, vì vậy thao tác lưu đã bị chặn. Hãy chọn lại máy hoặc ngày để tải lại.",
     "loadFailedBlockSave": "Không thể lưu vì tải bản ghi sản xuất hiện có thất bại. Vui lòng tải lại.",
-    "oeeUnreported": "Chưa báo cáo"
+    "oeeUnreported": "Chưa báo cáo",
+    "deleteNotAllowed": "Chỉ quản trị viên mới có thể xóa bản ghi sản xuất."
   },
   "common": {
     "off": "Nghỉ",

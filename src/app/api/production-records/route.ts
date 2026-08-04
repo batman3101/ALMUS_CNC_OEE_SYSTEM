@@ -102,6 +102,27 @@ export async function GET(request: NextRequest) {
         ? chunkIdsForInFilter(authenticatedUser.assignedMachineIds)
         : [null];
 
+    /**
+     * 청크가 하나면 병합할 것이 없으므로 **요청한 페이지만** 받는다.
+     *
+     * 예전에는 청크 수와 무관하게 언제나 `range(0, page*limit-1)` 이었다. 바로 위 주석은
+     * "스코프가 하나면 그 페이지만 받는다"고 적혀 있었는데 **코드가 그렇게 하지 않았다** —
+     * 주석이 의도를 정확히 적어 두고도 구현이 따라가지 않은 채, 그 주석이 문제를 가리고
+     * 있었다(감사 정정 #1).
+     *
+     * 결과는 두 가지였다. 328페이지를 열면 32,736행을 전송해 100행만 남기고 버렸고,
+     * `page*limit` 이 PostgREST 의 `max-rows`(100,000)를 넘으면 실제 데이터가 남아 있어도
+     * 뒷 페이지가 **조용히 빈 배열**이 됐다. 현재 행 수에서는 후자가 발현하지 않지만,
+     * 하루 약 1,423행씩 늘고 있어 시간 문제다.
+     *
+     * 청크가 여럿일 때(운영자 담당 설비 800대 분할 조회)는 누적 조회가 **정확성의 조건**이다.
+     * 어느 청크가 N페이지에 얼마나 기여하는지는 앞에서부터 읽어야만 알 수 있기 때문이다.
+     * 그 경우에만 대가를 치른다.
+     */
+    const singleScope = scopeChunks.length === 1;
+    const pageStart = (page - 1) * limit;
+    const pageEnd = page * limit - 1;
+
     const buildQuery = (scope: string[] | null) => {
       let q = supabaseAdmin
         .from('production_records')
@@ -121,9 +142,8 @@ export async function GET(request: NextRequest) {
       if (startDate) q = q.gte('date', startDate);
       if (endDate) q = q.lte('date', endDate);
       if (shift) q = q.eq('shift', shift);
-      // 청크마다 **앞에서부터** 이 페이지에 닿을 수 있는 만큼만 받는다. 스코프가 하나면
-      // (관리자·엔지니어·설비 지정) 청크가 1개라 예전과 똑같이 그 페이지만 받는다.
-      return q.range(0, page * limit - 1);
+      // 청크가 하나면 DB 가 페이지를 잘라 준다. 여럿이면 병합을 위해 앞에서부터 받는다.
+      return singleScope ? q.range(pageStart, pageEnd) : q.range(0, pageEnd);
     };
 
     if (!machineId && authenticatedUser.role === 'operator' && scopeChunks.length === 0) {
@@ -161,7 +181,9 @@ export async function GET(request: NextRequest) {
           : String(b.date).localeCompare(String(a.date))
       );
     }
-    const records = merged.slice((page - 1) * limit, page * limit);
+    // 청크가 하나면 DB 가 이미 이 페이지만 돌려줬다 — 여기서 또 자르면 2페이지부터
+    // 빈 배열이 된다(자르기가 두 번 적용됨). 여럿일 때만 병합 결과에서 잘라낸다.
+    const records = singleScope ? merged : merged.slice(pageStart, page * limit);
 
     // ✅ 실제 Supabase 데이터 그대로 반환 (OEE 필드 포함)
     const formattedRecords = (records || []).map(record => ({

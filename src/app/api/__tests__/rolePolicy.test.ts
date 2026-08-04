@@ -23,7 +23,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { USER_MANAGEMENT_ROLES } from '@/lib/pageAccess';
+import { PRODUCTION_RECORD_DELETE_ROLES, USER_MANAGEMENT_ROLES } from '@/lib/pageAccess';
 
 const A = 'admin';
 const AE = 'admin+engineer';
@@ -111,6 +111,38 @@ const GUARD_HELPERS: Record<string, string> = {
   requireUserManager: [...USER_MANAGEMENT_ROLES].sort().join('+'),
 };
 
+/**
+ * `requireUser(request, [...CONST])` 처럼 역할 목록을 상수에서 펼쳐 쓰는 라우트가 있다.
+ * 소스 텍스트만 보면 `...PRODUCTION_RECORD_DELETE_ROLES` 라는 글자만 남아 원장과 비교할 수
+ * 없다. 여기서 **실제 상수 값으로** 해석한다 — `GUARD_HELPERS` 와 같은 원리이고, 상수가
+ * 바뀌면 이 테스트가 자동으로 새 값을 본다.
+ *
+ * 라우트가 역할을 다시 적지 않고 상수를 읽는 것은 권장되는 방향이므로(UI 와 API 가 같은
+ * 규칙을 읽는다), 원장이 그걸 이해하지 못해서 상수 사용을 막는 일이 없어야 한다.
+ */
+const ROLE_CONSTANTS: Record<string, readonly string[]> = {
+  PRODUCTION_RECORD_DELETE_ROLES,
+  USER_MANAGEMENT_ROLES,
+};
+
+/** `'admin'` 같은 리터럴과 `...CONST` 스프레드를 모두 역할 이름 배열로 편다. */
+function expandRoleTokens(raw: string): string[] {
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .flatMap(token => {
+      const spread = token.match(/^\.\.\.\s*(\w+)$/);
+      if (spread) {
+        const resolved = ROLE_CONSTANTS[spread[1]];
+        // 모르는 상수를 조용히 무시하면 원장이 "역할 없음"으로 읽어 거짓 통과가 된다.
+        if (!resolved) throw new Error(`ROLE_CONSTANTS 에 ${spread[1]} 이(가) 없습니다`);
+        return [...resolved];
+      }
+      return [token.replace(/^['"]|['"]$/g, '')];
+    });
+}
+
 /** 파일을 export 함수(메서드) 블록으로 잘라, 각 블록의 인가 검사 역할을 뽑는다. */
 function extractByMethod(source: string): Record<string, string> {
   const re = new RegExp(`export\\s+(?:async\\s+)?function\\s+(${METHODS.join('|')})\\b`, 'g');
@@ -131,7 +163,7 @@ function extractByMethod(source: string): Record<string, string> {
 
     const rm = block.match(/requireUser\(\s*request\s*,\s*\[([^\]]*)\]/);
     result[marks[i].method] = rm
-      ? rm[1].split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean).sort().join('+')
+      ? expandRoleTokens(rm[1]).sort().join('+')
       : NONE;
   }
   return result;

@@ -210,7 +210,12 @@
     "loadingOeeData": "OEE 데이터를 불러오는 중...",
     "inputProductionForOee": "생산 실적을 입력하면 OEE가 자동으로 계산됩니다.",
     "loadingData": "데이터를 불러오는 중...",
-    "noAssignedMachines": "배정된 설비가 없습니다"
+    "noAssignedMachines": "배정된 설비가 없습니다",
+    "closeBelowProgressTitle": "진척 보고({{last}}개)보다 적은 {{qty}}개로 마감하려 합니다",
+    "closeBelowProgressHint": "사유를 적으면 마감됩니다. 입력한 내용은 나중에 확인할 수 있도록 기록됩니다.",
+    "closeBelowProgressReasonPlaceholder": "예: 진척을 잘못 입력해 종이 카운트로 정정",
+    "closeBelowProgressConfirm": "사유 확인 후 마감",
+    "closeBelowProgressCancel": "취소"
   },
   "productionInput": {
     "title": "생산 실적 입력",

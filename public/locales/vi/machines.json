@@ -210,7 +210,12 @@
     "loadingOeeData": "Đang tải dữ liệu OEE...",
     "inputProductionForOee": "Nhập kết quả sản xuất để tự động tính toán OEE.",
     "loadingData": "Đang tải dữ liệu...",
-    "noAssignedMachines": "Không có thiết bị được phân công"
+    "noAssignedMachines": "Không có thiết bị được phân công",
+    "closeBelowProgressTitle": "Bạn đang chốt {{qty}} cái, ít hơn tiến độ đã báo ({{last}} cái)",
+    "closeBelowProgressHint": "Nhập lý do để chốt. Nội dung này được lưu lại để có thể kiểm tra sau.",
+    "closeBelowProgressReasonPlaceholder": "VD: nhập nhầm tiến độ, chỉnh lại theo số đếm trên giấy",
+    "closeBelowProgressConfirm": "Xác nhận lý do và chốt",
+    "closeBelowProgressCancel": "Hủy"
   },
   "productionInput": {
     "title": "Nhập kết quả sản xuất",

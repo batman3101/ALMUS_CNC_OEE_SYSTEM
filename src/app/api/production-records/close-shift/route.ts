@@ -19,11 +19,23 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 export async function POST(request: NextRequest) {
   try {
     const user = await requireUser(request, ['admin', 'engineer', 'operator']);
-    const body = await request.json() as { machine_id?: unknown; date?: unknown; shift?: unknown; final_qty?: unknown };
+    const body = await request.json() as {
+      machine_id?: unknown; date?: unknown; shift?: unknown; final_qty?: unknown;
+      below_progress_reason?: unknown;
+    };
     const machineId = typeof body.machine_id === 'string' ? body.machine_id : '';
     const date = typeof body.date === 'string' ? body.date : '';
     const shift = body.shift === 'A' || body.shift === 'B' ? body.shift : null;
     const finalQty = typeof body.final_qty === 'number' ? body.final_qty : null;
+    /**
+     * 진척보다 낮게 마감할 때의 사유. 그 경우가 아니면 무시된다.
+     *
+     * 필요 여부를 여기서 판단하지 않는다 — 진척은 잠금 밖에서 읽으면 그 사이에 새 보고가
+     * 들어올 수 있어, "사유가 필요한 마감"이 사유 없이 통과할 수 있다. 판정은 RPC 가
+     * 잠금을 쥔 뒤에 하고, 여기서는 값을 그대로 넘긴다.
+     */
+    const belowProgressReason =
+      typeof body.below_progress_reason === 'string' ? body.below_progress_reason : null;
 
     if (!UUID.test(machineId)) return NextResponse.json({ error: 'machine_id must be a UUID' }, { status: 400 });
     if (!DATE.test(date)) return NextResponse.json({ error: 'date must be YYYY-MM-DD' }, { status: 400 });
@@ -98,7 +110,7 @@ export async function POST(request: NextRequest) {
       operatingMinutes, breakMinutes, downtimeMinutes, outputQty, defectQty: null, tactSeconds,
     });
 
-    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('close_shift_upsert_v2', {
+    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('close_shift_upsert_v3', {
       p_machine_id: machineId, p_date: date, p_shift: shift, p_output_qty: outputQty,
       // 정수 컬럼(runtime)·소수 4자리(비율)로 반올림해 저장한다(daily 라우트와 동일 규율).
       p_planned_runtime: Math.round(snap.plannedRuntime),
@@ -112,10 +124,31 @@ export async function POST(request: NextRequest) {
       p_window_start: windowStartIso,
       p_window_end: windowEndIso,
       p_expected_digest: expectedDigest,
+      // 하향 마감 사유와 그 기록의 주체. 서비스 롤로 부르므로 auth.uid() 를 쓸 수 없다.
+      p_below_progress_reason: belowProgressReason,
+      p_actor_id: user.userId,
     });
 
-    const rpcResult = rpcData as { ok?: boolean; reason?: string; defect_qty?: number } | null;
+    const rpcResult = rpcData as {
+      ok?: boolean; reason?: string; defect_qty?: number; last_progress_qty?: number;
+    } | null;
     if (rpcError || !rpcResult?.ok) {
+      /**
+       * 진척보다 낮은 마감인데 사유가 없다.
+       *
+       * 오류가 아니라 **확인이 필요한 상태**다 — 현장에서 실제로 일어날 수 있는 일이라
+       * 막지 않기로 했고(사용자 확정 2026-08-04), 대신 나중에 되짚을 수 있게 사유를 받는다.
+       * 마지막 진척값을 함께 실어 화면이 "진척 100개보다 적습니다"라고 구체적으로 물을 수
+       * 있게 한다.
+       */
+      if (rpcResult?.reason === 'below_progress_needs_reason')
+        return NextResponse.json(
+          {
+            error: 'below_progress_needs_reason',
+            last_progress_qty: rpcResult.last_progress_qty,
+          },
+          { status: 409 },
+        );
       // 확정 불량보다 작은 output 재마감 — 데이터 불변조건(defect ≤ output) 보호.
       if (rpcResult?.reason === 'output_lt_defect')
         return NextResponse.json(

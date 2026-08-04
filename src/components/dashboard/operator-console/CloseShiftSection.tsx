@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, InputNumber, Button, Space, Typography, Alert, Badge } from 'antd';
+import { Card, InputNumber, Input, Button, Space, Typography, Alert, Badge } from 'antd';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import { authFetch } from '@/lib/authFetch';
 import { useMachinesTranslation } from '@/hooks/useTranslation';
@@ -29,6 +29,14 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
   const [qty, setQty] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 진척보다 낮게 마감하려 할 때 뜨는 확인 단계. `null` 이면 평소 화면이다.
+   *
+   * 서버가 판정한다 — 여기서 미리 비교하지 않는 이유는 진척이 이 화면이 모르는 사이에
+   * 늘어날 수 있고, 무엇보다 **판정과 저장이 같은 잠금 아래** 있어야 하기 때문이다.
+   */
+  const [belowProgress, setBelowProgress] = useState<{ lastQty: number } | null>(null);
+  const [reason, setReason] = useState('');
   // 작업자가 수량 칸을 건드렸는지 — 폴링 갱신이 입력값을 덮지 않게 하는 가드
   // (ProgressInputSection 과 동일 교훈).
   const edited = useRef(false);
@@ -57,7 +65,7 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
 
   if (!selected) return null;
 
-  const submit = async () => {
+  const submit = async (belowProgressReason?: string) => {
     if (qty === null) return;
     setSaving(true);
     setError(null);
@@ -65,7 +73,13 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
       const post = () => authFetch('/api/production-records/close-shift', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ machine_id: machineId, date: selected.date, shift: selected.shift, final_qty: qty }),
+        body: JSON.stringify({
+          machine_id: machineId,
+          date: selected.date,
+          shift: selected.shift,
+          final_qty: qty,
+          ...(belowProgressReason ? { below_progress_reason: belowProgressReason } : {}),
+        }),
       });
 
       let res = await post();
@@ -77,11 +91,25 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
       // 한 번만 재시도한다 — 두 번 연속 어긋난다면 누군가 지금 비가동을 계속 고치고 있다는
       // 뜻이고, 그때는 조용히 반복하기보다 실패로 알리는 편이 낫다.
       if (res.status === 409) {
-        const body = await res.clone().json().catch(() => null) as { retryable?: boolean } | null;
+        const body = await res.clone().json().catch(() => null) as {
+          retryable?: boolean; error?: string; last_progress_qty?: number;
+        } | null;
         if (body?.retryable) res = await post();
+
+        /**
+         * 진척보다 낮은 마감이다. 오류가 아니라 **확인이 필요한 상태**다 —
+         * 진척 오입력을 종이 카운트로 정정하는 일이 실제로 있어 막지 않기로 했다.
+         * 대신 사유를 받아 감사 기록에 남긴다. 사유 없이는 저장되지 않는다.
+         */
+        if (body?.error === 'below_progress_needs_reason') {
+          setBelowProgress({ lastQty: body.last_progress_qty ?? 0 });
+          setReason('');
+          return;
+        }
       }
 
       if (!res.ok) { setError(t('operator.closeShiftFailed')); return; }
+      setBelowProgress(null);
       onClosed();
     } catch {
       setError(t('operator.closeShiftFailed'));
@@ -130,10 +158,64 @@ export const CloseShiftSection: React.FC<Props> = ({ machineId, pendingShifts, o
           size="large"
           placeholder={t('operator.closeShiftFinalQty')}
         />
-        <Button type="primary" block size="large" loading={saving} disabled={qty === null} onClick={submit}>
-          {t('operator.closeShiftButton')}
-        </Button>
-        <Text type="secondary" style={{ fontSize: 12 }}>{t('operator.closeShiftHint')}</Text>
+        {belowProgress === null ? (
+          <>
+            <Button
+              type="primary"
+              block
+              size="large"
+              loading={saving}
+              disabled={qty === null}
+              onClick={() => submit()}
+            >
+              {t('operator.closeShiftButton')}
+            </Button>
+            <Text type="secondary" style={{ fontSize: 12 }}>{t('operator.closeShiftHint')}</Text>
+          </>
+        ) : (
+          /*
+            진척보다 낮은 마감 — 막지 않고 사유를 받는다.
+            현장에서 진척 오입력을 종이 카운트로 정정하는 일이 실제로 있기 때문이다.
+            막아 버리면 그 교대가 영원히 마감 불가가 된다. 대신 나중에 되짚을 수 있게
+            사유를 감사 기록에 남긴다.
+          */
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Alert
+              type="warning"
+              showIcon
+              message={t('operator.closeBelowProgressTitle', {
+                last: belowProgress.lastQty,
+                qty,
+              })}
+              description={t('operator.closeBelowProgressHint')}
+            />
+            <Input.TextArea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              maxLength={200}
+              showCount
+              placeholder={t('operator.closeBelowProgressReasonPlaceholder')}
+            />
+            <Space style={{ width: '100%' }}>
+              <Button
+                onClick={() => { setBelowProgress(null); setReason(''); }}
+                disabled={saving}
+              >
+                {t('operator.closeBelowProgressCancel')}
+              </Button>
+              <Button
+                type="primary"
+                danger
+                loading={saving}
+                disabled={reason.trim().length === 0}
+                onClick={() => submit(reason.trim())}
+              >
+                {t('operator.closeBelowProgressConfirm')}
+              </Button>
+            </Space>
+          </Space>
+        )}
         {error && <Alert type="error" showIcon message={error} />}
       </Space>
     </Card>

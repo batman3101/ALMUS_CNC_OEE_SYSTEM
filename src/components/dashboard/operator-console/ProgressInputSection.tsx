@@ -47,6 +47,8 @@ export const ProgressInputSection: React.FC<Props> = ({ machineId, date, shift, 
       if (res.status === 409) {
         const body = (await res.json()) as { error?: unknown; last_reported_qty?: unknown };
         if (body.error === 'machine_in_downtime') { setError(t('progressInput.downtimeServerRejected')); return; }
+        // 마감이 먼저 들어왔다. 다시 눌러도 결과가 같으므로 "실패"가 아니라 사실을 알린다.
+        if (body.error === 'already_closed') { setError(t('progressInput.alreadyClosed')); return; }
         if (typeof body.last_reported_qty === 'number') { setError(t('progressInput.decreasedError', { last: body.last_reported_qty })); return; }
       }
       if (!res.ok) { setError(t('progressInput.saveFailed')); return; }
