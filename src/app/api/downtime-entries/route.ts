@@ -76,6 +76,28 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    /**
+     * 비가동은 **이미 일어난 일**을 기록하는 것이다. 시작 시각이 미래인 행은 기록이 아니라
+     * 예정이고, 이 시스템에는 예정을 담을 자리가 없다.
+     *
+     * 그냥 이상한 데이터에서 그치지 않았다 — 진척 보고 RPC 는 열린 비가동을 전부 "지금
+     * 비가동"으로 판정했기 때문에, 미래 시각 행이 하나라도 있으면 설비가 정상 가동 중인데도
+     * 진척 저장이 409 로 거부됐다. 화면은 비가동으로 보지 않으니 작업자에게는 원인 없는
+     * 거부로만 보였다.
+     *
+     * 판정 쪽도 같은 변경에서 `start_time <= now()` 로 고쳤다. 여기서 막는 것은 새 행이
+     * 같은 증상을 다시 만들지 않게 하기 위해서다.
+     *
+     * 시계 차이(서버 now vs 브라우저 now)로 방금 찍은 시각이 몇 초 미래가 될 수 있으므로
+     * 여유를 둔다 — 정확히 now 로 자르면 정상 입력이 간헐적으로 거부된다.
+     */
+    const FUTURE_TOLERANCE_MS = 60_000;
+    if (startTime.getTime() > Date.now() + FUTURE_TOLERANCE_MS) {
+      return NextResponse.json(
+        { success: false, error: '시작 시간은 미래일 수 없습니다' },
+        { status: 400 }
+      );
+    }
 
     const { data: machine, error: machineError } = await supabaseAdmin
       .from('machines')
