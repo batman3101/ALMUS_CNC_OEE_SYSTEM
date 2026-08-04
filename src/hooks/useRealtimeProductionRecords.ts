@@ -5,9 +5,14 @@ import { format, subDays } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { collectOeeDataPages, OeeDataPage } from '@/lib/oeeDataPages';
 import { authFetch } from '@/lib/authFetch';
+import { createReadinessGate } from './subscriptionGate';
+
+/** `SUBSCRIBED` 를 기다리는 한계. 세 Realtime 훅이 같은 값을 쓴다. */
+const SUBSCRIPTION_READY_TIMEOUT_MS = 3000;
 
 // production_records는 설비 800대 × 2교대 ≈ 1,600행/일로 증가한다.
-// 필터가 없으면 전체 테이블(32만행 이상)을 내려받아 statement timeout(57014)에 걸리므로
+// (2026-08-04 실측: 32,736행, 하루 약 1,423행)
+// 필터가 없으면 전체 테이블을 내려받아 statement timeout(57014)에 걸리므로
 // 호출부가 아무것도 넘기지 않아도 항상 "기간 + 행수" 상한이 걸리도록 한다.
 const DEFAULT_WINDOW_DAYS = 7;       // useRealtimeData와 동일한 기본 조회 기간
 const DEFAULT_RECORD_LIMIT = 15000;  // 7일 × 약 1,600행/일 ≈ 11,200행 + 여유분
@@ -140,6 +145,27 @@ export const useRealtimeProductionRecords = ({
     // 이 이펙트가 정리되었는지 표시한다. await 이후에는 항상 이 플래그를 확인해서
     // 이미 정리된 이펙트가 setState 하거나 채널을 남기지 않도록 한다.
     let cancelled = false;
+
+    /**
+     * 구독이 준비될 때까지 첫 조회를 미루기 위한 게이트.
+     *
+     * 예전에는 첫 조회를 먼저 하고 그 뒤에 채널을 만들었다. `subscribe()` 는 비동기라
+     * 실제 준비는 `SUBSCRIBED` 콜백에서 끝나는데, 그 사이에 커밋된 변경은 스냅샷에도 없고
+     * 이벤트로도 오지 않는다 — 다음 이벤트나 수동 새로고침 전까지 화면이 낡은 채로 남았다.
+     */
+    const readinessGate = createReadinessGate(1, SUBSCRIPTION_READY_TIMEOUT_MS);
+
+    /**
+     * 첫 조회가 끝나기 전에 도착한 이벤트는 **한 번의 후속 재조회로 합친다.**
+     *
+     * 이 훅의 이벤트 처리는 거의 전부 `refreshRecords()`(서버 재조회)로 끝난다. 그래서
+     * 개별 이벤트를 버퍼에 모아 재생할 필요가 없다 — 재조회 한 번이 그 모든 이벤트를 반영한
+     * 상태를 서버에서 그대로 가져온다. 대신 **첫 조회와 동시에 재조회가 돌지 않게** 막아야
+     * 한다. `refreshRecords` 에는 순번 가드가 없어서, 둘이 겹치면 나중에 시작한 쪽이 아니라
+     * 나중에 끝난 쪽이 이긴다.
+     */
+    let initialLoadDone = false;
+    let refreshQueuedDuringInitialLoad = false;
     const seededRecords = initialDataConsumedRef.current ? [] : initialDataRef.current;
     initialDataConsumedRef.current = true;
     setAggregateStats(null);
@@ -300,14 +326,7 @@ export const useRealtimeProductionRecords = ({
 
     const setupRealtime = async () => {
       try {
-        // 먼저 초기 데이터 로드
-        if (seededRecords.length === 0) {
-          await refreshRecords();
-          // 초기 로드를 기다리는 동안 이펙트가 정리되었으면 채널을 만들지 않는다
-          if (cancelled) return;
-        }
-
-        // Realtime 구독 설정
+        // **구독을 먼저 연다.** 첫 조회는 구독이 준비된 뒤로 미룬다(위 게이트 설명 참조).
         const channel = supabase
           .channel(`production-records-channel-${++channelSequence}`)
           .on(
@@ -320,6 +339,13 @@ export const useRealtimeProductionRecords = ({
             async (payload) => {
               if (cancelled) return;
               console.log('Production records realtime event received:', payload);
+
+              // 첫 조회가 아직 끝나지 않았다면 지금 무엇을 해도 그 조회 결과가 덮어쓴다.
+              // 표시만 해 두고, 조회가 끝난 뒤 한 번 더 불러온다.
+              if (!initialLoadDone) {
+                refreshQueuedDuringInitialLoad = true;
+                return;
+              }
 
               const { eventType, new: newRecord, old: oldRecord } = payload;
 
@@ -403,11 +429,16 @@ export const useRealtimeProductionRecords = ({
 
             if (status === 'SUBSCRIBED') {
               console.log('Successfully subscribed to production records realtime updates');
-              setLoading(false);
-            } else if (status === 'CHANNEL_ERROR') {
-              console.error('Production records realtime subscription error');
+              readinessGate.markReady();
+              return;
+            }
+
+            // TIMED_OUT 을 빠뜨리면 화면은 "연결됨"인 채로 갱신만 멈춘다.
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              console.error('Production records realtime subscription failed:', status);
               setError('실시간 연결에 오류가 발생했습니다.');
               setLoading(false);
+              readinessGate.cancel();
             }
           });
 
@@ -417,6 +448,25 @@ export const useRealtimeProductionRecords = ({
         if (cancelled) {
           channel.unsubscribe();
           subscription = null;
+          return;
+        }
+
+        // 구독이 준비된 뒤에 첫 조회를 한다. Realtime 이 죽어 있으면 게이트가 타임아웃되고,
+        // 그때는 원래 있던 창을 그대로 안은 채 진행한다 — 빈 화면보다는 낫다.
+        await readinessGate.wait();
+        if (cancelled) return;
+
+        if (seededRecords.length === 0) {
+          await refreshRecords();
+          if (cancelled) return;
+        }
+
+        initialLoadDone = true;
+
+        // 첫 조회가 도는 동안 도착했던 이벤트들을 한 번의 재조회로 반영한다.
+        if (refreshQueuedDuringInitialLoad) {
+          refreshQueuedDuringInitialLoad = false;
+          await refreshRecords();
         }
       } catch (err: unknown) {
         if (cancelled) return;
@@ -435,6 +485,8 @@ export const useRealtimeProductionRecords = ({
       // await 중이라 아직 채널이 만들어지지 않았을 수 있으므로 취소 플래그를 먼저 세운다.
       // (setupRealtime이 이 플래그를 보고 채널 생성을 건너뛰거나 즉시 해제한다)
       cancelled = true;
+      // 정리된 채널은 SUBSCRIBED 를 주지 않는다 — 기다리던 로드를 풀어 준다.
+      readinessGate.cancel();
       if (subscription) {
         subscription.unsubscribe();
         subscription = null;
