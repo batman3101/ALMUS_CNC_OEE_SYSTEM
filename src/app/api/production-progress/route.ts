@@ -115,6 +115,20 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
+      /**
+       * 마감이 먼저 들어온 경우. **정상적인 동시성 결과이지 장애가 아니다.**
+       *
+       * RPC 는 마감과 같은 잠금 아래에서 이 상태를 판정해 `already_closed` 를 돌려주는데,
+       * 라우트가 그 reason 을 몰라 일반 500 으로 떨어뜨리고 있었다. 그래서 정상적인 경합이
+       * 서버 오류로 기록되고, 작업자에게도 "저장 실패"로 보였다 — 다시 눌러도 결과는 같은데
+       * 무엇이 잘못됐는지 알 수 없으니 계속 누르게 된다.
+       *
+       * 409 로 구분해 "이 교대는 이미 마감됐다"는 사실을 그대로 전한다. 진척 UI 는 이미
+       * 409 를 사유별로 나눠 다루므로 문구만 늘리면 된다.
+       */
+      if (result.reason === 'already_closed') {
+        return NextResponse.json({ error: 'already_closed' }, { status: 409 });
+      }
       return NextResponse.json({ error: 'Failed to save report' }, { status: 500 });
     }
 

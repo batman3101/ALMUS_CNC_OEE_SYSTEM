@@ -43,6 +43,7 @@
     "downtimeLocked": "Đang dừng máy từ {{since}} đến hiện tại. Hãy chuyển sang vận hành bình thường trước khi nhập.",
     "downtimeServerRejected": "Máy đang dừng nên không thể lưu. Hãy chuyển sang vận hành bình thường rồi thử lại.",
     "shiftChanged": "Ca làm việc đã thay đổi. Hãy đóng và mở lại để nhập cho ca hiện tại.",
+    "alreadyClosed": "Ca này đã được chốt. Nếu cần sửa số lượng, vui lòng báo quản trị viên.",
     "submit": "Lưu"
   }
 }
