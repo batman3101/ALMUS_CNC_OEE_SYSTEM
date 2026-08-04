@@ -17,13 +17,15 @@ import {
   Row,
   Col,
   App,
+  Tooltip,
   theme
 } from 'antd';
 import {
   EditOutlined,
   DeleteOutlined,
   SearchOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  LockOutlined
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { useMachines } from '@/hooks/useMachines';
@@ -31,6 +33,8 @@ import { useDataInputTranslation } from '@/hooks/useTranslation';
 import { formatMachineLocation } from '@/utils/machineLocation';
 import { authFetch } from '@/lib/authFetch';
 import { useFailureReport } from '@/hooks/useFailureReport';
+import { useAuth } from '@/contexts/AuthContext';
+import { canDeleteProductionRecord, type UserRole } from '@/lib/pageAccess';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -68,6 +72,9 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
   const { machines, loading: machinesLoading } = useMachines();
   const { message: messageApi } = App.useApp();
   const reportFailure = useFailureReport();
+  // 삭제 권한은 API 와 **같은 함수**로 판단한다. 여기서 역할을 다시 적으면 규칙이 둘이 된다.
+  const { user } = useAuth();
+  const canDelete = canDeleteProductionRecord(user?.role as UserRole | undefined);
   const { token } = theme.useToken();
 
   // 상태
@@ -356,18 +363,32 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
           >
             {t('recordList.edit')}
           </Button>
-          <Popconfirm
-            title={t('messages.confirmDelete')}
-            description={t('messages.confirmDeleteDescription')}
-            onConfirm={() => handleDelete(record.record_id)}
-            okText={t('recordList.delete')}
-            cancelText={t('recordList.editModal.cancel')}
-            okButtonProps={{ danger: true }}
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              {t('recordList.delete')}
-            </Button>
-          </Popconfirm>
+          {/*
+            삭제 권한이 없으면 버튼을 **없애지 않고** 자물쇠와 함께 비활성으로 남긴다.
+            사라지면 "내 화면에는 그 기능이 없다"가 되어 무엇이 존재하는지조차 알 수 없다 —
+            `pageAccess` 가 사이드바에서 세운 원칙과 같다. 예전에는 아무 표시 없이 눌리기만
+            했고 요청은 항상 403 이었다.
+          */}
+          {canDelete ? (
+            <Popconfirm
+              title={t('messages.confirmDelete')}
+              description={t('messages.confirmDeleteDescription')}
+              onConfirm={() => handleDelete(record.record_id)}
+              okText={t('recordList.delete')}
+              cancelText={t('recordList.editModal.cancel')}
+              okButtonProps={{ danger: true }}
+            >
+              <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+                {t('recordList.delete')}
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Tooltip title={t('recordList.deleteNotAllowed')}>
+              <Button type="link" size="small" disabled icon={<LockOutlined />}>
+                {t('recordList.delete')}
+              </Button>
+            </Tooltip>
+          )}
         </Space>
       )
     }

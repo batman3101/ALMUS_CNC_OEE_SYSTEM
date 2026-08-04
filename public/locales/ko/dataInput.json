@@ -10,7 +10,7 @@
   },
   "machineInfo": {
     "equipmentModel": "설비 모델",
-    "machineProcess": "기계 공정", 
+    "machineProcess": "기계 공정",
     "tactTime": "Tact Time",
     "equipmentSelection": "설비 선택",
     "formalOperation": "정식 가동",
@@ -24,7 +24,7 @@
   },
   "schedule": {
     "dayShiftBaseTime": "주간표 기본 기준 시간",
-    "nightShiftBaseTime": "야간표 기본 기준 시간", 
+    "nightShiftBaseTime": "야간표 기본 기준 시간",
     "dailyTotalCapa": "한일 총 CAPA",
     "minutes": "분",
     "pieces": "개",
@@ -183,7 +183,8 @@
     "loadFailedTitle": "기존 생산 기록을 불러오지 못했습니다",
     "loadFailedDescription": "기록 없음으로 처리하면 기존 교대 데이터가 삭제될 수 있어 저장을 차단했습니다. 설비 또는 날짜를 다시 선택해 조회를 재시도하세요.",
     "loadFailedBlockSave": "기존 생산 기록 조회에 실패해 저장할 수 없습니다. 다시 조회해 주세요.",
-    "oeeUnreported": "미보고"
+    "oeeUnreported": "미보고",
+    "deleteNotAllowed": "생산 기록 삭제는 관리자만 할 수 있습니다."
   },
   "common": {
     "off": "휴무",

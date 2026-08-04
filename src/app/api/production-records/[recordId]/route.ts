@@ -12,6 +12,7 @@ import {
   assertMachineAccess,
   requireUser,
 } from '@/lib/apiAuth';
+import { PRODUCTION_RECORD_DELETE_ROLES } from '@/lib/pageAccess';
 
 // cavity_count 는 참고용(사이클 수 환산·JIG 구성 기록)으로 스냅샷에만 보존하고
 // OEE 계산에는 사용하지 않는다. tact_time_seconds 가 이미 개당 가공시간이다.
@@ -483,7 +484,8 @@ export async function DELETE(
 ) {
   try {
     const { recordId } = await params;
-    await requireUser(request, ['admin', 'engineer']);
+    // 역할 목록을 여기 다시 적지 않는다 — 목록 화면의 삭제 버튼과 **같은 규칙**을 읽는다.
+    await requireUser(request, [...PRODUCTION_RECORD_DELETE_ROLES]);
     console.log('DELETE /api/production-records/[recordId] called with id:', recordId);
 
     // 생산실적만 삭제하고 해당 교대 상태를 MISSING으로 기록한다.

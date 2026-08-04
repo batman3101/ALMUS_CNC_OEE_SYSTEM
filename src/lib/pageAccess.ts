@@ -143,6 +143,31 @@ export function getNavEntries(): PageAccessEntry[] {
  * 역할 변경과 결과가 같기 때문이다 — 한쪽만 막으면 막은 것이 아니다.
  * ──────────────────────────────────────────────────────────────────────────── */
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * 생산 기록 세부 권한
+ *
+ * `/production-records` 는 전 역할이 들어간다 — 운영자도 자기 실적을 봐야 하기 때문이다.
+ * 그런데 그 안의 **삭제**는 admin/engineer 전용이다. 페이지 권한만으로는 이 층을 표현할 수
+ * 없어서, 예전에는 목록이 역할을 보지 않고 모두에게 삭제 버튼을 그렸다. 운영자는 누를 수
+ * 있었고 요청은 **항상 403** 이었다.
+ *
+ * 보안 결함은 아니다 — API 가 막는다. 문제는 `pageAccess` 가 세운 원칙("권한 없는 것은
+ * 자물쇠와 함께 비활성으로 남긴다")이 **페이지 단위로만 적용되고 페이지 안의 동작에는
+ * 적용되지 않았다"는 것이다. 그래서 UI 와 API 가 같은 함수를 읽게 한다.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** 확정된 생산 기록을 지울 수 있는가. 되돌릴 수 없는 조작이라 운영자에게는 닫힌다. */
+export function canDeleteProductionRecord(role: UserRole | undefined): boolean {
+  return role === 'admin' || role === 'engineer';
+}
+
+/**
+ * 생산 기록 삭제 API 가 요구할 역할 목록. `canDeleteProductionRecord` 에서 **파생**시킨다 —
+ * 라우트에 `['admin','engineer']` 를 다시 적으면 규칙이 그만큼 늘어난다.
+ */
+export const PRODUCTION_RECORD_DELETE_ROLES: readonly UserRole[] =
+  ALL_ROLES.filter(canDeleteProductionRecord);
+
 /** 사용자 관리 화면(탭)에 들어갈 수 있는가. */
 export function canManageUsers(role: UserRole | undefined): boolean {
   return role === 'admin' || role === 'engineer';
