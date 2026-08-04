@@ -666,7 +666,7 @@ export const useRealtimeData = (
           console.log('✅ Machine logs 실시간 구독 성공');
           updateConnectionStatus('connected');
           readinessGate.markReady();
-        } else if (status === 'CHANNEL_ERROR') {
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error('❌ Machine logs 구독 오류:', error);
           updateConnectionStatus('error');
           scheduleReconnect();
@@ -765,7 +765,7 @@ export const useRealtimeData = (
         if (generation !== subscriptionGenerationRef.current) return;
         if (status === 'SUBSCRIBED') {
           readinessGate.markReady();
-        } else if (status === 'CHANNEL_ERROR') {
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error('❌ Production records 구독 오류:', error);
           scheduleReconnect();
           readinessGate.cancel();
@@ -826,7 +826,7 @@ export const useRealtimeData = (
         if (generation !== subscriptionGenerationRef.current) return;
         if (status === 'SUBSCRIBED') {
           readinessGate.markReady();
-        } else if (status === 'CHANNEL_ERROR') {
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error('❌ Machines 구독 오류:', error);
           scheduleReconnect();
           readinessGate.cancel();

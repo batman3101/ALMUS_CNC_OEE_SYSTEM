@@ -120,6 +120,7 @@
     "saveFailed": "저장 실패",
     "existingRecordLoaded": "기존 생산 데이터가 로드되었습니다",
     "recordUpdateSuccess": "생산 데이터가 수정되었습니다",
+    "recordChanged": "다른 곳에서 이 기록이 먼저 변경되었습니다. 최신 내용을 다시 불러왔으니 확인 후 수정해 주세요.",
     "recordDeleteSuccess": "생산 데이터가 삭제되었습니다",
     "recordDeleteFailed": "삭제 실패",
     "confirmDelete": "삭제하시겠습니까?",

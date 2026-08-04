@@ -19,11 +19,19 @@ import {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
 
-// 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량
+/**
+ * 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량.
+ *
+ * `defectQty === null` 은 **미검사**다(교대 마감은 `defect_qty` 를 NULL 로 두고 다음날 확정한다).
+ * 예전에는 null 을 "정수가 아님"으로 보고 400 을 냈다. 그래서 불량대기 상태의 레코드는
+ * 생산량만 고치려 해도 열리지 않았고 — 즉 **가장 손대야 할 행이 오히려 수정 불가였다** —
+ * 오류 문구까지 "불량 수량은 0 이상의 정수여야 합니다"라 원인을 오해하게 만들었다.
+ */
 function validateQuantities(outputQty: unknown, defectQty: unknown): string | null {
   if (!Number.isInteger(outputQty) || (outputQty as number) < 0) {
     return '생산 수량(output_qty)은 0 이상의 정수여야 합니다';
   }
+  if (defectQty === null) return null;
   if (!Number.isInteger(defectQty) || (defectQty as number) < 0) {
     return '불량 수량(defect_qty)은 0 이상의 정수여야 합니다';
   }
@@ -42,7 +50,9 @@ interface ExistingRecord {
   actual_runtime: number | null;
   ideal_runtime: number | null;
   output_qty: number;
-  defect_qty: number;
+  // DB 는 이 컬럼을 NULL 로 허용한다 — 마감은 됐지만 불량 검사 전인 상태다.
+  // `number` 로 적으면 "미검사"를 표현할 수 없고, 그 타입 거짓말이 위 400 버그를 만들었다.
+  defect_qty: number | null;
   tact_time_seconds: number | null;
   cavity_count: number | null;
   downtime_minutes: number | null;
@@ -54,6 +64,89 @@ interface ExistingRecord {
 
 const EXISTING_RECORD_COLUMNS =
   'record_id, machine_id, date, shift, planned_runtime, actual_runtime, ideal_runtime, output_qty, defect_qty, tact_time_seconds, cavity_count, downtime_minutes, availability, performance, quality, oee';
+
+/**
+ * 낙관적 동시성(CAS) 대조에 쓸 컬럼.
+ *
+ * ## 왜 필요한가
+ *
+ * 이 라우트는 행을 읽고 → Node 에서 파생지표를 전부 다시 계산하고 → 통째로 덮어쓴다.
+ * 그런데 같은 행을 고치는 다른 경로(`confirm_shift_defect`, `close_shift_upsert_v2`)는
+ * `pg_advisory_xact_lock(machine||date||shift)` 아래에서 돈다. advisory lock 은 Postgres 에서
+ * 독립된 네임스페이스라 이 라우트의 평범한 UPDATE 를 **차단하지 않는다**. 그래서 넷 다
+ * "보호되는 것처럼" 보였지만 실제로는 다음이 가능했다:
+ *
+ *   1. PATCH 가 `defect_qty = 1` 을 읽는다
+ *   2. `confirm_shift_defect` 가 `defect_qty = 5` 와 새 quality/oee 를 확정 저장한다
+ *   3. PATCH 가 1단계 값으로 계산한 지표를 덮어쓴다 → **확정 불량이 사라진다**
+ *
+ * `close_shift_upsert_v2` 는 `on conflict … defect_qty = production_records.defect_qty` 로
+ * 확정 불량을 일부러 보존한다. 그 규약을 이 라우트만 지키지 않고 있었다.
+ *
+ * ## 왜 잠금이 아니라 CAS 인가
+ *
+ * 잠금을 쓰려면 RPC 를 새로 만들어야 하고, 그건 마이그레이션 배포와 코드 배포 사이에 창을
+ * 만든다. CAS 는 앱만으로 완결되고 **읽은 그대로가 아니면 쓰지 않는다**는 같은 보장을 준다.
+ * 최악이 "불필요한 409 재시도"인데 그건 되돌릴 수 있다. 조용한 덮어쓰기는 되돌릴 수 없다.
+ *
+ * ## 왜 파생지표까지 전부 대조하는가
+ *
+ * 이 라우트가 **덮어쓰는 모든 컬럼**과 **계산에 쓴 모든 컬럼**을 넣는다. 일부만 넣으면
+ * 넣지 않은 컬럼이 그 사이 바뀌었을 때 조용히 통과한다. 좁은 지문은 지문이 아니다.
+ */
+const CONCURRENCY_GUARD_COLUMNS = [
+  'output_qty',
+  'defect_qty',
+  'planned_runtime',
+  'actual_runtime',
+  'ideal_runtime',
+  'downtime_minutes',
+  'tact_time_seconds',
+  'availability',
+  'performance',
+  'quality',
+  'oee',
+] as const satisfies readonly (keyof ExistingRecord)[];
+
+/**
+ * 읽은 스냅샷과 **완전히 같을 때만** 갱신한다. 그 사이 누가 바꿨으면 0행이 갱신되고,
+ * 호출자는 409 로 되돌려 보낸다.
+ *
+ * NULL 은 `.eq()` 로 비교되지 않는다(SQL 에서 `col = NULL` 은 NULL 이다). 그래서 값이 null 인
+ * 컬럼은 `.is()` 로 건다 — 이걸 빠뜨리면 NULL 컬럼을 가진 행은 **어떤 조건도 만족하지 못해**
+ * 항상 409 가 되거나, 반대로 조건에서 빠져 보호받지 못한다.
+ */
+async function updateRecordIfUnchanged(
+  recordId: string,
+  existing: ExistingRecord,
+  updateData: Record<string, number | null>
+) {
+  let query = supabaseAdmin
+    .from('production_records')
+    .update(updateData)
+    .eq('record_id', recordId);
+
+  for (const column of CONCURRENCY_GUARD_COLUMNS) {
+    const seen = existing[column];
+    query = seen === null || seen === undefined
+      ? query.is(column, null)
+      : query.eq(column, seen);
+  }
+
+  return query.select().maybeSingle();
+}
+
+/** 동시 수정으로 갱신이 무산됐을 때의 응답. 사용자에게는 "다시 불러와 확인"이 유일한 안전한 행동이다. */
+const concurrentModificationResponse = () =>
+  NextResponse.json(
+    {
+      success: false,
+      error: 'record_changed',
+      message:
+        '다른 곳에서 이 기록이 먼저 변경되었습니다. 최신 내용을 다시 불러온 뒤 수정해 주세요.'
+    },
+    { status: 409 }
+  );
 
 // 설비의 현재 공정 기준 Tact Time 조회 (서버 기준값).
 // current_tact_time 은 개당(1 piece) 가공시간이다. cavity 는 계산에 쓰지 않으므로
@@ -179,7 +272,9 @@ async function buildUpdateData(
     : resolveSavedMinutesPerUnit(existing);
 
   const outputQtyValue = outputQty as number;
-  const defectQtyValue = defectQty as number;
+  // 미검사(NULL)를 0 으로 접지 않는다. 접으면 불량 0건으로 확정한 것과 구분이 사라지고,
+  // 품질 100% 로 보이는 행이 만들어진다(NULL≠0 원칙).
+  const defectQtyValue = defectQty === null ? null : (defectQty as number);
 
   const idealRuntime = minutesPerUnit === null ? null : outputQtyValue * minutesPerUnit;
   const availability =
@@ -194,9 +289,15 @@ async function buildUpdateData(
       : actualRuntime > 0
         ? clamp(idealRuntime / actualRuntime, 0, 1)
         : 0;
+  // 불량이 미검사면 품질도 OEE 도 "계산할 수 없음"이다. close_shift_upsert_v2 가
+  // 같은 규칙을 쓴다(`v_defect is null → v_quality := null`) — 두 경로가 같은 말을 해야 한다.
   const quality =
-    outputQtyValue > 0 ? clamp((outputQtyValue - defectQtyValue) / outputQtyValue, 0, 1) : 0;
-  const oee = availability === null || performance === null
+    defectQtyValue === null
+      ? null
+      : outputQtyValue > 0
+        ? clamp((outputQtyValue - defectQtyValue) / outputQtyValue, 0, 1)
+        : 0;
+  const oee = availability === null || performance === null || quality === null
     ? null
     : availability * performance * quality;
 
@@ -333,17 +434,20 @@ export async function PUT(
       );
     }
 
-    // 생산 기록 업데이트
-    const { data: updatedRecord, error: updateError } = await supabaseAdmin
-      .from('production_records')
-      .update(updateData)
-      .eq('record_id', recordId)
-      .select()
-      .single();
+    // 읽은 스냅샷 그대로일 때만 쓴다 — 마감·불량확정과 경쟁해 확정값을 덮어쓰지 않게.
+    const { data: updatedRecord, error: updateError } = await updateRecordIfUnchanged(
+      recordId,
+      existingRecord,
+      updateData
+    );
 
     if (updateError) {
       console.error('Update error:', updateError);
       throw updateError;
+    }
+
+    if (!updatedRecord) {
+      return concurrentModificationResponse();
     }
 
     console.log('Successfully updated production record:', updatedRecord?.record_id);
@@ -465,17 +569,20 @@ export async function PATCH(
       );
     }
 
-    // 생산 기록 부분 업데이트
-    const { data: updatedRecord, error: updateError } = await supabaseAdmin
-      .from('production_records')
-      .update(updateData)
-      .eq('record_id', recordId)
-      .select()
-      .single();
+    // 읽은 스냅샷 그대로일 때만 쓴다 (PUT 과 동일 규율).
+    const { data: updatedRecord, error: updateError } = await updateRecordIfUnchanged(
+      recordId,
+      existingRecord,
+      updateData
+    );
 
     if (updateError) {
       console.error('PATCH update error:', updateError);
       throw updateError;
+    }
+
+    if (!updatedRecord) {
+      return concurrentModificationResponse();
     }
 
     console.log('Successfully patched production record:', updatedRecord?.record_id);

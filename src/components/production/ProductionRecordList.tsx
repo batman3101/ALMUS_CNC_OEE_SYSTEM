@@ -186,21 +186,35 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      // 본문을 **먼저** 읽는다. 예전에는 `!response.ok` 이면 status 만 보고 바로 던져서,
+      // 서버가 실어 보낸 사유가 버려졌다. 그 결과 동시 수정 충돌(409)까지 "저장 실패"라는
+      // 같은 문구로 뭉개졌고, 사용자는 원인을 알 수 없어 같은 저장을 반복했다.
+      const result = await response.json().catch(() => null);
 
-      const result = await response.json();
-
-      if (result.success) {
-        messageApi.success(t('messages.recordUpdateSuccess'));
+      /**
+       * 409 = 내가 화면에 띄운 값이 이미 낡았다는 뜻이다(다른 사람의 마감·불량확정이 먼저 저장됨).
+       * 이건 "다시 시도"로 풀리는 실패가 아니라 **다시 불러와야** 하는 실패다 —
+       * 재시도하면 남의 확정값을 덮어쓰려는 시도를 반복할 뿐이다.
+       * 그래서 문구를 구분하고, 목록을 새로 읽어 최신 상태를 보여준 뒤 모달을 닫는다.
+       */
+      if (response.status === 409) {
+        messageApi.warning(result?.message ?? t('messages.recordChanged'));
         setEditModalVisible(false);
         setEditingRecord(null);
         editForm.resetFields();
         fetchRecords();
-      } else {
-        throw new Error(result.error || 'Update failed');
+        return;
       }
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.message || result?.error || `HTTP ${response.status}`);
+      }
+
+      messageApi.success(t('messages.recordUpdateSuccess'));
+      setEditModalVisible(false);
+      setEditingRecord(null);
+      editForm.resetFields();
+      fetchRecords();
     } catch (error) {
       console.error('Error updating production record:', error);
       reportFailure(t('messages.saveFailed'), error);
