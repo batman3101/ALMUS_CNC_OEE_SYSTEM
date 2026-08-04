@@ -120,6 +120,7 @@
     "saveFailed": "Lưu thất bại",
     "existingRecordLoaded": "Đã tải dữ liệu sản xuất hiện có",
     "recordUpdateSuccess": "Dữ liệu sản xuất đã được cập nhật",
+    "recordChanged": "Bản ghi này đã được thay đổi ở nơi khác trước đó. Dữ liệu mới nhất đã được tải lại, vui lòng kiểm tra rồi chỉnh sửa.",
     "recordDeleteSuccess": "Dữ liệu sản xuất đã được xóa",
     "recordDeleteFailed": "Xóa thất bại",
     "confirmDelete": "Bạn có muốn xóa không?",
