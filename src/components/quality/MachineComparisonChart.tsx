@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import { Select, Space, Checkbox, Card, Row, Col } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 interface MachineComparisonChartProps {
   data: Array<{
@@ -32,6 +33,7 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   selectedMachines = []
 }) => {
   const { t } = useTranslation();
+  const chartAnimation = useChartAnimation();
 
   // 설비 필터 상태
   const [machineFilter, setMachineFilter] = useState<'all' | 'top10' | 'bottom10' | 'custom'>('top10');
@@ -151,10 +153,11 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
             wrapperStyle={{ paddingTop: '20px' }}
             iconType="rect"
           />
-          {visibleMetrics.OEE && <Bar dataKey="OEE" fill="#ff7875" name={t('dashboard:comparisonChart.oee')} />}
-          {visibleMetrics.availability && <Bar dataKey="availability" fill="#40a9ff" name={t('dashboard:comparisonChart.availability')} />}
-          {visibleMetrics.performance && <Bar dataKey="performance" fill="#52c41a" name={t('dashboard:comparisonChart.performance')} />}
-          {visibleMetrics.quality && <Bar dataKey="quality" fill="#faad14" name={t('dashboard:comparisonChart.quality')} />}
+          {/* isAnimationActive: display.chart_animation_enabled */}
+          {visibleMetrics.OEE && <Bar dataKey="OEE" fill="#ff7875" name={t('dashboard:comparisonChart.oee')} isAnimationActive={chartAnimation.recharts} />}
+          {visibleMetrics.availability && <Bar dataKey="availability" fill="#40a9ff" name={t('dashboard:comparisonChart.availability')} isAnimationActive={chartAnimation.recharts} />}
+          {visibleMetrics.performance && <Bar dataKey="performance" fill="#52c41a" name={t('dashboard:comparisonChart.performance')} isAnimationActive={chartAnimation.recharts} />}
+          {visibleMetrics.quality && <Bar dataKey="quality" fill="#faad14" name={t('dashboard:comparisonChart.quality')} isAnimationActive={chartAnimation.recharts} />}
         </BarChart>
       );
     } else {
@@ -189,6 +192,8 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
               strokeWidth={3}
               dot={{ fill: '#ff7875', strokeWidth: 2, r: 5 }}
               name={t('dashboard:comparisonChart.oee')}
+              // display.chart_animation_enabled
+              isAnimationActive={chartAnimation.recharts}
             />
           )}
           {visibleMetrics.availability && (
@@ -199,6 +204,8 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
               strokeWidth={3}
               dot={{ fill: '#40a9ff', strokeWidth: 2, r: 5 }}
               name={t('dashboard:comparisonChart.availability')}
+              // display.chart_animation_enabled
+              isAnimationActive={chartAnimation.recharts}
             />
           )}
           {visibleMetrics.performance && (
@@ -209,6 +216,8 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
               strokeWidth={3}
               dot={{ fill: '#52c41a', strokeWidth: 2, r: 5 }}
               name={t('dashboard:comparisonChart.performance')}
+              // display.chart_animation_enabled
+              isAnimationActive={chartAnimation.recharts}
             />
           )}
           {visibleMetrics.quality && (
@@ -219,6 +228,8 @@ const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
               strokeWidth={3}
               dot={{ fill: '#faad14', strokeWidth: 2, r: 5 }}
               name={t('dashboard:comparisonChart.quality')}
+              // display.chart_animation_enabled
+              isAnimationActive={chartAnimation.recharts}
             />
           )}
         </LineChart>

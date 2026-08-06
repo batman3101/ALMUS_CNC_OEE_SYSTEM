@@ -4,6 +4,7 @@ import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, PieLabelRenderProps, PieLabel } from 'recharts';
 import { List, Tag } from 'antd';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 interface DefectTypeAnalysisChartProps {
   data: Array<{
@@ -23,6 +24,7 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
   height = 300
 }) => {
   const { t } = useTranslation();
+  const chartAnimation = useChartAnimation();
 
   // 불량 유형별 모의 데이터 생성 (실제로는 API에서 가져와야 함)
   const defectTypeData = React.useMemo(() => {
@@ -117,6 +119,8 @@ const DefectTypeAnalysisChart: React.FC<DefectTypeAnalysisChartProps> = ({
                 dataKey="value"
                 startAngle={90}
                 endAngle={450}
+                // display.chart_animation_enabled
+                isAnimationActive={chartAnimation.recharts}
               >
                 {defectTypeData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />

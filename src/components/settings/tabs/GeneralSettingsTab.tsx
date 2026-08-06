@@ -11,11 +11,14 @@ import {
   Card,
   Typography,
   Row,
-  Col
+  Col,
+  Alert
 } from 'antd';
 import { UploadOutlined, SaveOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useGeneralSettings } from '@/hooks/useSystemSettings';
+import { systemSettingsService } from '@/lib/systemSettings';
+import { useSettingsFormState } from '../useSettingsFormState';
 import { useMessage } from '@/hooks/useMessage';
 import type { UploadFile, UploadChangeParam } from 'antd/es/upload/interface';
 import { authFetch } from '@/lib/authFetch';
@@ -24,29 +27,33 @@ import { useFailureReport } from '@/hooks/useFailureReport';
 const { Title, Text } = Typography;
 
 interface GeneralSettingsTabProps {
-  onSettingsChange?: () => void;
+  /** 편집이 시작되면 true, 저장/되돌리기로 정리되면 false. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChange }) => {
+const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onDirtyChange }) => {
   const { t } = useLanguage();
-  const { settings, updateMultipleSettings } = useGeneralSettings();
+  const { settings } = useGeneralSettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoFileList, setLogoFileList] = useState<UploadFile[]>([]);
+  const { hydrate, markSaved, markDirty, revertToSaved, canRevert } =
+    useSettingsFormState<Record<string, unknown>>(form, onDirtyChange);
 
-  // 폼 초기값 설정
+  // 폼 초기값 설정 (`||` 대신 `??` — 저장된 빈 문자열을 코드 기본값으로 덮지 않는다.
+  // 로고 URL 은 빈 문자열이 "로고 없음"이라는 **의도된 값**이다)
   useEffect(() => {
     if (settings) {
-      form.setFieldsValue({
-        company_name: settings.company_name || 'ALMUS TECH',
-        company_logo_url: settings.company_logo_url || '',
-        timezone: settings.timezone || 'Asia/Ho_Chi_Minh',
-        language: settings.language || 'vi',
-        date_format: settings.date_format || 'DD/MM/YYYY',
-        time_format: settings.time_format || 'HH:mm:ss'
+      hydrate({
+        company_name: settings.company_name ?? 'ALMUS TECH',
+        company_logo_url: settings.company_logo_url ?? '',
+        timezone: settings.timezone ?? 'Asia/Ho_Chi_Minh',
+        language: settings.language ?? 'vi',
+        date_format: settings.date_format ?? 'DD/MM/YYYY',
+        time_format: settings.time_format ?? 'HH:mm:ss'
       });
 
       // 로고 파일 리스트 설정
@@ -59,7 +66,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         }]);
       }
     }
-  }, [settings, form]);
+  }, [settings, hydrate]);
 
   // 설정 저장
   const handleSave = async (values: Record<string, unknown>) => {
@@ -93,15 +100,23 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
 
       console.log('Updating settings:', updates);
 
-      // updateMultipleSettings 호출
-      const success = await updateMultipleSettings(updates);
-      if (!success) {
+      // **한 트랜잭션**으로 저장한다. 예전 경로(updateMultipleSettings)는 내부가
+      // Promise.all 개별 갱신이라, 뒤쪽 키가 실패하면 앞쪽 키만 DB 에 남았다.
+      const result = await systemSettingsService.updateSettingsAtomic(
+        updates.map(update => ({
+          category: 'general',
+          setting_key: update.key,
+          setting_value: update.value,
+        })),
+        '일반 설정 업데이트',
+      );
+      if (!result.success) {
         // 이 메시지는 아래 catch 에서 error.message 로 토스트에 그대로 표시된다.
-        throw new Error(t('settings.general.updateFailed'));
+        throw new Error(result.error ?? t('settings.general.updateFailed'));
       }
 
       showSuccess(t('settings.saveSuccess'));
-      onSettingsChange?.();
+      markSaved(values);
     } catch (error) {
       console.error('일반 설정 저장 오류:', error);
       const errorMessage = error instanceof Error ? error.message : t('settings.saveError');
@@ -235,6 +250,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
         form={form}
         layout="vertical"
         onFinish={handleSave}
+        onValuesChange={markDirty}
         size="large"
       >
         <Row gutter={[24, 0]}>
@@ -308,6 +324,18 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
                   }
                 />
               </Form.Item>
+              {/*
+                이 설정은 앱의 서버·교대 계산에는 적용되지만, 배포된 일일 OEE 집계
+                Edge Function 은 'Asia/Ho_Chi_Minh' 를 상수로 갖고 있어 여기 값을 읽지 않는다
+                (supabase/functions/daily-oee-aggregation/index.ts). 적용 범위를 숨기면
+                관리자는 바꾼 값이 배치에도 적용된 줄로 안다.
+              */}
+              <Alert
+                message={t('settings.general.timezoneScopeNote')}
+                type="info"
+                showIcon
+                style={{ marginBottom: '24px' }}
+              />
 
               <Form.Item
                 name="language"
@@ -319,7 +347,27 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
                   options={languageOptions}
                 />
               </Form.Item>
+              {/*
+                2026-07-14(d355df1) 이후 언어는 개인 환경설정이 우선이다
+                (UserPreferencesContext: user.language ?? systemLanguage). 이 값은 개인 언어를
+                고른 적 없는 계정에만 적용된다. 라벨이 그냥 "언어"이면 전역 즉시 적용처럼
+                보이고, 관리자는 바꿔도 자기 화면이 안 바뀌는 이유를 알 수 없다.
+              */}
+              <Alert
+                message={t('settings.general.languageScopeNote')}
+                type="info"
+                showIcon
+                style={{ marginBottom: '24px' }}
+              />
 
+              {/*
+                날짜·시간 형식은 **아직 어떤 화면도 읽지 않는다.**
+                저장하면 dateTimeUtils 의 포맷터 싱글턴이 초기화되기는 하지만, 그 포맷터를
+                호출하는 컴포넌트가 하나도 없다(전 저장소 import 0건). 실제 화면 46곳은
+                `toLocaleDateString` 등을 직접 부른다. 저장은 성공하고 화면은 안 바뀌는
+                전형적인 "미적용" 이므로, 공통 포맷터로 전환하기 전까지 입력을 잠근다.
+                값을 지우지는 않는다 — 전환 시 그대로 쓸 값이다.
+              */}
               <Form.Item
                 name="date_format"
                 label={t('settings.general.dateFormat')}
@@ -327,6 +375,7 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
                 <Select
                   placeholder={t('settings.general.dateFormatSelect')}
                   options={dateFormatOptions}
+                  disabled
                 />
               </Form.Item>
 
@@ -337,16 +386,23 @@ const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({ onSettingsChang
                 <Select
                   placeholder={t('settings.general.timeFormatSelect')}
                   options={timeFormatOptions}
+                  disabled
                 />
               </Form.Item>
+
+              <Alert
+                message={t('settings.general.formatNotAppliedNote')}
+                type="warning"
+                showIcon
+              />
             </Card>
           </Col>
         </Row>
 
         <div style={{ marginTop: '24px', textAlign: 'right' }}>
           <Space>
-            <Button onClick={() => form.resetFields()}>
-              {t('common.reset')}
+            <Button onClick={revertToSaved} disabled={!canRevert}>
+              {t('settings.revertToSaved')}
             </Button>
             <Button 
               type="primary" 

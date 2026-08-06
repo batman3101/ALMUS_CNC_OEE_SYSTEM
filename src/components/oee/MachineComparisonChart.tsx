@@ -5,6 +5,7 @@ import { Card, Button, Space, Table, Empty, Spin, Checkbox, Tag, Pagination } fr
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
 import { BarChartOutlined, LineChartOutlined } from '@ant-design/icons';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 interface MachineComparisonData {
   machine_name: string;
@@ -51,6 +52,7 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
   onMetricsChange
 }) => {
   const { t } = useDashboardTranslation();
+  const chartAnimation = useChartAnimation();
   const displayTitle = title ?? t('chart.machinePerformanceComparison');
   // 지표 라벨
   const METRIC_LABELS: Record<'oee' | 'availability' | 'performance' | 'quality', string> = {
@@ -137,6 +139,8 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
               fill={METRIC_COLORS[metric]}
               name={METRIC_LABELS[metric]}
               radius={[2, 2, 0, 0]}
+              // display.chart_animation_enabled
+              isAnimationActive={chartAnimation.recharts}
             />
           ))}
         </BarChart>
@@ -158,6 +162,8 @@ export const MachineComparisonChart: React.FC<MachineComparisonChartProps> = ({
               strokeWidth={2}
               dot={{ r: 4 }}
               name={METRIC_LABELS[metric]}
+              // display.chart_animation_enabled
+              isAnimationActive={chartAnimation.recharts}
             />
           ))}
         </LineChart>

@@ -50,6 +50,12 @@ const INPUT_VALIDATION = [
   "src/components/settings/tabs/ShiftSettingsTab.tsx | showError(t('settings.shift.aShiftTimeError'));",
   'src/components/settings/tabs/ShiftSettingsTab.tsx | showError(`휴식 시간은 0 이상이고 짧은 교대(${shortestShift}분)보다 작아야 합니다.`);',
   'src/components/settings/tabs/ShiftSettingsTab.tsx | showError(`교대 전환 유예는 0 이상이고 짧은 교대(${shortestShift}분)보다 작아야 합니다.`);',
+  // 실시간 엔진이 지원하지 않는 교대 길이·휴식 총량을 저장 **전에** 막는다(감사 2026-08-06
+  // HIGH-04). 요청 실패가 아니라 입력 검증이다 — 서버에 보내지도 않고, 세션 상태와 무관하게
+  // 항상 보여야 한다. 이 둘을 삼키면 관리자는 저장이 왜 안 되는지 알 수 없고, 반대로 통과시키면
+  // 저장은 성공한 뒤 설비 콘솔의 실시간 지표만 조용히 사라진다.
+  "src/components/settings/tabs/ShiftSettingsTab.tsx | showError(t('settings.shift.durationUnsupported', { supported: SUPPORTED_SHIFT_MINUTES }));",
+  "src/components/settings/tabs/ShiftSettingsTab.tsx | showError(t('settings.shift.breakUnsupported', { supported: TOTAL_BREAK_MINUTES }));",
 ];
 
 /**

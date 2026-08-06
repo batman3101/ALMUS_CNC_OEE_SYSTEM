@@ -19,6 +19,7 @@ import { Card, Typography, Select, Row, Col, Statistic } from 'antd';
 import { format } from 'date-fns';
 import { ko, vi } from 'date-fns/locale';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 import { ProductionData } from '@/types';
 
 ChartJS.register(
@@ -52,6 +53,7 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
   onChartTypeChange
 }) => {
   const { t, language } = useTranslation();
+  const chartAnimation = useChartAnimation();
   const dateLocale = language === 'vi' ? vi : ko;
   // 차트 데이터 구성
   const chartData = {
@@ -114,6 +116,8 @@ export const ProductionChart: React.FC<ProductionChartProps> = ({
   const options: ChartOptions<'bar'> = {
     responsive: true,
     maintainAspectRatio: false,
+    // display.chart_animation_enabled — 켜짐은 undefined(라이브러리 기본값)로 표현한다.
+    animation: chartAnimation.chartJs,
     plugins: {
       legend: {
         position: 'top' as const,

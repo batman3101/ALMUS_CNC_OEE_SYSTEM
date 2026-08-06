@@ -16,6 +16,7 @@ import {
 } from 'chart.js';
 import { Card, Typography, Select, DatePicker, Row, Col, Alert } from 'antd';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 import { isCutoverInRange } from '@/lib/oeeCutover';
 import { oeeCutoverMarkerPlugin } from './oeeCutoverPlugin';
 
@@ -60,6 +61,7 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
   onPeriodChange
 }) => {
   const { t } = useDashboardTranslation();
+  const chartAnimation = useChartAnimation();
   const displayTitle = title ?? `OEE ${t('oee.trend')}`;
 
   // 데이터 로깅 (디버깅용)
@@ -165,6 +167,8 @@ export const OEETrendChart: React.FC<OEETrendChartProps> = ({
   const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
+    // display.chart_animation_enabled — 켜짐은 undefined(라이브러리 기본값)로 표현한다.
+    animation: chartAnimation.chartJs,
     plugins: {
       // 계산식 변경일 세로 마커 (플러그인이 draw 시점에 최신 dates 를 읽는다)
       oeeCutoverMarker: {

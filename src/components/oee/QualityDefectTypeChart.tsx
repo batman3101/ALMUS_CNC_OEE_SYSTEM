@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { Card, Typography, Row, Col, Empty, Spin, Table } from 'antd';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 const { Title: AntTitle } = Typography;
 
@@ -105,6 +106,7 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
   showTable = true
 }) => {
   const { t } = useDashboardTranslation();
+  const chartAnimation = useChartAnimation();
   const displayTitle = title ?? t('chart.defectTypeAnalysis');
 
   // 데이터 로깅 (디버깅용)
@@ -238,6 +240,8 @@ export const QualityDefectTypeChart: React.FC<QualityDefectTypeChartProps> = ({
                     innerRadius={Math.min(height * 0.15, 60)}
                     paddingAngle={2}
                     dataKey="count"
+                    // display.chart_animation_enabled
+                    isAnimationActive={chartAnimation.recharts}
                   >
                     {data.map((entry, index) => (
                       <Cell 

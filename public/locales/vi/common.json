@@ -245,7 +245,10 @@
       "noChanges": "Không có thay đổi nào để lưu.",
       "updateFailed": "Cập nhật cài đặt hệ thống thất bại. Vui lòng kiểm tra kết nối mạng hoặc quyền truy cập.",
       "uploadFailed": "Tải lên thất bại.",
-      "uploadNoUrl": "Không nhận được URL của file đã tải lên."
+      "uploadNoUrl": "Không nhận được URL của file đã tải lên.",
+      "timezoneScopeNote": "Múi giờ này áp dụng cho giao diện và các tính toán phía máy chủ. Tuy nhiên tác vụ tổng hợp OEE hằng ngày (Edge Function) dùng hằng số riêng (Asia/Ho_Chi_Minh) nên không theo giá trị này.",
+      "languageScopeNote": "Đây là ngôn ngữ mặc định chỉ áp dụng cho tài khoản chưa từng chọn ngôn ngữ riêng. Người dùng đã chọn ngôn ngữ riêng (kể cả quản trị viên) sẽ không bị thay đổi.",
+      "formatNotAppliedNote": "Định dạng ngày và giờ hiện chưa được áp dụng ở bất kỳ màn hình nào. Ô nhập được khoá cho tới khi các màn hình chuyển sang dùng bộ định dạng chung. Giá trị đã lưu vẫn được giữ nguyên."
     },
     "oee": {
       "title": "Cài đặt OEE",
@@ -304,7 +307,10 @@
       "aShiftTimeError": "Thời gian kết thúc ca A phải sau thời gian bắt đầu",
       "hoursMinutes": "{{h}} giờ {{m}} phút",
       "fullDay": "24 giờ",
-      "breakPerShift": "{{total}} phút (mỗi ca {{each}} phút)"
+      "breakPerShift": "{{total}} phút (mỗi ca {{each}} phút)",
+      "engineConstraint": "Bộ tính toán thời gian thực hiện chỉ hỗ trợ ca {{shift}} phút và nghỉ {{brk}} phút. Lưu giá trị khác sẽ khiến các chỉ số thời gian thực trên bảng điều khiển máy không hiển thị.",
+      "durationUnsupported": "Mỗi ca phải là {{supported}} phút. Vui lòng đặt khoảng cách giữa hai giờ bắt đầu ca đúng {{supported}} phút.",
+      "breakUnsupported": "Thời gian nghỉ hiện chỉ hỗ trợ {{supported}} phút. Các khung giờ nghỉ thời gian thực được cố định dựa trên tổng này."
     },
     "notification": {
       "title": "Cài đặt thông báo",
@@ -372,7 +378,8 @@
       "warningSample": "Cảnh báo",
       "errorSample": "Lỗi",
       "currentSettings": "Cài đặt hiện tại",
-      "colorsReset": "Màu đã được đặt lại về mặc định"
+      "colorsReset": "Màu đã được đặt lại về mặc định",
+      "themeModeScopeNote": "Đây là giao diện mặc định chỉ áp dụng cho tài khoản chưa từng chọn giao diện riêng. Người dùng đã chọn giao diện riêng (kể cả quản trị viên) sẽ không bị thay đổi."
     },
     "audit": {
       "title": "Lịch sử thay đổi cài đặt",
@@ -389,7 +396,9 @@
       "filterSettingKey": "Tìm kiếm khóa cài đặt",
       "filterChangedBy": "Tìm kiếm người thay đổi",
       "items": "mục"
-    }
+    },
+    "lastLoaded": "Lần tải gần nhất",
+    "revertToSaved": "Khôi phục về giá trị đã lưu"
   },
   "dataInput": {
     "title": "Nhập dữ liệu sản xuất",

@@ -18,38 +18,49 @@ import {
 import { SaveOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useOEESettings } from '@/hooks/useSystemSettings';
+import { systemSettingsService } from '@/lib/systemSettings';
+import { useSettingsFormState } from '../useSettingsFormState';
 import { useMessage } from '@/hooks/useMessage';
 import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
 interface OEESettingsTabProps {
-  onSettingsChange?: () => void;
+  /** 편집이 시작되면 true, 저장/되돌리기로 정리되면 false. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => {
+const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
   const { token } = theme.useToken();
   const { t } = useLanguage();
-  const { settings, updateSetting } = useOEESettings();
+  const { settings } = useOEESettings();
   const { success: showSuccess, error: showError, contextHolder } = useMessage();
   const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const { hydrate, markSaved, markDirty, revertToSaved, canRevert } =
+    useSettingsFormState<Record<string, number>>(form, onDirtyChange);
 
   // 폼 초기값 설정
+  //
+  // `||` 가 아니라 `??` 여야 한다. 임계값의 하한은 0 이고, 관리자가 **명시적으로 0** 을
+  // 저장한 경우(예: critical_oee_threshold = 0, "위험 등급을 쓰지 않겠다") `||` 는 그 0 을
+  // falsy 로 보고 코드 기본값으로 되돌린다. 화면은 0.40 을 보여주는데 DB 에는 0 이 들어
+  // 있는 상태가 되고, 저장을 누르면 관리자가 고른 적 없는 값이 저장된다.
+  // 교대 탭이 같은 이유로 이미 `??` 로 고쳐졌다(적대적 재감사 #9).
   useEffect(() => {
     if (settings) {
-      form.setFieldsValue({
-        target_oee: settings.target_oee || 0.85,
-        target_availability: settings.target_availability || 0.90,
-        target_performance: settings.target_performance || 0.95,
-        target_quality: settings.target_quality || 0.99,
-        low_oee_threshold: settings.low_oee_threshold || 0.60,
-        critical_oee_threshold: settings.critical_oee_threshold || 0.40,
-        downtime_alert_minutes: settings.downtime_alert_minutes || 30
+      hydrate({
+        target_oee: settings.target_oee ?? 0.85,
+        target_availability: settings.target_availability ?? 0.90,
+        target_performance: settings.target_performance ?? 0.95,
+        target_quality: settings.target_quality ?? 0.99,
+        low_oee_threshold: settings.low_oee_threshold ?? 0.60,
+        critical_oee_threshold: settings.critical_oee_threshold ?? 0.40,
+        downtime_alert_minutes: settings.downtime_alert_minutes ?? 30
       });
     }
-  }, [settings, form]);
+  }, [settings, hydrate]);
 
   // 설정 저장
   const handleSave = async (values: Record<string, number>) => {
@@ -67,21 +78,27 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
         return;
       }
 
-      const updates = Object.entries(values).map(([key, value]) => ({
-        key,
-        value,
-        reason: `Updated OEE ${key} setting`
-      }));
-
-      for (const update of updates) {
-        const success = await updateSetting(update.key, update.value, update.reason);
-        if (!success) {
-          throw new Error(`Failed to update ${update.key}`);
-        }
+      // **한 트랜잭션**으로 저장한다.
+      //
+      // 예전에는 for 루프로 7건을 따로 저장했다. 다섯 번째에서 실패하면 앞의 넷은 DB 에
+      // 남고 뒤의 셋은 안 남는데, 화면은 전체 실패로 표시했다 — 관리자가 보는 상태와 DB 의
+      // 상태가 갈라진다. 게다가 이 값들은 서로를 해석하는 값이라(critical < low < target)
+      // 반쪽 저장은 그 불변조건 자체를 깨뜨린다. 저장 전에는 검증이 통과했는데 저장 후에는
+      // 깨져 있는 상태가 만들어질 수 있다.
+      const result = await systemSettingsService.updateSettingsAtomic(
+        Object.entries(values).map(([key, value]) => ({
+          category: 'oee',
+          setting_key: key,
+          setting_value: value,
+        })),
+        'Updated OEE settings',
+      );
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to update OEE settings');
       }
 
       showSuccess(t('settings.saveSuccess'));
-      onSettingsChange?.();
+      markSaved(values);
     } catch (error) {
       console.error('Error saving OEE settings:', error);
       reportFailure(t('settings.saveError'), error);
@@ -131,6 +148,7 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
         form={form}
         layout="vertical"
         onFinish={handleSave}
+        onValuesChange={markDirty}
         size="large"
       >
         <Row gutter={[24, 0]}>
@@ -357,8 +375,8 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onSettingsChange }) => 
 
         <div style={{ marginTop: '24px', textAlign: 'right' }}>
           <Space>
-            <Button onClick={() => form.resetFields()}>
-              {t('common.reset')}
+            <Button onClick={revertToSaved} disabled={!canRevert}>
+              {t('settings.revertToSaved')}
             </Button>
             <Button 
               type="primary" 

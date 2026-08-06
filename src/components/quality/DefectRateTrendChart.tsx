@@ -3,6 +3,7 @@
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 import { ProductionData } from '@/types';
 
 interface DefectRateTrendChartProps {
@@ -17,6 +18,7 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
   period = 'month'
 }) => {
   const { t, language } = useTranslation();
+  const chartAnimation = useChartAnimation();
 
   const chartData = data.map(item => ({
     date: item.date,
@@ -104,6 +106,8 @@ const DefectRateTrendChart: React.FC<DefectRateTrendChartProps> = ({
               dot={{ fill: '#ff4d4f', strokeWidth: 2, r: 4 }}
               activeDot={{ r: 6, stroke: '#ff4d4f', strokeWidth: 2 }}
               connectNulls={false}
+              // display.chart_animation_enabled
+              isAnimationActive={chartAnimation.recharts}
             />
           </LineChart>
         </ResponsiveContainer>

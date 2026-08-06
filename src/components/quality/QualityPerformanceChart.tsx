@@ -17,6 +17,7 @@ import {
 import { Typography, Row, Col, Statistic } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 ChartJS.register(
   CategoryScale,
@@ -49,6 +50,7 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
   height = 300,
 }) => {
   const { t } = useTranslation();
+  const chartAnimation = useChartAnimation();
 
   // 데이터 가공
   const chartData = React.useMemo(() => {
@@ -140,6 +142,8 @@ export const QualityPerformanceChart: React.FC<QualityPerformanceChartProps> = (
 
   // 차트 옵션
   const options: ChartOptions<'line'> = {
+    // display.chart_animation_enabled — 켜짐은 undefined(라이브러리 기본값)로 표현한다.
+    animation: chartAnimation.chartJs,
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
