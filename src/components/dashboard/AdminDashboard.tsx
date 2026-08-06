@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Row, Col, Card, Statistic, Table, Progress, Alert, Space, Button, Spin, Badge, Drawer, List, Empty, Typography, Tag, Tooltip, Modal } from 'antd';
 import { 
   DashboardOutlined, 
@@ -64,6 +65,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const { t, i18n } = useDashboardTranslation();
   const isClient = useClientOnly();
   const reportFailure = useFailureReport();
+  const router = useRouter();
   const {
     notifications,
     acknowledgeNotification,
@@ -707,7 +709,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         </Space>
       </div>
 
-      {/* 데이터 상태 알림 */}
+      {/*
+        데이터 상태 알림.
+
+        이동 버튼은 클라이언트 라우팅을 쓴다. 예전에는 `window.location.href` 로 **전체 페이지를
+        다시 로드**했는데, 그러면 번들을 다시 받고 모든 Provider 가 처음부터 데이터를 다시
+        조회한다 — 800대 설비와 교대 설정을 전부 다시 불러오는 대가를 치르면서 얻는 것이 없다.
+        (로그아웃은 반대로 그 비움이 목적이라 의도적으로 전체 로드를 쓴다 — AuthContext 참조)
+      */}
       {!recordsLoading && productionRecords.length === 0 && !recordsError && (
         <Alert
           message={t('adminDashboard.noProductionData')}
@@ -716,7 +725,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           showIcon
           style={{ marginBottom: 24 }}
           action={
-            <Button size="small" onClick={() => window.location.href = '/data-input'}>
+            <Button size="small" onClick={() => router.push('/data-input')}>
               {t('adminDashboard.goToDataInput')}
             </Button>
           }
