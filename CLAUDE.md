@@ -489,7 +489,8 @@ vercel --prod
 
 - Edge Function: `supabase/functions/daily-oee-aggregation/index.ts`
 - 회귀 검사: `supabase/functions/__tests__/dailyOeeAggregationAuthz.test.ts`
-- ⚠ `docs/OEE_AGGREGATION_SYSTEM.md` 는 아직 옛 서술(pg_cron 스케줄)을 담고 있다.
+- 상세: `docs/OEE_AGGREGATION_SYSTEM.md` (2026-08-06 전면 재작성 — 존재하지 않는 시스템의
+  설치 절차를 지우고 실측만 남겼다. 원래 설계와 그 행방은 그 문서 부록에 있다.)
 
 ### Production Record Input System
 Shift-based production data entry with automatic notifications:
