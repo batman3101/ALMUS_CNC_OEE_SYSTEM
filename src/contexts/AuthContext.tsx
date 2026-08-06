@@ -298,14 +298,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // 에러가 있어도 사용자 상태는 이미 초기화되었으므로 계속 진행
       }
       
-      // 로그인 페이지로 즉시 이동 (prefetch된 페이지)
+      /**
+       * 로그아웃은 **전체 페이지 로드**로 나간다 — `router.push()` 가 아니다.
+       *
+       * SPA 이동은 앱을 살려 둔 채 화면만 바꾼다. 그러면 이전 사용자의 흔적이 그대로 남는다:
+       * 각 Provider 의 인메모리 상태(설비 목록·설정·알림), 열려 있는 Realtime 채널,
+       * 진행 중이던 폴링 타이머. 다음 사람이 같은 브라우저로 로그인하면 그 위에 덧씌워진다.
+       *
+       * 전체 로드는 그 모두를 한 번에 버린다. 느린 것이 아니라 **비우는 것**이 목적이다.
+       * (Next 16.3 의 no-location-assign-relative-destination 은 이 의도를 구분하지 못한다)
+       */
       if (typeof window !== 'undefined') {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = '/login';
       }
     } catch (error: unknown) {
       log.error('Logout error', error, LogCategories.AUTH);
-      // 오류가 있어도 로그인 페이지로 이동
+      // 오류가 나도 세션은 이미 끊겼다고 보고 같은 이유로 전체 로드로 나간다.
       if (typeof window !== 'undefined') {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = '/login';
       }
     }

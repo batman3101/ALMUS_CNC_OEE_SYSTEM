@@ -1,6 +1,6 @@
 {
   "note": "운영(wmtkkefsorrdlzprhlpr) 적용 원장 — MCP list_migrations 스냅샷. 파일명 타임스탬프와 적용 version 이 다르므로(런북 0절, db push 금지) 이름 기준으로 대조한다. 갱신: 마이그레이션을 적용한 세션이 applied 배열과 hashes(적용 시점 파일 sha256-16) 를 함께 갱신한다. 검사: npm run check:migrations (미적용 = 실패, 적용 후 파일 내용 드리프트 = 경고).",
-  "snapshot_at": "2026-08-06T02:56:40.000Z",
+  "snapshot_at": "2026-08-06T04:20:00.000Z",
   "hashes": {
     "20251116070000_create_system_settings_audit_table": "02a1488bae1ef176",
     "20251116070100_create_recent_settings_changes_view": "d6add6dc43c42a32",
@@ -56,7 +56,8 @@
     "20260804110000_master_write_boundary": "42bd1e66872699a2",
     "20260804130000_close_shift_below_progress_reason": "976947b677ba1f3f",
     "20260804120000_progress_ignores_future_downtime": "0be8986631b04e0c",
-    "20260804140000_drop_oee_calculations": "1aeff7c16fdf5441"
+    "20260804140000_drop_oee_calculations": "1aeff7c16fdf5441",
+    "20260806020000_drop_close_shift_upsert_v2": "43877dcb4a68c532"
   },
   "applied": [
     {
@@ -402,6 +403,10 @@
     {
       "version": "20260806010832",
       "name": "drop_oee_calculations"
+    },
+    {
+      "version": "20260806012312",
+      "name": "drop_close_shift_upsert_v2"
     }
   ],
   "file_matches": {
