@@ -9,6 +9,7 @@ jest.mock('../supabase', () => ({
 }));
 
 import { SystemSettingsService } from '../systemSettings';
+import { SETTINGS_REGISTRY } from '../settingsRegistry';
 import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 
 /**
@@ -42,7 +43,7 @@ describe('설정 일괄 저장은 요청 한 번이다', () => {
     mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true }) });
   });
 
-  it('resetToDefaults 는 32개 설정을 배치 요청 한 번으로 쓴다', async () => {
+  it('resetToDefaults 는 계약 전체를 배치 요청 한 번으로 쓴다', async () => {
     const result = await service.resetToDefaults();
 
     expect(result.success).toBe(true);
@@ -51,7 +52,7 @@ describe('설정 일괄 저장은 요청 한 번이다', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
     const body = capturedBody(0);
-    expect(body.updates).toHaveLength(32);
+    expect(body.updates).toHaveLength(SETTINGS_REGISTRY.length);
     expect(mockFetch.mock.calls[0][0]).toBe('/api/system-settings/update');
   });
 

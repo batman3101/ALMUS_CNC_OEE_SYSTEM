@@ -151,7 +151,19 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     ],
   },
 
-  // ── OEE (7) ─────────────────────────────────────────────────────────────────
+  // ── OEE (10) ────────────────────────────────────────────────────────────────
+  //
+  // 목표 4개(target_*)는 알림의 **경고선**이고, 위험선은 지표마다 따로 있다.
+  // "목표 미달"과 "위험"은 다른 사건이라 하나의 숫자로 겸할 수 없다.
+  //
+  // OEE 는 목표·저하·위험 세 값으로 등급 사다리를 만들지만(`src/lib/oeeGrading.ts`),
+  // 가동률·성능·품질에는 위험선 설정이 **없었다.** 그래서 알림 API 가 자기 숫자를
+  // 하드코딩했고, 관리자가 목표를 바꿔도 알림은 그대로였다(감사 2026-08-06 HIGH-02/03).
+  //
+  // ⚠️ 위험선을 목표에서 비율로 유추하지 않는다. OEE 의 위험/목표 비(0.6/0.85 ≈ 0.71)를
+  //    품질에 적용하면 위험선이 75.7% 가 되는데, 현장에서 품질 75% 를 그제야 위험이라
+  //    부르면 이미 늦다. 아래 세 기본값은 유추가 아니라 **하드코딩돼 있던 현장 검증값**
+  //    (ALERT_THRESHOLDS: availability 70 / performance 70 / quality 90)을 그대로 옮긴 것이다.
   {
     category: 'oee',
     key: 'target_oee',
@@ -211,8 +223,40 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
   },
   {
     category: 'oee',
+    key: 'critical_availability_threshold',
+    valueType: 'number',
+    defaultValue: 0.7,
+    description: '가동률 위험 임계값',
+    isSystem: true,
+    validation: { required: true, min: 0, max: 1 },
+  },
+  {
+    category: 'oee',
+    key: 'critical_performance_threshold',
+    valueType: 'number',
+    // 목표(target_performance)는 상한이 2 지만 위험선은 1 이 상한이다. 위험선은 **바닥**이고,
+    // "100% 보다 빠른데 위험" 은 표현할 이유가 없는 상태다.
+    defaultValue: 0.7,
+    description: '성능 위험 임계값',
+    isSystem: true,
+    validation: { required: true, min: 0, max: 1 },
+  },
+  {
+    category: 'oee',
+    key: 'critical_quality_threshold',
+    valueType: 'number',
+    defaultValue: 0.9,
+    description: '품질 위험 임계값',
+    isSystem: true,
+    validation: { required: true, min: 0, max: 1 },
+  },
+  {
+    category: 'oee',
     key: 'downtime_alert_minutes',
     valueType: 'number',
+    // 이 값이 알림의 **경고선**(분)이고 위험선은 그 2배다. 2배라는 관계는 하드코딩돼 있던
+    // 경고 60분 / 위험 120분 에서 그대로 가져왔다 — 연결하면서 두 값의 비율까지 바꾸면
+    // 알림 양이 왜 달라졌는지 나중에 추적할 수 없다.
     defaultValue: 30,
     description: '다운타임 알림 기준 (분)',
     isSystem: true,

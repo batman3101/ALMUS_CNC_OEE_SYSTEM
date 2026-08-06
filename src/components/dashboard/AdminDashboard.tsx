@@ -20,6 +20,7 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
 import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecords';
 import { useOperationalAlerts } from '@/hooks/useOperationalAlerts';
+import { useOEEGrading } from '@/hooks/useOEEThresholds';
 import { DateRangeSelector } from '@/components/common/DateRangeSelector';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { fetchMachines } from '@/lib/machinesCache';
@@ -72,6 +73,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     clearAllNotifications,
   } = useNotifications();
   const { dateRange, getFormattedRange, preset } = useDateRange();
+  // OEE 등급 색은 관리자가 저장한 목표·임계값을 따른다 (판정 규칙은 `@/lib/oeeGrading`).
+  const { colorOf: oeeColorOf } = useOEEGrading();
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
@@ -621,7 +624,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
           <Progress
             percent={oee * 100}
             size="small"
-            strokeColor={oee >= 0.85 ? '#52c41a' : oee >= 0.65 ? '#faad14' : '#ff4d4f'}
+            strokeColor={oeeColorOf(oee)}
             format={(percent) => `${percent?.toFixed(1)}%`}
           />
         ),
@@ -814,11 +817,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                 ? (processedData.overallMetrics.oee * 100).toFixed(1)
                 : '—'}
               suffix={processedData.overallMetrics ? '%' : undefined}
-              valueStyle={{ 
-                color: !processedData.overallMetrics ? '#8c8c8c'
-                  : processedData.overallMetrics.oee >= 0.85 ? '#52c41a'
-                  : processedData.overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f'
-              }}
+              valueStyle={{ color: oeeColorOf(processedData.overallMetrics?.oee ?? null) }}
             />
           </Card>
         </Col>

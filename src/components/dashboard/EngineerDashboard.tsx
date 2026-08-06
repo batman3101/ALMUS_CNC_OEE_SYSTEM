@@ -23,6 +23,8 @@ import { useMachineOEEStats } from '@/hooks/useMachineOEEStats';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useOEEGrading } from '@/hooks/useOEEThresholds';
+import { OEE_GRADE_LADDER, type OEEGrade } from '@/lib/oeeGrading';
 import { formatMachineLocation } from '@/utils/machineLocation';
 
 // Removed deprecated TabPane import
@@ -41,6 +43,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const { user } = useAuth();
   const { t } = useTranslation();
   const { getDisplaySettings } = useSystemSettings();
+  const { gradeOf, colorOf } = useOEEGrading();
   const isDarkMode = getDisplaySettings().mode === 'dark';
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
@@ -55,13 +58,15 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   const [selectedOEEGrades, setSelectedOEEGrades] = useState<string[]>(['all']);
   const [filterDropdownVisible, setFilterDropdownVisible] = useState(false);
 
-  // OEE 등급 분류 함수
-  const getOEEGrade = (oee: number): string => {
-    if (oee >= 0.85) return 'excellent';  // 우수 (85% 이상)
-    if (oee >= 0.75) return 'good';       // 양호 (75-85%)
-    if (oee >= 0.65) return 'fair';       // 보통 (65-75%)
-    return 'poor';                        // 미흡 (65% 미만)
-  };
+  // OEE 등급 분류.
+  //
+  // 예전에는 여기에만 0.75 라는 네 번째 경계가 있었다. 어떤 설정도 표현하지 않는 숫자라
+  // 같은 설비가 이 화면에서는 '보통', 다른 화면에서는 '양호'로 보였다. 이제 등급은
+  // `@/lib/oeeGrading` 의 사다리(목표/저조/심각) 하나만 따른다.
+  //
+  // 필터 값(excellent/good/warning/critical)이 곧 등급 이름이다. 등급을 매길 수 없는
+  // 값은 필터에 걸리지 않는다 — `grade === null` 은 어떤 선택에도 포함되지 않는다.
+  // 판정은 `gradeOf` 하나로만 한다 (useOEEGrading 이 설정이 바뀔 때만 새로 만든다).
 
   const compareNullable = (left: number | null, right: number | null): number => {
     if (left === null) return right === null ? 0 : 1;
@@ -69,11 +74,13 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     return left - right;
   };
 
-  const oeeGradeLabels = {
+  // 라벨은 기존 번역 키를 그대로 재사용한다 (새 문구를 만들지 않는다).
+  // 등급 이름이 fair/poor → warning/critical 로 바뀌었을 뿐, 가리키는 칸은 세 번째·네 번째로 같다.
+  const oeeGradeLabels: Record<OEEGrade, string> = {
     excellent: t('dashboard:oeeGrades.excellent'),
     good: t('dashboard:oeeGrades.good'),
-    fair: t('dashboard:oeeGrades.fair'),
-    poor: t('dashboard:oeeGrades.poor')
+    warning: t('dashboard:oeeGrades.fair'),
+    critical: t('dashboard:oeeGrades.poor')
   };
 
   // 실시간 데이터 훅 사용 (설비 목록과 연결 상태용.
@@ -137,16 +144,16 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     }
 
     const matching = Object.values(machineStats)
-      .filter(stat =>
-        stat.reported_records > 0
-        && stat.avg_oee !== null
-        && selectedOEEGrades.includes(getOEEGrade(stat.avg_oee))
-      )
+      .filter(stat => {
+        if (stat.reported_records === 0) return false;
+        const { grade } = gradeOf(stat.avg_oee);
+        return grade !== null && selectedOEEGrades.includes(grade);
+      })
       .map(stat => stat.machine_id);
 
     if (matching.length === 0) return NO_MATCHING_MACHINE_ID;
     return matching.join(',');
-  }, [selectedOEEGrades, machineStats, selectedMachineIds]);
+  }, [selectedOEEGrades, machineStats, selectedMachineIds, gradeOf]);
 
   // 필터 옵션 데이터
   const filterOptions = React.useMemo(() => {
@@ -161,10 +168,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         ],
         oeeGrades: [
           { value: 'all', label: t('dashboard:filterMenu.allGrades'), count: 0 },
-          { value: 'excellent', label: oeeGradeLabels.excellent, count: 0 },
-          { value: 'good', label: oeeGradeLabels.good, count: 0 },
-          { value: 'fair', label: oeeGradeLabels.fair, count: 0 },
-          { value: 'poor', label: oeeGradeLabels.poor, count: 0 }
+          ...OEE_GRADE_LADDER.map(grade => ({
+            value: grade as string,
+            label: oeeGradeLabels[grade],
+            count: 0
+          }))
         ]
       };
     }
@@ -176,19 +184,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     // 개수와 필터가 같은 근거(기간·교대가 적용된 설비별 집계)를 쓰도록 machineStats 를 사용한다.
     // 이전에는 개수는 "설비별 최신 실적 1건"으로 세고 필터는 날짜별 추세 행에 걸어, 둘이
     // 서로 다른 것을 세고 있었다.
-    const machineOeeValues = Object.values(machineStats)
-      .filter((stat): stat is typeof stat & { avg_oee: number } =>
-        stat.reported_records > 0 && stat.avg_oee !== null
-      )
-      .map(stat => stat.avg_oee);
+    const machineGrades = Object.values(machineStats)
+      .filter(stat => stat.reported_records > 0)
+      .map(stat => gradeOf(stat.avg_oee).grade);
 
-    const oeeGrades = {
-      excellent: machineOeeValues.filter(oee => getOEEGrade(oee) === 'excellent').length,
-      good: machineOeeValues.filter(oee => getOEEGrade(oee) === 'good').length,
-      fair: machineOeeValues.filter(oee => getOEEGrade(oee) === 'fair').length,
-      poor: machineOeeValues.filter(oee => getOEEGrade(oee) === 'poor').length
-    };
-    
+    const countOfGrade = (grade: OEEGrade) =>
+      machineGrades.filter(machineGrade => machineGrade === grade).length;
+
+
     return {
       locations: [
         { value: 'all', label: t('dashboard:filterMenu.allLocations'), count: machines.length },
@@ -206,13 +209,14 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       ],
       oeeGrades: [
         { value: 'all', label: t('dashboard:filterMenu.allGrades'), count: machines.length },
-        { value: 'excellent', label: oeeGradeLabels.excellent, count: oeeGrades.excellent },
-        { value: 'good', label: oeeGradeLabels.good, count: oeeGrades.good },
-        { value: 'fair', label: oeeGradeLabels.fair, count: oeeGrades.fair },
-        { value: 'poor', label: oeeGradeLabels.poor, count: oeeGrades.poor }
+        ...OEE_GRADE_LADDER.map(grade => ({
+          value: grade as string,
+          label: oeeGradeLabels[grade],
+          count: countOfGrade(grade)
+        }))
       ]
     };
-  }, [machines, machineStats, t]);
+  }, [machines, machineStats, t, gradeOf]);
 
   // 활성 필터 개수 계산
   const activeFilterCount = React.useMemo(() => {
@@ -335,11 +339,11 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
               key={option.value}
               style={{ cursor: 'pointer', userSelect: 'none' }}
               color={
-                selectedOEEGrades.includes(option.value) 
+                selectedOEEGrades.includes(option.value)
                   ? option.value === 'excellent' ? 'green'
-                  : option.value === 'good' ? 'blue'  
-                  : option.value === 'fair' ? 'orange'
-                  : option.value === 'poor' ? 'red'
+                  : option.value === 'good' ? 'blue'
+                  : option.value === 'warning' ? 'orange'
+                  : option.value === 'critical' ? 'red'
                   : 'purple'
                   : 'default'
               }
@@ -540,12 +544,12 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
     if (selectedOEEGrades.includes('all')) {
       return processedData.analysisData;
     }
-    return processedData.analysisData.filter(
-      item => item.hasData
-        && item.avgOEE !== null
-        && selectedOEEGrades.includes(getOEEGrade(item.avgOEE))
-    );
-  }, [processedData.analysisData, selectedOEEGrades]);
+    return processedData.analysisData.filter(item => {
+      if (!item.hasData) return false;
+      const { grade } = gradeOf(item.avgOEE);
+      return grade !== null && selectedOEEGrades.includes(grade);
+    });
+  }, [processedData.analysisData, selectedOEEGrades, gradeOf]);
 
   // 비교 차트는 숫자 OEE가 있는 설비만 그린다. 미보고 설비는 표와 coverage에는
   // 그대로 남기되, 차트에 0점으로 투입해 저성과 설비처럼 보이게 하지 않는다.
@@ -629,15 +633,12 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       // 선택한 기간에 실적이 없는 설비는 0%가 아니라 "데이터 없음"이다.
       // 0%로 표시하면 "이 설비는 완전히 멈춰 있었다"로 읽혀 실제와 다르다.
       render: (value: number | null, record: { hasData: boolean }) =>
-        record.hasData ? (
-          <span style={{
-            color: (value ?? 0) >= 0.85 ? '#52c41a' : (value ?? 0) >= 0.65 ? '#faad14' : '#ff4d4f',
-            fontWeight: 'bold'
-          }}>
-            {((value ?? 0) * 100).toFixed(1)}%
+        record.hasData && value !== null ? (
+          <span style={{ color: colorOf(value), fontWeight: 'bold' }}>
+            {(value * 100).toFixed(1)}%
           </span>
         ) : (
-          <span style={{ color: '#8c8c8c' }}>—</span>
+          <span style={{ color: colorOf(null) }}>—</span>
         ),
       sorter: (a: { avgOEE: number | null }, b: { avgOEE: number | null }) =>
         compareNullable(a.avgOEE, b.avgOEE),
@@ -854,11 +855,7 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
                 ? (processedData.overallMetrics.oee * 100).toFixed(1)
                 : '—'}
               suffix={processedData.overallMetrics ? '%' : undefined}
-              valueStyle={{ 
-                color: !processedData.overallMetrics ? '#8c8c8c'
-                  : processedData.overallMetrics.oee >= 0.85 ? '#52c41a'
-                  : processedData.overallMetrics.oee >= 0.65 ? '#faad14' : '#ff4d4f'
-              }}
+              valueStyle={{ color: colorOf(processedData.overallMetrics?.oee ?? null) }}
             />
           </Card>
         </Col>
