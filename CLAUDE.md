@@ -16,11 +16,28 @@ cp .env.example .env.local  # Create environment file (configure Supabase keys)
 
 ### Development
 ```bash
-npm run dev                 # Start development server (localhost:3000)
+npm run dev                 # Start development server (localhost:3000) — Turbopack
 npm run dev:clean           # Clean .next cache and start dev server
-npm run build               # Build for production
+npm run build               # Build for production — webpack
 npm start                   # Start production server
 ```
+
+#### ⚠️ dev 는 Turbopack, build 는 webpack — 섞인 것이 아니라 각각 검증된 조합이다
+
+Next.js **16.3.0 의 webpack dev 경로는 이 앱에서 깨진다.** 화면이 통째로 뜨지 않고
+런타임 오류만 남는다:
+
+```
+InvariantError: Instant validation boundaries should never appear in browser bundles.
+This is a bug in Next.js.
+```
+
+`next build --webpack` 은 정상이고 프로덕션도 정상이다 — **dev 전용 문제**다.
+그래서 dev 만 Turbopack 으로 옮기고 build 는 검증된 webpack 을 유지한다.
+
+**이 조합을 되돌리기 전에 브라우저에서 화면이 뜨는지 먼저 확인할 것.** 타입 검사·lint·
+테스트·프로덕션 빌드가 **전부 통과하는데도** dev 화면만 죽기 때문에, 자동 검증만으로는
+이 회귀가 보이지 않는다(2026-08-06 에 실제로 그렇게 놓칠 뻔했다).
 
 ### Testing & Quality
 ```bash
