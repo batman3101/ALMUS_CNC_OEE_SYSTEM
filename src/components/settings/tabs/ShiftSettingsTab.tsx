@@ -18,7 +18,9 @@ import {
 import { SaveOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { resolveBreakMinutes, resolveShiftChangeBufferMinutes } from '@/lib/shiftDefaults';
+import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 import { systemSettingsService } from '@/lib/systemSettings';
+import { useSettingsFormState } from '../useSettingsFormState';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useShiftSettings } from '@/hooks/useSystemSettings';
 import { useMessage } from '@/hooks/useMessage';
@@ -26,11 +28,31 @@ import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
+/**
+ * 실시간 계산 엔진이 실제로 지원하는 교대 모델.
+ *
+ * `src/utils/shiftBreaks.ts` 의 휴식 시간대는 **720분 교대를 전제로 하드코딩**돼 있고
+ * (`BREAK_WINDOWS_END_OFFSET_MINUTES = 600`), `calculateRealtimeProgress` 는 교대가 그보다
+ * 짧으면 아예 예외를 던진다. `MachineConsole` 도 `operatingMinutes === 720` 이 아니면
+ * 실시간 지표를 통째로 감춘다. 휴식 총량 역시 110분(TOTAL_BREAK_MINUTES)이 아니면
+ * `/api/production-progress` 가 `break_config_matches: false` 로 계산을 중단한다.
+ *
+ * 즉 UI 가 허용해 온 "임의의 시작 시각 + 0~240분 휴식"은 **저장은 되지만 지원되지 않는**
+ * 값이었다. 저장에 성공한 뒤 설비 콘솔의 실시간 화면만 조용히 사라지고, 관리자는 그 둘을
+ * 연결 짓지 못한다. 확정 OEE 는 새 설정을 따르는데 실시간만 죽으므로 증상은 더 헷갈린다.
+ *
+ * 그래서 지금은 UI 를 엔진이 감당하는 범위로 좁힌다. 가변 교대를 제품 요구로 되살리려면
+ * shiftBreaks 의 시간대를 설정 기반으로 바꾸고 자정 교차·비대칭 교대 회귀 테스트를 먼저
+ * 갖춘 뒤 이 상수를 풀어야 한다.
+ */
+const SUPPORTED_SHIFT_MINUTES = 720;
+
 interface ShiftSettingsTabProps {
-  onSettingsChange?: () => void;
+  /** 편집이 시작되면 true, 저장/되돌리기로 정리되면 false. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange }) => {
+const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onDirtyChange }) => {
   const { token } = theme.useToken();
   const { t } = useLanguage();
   // updateSetting(단건)은 더 쓰지 않는다 — 교대 설정 네 값은 서로를 해석하므로
@@ -40,6 +62,8 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
   const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const { hydrate, markSaved, markDirty, revertToSaved, canRevert } =
+    useSettingsFormState<Record<string, unknown>>(form, onDirtyChange);
 
   // 폼 초기값 설정
   //
@@ -54,7 +78,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
   // 시작 시각에서 파생해 **보여주기만** 한다.
   useEffect(() => {
     if (settings) {
-      form.setFieldsValue({
+      hydrate({
         shift_a_start: settings.shift_a_start ? dayjs(settings.shift_a_start, 'HH:mm') : dayjs('08:00', 'HH:mm'),
         shift_b_start: settings.shift_b_start ? dayjs(settings.shift_b_start, 'HH:mm') : dayjs('20:00', 'HH:mm'),
         // `||` 이 아니라 `??` 여야 한다. 관리자가 **명시적으로 0** 을 설정한 경우
@@ -68,7 +92,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
           resolveShiftChangeBufferMinutes(settings.shift_change_buffer_minutes)
       });
     }
-  }, [settings, form]);
+  }, [settings, hydrate]);
 
   // 설정 저장
   const handleSave = async (values: {
@@ -110,6 +134,20 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
       const breakMinutes = processedValues.break_time_minutes;
       const bufferMinutes = processedValues.shift_change_buffer_minutes;
 
+      // 엔진이 감당하는 교대 길이는 720분뿐이다. 이 검사가 없으면 비대칭 교대를 저장할 수
+      // 있고, 저장 직후 설비 콘솔의 실시간 지표가 통째로 사라진다(위 SUPPORTED_SHIFT_MINUTES 주석).
+      if (shortestShift !== SUPPORTED_SHIFT_MINUTES) {
+        showError(t('settings.shift.durationUnsupported', { supported: SUPPORTED_SHIFT_MINUTES }));
+        return;
+      }
+
+      // 휴식 총량도 마찬가지다. shiftBreaks 의 시간대 합계와 다르면
+      // /api/production-progress 가 break_config_matches: false 로 계산을 멈춘다.
+      if (breakMinutes !== TOTAL_BREAK_MINUTES) {
+        showError(t('settings.shift.breakUnsupported', { supported: TOTAL_BREAK_MINUTES }));
+        return;
+      }
+
       if (!Number.isFinite(breakMinutes) || breakMinutes < 0 || breakMinutes >= shortestShift) {
         showError(`휴식 시간은 0 이상이고 짧은 교대(${shortestShift}분)보다 작아야 합니다.`);
         return;
@@ -143,7 +181,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
       }
 
       showSuccess(t('settings.saveSuccess'));
-      onSettingsChange?.();
+      markSaved(values as unknown as Record<string, unknown>);
     } catch (error) {
       console.error('Error saving shift settings:', error);
       reportFailure(t('settings.saveError'), error);
@@ -229,6 +267,7 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
         form={form}
         layout="vertical"
         onFinish={handleSave}
+        onValuesChange={markDirty}
         size="large"
       >
         <Row gutter={[24, 0]}>
@@ -311,17 +350,33 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
                 label={t('settings.shift.breakTime')}
                 rules={[
                   { required: true, message: t('settings.shift.breakTimeRequired') },
-                  { type: 'number', min: 0, max: 240, message: t('settings.shift.breakTimeRange') }
+                  {
+                    type: 'number',
+                    min: TOTAL_BREAK_MINUTES,
+                    max: TOTAL_BREAK_MINUTES,
+                    message: t('settings.shift.breakUnsupported', { supported: TOTAL_BREAK_MINUTES }),
+                  }
                 ]}
               >
+                {/* min = max = 지원값. "설정 가능한 값"과 "지원되는 값"을 같게 만든다. */}
                 <InputNumber
-                  min={0}
-                  max={240}
+                  min={TOTAL_BREAK_MINUTES}
+                  max={TOTAL_BREAK_MINUTES}
                   step={5}
                   style={{ width: '100%' }}
                   addonAfter={t('common.minutes')}
                 />
               </Form.Item>
+
+              <Alert
+                message={t('settings.shift.engineConstraint', {
+                  shift: SUPPORTED_SHIFT_MINUTES,
+                  brk: TOTAL_BREAK_MINUTES,
+                })}
+                type="warning"
+                showIcon
+                style={{ marginBottom: '24px' }}
+              />
 
               <Form.Item
                 name="shift_change_buffer_minutes"
@@ -383,8 +438,8 @@ const ShiftSettingsTab: React.FC<ShiftSettingsTabProps> = ({ onSettingsChange })
 
         <div style={{ marginTop: '24px', textAlign: 'right' }}>
           <Space>
-            <Button onClick={() => form.resetFields()}>
-              {t('common.reset')}
+            <Button onClick={revertToSaved} disabled={!canRevert}>
+              {t('settings.revertToSaved')}
             </Button>
             <Button 
               type="primary" 

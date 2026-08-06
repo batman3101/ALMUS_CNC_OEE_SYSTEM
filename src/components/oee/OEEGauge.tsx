@@ -12,6 +12,7 @@ import {
 import { Card, Typography, Row, Col, Progress } from 'antd';
 import { OEEMetrics } from '@/types';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -43,6 +44,7 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
   shiftCount
 }) => {
   const { t } = useDashboardTranslation();
+  const chartAnimation = useChartAnimation();
   const { availability, performance, quality, oee } = metrics;
 
   // 0·음수·NaN 이면 교대 1회 평균이 정의되지 않는다. 나눠서 Infinity/NaN 을 숫자인 척
@@ -83,6 +85,8 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
   const gaugeOptions: ChartOptions<'doughnut'> = {
     responsive: true,
     maintainAspectRatio: false,
+    // display.chart_animation_enabled — 켜짐은 undefined(라이브러리 기본값)로 표현한다.
+    animation: chartAnimation.chartJs,
     plugins: {
       legend: {
         display: false,

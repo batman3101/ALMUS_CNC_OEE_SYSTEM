@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Layout, Button, Dropdown, Typography, Grid, Spin, App, Result, Alert } from 'antd';
 import {
   MenuFoldOutlined,
@@ -11,6 +11,7 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { canAccessPath, isPublicPath, type UserRole } from '@/lib/pageAccess';
 import { useFailureReport } from '@/hooks/useFailureReport';
 import LoginForm from '@/components/auth/LoginForm';
@@ -36,6 +37,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const { message } = App.useApp();
   const reportFailure = useFailureReport();
   const screens = useBreakpoint();
+  const { getDisplaySettings, isLoading: settingsLoading } = useSystemSettings();
+  const configuredCollapsed = getDisplaySettings().sidebarCollapsed;
 
   // 로그인 페이지인지 확인
   const isLoginPage = pathname === '/login';
@@ -65,6 +68,63 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     if (screens.lg === undefined) return;
     setCollapsed(!screens.lg || isOperatorConsolePage);
   }, [screens.lg, isOperatorConsolePage]);
+
+  /**
+   * 바로 위 효과가 **강제하는** 접힘 상태를, 아래 하이드레이션이 읽을 수 있게 같은 규칙으로
+   * 파생한다. `null` 은 아직 브레이크포인트가 확정되지 않았다는 뜻이다(antd 의
+   * `useBreakpoint` 는 첫 렌더에서 전부 undefined 를 준다).
+   *
+   * 두 곳에 같은 식이 적힌 이유는, 위 효과의 표현이 운영자 태블릿 동선 계약
+   * (`src/components/dashboard/__tests__/OperatorDashboard.tabletLayout.test.ts`)에
+   * 그대로 못박혀 있기 때문이다. 그 계약은 이 화면이 현장 태블릿에서 어떻게 동작해야
+   * 하는지에 대한 결정이므로 표현을 바꾸지 않는다. 둘이 어긋나면
+   * `appLayoutSidebarCollapsed.test.tsx` 의 모바일·운영자 콘솔 조항이 깨진다.
+   */
+  const forcedCollapsed = screens.lg === undefined
+    ? null
+    : (!screens.lg || isOperatorConsolePage);
+
+  /**
+   * `display.sidebar_collapsed` 를 **초기 접힘 상태**로 한 번만 반영한다.
+   *
+   * ■ 왜 1회 하이드레이션인가
+   *   이 설정은 비동기로 도착한다(`useSystemSettings().isLoading`). 매 렌더마다 그대로
+   *   반영하면 사용자가 사이드바를 접자마자 설정값이 다시 펴 버리고, 사용자는 토글이
+   *   고장 났다고 읽는다. `UserPreferencesContext` 가 언어·테마에서 이미 겪은 문제이고
+   *   해법도 같다 — ref 로 "확정했는가"를 기억하고, 확정 뒤에는 사용자의 선택만이 값을
+   *   바꾼다.
+   *
+   * ■ 왜 브레이크포인트 확정을 기다리는가
+   *   바로 위 효과가 모바일·운영자 콘솔에서 접힘을 **강제**한다. 두 규칙이 같은 상태를
+   *   두고 다투면 화면이 한 번 깜빡였다가 되돌아간다. 그래서 강제 규칙이 정해진 뒤에만
+   *   판단하고, 강제 접힘 상황(`forcedCollapsed === true`)에서는 설정이 개입하지 않는다
+   *   — 모바일에서 설정 때문에 사이드바가 펼쳐지면 콘텐츠를 통째로 덮는다.
+   *
+   * ■ 왜 강제 접힘일 때도 "반영 완료"로 표시하는가
+   *   "초기 상태"라는 순간은 브레이크포인트와 설정이 모두 확정된 시점에 끝난다. 여기서
+   *   소비 표시를 미루면 나중에 창을 넓혔을 때(모바일 → 데스크톱) 뒤늦게 설정이 튀어나와
+   *   사용자가 요청하지 않은 접힘이 일어난다.
+   */
+  const sidebarHydratedRef = useRef(false);
+  const userToggledSidebarRef = useRef(false);
+
+  useEffect(() => {
+    if (sidebarHydratedRef.current) return;
+    if (settingsLoading) return;
+    if (forcedCollapsed === null) return;
+
+    sidebarHydratedRef.current = true;
+
+    // 설정을 기다리는 동안 사용자가 이미 접거나 편 경우, 그 선택이 이긴다.
+    if (forcedCollapsed || userToggledSidebarRef.current) return;
+    setCollapsed(configuredCollapsed);
+  }, [settingsLoading, forcedCollapsed, configuredCollapsed]);
+
+  /** 사용자가 직접 바꾼 접힘. 이후로는 설정이 이 선택을 덮지 않는다. */
+  const handleCollapseChange = useCallback((next: boolean) => {
+    userToggledSidebarRef.current = true;
+    setCollapsed(next);
+  }, []);
 
 
 
@@ -163,15 +223,22 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   return (
     <Layout className={styles.appLayout}>
-      <Sidebar collapsed={collapsed} onCollapse={setCollapsed} />
+      <Sidebar collapsed={collapsed} onCollapse={handleCollapseChange} />
       <Layout>
         <Header className={styles.header}>
           <div className={styles.headerLeft}>
-            {(!screens.lg || isOperatorConsolePage) && (
+            {/*
+              데스크톱 넓은 화면에서는 사이드바가 늘 펼쳐져 있으므로 토글이 필요 없었다.
+              그런데 `display.sidebar_collapsed` 를 켜면 접힌 채로 시작하고, 토글이 없으면
+              **펼칠 방법이 사라진다** — 설정 하나가 화면을 되돌릴 수 없는 상태로 만든다.
+              그래서 그 설정이 켜져 있을 때는 데스크톱에서도 토글을 남긴다. 설정이 꺼져
+              있으면(현재 운영값) 조건이 예전과 완전히 같다.
+            */}
+            {(!screens.lg || isOperatorConsolePage || configuredCollapsed) && (
               <Button
                 type="text"
                 icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                onClick={() => setCollapsed(!collapsed)}
+                onClick={() => handleCollapseChange(!collapsed)}
                 className={styles.menuToggle}
               />
             )}

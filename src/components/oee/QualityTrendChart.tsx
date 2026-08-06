@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { Card, Typography, Empty, Spin } from 'antd';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 const { Title: AntTitle } = Typography;
 
@@ -79,6 +80,7 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
   error
 }) => {
   const { t } = useDashboardTranslation();
+  const chartAnimation = useChartAnimation();
   const displayTitle = title ?? t('chart.defectRateTrend');
 
   // 데이터 로깅 (디버깅용)
@@ -211,6 +213,8 @@ export const QualityTrendChart: React.FC<QualityTrendChartProps> = ({
                   fill: '#fff',
                 }}
                 name={t('chart.defectRatePercent')}
+                // display.chart_animation_enabled
+                isAnimationActive={chartAnimation.recharts}
               />
             </LineChart>
           </ResponsiveContainer>

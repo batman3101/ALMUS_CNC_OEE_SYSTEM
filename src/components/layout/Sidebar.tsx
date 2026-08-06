@@ -30,6 +30,40 @@ import styles from './Sidebar.module.css';
 const { Sider } = Layout;
 const { useBreakpoint } = Grid;
 
+/** 설정에 로고가 없을 때 쓰는 기본 심볼. 지금까지 하드코딩되어 있던 그 파일이다. */
+const FALLBACK_LOGO_SRC = '/ALMUS symbol.png';
+
+/**
+ * 설정에 저장된 로고 URL을 `next/image` 가 실제로 그릴 수 있는 형태로 판정한다.
+ *
+ * 업로드된 로고는 Supabase Storage 의 **공개 URL**(`https://<project>.supabase.co/...`)로
+ * 저장된다(`src/app/api/upload/image/route.ts`). `next/image` 의 기본 로더는 외부 호스트를
+ * `next.config.js` 의 `images.remotePatterns` 에 등록해야만 최적화 경로로 통과시키고,
+ * 등록되지 않은 호스트는 **런타임 에러**로 막는다. 지금 이 설정에는 `images` 블록 자체가
+ * 없다.
+ *
+ * 그래서 원격 URL 은 `unoptimized` 로 그린다 — 이 플래그가 붙으면 Next 는 로더를 아예
+ * 부르지 않고 `src` 를 그대로 `<img>` 에 넘기므로 호스트 등록이 필요 없다. 로고는 32px
+ * 짜리 심볼이라 최적화로 얻을 이득도 거의 없다. 값이 비어 있으면(현재 운영 상태) 기존
+ * 로컬 파일을 그대로 쓰므로 화면은 지금과 완전히 동일하다.
+ *
+ * ■ 왜 `null`·`undefined` 까지 받는가
+ *   타입상 `getCompanyInfo().logo` 는 항상 문자열이지만, 이 함수가 문자열을 전제하고
+ *   `.trim()` 을 부르는 순간 **회사 로고라는 장식 하나가 내비게이션 전체를 무너뜨릴 수
+ *   있는 자리**가 된다 — 실제로 `logo` 키가 없는 호출자 하나에 `Sidebar` 가 통째로
+ *   TypeError 로 죽었다. 값이 없으면 기본 심볼로 물러나는 것이 언제나 옳으므로, 타입을
+ *   믿는 대신 전(total) 함수로 만든다.
+ */
+function resolveLogo(configuredUrl: string | null | undefined): { src: string; unoptimized: boolean } {
+  const trimmed = configuredUrl?.trim() ?? '';
+  if (!trimmed) return { src: FALLBACK_LOGO_SRC, unoptimized: false };
+
+  // 로컬 경로(`/foo.png`)는 최적화 경로가 그대로 처리한다. 프로토콜 상대 URL(`//host/..`)은
+  // 원격이므로 제외한다.
+  const isLocal = trimmed.startsWith('/') && !trimmed.startsWith('//');
+  return { src: trimmed, unoptimized: !isLocal };
+}
+
 /**
  * 경로별 아이콘. 권한 표(`@/lib/pageAccess`)에 아이콘을 섞지 않는 이유는, 그 표를 React 를
  * 모르는 곳(테스트·서버)에서도 읽기 때문이다. 표는 규칙만, 여기는 표현만 담당한다.
@@ -61,6 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const screens = useBreakpoint();
   
   const companyInfo = getCompanyInfo();
+  const logo = resolveLogo(companyInfo.logo);
 
   const userRole = user?.role as UserRole | undefined;
 
@@ -127,11 +162,12 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
     >
       <div className={`${styles.logo} ${screens.xs ? styles.logoMobile : ''}`}>
         <Image
-          src="/ALMUS symbol.png"
+          src={logo.src}
           alt="ALMUS Logo"
           width={32}
           height={32}
           className={`${styles.logoImage} ${collapsed ? styles.logoImageCollapsed : ''}`}
+          unoptimized={logo.unoptimized}
           priority
         />
         {!collapsed && (

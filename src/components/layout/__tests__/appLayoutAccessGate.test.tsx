@@ -38,6 +38,18 @@ jest.mock('@/contexts/LanguageContext', () => ({
   useLanguage: () => ({ t: (key: string) => key }),
 }));
 
+// AppLayout 은 `display.sidebar_collapsed` 를 읽는다. 이 검사의 대상은 아니지만, 대역이
+// 없으면 SystemSettingsContext → supabase 로 이어져 `.env.local` 없이는 import 자체가
+// 실패한다. 접힘 상태 검사는 `appLayoutSidebarCollapsed.test.tsx` 가 따로 본다.
+jest.mock('@/contexts/SystemSettingsContext', () => ({
+  useSystemSettings: () => ({
+    settings: {},
+    isLoading: false,
+    error: null,
+    getSetting: () => null,
+  }),
+}));
+
 // 사이드바와 로그인 폼은 이 검사의 대상이 아니다. 각자 컨텍스트를 많이 요구하므로
 // 표식만 남기고 대체한다 — 관문이 열렸는지 닫혔는지만 보면 된다.
 jest.mock('../Sidebar', () => ({

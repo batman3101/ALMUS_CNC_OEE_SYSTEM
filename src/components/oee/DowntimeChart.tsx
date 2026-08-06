@@ -19,6 +19,7 @@ import { Card, Typography, Table, Row, Col } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { MachineState, DowntimeData } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useChartAnimation } from '@/hooks/useChartAnimation';
 
 ChartJS.register(
   CategoryScale,
@@ -60,6 +61,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   showTable = true
 }) => {
   const { t } = useTranslation();
+  const chartAnimation = useChartAnimation();
 
   // 상태 레이블 번역 함수
   const getStateLabel = (state: MachineState): string => {
@@ -126,6 +128,8 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   const options: ChartOptions<'bar'> = {
     responsive: true,
     maintainAspectRatio: false,
+    // display.chart_animation_enabled — 켜짐은 undefined(라이브러리 기본값)로 표현한다.
+    animation: chartAnimation.chartJs,
     plugins: {
       legend: {
         position: 'top' as const,

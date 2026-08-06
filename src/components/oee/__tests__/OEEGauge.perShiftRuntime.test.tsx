@@ -6,6 +6,13 @@ import type { OEEMetrics } from '@/types';
 // 게이지 그림이 아니라 하단 상세행의 숫자다.
 jest.mock('react-chartjs-2', () => ({ Doughnut: () => null }));
 
+// 차트 애니메이션 설정은 이 검사의 대상이 아니다(전용 검사는
+// `src/components/oee/__tests__/chartAnimationSetting.test.tsx`). 대역으로 두면
+// SystemSettingsContext → supabase 로 이어지는 import 사슬도 함께 끊어진다.
+jest.mock('@/hooks/useChartAnimation', () => ({
+  useChartAnimation: () => ({ enabled: true, chartJs: undefined, recharts: true }),
+}));
+
 jest.mock('@/hooks/useTranslation', () => ({
   useDashboardTranslation: () => ({
     t: (key: string, vars?: Record<string, unknown>) =>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { validateSettingValue } from '@/lib/settingsRegistry';
 
 /**
  * Service Role을 사용하여 시스템 설정 업데이트 (RLS 우회)
@@ -17,7 +18,7 @@ interface SettingUpdateItem {
   setting_value: unknown;
 }
 
-/** 배치 요청의 항목들을 검증해 정규화한다. 하나라도 어긋나면 전체를 거부한다. */
+/** 배치 요청의 항목들을 형태만 보고 정규화한다. 하나라도 어긋나면 전체를 거부한다. */
 function normalizeUpdates(raw: unknown): SettingUpdateItem[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const items: SettingUpdateItem[] = [];
@@ -29,6 +30,33 @@ function normalizeUpdates(raw: unknown): SettingUpdateItem[] | null {
     items.push({ category, setting_key, setting_value });
   }
   return items;
+}
+
+/**
+ * 현행 설정 계약(`src/lib/settingsRegistry.ts`)과 대조한다. 어긋난 첫 항목의 사유를 돌려주고,
+ * 모두 통과하면 `null` 을 돌려준다.
+ *
+ * ## 왜 여기서 막아야 하나
+ *
+ * 이 라우트가 부르는 `update_system_setting` 은 **키가 없으면 새 행을 INSERT 한다**
+ * (`supabase/migrations/20260714040000_role_based_rls.sql`). 즉 오타 한 번, 옛 코드 경로 한 번이
+ * 곧바로 영구 레거시 행이 되고, 아무도 오류를 보지 못한다 — 응답은 성공이기 때문이다.
+ * 라이브 DB 에 현행 32개 계약 밖의 활성 키가 11개 쌓인 경로가 정확히 이것이다
+ * (`display.theme`, `oee.quality_target`, `ui.language`, ... — 2026-08-06 감사 5.2).
+ * 예전 검사는 카테고리·키가 빈 문자열인지만 봤고 자료형도 범위도 보지 않았다.
+ *
+ * ## 왜 인가 뒤인가
+ *
+ * 계약 위반 사유는 "어떤 키가 존재하는가"를 알려준다. 인가 앞에서 검사하면 로그인하지 않은
+ * 사람이 400/401 차이만으로 설정 키 목록을 훑을 수 있다. 형태 검사(카테고리·키가 문자열인가)는
+ * 그런 정보를 담지 않으므로 예전 위치에 그대로 둔다.
+ */
+function contractViolation(items: readonly SettingUpdateItem[]): string | null {
+  for (const item of items) {
+    const result = validateSettingValue(item.category, item.setting_key, item.setting_value);
+    if (!result.ok) return result.error;
+  }
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -120,6 +148,20 @@ export async function POST(request: NextRequest) {
       );
     }
     // ──────────────────────────────────────────────────────────────────────────
+
+    // 계약 검사는 배치·단건 **양쪽 모두** 거친다. 한쪽만 막으면 다른 쪽이 레거시 키를 계속
+    // 만들어 낸다 — 실제로 라이브에 쌓인 11개 중 상당수가 단건 경로에서 왔다.
+    // 배치는 하나라도 어긋나면 전체를 거부한다(RPC 자체가 all-or-nothing 이므로 같은 규칙이다).
+    const violation = updates !== null
+      ? contractViolation(updates)
+      : contractViolation(
+          // 단건 모드는 위에서 이미 category/setting_key 가 비어 있지 않음을 확인했다.
+          // 그 사실을 단언(as)으로 다시 주장하는 대신 좁혀진 값으로 배열을 만든다.
+          category && setting_key ? [{ category, setting_key, setting_value }] : [],
+        );
+    if (violation) {
+      return NextResponse.json({ success: false, error: violation }, { status: 400 });
+    }
 
     const reason = change_reason || '시스템 자동 업데이트';
 

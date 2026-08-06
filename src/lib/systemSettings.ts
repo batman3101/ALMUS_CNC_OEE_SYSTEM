@@ -2,6 +2,7 @@
 
 import { supabase } from './supabase';
 import { log, LogCategories } from './logger';
+import { SETTINGS_REGISTRY, validateSettingValue as validateAgainstRegistry } from './settingsRegistry';
 import type {
   SystemSetting,
   SettingUpdate,
@@ -366,34 +367,85 @@ export class SystemSettingsService {
       if (!validation.isValid) return { success: false, error: validation.error };
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const response = await fetch('/api/system-settings/update', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      },
-      body: JSON.stringify({
-        updates: updates.map(u => ({
-          category: u.category,
-          setting_key: u.setting_key,
-          setting_value: typeof u.setting_value === 'string'
-            ? u.setting_value
-            : JSON.stringify(u.setting_value),
-        })),
-        change_reason: changeReason,
-      }),
-    });
-
-    const result = (await response.json().catch(() => null)) as
-      { success?: boolean; error?: string } | null;
-    if (!response.ok || !result?.success) {
-      return { success: false, error: result?.error ?? `HTTP ${response.status}` };
-    }
+    const result = await this.sendBatch(updates, changeReason);
+    if (!result.success) return result;
 
     // 한 번에 바뀌었으므로 캐시도 한 번만 비운다.
     this.invalidateCache();
     for (const update of updates) await this.broadcastSettingChange(update);
+    return { success: true };
+  }
+
+  /**
+   * 배치 저장의 전송 계층. 브라우저와 서버가 같은 트랜잭션(=같은 RPC)에 도달하게 한다.
+   *
+   * 두 경로가 필요한 이유는 호출자가 양쪽에 있기 때문이다 — 설정 화면(브라우저)과
+   * `/api/system-settings` PUT·`/api/system-settings/[category]` PUT/DELETE(서버). 브라우저에서
+   * 상대 경로 fetch 는 되지만 서버에서는 되지 않고, 서버에서 Service Role 클라이언트를 만드는
+   * 것은 브라우저에서 하면 안 된다. 갈라지는 것은 **전송 방법뿐**이고 도착지는 하나다.
+   *
+   * `update_system_settings_batch` 의 EXECUTE 권한은 `service_role` 에만 있다
+   * (`20260729220000_settings_batch_update.sql`). 그래서 브라우저 경로는 반드시 라우트를 거친다 —
+   * 거기서 관리자 세션을 확인한 뒤 Service Role 로 바꿔 부른다.
+   */
+  private async sendBatch(
+    updates: SettingUpdate[],
+    changeReason?: string,
+  ): Promise<SettingUpdateResponse> {
+    // RPC 는 text 를 받아 값 종류(문자열/숫자/불리언)를 스스로 판별한다. 단건 경로와 같은
+    // 규칙을 쓴다 — 인코딩이 경로마다 다르면 같은 값이 경로에 따라 다르게 저장된다.
+    const wireUpdates = updates.map(u => ({
+      category: u.category,
+      setting_key: u.setting_key,
+      setting_value: typeof u.setting_value === 'string'
+        ? u.setting_value
+        : JSON.stringify(u.setting_value),
+    }));
+
+    if (typeof window !== 'undefined') {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/system-settings/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ updates: wireUpdates, change_reason: changeReason }),
+      });
+
+      const result = (await response.json().catch(() => null)) as
+        { success?: boolean; error?: string } | null;
+      if (!response.ok || !result?.success) {
+        return { success: false, error: result?.error ?? `HTTP ${response.status}` };
+      }
+      return { success: true };
+    }
+
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!serviceRoleKey || !supabaseUrl) {
+      return { success: false, error: 'Service Role이 구성되지 않았습니다.' };
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data, error } = await serviceClient.rpc('update_system_settings_batch', {
+      p_updates: wireUpdates,
+      p_reason: changeReason ?? null,
+    });
+
+    // 이 RPC 는 실패를 예외가 아니라 `{ok:false, reason}` 으로도 돌려준다. `error` 만 보면
+    // "성공했는데 아무것도 안 바뀜"을 성공으로 읽는다 — 호출자가 가장 알아채기 어려운 실패다.
+    const result = data as { ok?: boolean; reason?: string; updated?: number } | null;
+    if (error || !result?.ok) {
+      return {
+        success: false,
+        error: `설정 업데이트 실패: ${error?.message ?? result?.reason ?? 'unknown'}`,
+      };
+    }
     return { success: true };
   }
 
@@ -474,23 +526,24 @@ export class SystemSettingsService {
   }
 
   /**
-   * 여러 설정값 일괄 업데이트
+   * 여러 설정값 일괄 업데이트 — `updateSettingsAtomic` 과 같은 한 트랜잭션을 쓴다.
+   *
+   * 예전 구현은 `Promise.all(updates.map(updateSetting))` 이었다. N번의 독립 요청이므로
+   * 중간이 실패하면 앞선 것들은 이미 저장돼 있고, 병렬이라 무엇이 남았는지 예측조차 어렵다.
+   * 호출자는 `success: false` 하나만 받고 DB 에는 절반이 남는다 — 화면과 DB 가 다른 이야기를
+   * 하는 상태다 (2026-08-06 감사 HIGH-05).
+   *
+   * 시그니처와 반환 형태는 그대로 둔다. 바뀐 것은 **요청 수가 N 에서 1 로 줄었다는 것**이고,
+   * 그것이 이 변경의 전부다. 회귀 검사도 반환값이 아니라 요청 수를 단언한다 — 반환값만 보는
+   * 테스트는 깨진 구현에서도 통과한다.
    */
   async updateMultipleSettings(updates: SettingUpdate[]): Promise<SettingUpdateResponse> {
     try {
-      const results = await Promise.all(
-        updates.map(update => this.updateSetting(update))
-      );
-
-      const failedUpdates = results.filter(result => !result.success);
-      if (failedUpdates.length > 0) {
-        return {
-          success: false,
-          error: `Failed to update ${failedUpdates.length} settings`
-        };
-      }
-
-      return { success: true };
+      // 배치 RPC 는 사유를 하나만 받는다. 개별 사유는 "Updated display X setting" 처럼
+      // 키를 되풀이하는 문구뿐이고, 감사 행에는 category·setting_key 가 따로 남으므로
+      // 첫 사유를 대표로 쓴다.
+      const changeReason = updates.find(u => u.change_reason)?.change_reason;
+      return await this.updateSettingsAtomic(updates, changeReason);
     } catch (error) {
       console.error('Error in updateMultipleSettings:', error);
       return { success: false, error: 'Failed to update multiple settings' };
@@ -569,8 +622,17 @@ export class SystemSettingsService {
   }
 
   /**
-   * 기본 설정값으로 초기화
-   * (감사 추적이 남는 update_system_setting RPC를 통해 기본값을 다시 기록한다)
+   * 기본 설정값으로 초기화 — 원장의 기본값을 **한 트랜잭션**으로 다시 기록한다.
+   *
+   * 이 메서드는 관리자가 "모든 설정 초기화" 버튼으로 부르는 것이고, 그래서 두 가지가 동시에
+   * 위험했다 (2026-08-06 감사 HIGH-01):
+   *
+   * 1. 기본값이 운영값과 어긋나 있었다. 휴식 60분을 써 넣으면 `/api/production-progress` 가
+   *    안전 중단해 실시간 지표가 전 설비에서 사라진다. 이제 기본값은 실시간 계산이 쓰는 상수를
+   *    그대로 가져온다(`settingsRegistry.ts`).
+   * 2. `Promise.all` 로 32번을 따로 썼다. 중간에 실패하면 **일부만 초기화된** 상태가 남는다.
+   *    초기화의 존재 이유가 "알 수 없는 상태에서 아는 상태로 되돌리는 것"인데, 부분 실패는
+   *    더 알 수 없는 상태를 만든다. 한 트랜잭션이면 전부 되돌아가거나 전부 적용된다.
    */
   async resetToDefaults(category?: SettingCategory): Promise<SettingUpdateResponse> {
     try {
@@ -585,20 +647,19 @@ export class SystemSettingsService {
         };
       }
 
-      const results = await Promise.all(
-        definitions.map(def => this.updateSetting({
+      const result = await this.updateSettingsAtomic(
+        definitions.map(def => ({
           category: def.category,
           setting_key: def.key,
           setting_value: def.default_value,
-          change_reason: 'Reset to default value'
-        }))
+        })),
+        'Reset to default value',
       );
 
-      const failedResets = results.filter(result => !result.success);
-      if (failedResets.length > 0) {
+      if (!result.success) {
         return {
           success: false,
-          error: `Failed to reset ${failedResets.length} of ${definitions.length} settings to defaults`
+          error: result.error ?? `Failed to reset ${definitions.length} settings to defaults`
         };
       }
 
@@ -610,38 +671,17 @@ export class SystemSettingsService {
   }
 
   /**
-   * 설정값 검증 (간단한 버전)
+   * 설정값 검증 — 원장이 기준이다.
+   *
+   * 예전에는 `null`/`undefined` 만 걸렀고, 자료형을 아는 `validateValueType()` 은 만들어만
+   * 두고 **어느 저장 경로에서도 부르지 않았다.** 그래서 오타 키도 잘못된 자료형도 그대로
+   * 저장됐고, `update_system_setting` 은 없는 키를 만나면 새 행을 만들기 때문에 그 오타가
+   * 영구 레거시 행이 됐다 — 라이브에 그렇게 쌓인 계약 밖 활성 키가 11개다
+   * (2026-08-06 감사 5.2). 검증기를 두 벌 두면 언젠가 한쪽만 고쳐지므로 원장 하나만 남긴다.
    */
   private validateSettingValue(update: SettingUpdate): { isValid: boolean; error?: string } {
-    // 기본적인 검증만 수행
-    if (update.setting_value === null || update.setting_value === undefined) {
-      return { isValid: false, error: 'Setting value cannot be null or undefined' };
-    }
-
-    return { isValid: true };
-  }
-
-
-  /**
-   * 값 타입 검증
-   */
-  private validateValueType(value: unknown, expectedType: string): boolean {
-    switch (expectedType) {
-      case 'string':
-        return typeof value === 'string';
-      case 'number':
-        return typeof value === 'number' && !isNaN(value);
-      case 'boolean':
-        return typeof value === 'boolean';
-      case 'time':
-        return typeof value === 'string' && /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(value);
-      case 'color':
-        return typeof value === 'string' && /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(value);
-      case 'json':
-        return true; // JSON은 모든 타입 허용
-      default:
-        return false;
-    }
+    const result = validateAgainstRegistry(update.category, update.setting_key, update.setting_value);
+    return result.ok ? { isValid: true } : { isValid: false, error: result.error };
   }
 
   /**
@@ -740,318 +780,27 @@ export class SystemSettingsService {
   }
 
   /**
-   * 기본 설정 정의
+   * 기본 설정 정의 — 원장(`settingsRegistry.ts`)의 투영이다.
+   *
+   * 예전에는 이 자리에 32개짜리 목록이 통째로 적혀 있었고, 그것이 초기화의 유일한 기준이었다.
+   * 화면·DB 와 따로 자라다가 2026-08-06 감사에서 실제로 갈라진 채 발견됐다 — 제거된
+   * `shift_a_end`/`shift_b_end` 를 되살리고 현행 `shift_change_buffer_minutes`/
+   * `notification_email` 은 빠뜨린 상태였다. 목록을 여기에 다시 적지 않는다.
+   *
+   * 원장은 camelCase, 이 계층의 `SettingDefinition` 은 DB 컬럼을 따라 snake_case 라 이름만
+   * 옮긴다. 값은 하나도 만들지 않는다 — 만드는 순간 두 벌이 된다.
    */
   private getDefaultSettings(): SettingDefinitionWithOptions[] {
-    return [
-      // 일반 설정
-      {
-        key: 'company_name',
-        category: 'general',
-        value_type: 'string',
-        default_value: 'ALMUS TECH',
-        description: '회사명',
-        is_system: true,
-        validation: { required: true }
-      },
-      {
-        key: 'company_logo_url',
-        category: 'general',
-        value_type: 'string',
-        default_value: '',
-        description: '회사 로고 URL',
-        is_system: false
-      },
-      {
-        key: 'timezone',
-        category: 'general',
-        value_type: 'string',
-        default_value: 'Asia/Ho_Chi_Minh',
-        description: '시간대 설정',
-        is_system: true,
-        options: [
-          { label: '서울 (Asia/Seoul)', value: 'Asia/Seoul' },
-          { label: '호치민 (Asia/Ho_Chi_Minh)', value: 'Asia/Ho_Chi_Minh' },
-          { label: 'UTC', value: 'UTC' }
-        ]
-      },
-      {
-        key: 'date_format',
-        category: 'general',
-        value_type: 'string',
-        default_value: 'DD/MM/YYYY',
-        description: '날짜 형식',
-        is_system: true,
-        options: [
-          { label: 'DD/MM/YYYY', value: 'DD/MM/YYYY' },
-          { label: 'MM/DD/YYYY', value: 'MM/DD/YYYY' },
-          { label: 'YYYY-MM-DD', value: 'YYYY-MM-DD' },
-          { label: 'YYYY/MM/DD', value: 'YYYY/MM/DD' }
-        ]
-      },
-      {
-        key: 'time_format',
-        category: 'general',
-        value_type: 'string',
-        default_value: 'HH:mm:ss',
-        description: '시간 형식',
-        is_system: true,
-        options: [
-          { label: '24시간 (HH:mm:ss)', value: 'HH:mm:ss' },
-          { label: '24시간 (HH:mm)', value: 'HH:mm' },
-          { label: '12시간 (hh:mm:ss A)', value: 'hh:mm:ss A' },
-          { label: '12시간 (hh:mm A)', value: 'hh:mm A' }
-        ]
-      },
-      {
-        // DB canonical key. 코드 타입 계약(AllSystemSettings.general.language) 과는
-        // mapDbKeyToCodeKey() 를 통해 별칭 처리된다 (S4: DB 의 실제 row 는 default_language 키를 사용).
-        key: 'default_language',
-        category: 'general',
-        value_type: 'string',
-        default_value: 'ko',
-        description: '기본 언어',
-        is_system: true,
-        options: [
-          { label: '한국어', value: 'ko' },
-          { label: 'Tiếng Việt', value: 'vi' }
-        ]
-      },
-
-      // OEE 설정
-      {
-        key: 'target_oee',
-        category: 'oee',
-        value_type: 'number',
-        default_value: 0.85,
-        description: 'OEE 목표값',
-        is_system: true,
-        validation: { required: true, min: 0, max: 1 }
-      },
-      {
-        key: 'target_availability',
-        category: 'oee',
-        value_type: 'number',
-        default_value: 0.90,
-        description: '가동률 목표값',
-        is_system: true,
-        validation: { required: true, min: 0, max: 1 }
-      },
-      {
-        key: 'target_performance',
-        category: 'oee',
-        value_type: 'number',
-        default_value: 0.95,
-        description: '성능 목표값',
-        is_system: true,
-        validation: { required: true, min: 0, max: 1 }
-      },
-      {
-        key: 'target_quality',
-        category: 'oee',
-        value_type: 'number',
-        default_value: 0.99,
-        description: '품질 목표값',
-        is_system: true,
-        validation: { required: true, min: 0, max: 1 }
-      },
-      {
-        key: 'low_oee_threshold',
-        category: 'oee',
-        value_type: 'number',
-        default_value: 0.60,
-        description: 'OEE 저하 임계값',
-        is_system: true,
-        validation: { required: true, min: 0, max: 1 }
-      },
-      {
-        key: 'critical_oee_threshold',
-        category: 'oee',
-        value_type: 'number',
-        default_value: 0.40,
-        description: 'OEE 위험 임계값',
-        is_system: true,
-        validation: { required: true, min: 0, max: 1 }
-      },
-      {
-        key: 'downtime_alert_minutes',
-        category: 'oee',
-        value_type: 'number',
-        default_value: 30,
-        description: '다운타임 알림 기준 (분)',
-        is_system: true,
-        validation: { required: true, min: 1, max: 480 }
-      },
-
-      // 교대 설정
-      {
-        key: 'shift_a_start',
-        category: 'shift',
-        value_type: 'time',
-        default_value: '08:00',
-        description: 'A교대 시작 시간',
-        is_system: true,
-        validation: { required: true }
-      },
-      {
-        key: 'shift_a_end',
-        category: 'shift',
-        value_type: 'time',
-        default_value: '20:00',
-        description: 'A교대 종료 시간',
-        is_system: true,
-        validation: { required: true }
-      },
-      {
-        key: 'shift_b_start',
-        category: 'shift',
-        value_type: 'time',
-        default_value: '20:00',
-        description: 'B교대 시작 시간',
-        is_system: true,
-        validation: { required: true }
-      },
-      {
-        key: 'shift_b_end',
-        category: 'shift',
-        value_type: 'time',
-        default_value: '08:00',
-        description: 'B교대 종료 시간',
-        is_system: true,
-        validation: { required: true }
-      },
-      {
-        key: 'break_time_minutes',
-        category: 'shift',
-        value_type: 'number',
-        default_value: 60,
-        description: '교대별 휴식 시간 (분)',
-        is_system: true,
-        validation: { required: true, min: 0, max: 240 }
-      },
-
-      // 알림 설정
-      {
-        key: 'email_notifications_enabled',
-        category: 'notification',
-        value_type: 'boolean',
-        default_value: true,
-        description: '이메일 알림 활성화',
-        is_system: false
-      },
-      {
-        key: 'browser_notifications_enabled',
-        category: 'notification',
-        value_type: 'boolean',
-        default_value: true,
-        description: '브라우저 알림 활성화',
-        is_system: false
-      },
-      {
-        key: 'sound_notifications_enabled',
-        category: 'notification',
-        value_type: 'boolean',
-        default_value: true,
-        description: '소리 알림 활성화',
-        is_system: false
-      },
-      {
-        key: 'alert_check_interval_seconds',
-        category: 'notification',
-        value_type: 'number',
-        default_value: 60,
-        description: '알림 확인 간격 (초)',
-        is_system: true,
-        validation: { required: true, min: 10, max: 300 }
-      },
-
-      // 화면 설정
-      {
-        key: 'theme_mode',
-        category: 'display',
-        value_type: 'string',
-        default_value: 'light',
-        description: '테마 모드',
-        is_system: false,
-        options: [
-          { label: '라이트 모드', value: 'light' },
-          { label: '다크 모드', value: 'dark' }
-        ]
-      },
-      {
-        key: 'theme_primary_color',
-        category: 'display',
-        value_type: 'color',
-        default_value: '#1890ff',
-        description: '주요 테마 색상',
-        is_system: false
-      },
-      {
-        key: 'theme_success_color',
-        category: 'display',
-        value_type: 'color',
-        default_value: '#52c41a',
-        description: '성공 색상',
-        is_system: false
-      },
-      {
-        key: 'theme_warning_color',
-        category: 'display',
-        value_type: 'color',
-        default_value: '#faad14',
-        description: '경고 색상',
-        is_system: false
-      },
-      {
-        key: 'theme_error_color',
-        category: 'display',
-        value_type: 'color',
-        default_value: '#ff4d4f',
-        description: '오류 색상',
-        is_system: false
-      },
-      {
-        key: 'dashboard_refresh_interval_seconds',
-        category: 'display',
-        value_type: 'number',
-        default_value: 30,
-        description: '대시보드 새로고침 간격 (초)',
-        is_system: true,
-        validation: { required: true, min: 5, max: 300 }
-      },
-      {
-        key: 'chart_animation_enabled',
-        category: 'display',
-        value_type: 'boolean',
-        default_value: true,
-        description: '차트 애니메이션 활성화',
-        is_system: false
-      },
-      {
-        key: 'compact_mode',
-        category: 'display',
-        value_type: 'boolean',
-        default_value: false,
-        description: '컴팩트 모드',
-        is_system: false
-      },
-      {
-        key: 'show_machine_images',
-        category: 'display',
-        value_type: 'boolean',
-        default_value: true,
-        description: '설비 이미지 표시',
-        is_system: false
-      },
-      {
-        key: 'sidebar_collapsed',
-        category: 'display',
-        value_type: 'boolean',
-        default_value: false,
-        description: '사이드바 접힘 상태',
-        is_system: false
-      }
-    ];
+    return SETTINGS_REGISTRY.map(entry => ({
+      key: entry.key,
+      category: entry.category,
+      value_type: entry.valueType,
+      default_value: entry.defaultValue,
+      description: entry.description,
+      is_system: entry.isSystem,
+      ...(entry.validation ? { validation: { ...entry.validation } } : {}),
+      ...(entry.options ? { options: entry.options.map(option => ({ ...option })) } : {}),
+    }));
   }
 
 }

@@ -18,36 +18,45 @@ import {
 import { SaveOutlined, BellOutlined, MailOutlined, SoundOutlined } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useNotificationSettings } from '@/hooks/useSystemSettings';
+import { systemSettingsService } from '@/lib/systemSettings';
+import { useSettingsFormState } from '../useSettingsFormState';
 import { useMessage } from '@/hooks/useMessage';
 import { useFailureReport } from '@/hooks/useFailureReport';
 
 const { Title, Text } = Typography;
 
 interface NotificationSettingsTabProps {
-  onSettingsChange?: () => void;
+  /** 편집이 시작되면 true, 저장/되돌리기로 정리되면 false. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
-const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSettingsChange }) => {
+const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onDirtyChange }) => {
   const { t } = useLanguage();
-  const { settings, updateSetting } = useNotificationSettings();
+  const { settings } = useNotificationSettings();
   const { success: showSuccess, error: showError, warning: showWarning, contextHolder } = useMessage();
   const reportFailure = useFailureReport();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>('default');
+  const { hydrate, markSaved, markDirty, revertToSaved, canRevert } =
+    useSettingsFormState<Record<string, unknown>>(form, onDirtyChange);
 
   // 폼 초기값 설정
+  //
+  // `||` 가 아니라 `??`. 확인 간격의 실제 저장값은 라이브에서 120 인데, 앱은 아직 60초를
+  // 하드코딩해 쓰고 있다(이 탭의 미적용 안내 참조). 그 상태에서 `|| 60` 까지 겹치면 화면이
+  // 저장값과도 앱 동작과도 다른 세 번째 숫자를 보여줄 수 있다. 읽어온 값은 그대로 보여준다.
   useEffect(() => {
     if (settings) {
-      form.setFieldsValue({
-        email_notifications_enabled: settings.email_notifications_enabled || false,
-        browser_notifications_enabled: settings.browser_notifications_enabled || false,
-        sound_notifications_enabled: settings.sound_notifications_enabled || false,
-        notification_email: settings.notification_email || '',
-        alert_check_interval_seconds: settings.alert_check_interval_seconds || 60
+      hydrate({
+        email_notifications_enabled: settings.email_notifications_enabled ?? false,
+        browser_notifications_enabled: settings.browser_notifications_enabled ?? false,
+        sound_notifications_enabled: settings.sound_notifications_enabled ?? false,
+        notification_email: settings.notification_email ?? '',
+        alert_check_interval_seconds: settings.alert_check_interval_seconds ?? 60
       });
     }
-  }, [settings, form]);
+  }, [settings, hydrate]);
 
   // 브라우저 알림 권한 확인
   useEffect(() => {
@@ -71,21 +80,22 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
         }
       }
 
-      const updates = Object.entries(values).map(([key, value]) => ({
-        key,
-        value,
-        reason: `Updated notification ${key} setting`
-      }));
-
-      for (const update of updates) {
-        const success = await updateSetting(update.key, update.value, update.reason);
-        if (!success) {
-          throw new Error(`Failed to update ${update.key}`);
-        }
+      // **한 트랜잭션**으로 저장한다. 예전에는 5건을 for 루프로 따로 저장해서, 중간 실패 시
+      // "이메일 알림은 켜졌는데 수신 주소는 예전 것" 같은 반쪽 상태가 DB 에 남을 수 있었다.
+      const result = await systemSettingsService.updateSettingsAtomic(
+        Object.entries(values).map(([key, value]) => ({
+          category: 'notification',
+          setting_key: key,
+          setting_value: value,
+        })),
+        'Updated notification settings',
+      );
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to update notification settings');
       }
 
       showSuccess(t('settings.saveSuccess'));
-      onSettingsChange?.();
+      markSaved(values);
     } catch (error) {
       console.error('Error saving notification settings:', error);
       reportFailure(t('settings.saveError'), error);
@@ -152,6 +162,7 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
         form={form}
         layout="vertical"
         onFinish={handleSave}
+        onValuesChange={markDirty}
         size="large"
       >
         <Row gutter={[24, 0]}>
@@ -342,8 +353,8 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onSet
 
         <div style={{ marginTop: '24px', textAlign: 'right' }}>
           <Space>
-            <Button onClick={() => form.resetFields()}>
-              {t('common.reset')}
+            <Button onClick={revertToSaved} disabled={!canRevert}>
+              {t('settings.revertToSaved')}
             </Button>
             <Button 
               type="primary" 
