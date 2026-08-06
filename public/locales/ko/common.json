@@ -275,7 +275,13 @@
       "thresholdValidation": "위험 임계값은 저하 임계값보다 낮아야 합니다",
       "targetValidation": "저하 임계값은 목표값보다 낮아야 합니다",
       "calculationExample": "계산 예시",
-      "formula": "계산식"
+      "formula": "계산식",
+      "criticalAvailability": "가동률 위험 임계값",
+      "criticalPerformance": "성능 위험 임계값",
+      "criticalQuality": "품질 위험 임계값",
+      "criticalRequired": "위험 임계값을 입력하세요",
+      "criticalBelowTargetValidation": "각 지표의 위험 임계값은 그 지표의 목표값보다 낮아야 합니다.",
+      "alertMappingNote": "알림은 목표값을 경고선으로, 위험 임계값을 위험선으로 사용합니다. 다운타임은 알림 기준이 경고선이고 그 2배가 위험선입니다."
     },
     "shift": {
       "title": "교대 설정",
@@ -347,7 +353,8 @@
       "checkIntervalRequired": "알림 확인 간격을 입력하세요",
       "checkIntervalRange": "확인 간격은 10초에서 300초 사이여야 합니다",
       "intervalHint": "시스템이 새로운 알림을 확인하는 주기입니다",
-      "summary": "알림 설정 요약"
+      "summary": "알림 설정 요약",
+      "emailNotSupportedNote": "이메일 발송 기능은 아직 구현되지 않았습니다. 값은 저장되지만 메일이 발송되지 않으므로, 발송 경로가 준비될 때까지 입력을 잠가 둡니다."
     },
     "display": {
       "title": "화면 설정",

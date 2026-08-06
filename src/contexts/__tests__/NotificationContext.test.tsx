@@ -52,6 +52,20 @@ jest.mock('@/components/notifications', () => ({
   showToast: jest.fn()
 }));
 
+// Provider 가 알림 설정을 읽는다(폴링 주기·브라우저 알림·소리). 여기서는 폴링 경로만 보므로
+// 바깥 채널은 꺼 둔다. 설정별 동작은 NotificationContext.notificationSettings.test.tsx 가 본다.
+jest.mock('@/hooks/useSystemSettings', () => ({
+  useSystemSettings: () => ({
+    getNotificationSettings: () => ({
+      email: false,
+      browser: false,
+      sound: false,
+      checkInterval: 60,
+      emailAddress: ''
+    })
+  })
+}));
+
 const machine = (n: number, state: string) => ({
   id: `machine-${n}`,
   name: `CNC-${String(n).padStart(3, '0')}`,
@@ -149,7 +163,7 @@ describe('NotificationContext', () => {
     expect(seen.current[0].machine_name).toBe('CNC-001');
   });
 
-  it('#8 Realtime 이 죽어도 폴백 폴링(60초)이 상태 변경을 따라잡는다', async () => {
+  it('#8 Realtime 이 죽어도 폴백 폴링(설정 60초)이 상태 변경을 따라잡는다', async () => {
     // 폴링 interval 은 마운트 시점에 걸리므로, 렌더 전부터 가짜 타이머여야 한다
     jest.useFakeTimers();
     mockMachines([machine(1, 'NORMAL_OPERATION')]);

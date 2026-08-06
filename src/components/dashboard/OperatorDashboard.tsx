@@ -20,6 +20,7 @@ import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { getCurrentShiftInfo, shouldShowShiftEndNotification, type ShiftTimeConfig } from '@/utils/shiftUtils';
 import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { useOEEGrading } from '@/hooks/useOEEThresholds';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { MachineConsole } from '@/components/dashboard/operator-console/MachineConsole';
 import { elapsedMinutesSince } from '@/utils/elapsedMinutes';
@@ -109,6 +110,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
   } = useRealtimeData(user?.id, user?.role);
 
   const { getCompanyInfo, getShiftTimes } = useSystemSettings();
+  const { colorOf } = useOEEGrading();
 
 
   // 에러 핸들링
@@ -309,13 +311,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       // null 을 number 로 받던 시절에는 `(null * 100).toFixed(1)` 이 조용히 "0.0" 이 되어
       // 계산 불가인 설비가 빨간 0.0% 로 찍혔다. antd 의 render 타입이 느슨해
       // 컴파일러도 잡지 못했다.
+      // 색은 `@/lib/oeeGrading` 이 정한다 — null 이면 회색이므로 `—` 표시와 항상 같이 움직인다.
       render: (oee: number | null) => (
-        <span style={{
-          fontWeight: 'bold',
-          color: oee === null ? '#8c8c8c'
-            : oee >= 0.85 ? '#52c41a'
-            : oee >= 0.65 ? '#faad14' : '#ff4d4f'
-        }}>
+        <span style={{ fontWeight: 'bold', color: colorOf(oee) }}>
           {oee === null ? '—' : `${(oee * 100).toFixed(1)}%`}
         </span>
       )
@@ -517,11 +515,7 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
                           {machinesT('labels.duration')}: {formatDuration(machine.currentDuration, machinesT)}
                         </div>
                         <div style={{ fontSize: 14, fontWeight: 'bold' }}>
-                          OEE: <span style={{
-                            color: machine.oee === null ? '#8c8c8c'
-                              : machine.oee >= 0.85 ? '#52c41a'
-                              : machine.oee >= 0.65 ? '#faad14' : '#ff4d4f'
-                          }}>
+                          OEE: <span style={{ color: colorOf(machine.oee) }}>
                             {machine.oee === null ? '—' : `${(machine.oee * 100).toFixed(1)}%`}
                           </span>
                         </div>

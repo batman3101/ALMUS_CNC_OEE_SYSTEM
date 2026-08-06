@@ -3,55 +3,37 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { unwrapJoin } from '@/types';
 import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
 import { getBusinessDateAt, getShiftAt } from '@/utils/downtimeIntervals';
+import {
+  DEFAULT_ALERT_THRESHOLDS,
+  DEFAULT_BUSINESS_CLOCK,
+  resolveAlertConfig,
+  type SettingRow,
+} from './alertThresholds';
 
-const DEFAULT_BUSINESS_CLOCK = {
-  timezone: 'Asia/Ho_Chi_Minh',
-  shiftAStart: '08:00',
-  shiftBStart: '20:00',
-};
-
-async function getBusinessClock() {
+/**
+ * 시계와 임계값을 **한 번의 조회**로 읽는다.
+ *
+ * 알림 엔드포인트는 대시보드가 주기적으로 부른다. 같은 테이블을 두 번 읽을 이유가 없다.
+ */
+async function loadAlertConfig(): Promise<ReturnType<typeof resolveAlertConfig>> {
   const { data, error } = await supabaseAdmin
     .from('system_settings')
     .select('category, setting_key, setting_value')
-    .in('category', ['general', 'shift'])
+    .in('category', ['general', 'shift', 'oee'])
     .eq('is_active', true);
-  if (error || !data) return DEFAULT_BUSINESS_CLOCK;
-  const value = (category: string, key: string): string | undefined => {
-    const setting = data.find(row => row.category === category && row.setting_key === key)
-      ?.setting_value as { value?: unknown } | null | undefined;
-    return typeof setting?.value === 'string' ? setting.value : undefined;
-  };
-  return {
-    timezone: value('general', 'timezone') || DEFAULT_BUSINESS_CLOCK.timezone,
-    shiftAStart: value('shift', 'shift_a_start') || DEFAULT_BUSINESS_CLOCK.shiftAStart,
-    shiftBStart: value('shift', 'shift_b_start') || DEFAULT_BUSINESS_CLOCK.shiftBStart,
-  };
-}
 
-// 알림 임계값 설정
-const ALERT_THRESHOLDS = {
-  oee: {
-    critical: 60,    // OEE 60% 미만 (치명적)
-    warning: 75      // OEE 75% 미만 (경고)
-  },
-  availability: {
-    critical: 70,    // 가용성 70% 미만
-    warning: 85      // 가용성 85% 미만
-  },
-  performance: {
-    critical: 70,    // 성능 70% 미만
-    warning: 85      // 성능 85% 미만
-  },
-  quality: {
-    critical: 90,    // 품질 90% 미만
-    warning: 95      // 품질 95% 미만
-  },
-  downtime: {
-    critical: 120,   // 연속 다운타임 120분 이상
-    warning: 60      // 연속 다운타임 60분 이상
+  if (error || !data) {
+    // 조회 실패는 "설정이 기본값이다"와 다른 사건이다. 구분해서 알린다.
+    console.error('알림 임계값 설정 조회 실패 — 기본값으로 판정한다:', error);
+    return {
+      clock: DEFAULT_BUSINESS_CLOCK,
+      thresholds: DEFAULT_ALERT_THRESHOLDS,
+      thresholdFallbacks: ['settings_unreadable'],
+    };
   }
-};
+
+  return resolveAlertConfig(data as SettingRow[]);
+}
 
 // 알림 타입 정의
 interface Alert {
@@ -92,7 +74,8 @@ export async function GET(request: NextRequest) {
     // 현재 시간 기준으로 최근 데이터 조회
     const currentTime = new Date();
     const recentTime = new Date(currentTime.getTime() - 30 * 60 * 1000); // 최근 30분
-    const businessClock = await getBusinessClock();
+    const { clock: businessClock, thresholds: alertThresholds, thresholdFallbacks } =
+      await loadAlertConfig();
     const currentBusinessDate = getBusinessDateAt(
       currentTime,
       businessClock.timezone,
@@ -327,7 +310,7 @@ export async function GET(request: NextRequest) {
       const quality = machine.latest_quality === null ? null : machine.latest_quality * 100;
 
       // OEE 알림
-      if (oee !== null && oee < ALERT_THRESHOLDS.oee.critical) {
+      if (oee !== null && oee < alertThresholds.oee.critical) {
         alerts.push({
           id: `oee:${machine.machine_id}:${machine.source_key}:critical`,
           machine_id: machine.machine_id,
@@ -335,14 +318,14 @@ export async function GET(request: NextRequest) {
           alert_type: 'oee',
           severity: 'critical',
           title: 'OEE 치명적 저하',
-          message: `${machine.machine_name}의 OEE가 ${oee.toFixed(1)}%로 임계값(${ALERT_THRESHOLDS.oee.critical}%)을 하회했습니다.`,
+          message: `${machine.machine_name}의 OEE가 ${oee.toFixed(1)}%로 임계값(${alertThresholds.oee.critical}%)을 하회했습니다.`,
           current_value: oee,
-          threshold_value: ALERT_THRESHOLDS.oee.critical,
+          threshold_value: alertThresholds.oee.critical,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
         });
-      } else if (oee !== null && oee < ALERT_THRESHOLDS.oee.warning) {
+      } else if (oee !== null && oee < alertThresholds.oee.warning) {
         alerts.push({
           id: `oee:${machine.machine_id}:${machine.source_key}:warning`,
           machine_id: machine.machine_id,
@@ -352,7 +335,7 @@ export async function GET(request: NextRequest) {
           title: 'OEE 경고',
           message: `${machine.machine_name}의 OEE가 ${oee.toFixed(1)}%로 경고 수준입니다.`,
           current_value: oee,
-          threshold_value: ALERT_THRESHOLDS.oee.warning,
+          threshold_value: alertThresholds.oee.warning,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
@@ -360,7 +343,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 가용성 알림
-      if (availability !== null && availability < ALERT_THRESHOLDS.availability.critical) {
+      if (availability !== null && availability < alertThresholds.availability.critical) {
         alerts.push({
           id: `availability:${machine.machine_id}:${machine.source_key}:critical`,
           machine_id: machine.machine_id,
@@ -370,12 +353,12 @@ export async function GET(request: NextRequest) {
           title: '가용성 치명적 저하',
           message: `${machine.machine_name}의 가용성이 ${availability.toFixed(1)}%로 임계값을 하회했습니다.`,
           current_value: availability,
-          threshold_value: ALERT_THRESHOLDS.availability.critical,
+          threshold_value: alertThresholds.availability.critical,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
         });
-      } else if (availability !== null && availability < ALERT_THRESHOLDS.availability.warning) {
+      } else if (availability !== null && availability < alertThresholds.availability.warning) {
         alerts.push({
           id: `availability:${machine.machine_id}:${machine.source_key}:warning`,
           machine_id: machine.machine_id,
@@ -385,7 +368,7 @@ export async function GET(request: NextRequest) {
           title: '가용성 경고',
           message: `${machine.machine_name}의 가용성이 ${availability.toFixed(1)}%로 경고 수준입니다.`,
           current_value: availability,
-          threshold_value: ALERT_THRESHOLDS.availability.warning,
+          threshold_value: alertThresholds.availability.warning,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
@@ -393,7 +376,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 성능 알림
-      if (performance !== null && performance < ALERT_THRESHOLDS.performance.critical) {
+      if (performance !== null && performance < alertThresholds.performance.critical) {
         alerts.push({
           id: `performance:${machine.machine_id}:${machine.source_key}:critical`,
           machine_id: machine.machine_id,
@@ -403,12 +386,12 @@ export async function GET(request: NextRequest) {
           title: '성능 치명적 저하',
           message: `${machine.machine_name}의 성능이 ${performance.toFixed(1)}%로 임계값을 하회했습니다.`,
           current_value: performance,
-          threshold_value: ALERT_THRESHOLDS.performance.critical,
+          threshold_value: alertThresholds.performance.critical,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
         });
-      } else if (performance !== null && performance < ALERT_THRESHOLDS.performance.warning) {
+      } else if (performance !== null && performance < alertThresholds.performance.warning) {
         alerts.push({
           id: `performance:${machine.machine_id}:${machine.source_key}:warning`,
           machine_id: machine.machine_id,
@@ -418,7 +401,7 @@ export async function GET(request: NextRequest) {
           title: '성능 경고',
           message: `${machine.machine_name}의 성능이 ${performance.toFixed(1)}%로 경고 수준입니다.`,
           current_value: performance,
-          threshold_value: ALERT_THRESHOLDS.performance.warning,
+          threshold_value: alertThresholds.performance.warning,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
@@ -426,7 +409,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 품질 알림
-      if (quality !== null && quality < ALERT_THRESHOLDS.quality.critical) {
+      if (quality !== null && quality < alertThresholds.quality.critical) {
         alerts.push({
           id: `quality:${machine.machine_id}:${machine.source_key}:critical`,
           machine_id: machine.machine_id,
@@ -436,12 +419,12 @@ export async function GET(request: NextRequest) {
           title: '품질 치명적 저하',
           message: `${machine.machine_name}의 품질이 ${quality.toFixed(1)}%로 임계값을 하회했습니다.`,
           current_value: quality,
-          threshold_value: ALERT_THRESHOLDS.quality.critical,
+          threshold_value: alertThresholds.quality.critical,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
         });
-      } else if (quality !== null && quality < ALERT_THRESHOLDS.quality.warning) {
+      } else if (quality !== null && quality < alertThresholds.quality.warning) {
         alerts.push({
           id: `quality:${machine.machine_id}:${machine.source_key}:warning`,
           machine_id: machine.machine_id,
@@ -451,7 +434,7 @@ export async function GET(request: NextRequest) {
           title: '품질 경고',
           message: `${machine.machine_name}의 품질이 ${quality.toFixed(1)}%로 경고 수준입니다.`,
           current_value: quality,
-          threshold_value: ALERT_THRESHOLDS.quality.warning,
+          threshold_value: alertThresholds.quality.warning,
           timestamp: currentTime.toISOString(),
           is_active: true,
           acknowledged: false
@@ -471,7 +454,7 @@ export async function GET(request: NextRequest) {
         : elapsedMinutes;
       const machineName = unwrapJoin(log.machines)?.name || 'Unknown';
 
-      if (duration >= ALERT_THRESHOLDS.downtime.critical) {
+      if (duration >= alertThresholds.downtime.critical) {
         alerts.push({
           id: `downtime:${log.machine_id}:${log.source_key}:critical`,
           machine_id: log.machine_id,
@@ -481,12 +464,12 @@ export async function GET(request: NextRequest) {
           title: '장기 다운타임 발생',
           message: `${machineName}이 ${duration}분간 ${log.state} 상태로 다운타임이 지속되고 있습니다.`,
           current_value: duration,
-          threshold_value: ALERT_THRESHOLDS.downtime.critical,
+          threshold_value: alertThresholds.downtime.critical,
           timestamp: log.start_time,
           is_active: !log.end_time,
           acknowledged: false
         });
-      } else if (duration >= ALERT_THRESHOLDS.downtime.warning) {
+      } else if (duration >= alertThresholds.downtime.warning) {
         alerts.push({
           id: `downtime:${log.machine_id}:${log.source_key}:warning`,
           machine_id: log.machine_id,
@@ -496,7 +479,7 @@ export async function GET(request: NextRequest) {
           title: '다운타임 경고',
           message: `${machineName}이 ${duration}분간 ${log.state} 상태입니다.`,
           current_value: duration,
-          threshold_value: ALERT_THRESHOLDS.downtime.warning,
+          threshold_value: alertThresholds.downtime.warning,
           timestamp: log.start_time,
           is_active: !log.end_time,
           acknowledged: false
@@ -622,8 +605,11 @@ export async function GET(request: NextRequest) {
     const response = {
       alerts: limitedAlerts,
       summary: alertSummary,
-      thresholds: ALERT_THRESHOLDS,
+      thresholds: alertThresholds,
       metadata: {
+        // 임계값이 설정이 아니라 기본값으로 판정된 지표. 비어 있으면 전부 설정대로다.
+        // 이걸 숨기면 "설정을 바꿨는데 알림이 그대로"인 이유를 밖에서 알 수 없다.
+        threshold_fallbacks: thresholdFallbacks,
         query_time: currentTime.toISOString(),
         filters: {
           machine_id: machineId,

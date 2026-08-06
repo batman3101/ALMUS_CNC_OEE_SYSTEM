@@ -19,7 +19,8 @@
     "check:grants": "node scripts/check-anon-grants.mjs",
     "settings:snapshot": "node scripts/settings-snapshot.mjs snapshot",
     "settings:diff": "node scripts/settings-snapshot.mjs diff",
-    "settings:restore": "node scripts/settings-snapshot.mjs restore"
+    "settings:restore": "node scripts/settings-snapshot.mjs restore",
+    "settings:scenario": "node scripts/settings-scenario.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",

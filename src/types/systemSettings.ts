@@ -70,6 +70,11 @@ export interface OEESettings {
   target_quality: number;
   low_oee_threshold: number;
   critical_oee_threshold: number;
+  // 가동률·성능·품질의 알림 위험선. 목표(target_*)는 경고선이고 이 셋은 위험선이다 —
+  // "목표 미달"과 "위험"은 다른 사건이라 한 숫자가 겸할 수 없다.
+  critical_availability_threshold: number;
+  critical_performance_threshold: number;
+  critical_quality_threshold: number;
   downtime_alert_minutes: number;
 }
 

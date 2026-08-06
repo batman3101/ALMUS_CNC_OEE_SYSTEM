@@ -1,5 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import {
+  businessDateInTimezone,
+  DEFAULT_PLANT_TIMEZONE,
+  resolvePlantTimezone
+} from './plantTimezone.ts'
 
 /**
  * 일일 OEE 정합성 보정 (daily-oee-aggregation)
@@ -53,6 +58,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
  * 따라서 일상 실행(어제/오늘)에서는 바꿀 것이 없어 완전한 무해·멱등 동작이 된다.
  *
  * dry_run: true 를 주면 계산만 하고 DB 에 쓰지 않는다 (영향 범위 확인용).
+ *
+ * 대상 영업일은 요청에 date 가 없으면 **system_settings.general.timezone 기준의 오늘**이다.
+ * 그 시간대를 어떻게 유도하고 왜 상수로 두지 않는지는 ./plantTimezone.ts 에 적었다.
  */
 
 interface ProductionRecordRow {
@@ -65,19 +73,6 @@ interface ProductionRecordRow {
   performance: number | null;
   quality: number | null;
   oee: number | null;
-}
-
-// 공장 표준시간대 (system_settings.general.timezone = 'Asia/Ho_Chi_Minh', UTC+7, DST 없음)
-const PLANT_TIMEZONE = 'Asia/Ho_Chi_Minh';
-
-/** 주어진 시각을 공장 현지 시간 기준 'YYYY-MM-DD' 로 변환 */
-function getLocalDateString(date: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: PLANT_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(date);
 }
 
 /**
@@ -183,8 +178,61 @@ serve(async (req) => {
       }
     }
 
+    // ── 공장 표준시간대 ────────────────────────────────────────────────────
+    //
+    // 이 값이 "오늘" 이 어느 날인지를 정한다. 예전에는 소스에 'Asia/Ho_Chi_Minh' 를 박아 두고
+    // 주석으로 설정값이 그것과 같다고 **단언**했지만, general.timezone 은 관리자가 UI 에서
+    // 바꿀 수 있다. 앱과 교대 계산은 바뀐 값을 따라가는데 이 배치만 옛 값을 쓰면 조용히
+    // 다른 날의 행을 대상으로 삼는다. 그래서 단언하지 않고 매 호출마다 읽는다.
+    //
+    // 읽기는 인가 뒤에 둔다 — 거부할 호출자를 위해 DB 를 건드리지 않는다.
+    const { data: timezoneRow, error: timezoneError } = await supabase
+      .from('system_settings')
+      .select('setting_value')
+      .eq('category', 'general')
+      .eq('setting_key', 'timezone')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    const timezoneResolution = resolvePlantTimezone({
+      settingValue: timezoneRow?.setting_value,
+      // maybeSingle 은 행이 없으면 error 없이 data=null 을 준다. 따라서 error 가 있다는 것은
+      // "행이 없다" 가 아니라 "읽지 못했다" 뿐이다.
+      queryError: timezoneError?.message ?? null
+    });
+
+    // 설정은 있는데 시간대로 쓸 수 없는 값이면 기본값으로 때우지 않고 거부한다. 인식되지
+    // 않는 시간대를 UTC 로 대신 해석하면 07:00 이전 호출이 하루 전 날짜를 조용히 고르고,
+    // 배치는 성공으로 끝난다 — 오류보다 나쁘다. 대상 날짜를 명시해 부른 경우에도 거부한다:
+    // 이 설정이 깨졌다는 사실 자체가 다음 실행에서 날짜를 어긋나게 하므로 지금 드러내야 한다.
+    if (timezoneResolution.status === 'invalid') {
+      console.error(`Refusing to run: ${timezoneResolution.detail}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'invalid_plant_timezone',
+          configured_timezone: timezoneResolution.configured,
+          message: timezoneResolution.detail
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    const plantTimezone = timezoneResolution.timezone;
+    // "설정을 읽어 보니 기본값과 같았다" 와 "설정을 못 읽어 기본값을 썼다" 는 다른 사실이다.
+    // 두 경우의 timezone 문자열이 같으므로, 출처를 따로 실어야 구분할 수 있다.
+    const timezoneSource = timezoneResolution.status === 'configured' ? 'system_settings' : 'default';
+    const timezoneFallbackReason =
+      timezoneResolution.status === 'fallback' ? timezoneResolution.reason : null;
+
+    if (timezoneResolution.status === 'fallback') {
+      console.warn(
+        `Plant timezone fell back to ${DEFAULT_PLANT_TIMEZONE} (${timezoneResolution.reason}): ${timezoneResolution.detail}`
+      );
+    }
+
     // 날짜는 supabase.functions.invoke() 가 보내는 POST 바디({ date })로 전달된다.
-    // 바디가 없으면 쿼리스트링(?date=), 그것도 없으면 오늘(현지 날짜)로 폴백한다.
+    // 바디가 없으면 쿼리스트링(?date=), 그것도 없으면 오늘(공장 현지 날짜)로 폴백한다.
     const url = new URL(req.url);
     let bodyDateStr: string | undefined;
     let dryRun = false;
@@ -201,12 +249,17 @@ serve(async (req) => {
       // 바디가 비어 있거나 JSON 이 아님 - 쿼리스트링/기본값으로 폴백
     }
 
-    const targetDateStr = bodyDateStr || url.searchParams.get('date') || getLocalDateString(new Date());
+    const targetDateStr =
+      bodyDateStr || url.searchParams.get('date') || businessDateInTimezone(new Date(), plantTimezone);
     if (url.searchParams.get('dry_run') === 'true') {
       dryRun = true;
     }
 
-    console.log(`Starting OEE consistency check for ${targetDateStr}${dryRun ? ' (dry run)' : ''}`);
+    console.log(
+      `Starting OEE consistency check for ${targetDateStr}` +
+      ` (timezone ${plantTimezone} from ${timezoneSource}${timezoneFallbackReason ? `: ${timezoneFallbackReason}` : ''})` +
+      `${dryRun ? ' (dry run)' : ''}`
+    );
 
     // 해당 날짜에 **이미 존재하는** 기록만 본다. 없는 기록을 만들지 않는다.
     const { data: records, error: recordsError } = await supabase
@@ -272,6 +325,12 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         date: targetDateStr,
+        // 어느 시간대로 그 날짜를 정했는지, 그 시간대가 설정에서 온 것인지 폴백인지 함께 싣는다.
+        // 이것이 없으면 "설정대로 돌았다" 와 "설정을 못 읽어 기본값으로 돌았다" 가 응답에서
+        // 똑같아 보인다.
+        plant_timezone: plantTimezone,
+        plant_timezone_source: timezoneSource,
+        plant_timezone_fallback_reason: timezoneFallbackReason,
         dry_run: dryRun,
         examined: rows.length,
         repaired: repaired.length,

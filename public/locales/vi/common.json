@@ -275,7 +275,13 @@
       "thresholdValidation": "Ngưỡng nguy hiểm phải thấp hơn ngưỡng giảm",
       "targetValidation": "Ngưỡng giảm phải thấp hơn giá trị mục tiêu",
       "calculationExample": "Ví dụ tính toán",
-      "formula": "Công thức tính"
+      "formula": "Công thức tính",
+      "criticalAvailability": "Ngưỡng nguy hiểm của mức khả dụng",
+      "criticalPerformance": "Ngưỡng nguy hiểm của hiệu suất",
+      "criticalQuality": "Ngưỡng nguy hiểm của chất lượng",
+      "criticalRequired": "Vui lòng nhập ngưỡng nguy hiểm",
+      "criticalBelowTargetValidation": "Ngưỡng nguy hiểm của mỗi chỉ số phải thấp hơn giá trị mục tiêu của chính chỉ số đó.",
+      "alertMappingNote": "Cảnh báo dùng giá trị mục tiêu làm mức cảnh báo và ngưỡng nguy hiểm làm mức nguy hiểm. Với thời gian dừng máy, tiêu chí cảnh báo là mức cảnh báo và gấp đôi giá trị đó là mức nguy hiểm."
     },
     "shift": {
       "title": "Cài đặt ca làm việc",
@@ -347,7 +353,8 @@
       "checkIntervalRequired": "Nhập khoảng thời gian kiểm tra thông báo",
       "checkIntervalRange": "Khoảng thời gian kiểm tra phải từ 10 giây đến 300 giây",
       "intervalHint": "Chu kỳ hệ thống kiểm tra thông báo mới",
-      "summary": "Tóm tắt cài đặt thông báo"
+      "summary": "Tóm tắt cài đặt thông báo",
+      "emailNotSupportedNote": "Chức năng gửi email chưa được triển khai. Giá trị vẫn được lưu nhưng email sẽ không được gửi, nên ô nhập bị khoá cho tới khi có đường gửi thực tế."
     },
     "display": {
       "title": "Cài đặt hiển thị",

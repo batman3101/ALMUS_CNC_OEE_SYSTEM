@@ -13,6 +13,20 @@ jest.mock('@/hooks/useChartAnimation', () => ({
   useChartAnimation: () => ({ enabled: true, chartJs: undefined, recharts: true }),
 }));
 
+// 게이지는 등급 색·문구를 시스템 설정(OEE 목표·임계값)에서 가져온다. 설정 저장소를 대역으로
+// 두면 SystemSettingsContext → supabase 로 이어지는 import 사슬이 끊긴다.
+// 등급 판정 자체는 여기의 관심사가 아니다
+// (전용 검사: `src/components/__tests__/oeeGradingConsistency.test.tsx`).
+jest.mock('@/contexts/SystemSettingsContext', () => ({
+  useSystemSettings: () => ({
+    settings: {},
+    isLoading: false,
+    error: null,
+    getSetting: () => null,
+    getSettingsByCategory: () => ({}),
+  }),
+}));
+
 jest.mock('@/hooks/useTranslation', () => ({
   useDashboardTranslation: () => ({
     t: (key: string, vars?: Record<string, unknown>) =>

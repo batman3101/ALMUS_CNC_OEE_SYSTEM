@@ -33,6 +33,12 @@ const CONTRACT = [
   'oee.target_quality',
   'oee.low_oee_threshold',
   'oee.critical_oee_threshold',
+  // 2026-08-06 추가. 목표(target_*)는 알림의 **경고선**이고 이 셋이 **위험선**이다.
+  // 예전에는 위험선이 알림 API 안에 하드코딩돼 있어(availability 70 / performance 70 /
+  // quality 90) 관리자가 목표를 바꿔도 알림 판단이 그대로였다.
+  'oee.critical_availability_threshold',
+  'oee.critical_performance_threshold',
+  'oee.critical_quality_threshold',
   'oee.downtime_alert_minutes',
 
   'shift.shift_a_start',
@@ -59,8 +65,8 @@ const CONTRACT = [
 ];
 
 describe('설정 원장 — 키 집합이 곧 계약이다', () => {
-  it('계약 키는 정확히 32개이며 목록과 완전히 일치한다', () => {
-    expect(CONTRACT).toHaveLength(32);
+  it('계약 키는 정확히 35개이며 목록과 완전히 일치한다', () => {
+    expect(CONTRACT).toHaveLength(35);
     expect([...SETTINGS_CONTRACT_IDS].sort()).toEqual([...CONTRACT].sort());
   });
 
@@ -105,7 +111,7 @@ describe('설정 원장 — 키 집합이 곧 계약이다', () => {
 
   it('카테고리별 개수가 설정 화면의 탭 구성과 같다', () => {
     expect(settingsForCategory('general')).toHaveLength(6);
-    expect(settingsForCategory('oee')).toHaveLength(7);
+    expect(settingsForCategory('oee')).toHaveLength(10);
     expect(settingsForCategory('shift')).toHaveLength(4);
     expect(settingsForCategory('notification')).toHaveLength(5);
     expect(settingsForCategory('display')).toHaveLength(10);

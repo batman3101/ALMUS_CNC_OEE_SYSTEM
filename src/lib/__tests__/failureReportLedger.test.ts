@@ -47,6 +47,9 @@ const INPUT_VALIDATION = [
   "src/components/settings/tabs/NotificationSettingsTab.tsx | showError(t('settings.notification.invalidEmail'));",
   "src/components/settings/tabs/OEESettingsTab.tsx | showError(t('settings.oee.thresholdValidation'));",
   "src/components/settings/tabs/OEESettingsTab.tsx | showError(t('settings.oee.targetValidation'));",
+  // 지표별 위험선이 그 지표의 목표보다 높으면 알림 판정의 경고 가지가 죽는다. 저장 **전에**
+  // 막는 입력 검증이므로 원장에 남긴다 — 요청 실패가 아니라 사용자 입력에 대한 답이다.
+  "src/components/settings/tabs/OEESettingsTab.tsx | showError(t('settings.oee.criticalBelowTargetValidation'));",
   "src/components/settings/tabs/ShiftSettingsTab.tsx | showError(t('settings.shift.aShiftTimeError'));",
   'src/components/settings/tabs/ShiftSettingsTab.tsx | showError(`휴식 시간은 0 이상이고 짧은 교대(${shortestShift}분)보다 작아야 합니다.`);',
   'src/components/settings/tabs/ShiftSettingsTab.tsx | showError(`교대 전환 유예는 0 이상이고 짧은 교대(${shortestShift}분)보다 작아야 합니다.`);',

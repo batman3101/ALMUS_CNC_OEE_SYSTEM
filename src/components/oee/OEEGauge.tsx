@@ -13,10 +13,21 @@ import { Card, Typography, Row, Col, Progress } from 'antd';
 import { OEEMetrics } from '@/types';
 import { useDashboardTranslation } from '@/hooks/useTranslation';
 import { useChartAnimation } from '@/hooks/useChartAnimation';
+import { useOEEGrading } from '@/hooks/useOEEThresholds';
+import type { OEEGrade } from '@/lib/oeeGrading';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 const { Title, Text } = Typography;
+
+// 등급 문구는 기존 번역 키(3개)를 그대로 쓴다. 사다리는 네 칸이지만 문구는 세 가지이므로
+// 아래 두 칸이 같은 문구('개선필요')를 공유한다 — 색은 여전히 주황/빨강으로 구분된다.
+const OEE_LEVEL_KEY: Record<OEEGrade, string> = {
+  excellent: 'oee.level.excellent',
+  good: 'oee.level.good',
+  warning: 'oee.level.needsImprovement',
+  critical: 'oee.level.needsImprovement',
+};
 
 interface OEEGaugeProps {
   metrics: OEEMetrics;
@@ -45,6 +56,7 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
 }) => {
   const { t } = useDashboardTranslation();
   const chartAnimation = useChartAnimation();
+  const { gradeOf } = useOEEGrading();
   const { availability, performance, quality, oee } = metrics;
 
   // 0·음수·NaN 이면 교대 1회 평균이 정의되지 않는다. 나눠서 Infinity/NaN 을 숫자인 척
@@ -55,26 +67,19 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
       : null;
   const runtimeDivisor = perShiftCount ?? 1;
 
-  // OEE 수준에 따른 색상 결정
-  const getOEEColor = (value: number): string => {
-    if (value >= 0.85) return '#52c41a'; // 우수 (녹색)
-    if (value >= 0.65) return '#faad14'; // 양호 (주황)
-    return '#ff4d4f'; // 개선필요 (빨강)
-  };
+  // 색과 문구는 같은 사다리를 두 번 적은 것이었고, 그 사다리는 관리자 설정을 읽지 않는
+  // 세 번째 사본이었다. 이제 둘 다 하나의 판정 결과에서 나온다 — 색과 문구가 어긋날 수 없다.
+  const gaugeGrade = gradeOf(oee);
+  const oeeColor = gaugeGrade.color;
 
-  // OEE 수준 텍스트
-  const getOEELevel = (value: number): string => {
-    if (value >= 0.85) return t('oee.level.excellent');
-    if (value >= 0.65) return t('oee.level.good');
-    return t('oee.level.needsImprovement');
-  };
+  const oeeLevelText = gaugeGrade.grade === null ? '' : t(OEE_LEVEL_KEY[gaugeGrade.grade]);
 
   // 게이지 차트 데이터
   const gaugeData = {
     datasets: [
       {
         data: [oee * 100, 100 - oee * 100],
-        backgroundColor: [getOEEColor(oee), '#f0f0f0'],
+        backgroundColor: [oeeColor, '#f0f0f0'],
         borderWidth: 0,
         cutout: '70%',
       },
@@ -129,11 +134,11 @@ export const OEEGauge: React.FC<OEEGaugeProps> = ({
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: config.valueSize, fontWeight: 'bold', color: getOEEColor(oee) }}>
+            <div style={{ fontSize: config.valueSize, fontWeight: 'bold', color: oeeColor }}>
               {(oee * 100).toFixed(1)}%
             </div>
             <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-              {getOEELevel(oee)}
+              {oeeLevelText}
             </div>
           </div>
         </div>

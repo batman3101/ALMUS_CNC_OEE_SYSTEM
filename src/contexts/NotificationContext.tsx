@@ -13,13 +13,22 @@ import { showToast } from '@/components/notifications';
 import { useLanguage } from './LanguageContext';
 import { fetchMachines, invalidateMachinesCache } from '@/lib/machinesCache';
 import { supabase } from '@/lib/supabase';
-
-// 설비 상태 변경을 놓치지 않기 위한 폴백 폴링 주기.
-// Realtime 구독이 끊겨도 이 주기로는 반드시 따라잡는다.
-const NOTIFICATION_POLL_INTERVAL_MS = 60_000;
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { showBrowserNotification } from '@/utils/browserNotification';
+import { playNotificationSound } from '@/utils/notificationSound';
 
 // Realtime 이벤트가 연달아 오면(대량 상태 변경) 매번 재조회하지 않도록 묶는다.
 const REALTIME_DEBOUNCE_MS = 1_000;
+
+/**
+ * 한 번의 조회에서 띄우는 브라우저 알림 상한.
+ *
+ * 설비 800대 공장에서 정전 복구 같은 사건은 새 알림 수십 건을 한꺼번에 만든다. 그걸 전부
+ * OS 알림으로 띄우면 화면이 덮이고, 사용자는 그날로 브라우저 알림 권한을 꺼 버린다.
+ * **잘려도 잃는 정보는 없다** — 앱 안의 알림 목록은 상한 없이 전부 보여준다(위 주석 참조).
+ * OS 알림은 "지금 봐라"는 신호일 뿐이고, 신호는 몇 개면 충분하다.
+ */
+const MAX_BROWSER_NOTIFICATIONS_PER_REFRESH = 5;
 
 /**
  * 비정상 설비 상태별 심각도.
@@ -111,6 +120,19 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const [state, dispatch] = useReducer(notificationReducer, initialState);
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { pollIntervalMs, browserEnabled, soundEnabled } = useNotificationPreferences();
+
+  // 타이머/구독 콜백에서 최신 설정을 보기 위한 ref.
+  // 설정이 바뀔 때마다 콜백 identity 가 바뀌면 폴링 타이머까지 다시 걸린다 — 소리·브라우저
+  // 알림 설정은 주기와 달리 타이머를 다시 걸 이유가 없다.
+  const announceOptionsRef = useRef({ browserEnabled, soundEnabled });
+  announceOptionsRef.current = { browserEnabled, soundEnabled };
+
+  /**
+   * 직전 조회에서 이미 보고한 알림 id 집합. `null` 은 "아직 기준선이 없다"는 뜻이며,
+   * 값이 없는 것(`new Set()`)과 구분해야 한다 — 아래 첫 조회 처리를 보라.
+   */
+  const announcedIdsRef = useRef<Set<string> | null>(null);
 
 
   // 로컬스토리지에서 확인된 알림 조회
@@ -260,6 +282,52 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const authFailStreakRef = useRef(0);
   const skipPollsRef = useRef(0);
 
+  /**
+   * **새로 생긴** 알림만 바깥 채널(브라우저 알림·소리)로 알린다.
+   *
+   * ## 왜 "새로"인가
+   *
+   * 폴링은 매 주기마다 현재 비정상 설비 전체를 돌려준다. 결과가 있을 때마다 소리를 내면
+   * 고장 하나가 고쳐질 때까지 몇 분마다 계속 울린다. 그러면 현장은 첫날 소리를 꺼 버리고,
+   * 그 시점부터 이 기능은 없는 것과 같다.
+   *
+   * ## 첫 조회는 기준선만 세운다
+   *
+   * `announcedIdsRef.current === null` 은 "이번 세션에서 아직 성공한 조회가 없다"는 뜻이다.
+   * 로그인 직후 이미 고장 나 있던 설비 열 대를 한꺼번에 울리는 것은 새 사건 보고가 아니라
+   * 소음이다. 그 열 대는 앱 안의 알림 목록에 그대로 보인다.
+   *
+   * 알림 id 는 `설비_상태` 라 같은 설비가 정상 복귀했다가 다시 고장 나면 집합에서 빠졌다가
+   * 다시 들어온다 — 그때는 **다른 사건**이므로 다시 울리는 것이 맞다.
+   */
+  const announceNewNotifications = useCallback((notifications: Notification[]) => {
+    const currentIds = new Set(notifications.map(item => item.id));
+    const alreadyAnnounced = announcedIdsRef.current;
+    announcedIdsRef.current = currentIds;
+
+    if (alreadyAnnounced === null) return;
+
+    const fresh = notifications.filter(item => !alreadyAnnounced.has(item.id));
+    if (fresh.length === 0) return;
+
+    const { browserEnabled, soundEnabled } = announceOptionsRef.current;
+
+    // 소리는 알림 건수와 무관하게 조회당 한 번이다. 스무 건이 한꺼번에 들어와도
+    // 스무 번 울릴 이유는 없다.
+    if (soundEnabled) void playNotificationSound();
+
+    if (browserEnabled) {
+      fresh.slice(0, MAX_BROWSER_NOTIFICATIONS_PER_REFRESH).forEach(item => {
+        // 문구는 토스트와 같은 번역 키를 쓴다 — 새 문자열을 만들지 않는다.
+        showBrowserNotification({
+          title: t(item.titleKey),
+          body: `${item.machine_name}: ${t(item.messageKey, item.messageParams)}`,
+          tag: item.id,
+        });
+      });
+    }
+  }, [t]);
+
   // 알림 목록 새로고침
   const refreshNotifications = useCallback(async () => {
     console.log('🔄 refreshNotifications 시작');
@@ -272,6 +340,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
       dispatch({ type: 'SET_NOTIFICATIONS', payload: realNotifications });
       dispatch({ type: 'SET_ERROR', payload: null });
+      // 조회가 성공했을 때만 바깥 채널로 알린다. 실패 경로는 기존 목록을 보존하므로
+      // (아래 catch), 실패를 "알림이 사라졌다"로 해석해 기준선을 흔들면 안 된다.
+      announceNewNotifications(realNotifications);
       authFailStreakRef.current = 0;
       skipPollsRef.current = 0;
 
@@ -292,7 +363,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       dispatch({ type: 'SET_LOADING', payload: false });
       console.log('🔄 refreshNotifications 완료');
     }
-  }, [generateRealNotifications]);
+  }, [generateRealNotifications, announceNewNotifications]);
 
 
   // 알림 추가
@@ -461,6 +532,29 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const refreshRef = useRef(refreshNotifications);
   refreshRef.current = refreshNotifications;
 
+  // 아래 두 effect 가 공유하는 취소 플래그.
+  // 구독 effect 는 `user.id` 로, 폴링 effect 는 `user.id` + 주기로 다시 도는데, 주기가 바뀌었다고
+  // 구독까지 다시 걸 이유는 없어서 둘을 나눴다. 플래그는 구독 effect 가 소유한다.
+  const cancelledRef = useRef(false);
+
+  // 실제 새로고침(캐시 무효화 + 조회). Realtime 이벤트는 이 경로를 직접 쓴다 —
+  // 설비 고장 같은 실제 상태 변경 이벤트가 폴링 백오프에 막히면 안 된다(자체 감사 후속 #2).
+  const doRefresh = useCallback(() => {
+    if (cancelledRef.current) return;
+    invalidateMachinesCache();
+    void refreshRef.current();
+  }, []);
+
+  // 폴링 경로: 인증 실패 백오프 중이면 이번 틱을 건너뛴다(만료 토큰으로 401 도배 방지).
+  const runPoll = useCallback(() => {
+    if (cancelledRef.current) return;
+    if (skipPollsRef.current > 0) {
+      skipPollsRef.current -= 1;
+      return;
+    }
+    doRefresh();
+  }, [doRefresh]);
+
   // 초기 데이터 로드 + 설비 상태 변경 추적
   //
   // 이전에는 이 effect 가 user.id 가 바뀔 때 한 번 도는 것이 전부였고, refreshNotifications 를
@@ -469,9 +563,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   // 않아 다음 고장이 영영 안 뜨는 상태가 됐다.
   //
   // 그래서 (a) machines 테이블 Realtime 구독과 (b) 폴백 폴링을 함께 건다.
+  // 폴링 타이머는 주기가 설정에 따라 바뀌므로 아래 별도 effect 로 뺐다.
   useEffect(() => {
     if (!user?.id) {
       console.log('❌ NotificationContext - 사용자 로그아웃됨, 알림 초기화');
+      cancelledRef.current = true;
+      announcedIdsRef.current = null;
       dispatch({ type: 'CLEAR_ALL_NOTIFICATIONS' });
       dispatch({ type: 'SET_LOADING', payload: false });
       dispatch({ type: 'SET_ERROR', payload: null });
@@ -480,30 +577,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     console.log('🔄 NotificationContext 초기화 - 사용자 ID:', user.id);
 
+    cancelledRef.current = false;
+
     // 재로그인/사용자 전환 시 인증 백오프를 리셋한다.
     authFailStreakRef.current = 0;
     skipPollsRef.current = 0;
 
-    let cancelled = false;
+    // 알림 보고 기준선도 함께 리셋한다. 다른 사용자의 세션에서 이미 보고한 알림을
+    // "이미 알렸다"로 물려받으면, 새로 로그인한 사람은 그 고장을 영영 못 듣는다.
+    announcedIdsRef.current = null;
+
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-    // 실제 새로고침(캐시 무효화 + 조회). Realtime 이벤트는 이 경로를 직접 쓴다 —
-    // 설비 고장 같은 실제 상태 변경 이벤트가 폴링 백오프에 막히면 안 된다(자체 감사 후속 #2).
-    const doRefresh = () => {
-      if (cancelled) return;
-      invalidateMachinesCache();
-      refreshRef.current();
-    };
-
-    // 폴링 경로: 인증 실패 백오프 중이면 이번 틱을 건너뛴다(만료 토큰으로 401 도배 방지).
-    const runPoll = () => {
-      if (cancelled) return;
-      if (skipPollsRef.current > 0) {
-        skipPollsRef.current -= 1;
-        return;
-      }
-      doRefresh();
-    };
 
     // 최초 1회는 즉시 조회한다(백오프 없이).
     doRefresh();
@@ -532,20 +616,37 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       console.error('❌ 알림 실시간 구독 실패 - 폴링으로 대체합니다:', error);
     }
 
-    // (b) Realtime 이 끊기거나 구독에 실패해도 따라잡기 위한 폴백 폴링(인증 백오프 적용)
-    const pollTimer = setInterval(runPoll, NOTIFICATION_POLL_INTERVAL_MS);
-
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
       if (debounceTimer) clearTimeout(debounceTimer);
-      clearInterval(pollTimer);
       try {
         channel?.unsubscribe();
       } catch (error) {
         console.error('❌ 알림 실시간 구독 해제 실패:', error);
       }
     };
-  }, [user?.id]);
+  }, [user?.id, doRefresh]);
+
+  /**
+   * (b) Realtime 이 끊기거나 구독에 실패해도 따라잡기 위한 폴백 폴링(인증 백오프 적용).
+   *
+   * 주기는 `notification.alert_check_interval_seconds` 를 따른다. 예전에는 60초가 상수로
+   * 박혀 있어서, 라이브 설정이 120초인데도 앱은 60초로 돌았다.
+   *
+   * **주기를 의존성에 둔다.** 마운트 시점 값을 한 번 잡고 마는 구현은 결국 또 하나의 고정
+   * 주기이고, 관리자가 설정을 바꿔도 새로고침 전에는 아무 일도 일어나지 않는다.
+   * cleanup 이 옛 타이머를 반드시 지우므로 주기를 바꿔도 타이머가 겹쳐 쌓이지 않는다 —
+   * 겹치면 폴링 요청이 조용히 배로 뛴다.
+   *
+   * 구독 effect 와 나눈 이유: 주기가 바뀔 때마다 Realtime 채널까지 재구독하면, 설정 저장이
+   * 전 사용자 재구독을 유발한다.
+   */
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const pollTimer = setInterval(runPoll, pollIntervalMs);
+    return () => clearInterval(pollTimer);
+  }, [user?.id, pollIntervalMs, runPoll]);
 
   // context value를 메모이제이션한다.
   // 매 렌더마다 새 객체를 만들면 useNotifications()를 쓰는 모든 소비자가 불필요하게 리렌더된다.

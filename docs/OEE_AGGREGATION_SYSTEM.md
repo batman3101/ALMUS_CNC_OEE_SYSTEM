@@ -29,6 +29,10 @@
 - 소스: `supabase/functions/daily-oee-aggregation/index.ts`
 - 인가 회귀 검사: `supabase/functions/__tests__/dailyOeeAggregationAuthz.test.ts`
 
+> ⚠ 2026-08-06 의 시간대 수정([아래](#대상-영업일과-공장-표준시간대-2026-08-06-수정))은 **소스에만
+> 반영돼 있고 배포되지 않았다.** 배포된 `version=2` 는 여전히 시간대를 상수로 쓴다. 즉 위 표의
+> `version` 과 저장소의 소스는 지금 서로 다르다 — 배포하기 전까지는 그렇게 읽을 것.
+
 ---
 
 ## 이 함수가 실제로 하는 일
@@ -74,6 +78,38 @@ tact time 도 `planned_runtime` 도 필요 없는 관계다. 이 조건을 위�
 실측 결과 저장된 입력값으로 파생 지표를 다시 계산하면 대다수 행이 바뀐다. 특히 레거시
 행들은 `planned_runtime=0` 인데 가동률이 0.94 로 저장돼 있어, 재계산하면 가동률과 OEE 가
 0 이 된다. **이 데이터에서 "재계산" 은 곧 역사 덮어쓰기다.**
+
+---
+
+## 대상 영업일과 공장 표준시간대 (2026-08-06 수정)
+
+요청에 `date` 가 없으면 **`system_settings.general.timezone` 기준의 오늘**을 대상으로 삼는다.
+
+그전에는 소스에 `'Asia/Ho_Chi_Minh'` 가 상수로 박혀 있었고, 주석이 설정값이 그것과 같다고
+**단언**하고 있었다. 그러나 그 설정은 관리자가 UI 에서 바꿀 수 있다. 바꾸는 순간 앱과 교대
+계산은 새 시간대를 따라가고 이 배치만 옛 시간대를 쓴다 — 오류 없이 **다른 날의 행**을
+대상으로 삼는다. 지금 운영값이 마침 `Asia/Ho_Chi_Minh` 라는 사실은 결함을 없애는 것이 아니라
+발현을 관리자의 다음 편집까지 미룰 뿐이라, 단언을 지우고 매 호출마다 읽도록 고쳤다.
+
+| 설정 상태 | 동작 | 응답 |
+|---|---|---|
+| 유효한 시간대가 설정돼 있음 | 그 시간대로 오늘을 정한다 | `plant_timezone_source: "system_settings"` |
+| 행이 없음 / `is_active=false` / 빈 값 | 기본값 `Asia/Ho_Chi_Minh` 로 진행 | `..._source: "default"`, `..._fallback_reason: "setting_missing"` |
+| 조회 자체가 실패 | 기본값 `Asia/Ho_Chi_Minh` 로 진행 | `..._source: "default"`, `..._fallback_reason: "settings_unreadable"` |
+| 시간대로 쓸 수 없는 값 | **거부** (HTTP 500) | `error: "invalid_plant_timezone"` |
+
+앞의 셋은 시간대 문자열이 같아질 수 있으므로 `plant_timezone_source` 로만 구분된다 —
+"설정을 읽어 보니 기본값과 같았다" 와 "설정을 못 읽어 기본값을 썼다" 는 다른 사실이다.
+
+**왜 마지막 줄만 거부인가.** 인식되지 않는 시간대를 조용히 UTC 로 해석하면 07:00 이전 호출이
+하루 전 날짜를 고르고 배치는 **성공으로 끝난다.** 그럴듯해 보이는 틀린 날짜는 오류보다 나쁘다
+(이 저장소가 이미 문서화한 규율: 비가동 `null` 은 0 이 아니고, NULL 지표는 0% 가 아니다).
+대상 날짜를 명시해 부른 경우에도 거부한다 — 설정이 깨졌다는 사실은 다음 실행에서 날짜를
+어긋나게 하므로 그때가 아니라 지금 드러나야 한다.
+
+- 해석 로직: `supabase/functions/daily-oee-aggregation/plantTimezone.ts` (의존성 없는 순수
+  모듈이라 Deno 와 Jest 가 같은 코드를 읽는다)
+- 회귀 검사: `supabase/functions/__tests__/plantTimezoneResolution.test.ts`
 
 ---
 

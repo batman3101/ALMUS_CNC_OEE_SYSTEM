@@ -5,6 +5,7 @@ import { useMemo, useEffect } from 'react';
 import type { Dayjs } from 'dayjs';
 import type { SettingCategory, AllSystemSettings } from '@/types/systemSettings';
 import { resolveBreakMinutes, resolveShiftChangeBufferMinutes } from '@/lib/shiftDefaults';
+import { resolveOEEGrade, resolveOEEGradingThresholds, type OEEGrade } from '@/lib/oeeGrading';
 import { 
   initializeDateTimeFormatter, 
   getDateTimeFormatter,
@@ -144,16 +145,17 @@ export function useSystemSettings() {
 
     /**
      * OEE 상태 계산 (목표 대비)
+     *
+     * 사다리는 `@/lib/oeeGrading` 한 곳에만 있다. 여기에 같은 규칙을 다시 적어 두었더니
+     * 화면들이 각자 세 번째 사본을 만들었고, 그중 어느 것도 이 함수를 부르지 않았다.
+     * 등급을 매길 수 없는 값은 `critical` 이 아니라 `null` 이다.
      */
-    getOEEStatus: (oeeValue: number) => {
-      const thresholds = helpers.getOEEThresholds();
-      const targets = helpers.getOEETargets();
-      
-      if (oeeValue >= targets.oee) return 'excellent';
-      if (oeeValue >= thresholds.low) return 'good';
-      if (oeeValue >= thresholds.critical) return 'warning';
-      return 'critical';
-    },
+    getOEEStatus: (oeeValue: number): OEEGrade | null =>
+      resolveOEEGrade(oeeValue, resolveOEEGradingThresholds({
+        target: context.getSetting('oee', 'target_oee'),
+        low: context.getSetting('oee', 'low_oee_threshold'),
+        critical: context.getSetting('oee', 'critical_oee_threshold'),
+      })).grade,
 
     /**
      * 색상 테마 적용

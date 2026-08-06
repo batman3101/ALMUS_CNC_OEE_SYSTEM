@@ -57,6 +57,9 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
         target_quality: settings.target_quality ?? 0.99,
         low_oee_threshold: settings.low_oee_threshold ?? 0.60,
         critical_oee_threshold: settings.critical_oee_threshold ?? 0.40,
+        critical_availability_threshold: settings.critical_availability_threshold ?? 0.70,
+        critical_performance_threshold: settings.critical_performance_threshold ?? 0.70,
+        critical_quality_threshold: settings.critical_quality_threshold ?? 0.90,
         downtime_alert_minutes: settings.downtime_alert_minutes ?? 30
       });
     }
@@ -76,6 +79,24 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
       if (values.low_oee_threshold >= values.target_oee) {
         showError(t('settings.oee.targetValidation'));
         return;
+      }
+
+      // 지표별 위험선은 그 지표의 목표보다 낮아야 한다.
+      //
+      // 알림 API 는 `if (위험) else if (경고)` 사슬로 판정한다. 위험선이 경고선(=목표)보다
+      // 높으면 경고 가지가 **영영 실행되지 않고** 모든 미달이 '위험'으로 뭉개진다 — 심각도
+      // 구분이 사라지는데 화면에는 아무 표시가 없다. 서버도 같은 검사를 하지만(그쪽은
+      // 기본값으로 물러난다), 관리자가 이유를 알 수 있는 자리는 여기다.
+      const criticalPairs: Array<[critical: keyof typeof values, target: keyof typeof values]> = [
+        ['critical_availability_threshold', 'target_availability'],
+        ['critical_performance_threshold', 'target_performance'],
+        ['critical_quality_threshold', 'target_quality'],
+      ];
+      for (const [criticalKey, targetKey] of criticalPairs) {
+        if (values[criticalKey] >= values[targetKey]) {
+          showError(t('settings.oee.criticalBelowTargetValidation'));
+          return;
+        }
       }
 
       // **한 트랜잭션**으로 저장한다.
@@ -171,6 +192,8 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
                     style={{ width: '100%' }}
                     formatter={value => `${(Number(value) * 100).toFixed(0)}%`}
                     parser={value => Number(value!.replace('%', '')) / 100}
+                    value={formValues.target_oee}
+                    onChange={value => form.setFieldValue('target_oee', value)}
                   />
                   <Slider
                     min={0}
@@ -201,6 +224,8 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
                     style={{ width: '100%' }}
                     formatter={value => `${(Number(value) * 100).toFixed(0)}%`}
                     parser={value => Number(value!.replace('%', '')) / 100}
+                    value={formValues.target_availability}
+                    onChange={value => form.setFieldValue('target_availability', value)}
                   />
                   <Slider
                     min={0}
@@ -231,6 +256,8 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
                     style={{ width: '100%' }}
                     formatter={value => `${(Number(value) * 100).toFixed(0)}%`}
                     parser={value => Number(value!.replace('%', '')) / 100}
+                    value={formValues.target_performance}
+                    onChange={value => form.setFieldValue('target_performance', value)}
                   />
                   <Slider
                     min={0}
@@ -261,6 +288,8 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
                     style={{ width: '100%' }}
                     formatter={value => `${(Number(value) * 100).toFixed(0)}%`}
                     parser={value => Number(value!.replace('%', '')) / 100}
+                    value={formValues.target_quality}
+                    onChange={value => form.setFieldValue('target_quality', value)}
                   />
                   <Slider
                     min={0}
@@ -295,6 +324,8 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
                     style={{ width: '100%' }}
                     formatter={value => `${(Number(value) * 100).toFixed(0)}%`}
                     parser={value => Number(value!.replace('%', '')) / 100}
+                    value={formValues.low_oee_threshold}
+                    onChange={value => form.setFieldValue('low_oee_threshold', value)}
                   />
                   <Slider
                     min={0}
@@ -325,6 +356,8 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
                     style={{ width: '100%' }}
                     formatter={value => `${(Number(value) * 100).toFixed(0)}%`}
                     parser={value => Number(value!.replace('%', '')) / 100}
+                    value={formValues.critical_oee_threshold}
+                    onChange={value => form.setFieldValue('critical_oee_threshold', value)}
                   />
                   <Slider
                     min={0}
@@ -337,6 +370,70 @@ const OEESettingsTab: React.FC<OEESettingsTabProps> = ({ onDirtyChange }) => {
                   />
                 </div>
               </Form.Item>
+
+              {/*
+                지표별 **위험선**. 목표(target_*)가 경고선이고 이 셋이 위험선이다.
+                예전에는 이 숫자들이 알림 API 안에 하드코딩돼 있어(가동률 70 / 성능 70 /
+                품질 90) 관리자가 목표를 바꿔도 알림 판단이 그대로였다(감사 2026-08-06).
+
+                세 필드를 각각 복사해 두지 않고 배열로 도는 이유는, 이 화면의 다른 결함들이
+                하나같이 "같은 코드가 여러 벌 있다가 한 벌만 고쳐진" 형태였기 때문이다.
+              */}
+              {([
+                ['critical_availability_threshold', 'settings.oee.criticalAvailability'],
+                ['critical_performance_threshold', 'settings.oee.criticalPerformance'],
+                ['critical_quality_threshold', 'settings.oee.criticalQuality'],
+              ] as const).map(([name, labelKey]) => (
+                <Form.Item
+                  key={name}
+                  name={name}
+                  label={t(labelKey)}
+                  rules={[
+                    { required: true, message: t('settings.oee.criticalRequired') },
+                    { type: 'number', min: 0, max: 1, message: t('settings.oee.valueRange') }
+                  ]}
+                >
+                  <div>
+                    {/*
+                      ⚠️ `value`/`onChange` 를 **직접** 준다.
+
+                      `Form.Item` 은 `name` 이 있으면 **단일 자식**을 복제해 value/onChange 를
+                      주입하는데, 여기 자식은 이 `<div>` 다. 주입된 props 는 div 로 가서 사라지고
+                      안쪽 InputNumber 는 아무 값도 받지 못한다 — 실제로 이 탭의 퍼센트 입력칸은
+                      전부 `0%` 로 보였다(저장값은 0.85 인데). 슬라이더가 멀쩡해 보였던 건 그쪽만
+                      `formValues` 를 직접 읽고 있었기 때문이고, 고장난 절반이 멀쩡한 절반 옆에
+                      있어서 눈으로는 "그럭저럭 동작" 처럼 보였다.
+                    */}
+                    <InputNumber<number>
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      precision={2}
+                      style={{ width: '100%' }}
+                      formatter={value => `${(Number(value) * 100).toFixed(0)}%`}
+                      parser={value => Number(value!.replace('%', '')) / 100}
+                      value={formValues[name]}
+                      onChange={value => form.setFieldValue(name, value)}
+                    />
+                    <Slider
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={formValues[name]}
+                      onChange={(value) => form.setFieldValue(name, value)}
+                      tooltip={{ formatter: (value) => `${(value! * 100).toFixed(0)}%` }}
+                      style={{ marginTop: '8px' }}
+                    />
+                  </div>
+                </Form.Item>
+              ))}
+
+              <Alert
+                message={t('settings.oee.alertMappingNote')}
+                type="info"
+                showIcon
+                style={{ marginBottom: '24px' }}
+              />
 
               <Form.Item
                 name="downtime_alert_minutes"

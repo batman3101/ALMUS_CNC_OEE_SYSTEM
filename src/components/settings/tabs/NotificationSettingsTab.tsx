@@ -236,7 +236,15 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onDir
                 label={t('settings.notification.enableEmail')}
                 valuePropName="checked"
               >
-                <Switch />
+                {/*
+                  ⚠️ 이메일은 **발송 경로가 존재하지 않는다.** 저장소 어디에도 메일을 보내는
+                     코드가 없다(감사 2026-08-06 HIGH-03). 켜 두면 "알림이 메일로 온다"고
+                     믿게 되는데 실제로는 아무 일도 일어나지 않는다 — 장애 감지를 이 경로에
+                     기대고 있으면 그 기대가 조용히 배신당한다.
+                     발송 구현(제공자 선택·비밀값 관리 포함) 전까지 입력을 잠근다.
+                     저장된 값과 수신 주소는 지우지 않는다.
+                */}
+                <Switch disabled />
               </Form.Item>
 
               <Form.Item
@@ -255,9 +263,16 @@ const NotificationSettingsTab: React.FC<NotificationSettingsTabProps> = ({ onDir
               >
                 <Input
                   placeholder={t('settings.notification.emailPlaceholder')}
-                  disabled={!formValues.email_notifications_enabled}
+                  disabled
                 />
               </Form.Item>
+
+              <Alert
+                message={t('settings.notification.emailNotSupportedNote')}
+                type="warning"
+                showIcon
+                style={{ marginBottom: '24px' }}
+              />
 
               <Alert
                 message={t('settings.notification.emailHint')}
