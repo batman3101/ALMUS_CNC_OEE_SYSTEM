@@ -77,21 +77,22 @@ begin
   where machine_id = v_machine and start_time >= now() - interval '1 minute';
   if n <> 2 then raise exception 'T2f expected 2 log rows per 2 transitions, got %', n; end if;
 
-  -- [T3] close_shift_upsert_v2: F2 보존 원자화 + output_lt_defect + confirm_shift_defect 가드
+  -- [T3] close_shift_upsert_v3: F2 보존 원자화 + output_lt_defect + confirm_shift_defect 가드
   --
-  -- v1 은 20260729170000 에서 제거됐다. 이 스크립트가 v1 을 계속 부르고 있어 운영 스키마에서
-  -- 통째로 실패하고 있었다(적대적 재감사 #7) — 불변조건 검사가 스스로 깨진 채 방치되면
-  -- "검사가 있다"는 사실이 오히려 안전하다는 착각을 만든다.
+  -- v1 은 20260729170000 에서, v2 는 20260806 에서 제거됐다. 이 스크립트가 v1 을 계속 부르고
+  -- 있어 운영 스키마에서 통째로 실패한 적이 있다(적대적 재감사 #7) — 불변조건 검사가 스스로
+  -- 깨진 채 방치되면 "검사가 있다"는 사실이 오히려 안전하다는 착각을 만든다.
+  -- **RPC 를 새 이름으로 올릴 때 이 파일도 같이 옮길 것.**
   v_digest := public.downtime_window_digest(v_machine, v_ws, v_we);
-  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
-                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest);
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest, null, null);
   if not (r->>'ok')::boolean or r->'preserved_defect' <> 'null'::jsonb then
     raise exception 'T3a first close failed: %', r;
   end if;
 
   -- [T3-CAS] 지문이 다르면 저장하지 않는다 (낡은 지표의 확정 저장 방지)
-  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
-                                    1.0, 0.9, 0, 558, v_ws, v_we, '__stale_digest__');
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, '__stale_digest__', null, null);
   if (r->>'ok')::boolean or r->>'reason' <> 'source_changed' then
     raise exception 'T3-CAS stale digest accepted: %', r;
   end if;
@@ -104,14 +105,14 @@ begin
     raise exception 'T3b defect confirm failed: %', r;
   end if;
 
-  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
-                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest);
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-01', 'A', 100, 610, 610, 930,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest, null, null);
   if (r->>'preserved_defect')::integer <> 8 then raise exception 'T3c reclose lost defect: %', r; end if;
   select defect_qty into v_defect from public.production_records where record_id = v_rec_id;
   if v_defect <> 8 then raise exception 'T3d row defect overwritten: %', v_defect; end if;
 
-  r := public.close_shift_upsert_v2(v_machine, date '2099-01-01', 'A', 5, 610, 610, 47,
-                                    1.0, 0.08, 0, 558, v_ws, v_we, v_digest);
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-01', 'A', 5, 610, 610, 47,
+                                    1.0, 0.08, 0, 558, v_ws, v_we, v_digest, null, null);
   if (r->>'ok')::boolean or r->>'reason' <> 'output_lt_defect' then
     raise exception 'T3e output<defect reclose accepted: %', r;
   end if;
@@ -152,6 +153,65 @@ begin
   r := public.report_shift_progress(v_machine, date '2099-01-01', 'A', 999, null);
   if (r->>'ok')::boolean or r->>'reason' <> 'already_closed' then
     raise exception 'T6 마감 후 진척이 수용됨: %', r;
+  end if;
+
+  -- [T3f] 진척보다 낮은 마감: 사유 없으면 거부, 있으면 통과하고 흔적을 남긴다
+  --
+  -- 진척 보고는 누적이라 감소가 409 로 거부된다. 마감이 같은 규칙을 따르지 않아 진척(100)보다
+  -- 작은 값으로 확정하면 이력과 실적이 어긋난 채 남았다(마감 대기 목록에서도 사라져 아무도
+  -- 다시 보지 못했다). 막지 않고 사유를 받기로 했으므로, **사유 없이는 통과하지 못한다**는
+  -- 것이 불변조건이다.
+  --
+  -- 판정은 RPC 안(잠금 아래)에서 한다. 라우트에서 진척을 읽어 비교하면 그 읽기와 저장 사이에
+  -- 새 진척이 들어와 사유가 필요한 마감이 사유 없이 통과할 수 있다.
+  insert into public.production_progress_reports(machine_id, date, shift, shift_output_qty, operator_id)
+  values (v_machine, date '2099-01-02', 'A', 100, null);
+
+  v_digest := public.downtime_window_digest(v_machine, v_ws, v_we);
+
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-02', 'A', 10, 610, 610, 93,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest, null, null);
+  if (r->>'ok')::boolean or r->>'reason' <> 'below_progress_needs_reason' then
+    raise exception 'T3f below-progress close accepted without reason: %', r;
+  end if;
+  if (r->>'last_progress_qty')::integer <> 100 then
+    raise exception 'T3f last_progress_qty not returned (화면이 얼마인지 물을 수 없다): %', r;
+  end if;
+  -- 거부됐으면 행도 없어야 한다 — 거부해 놓고 저장하면 거부가 아니다.
+  if exists (select 1 from public.production_records
+             where machine_id = v_machine and date = date '2099-01-02' and shift = 'A') then
+    raise exception 'T3f rejected close still wrote a record';
+  end if;
+
+  -- 공백만 있는 사유는 사유가 아니다.
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-02', 'A', 10, 610, 610, 93,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest, '   ', null);
+  if (r->>'ok')::boolean or r->>'reason' <> 'below_progress_needs_reason' then
+    raise exception 'T3f blank reason accepted: %', r;
+  end if;
+
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-02', 'A', 10, 610, 610, 93,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest, '종이 카운트로 정정', null);
+  if not (r->>'ok')::boolean or not (r->>'below_progress')::boolean then
+    raise exception 'T3f close with reason failed: %', r;
+  end if;
+
+  -- 흔적이 없으면 허용의 근거가 사라진다.
+  if not exists (
+    select 1 from public.audit_log
+    where action = 'close_below_progress'
+      and old_values->>'last_progress_qty' = '100'
+      and new_values->>'output_qty' = '10'
+      and new_values->>'reason' = '종이 카운트로 정정'
+  ) then
+    raise exception 'T3f audit row missing for below-progress close';
+  end if;
+
+  -- 진척과 같거나 크면 사유 없이도 통과한다(평소 마감이 막히면 안 된다).
+  r := public.close_shift_upsert_v3(v_machine, date '2099-01-02', 'A', 100, 610, 610, 930,
+                                    1.0, 0.9, 0, 558, v_ws, v_we, v_digest, null, null);
+  if not (r->>'ok')::boolean or (r->>'below_progress')::boolean then
+    raise exception 'T3f normal close blocked or mislabeled: %', r;
   end if;
 
   -- [T4] 비활성 설비 andon 거부
