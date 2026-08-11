@@ -409,9 +409,16 @@ export async function GET(request: NextRequest) {
         performance: record.performance,
         quality: record.quality,
         output_qty: record.output_qty,
-        good_qty: (record.output_qty || 0) - (record.defect_qty || 0),
+        // 미검사(NULL)는 양품·불량률을 확정하지 않는다 — quality-analysis 와 같은 규약(NULL≠0).
+        good_qty: record.defect_qty === null || record.defect_qty === undefined
+          ? null
+          : (record.output_qty || 0) - record.defect_qty,
         defect_qty: record.defect_qty,
-        defect_rate: record.output_qty > 0 ? Math.round(((record.defect_qty / record.output_qty) * 100) * 100) / 100 : 0
+        defect_rate: record.defect_qty === null || record.defect_qty === undefined
+          ? null
+          : record.output_qty > 0
+            ? Math.round(((record.defect_qty / record.output_qty) * 100) * 100) / 100
+            : 0
       }));
     }
 

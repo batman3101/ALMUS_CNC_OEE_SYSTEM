@@ -4,6 +4,7 @@ import React from 'react';
 import { Typography, App as AntdApp } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import ProductionRecordList from '@/components/production/ProductionRecordList';
+import CloseShiftQueue from '@/components/production/CloseShiftQueue';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
 
 const { Title, Text } = Typography;
@@ -22,6 +23,12 @@ function ProductionRecordsContent() {
           {t('recordList.description')}
         </Text>
       </div>
+
+      {/*
+        마감 대기 큐를 목록 **위**에 둔다. 마감은 기한이 있는 업무(다음날 불량 입력의 선행
+        조건)이고, 생산 기록 조회는 아니다. 대기가 없으면 빈 표만 남아 조용히 비켜선다.
+      */}
+      <CloseShiftQueue />
 
       <ProductionRecordList />
     </div>

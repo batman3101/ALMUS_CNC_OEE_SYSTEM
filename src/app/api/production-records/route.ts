@@ -70,6 +70,19 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate') || searchParams.get('start_date');
     const endDate = searchParams.get('endDate') || searchParams.get('end_date');
     const shift = searchParams.get('shift');
+    /**
+     * NG 확정 상태 필터. 다음날 불량 입력 업무의 작업 목록을 만드는 수단이다.
+     *   pending   = `defect_qty IS NULL`     (미검사 — 오늘 처리해야 할 행)
+     *   confirmed = `defect_qty IS NOT NULL` (0건 확정 포함, 검사 끝난 행)
+     * 허용값이 아니면 400 — 오타를 조용히 무시하면 "필터가 걸린 줄 알았는데 전체"가 된다.
+     */
+    const defectStatus = searchParams.get('defect_status');
+    if (defectStatus !== null && defectStatus !== 'pending' && defectStatus !== 'confirmed') {
+      return NextResponse.json(
+        { error: "defect_status must be 'pending' or 'confirmed'" },
+        { status: 400 }
+      );
+    }
     const requestedPage = Number.parseInt(searchParams.get('page') || '1', 10);
     const requestedLimit = Number.parseInt(searchParams.get('limit') || '100', 10);
     const page = Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1;
@@ -142,6 +155,9 @@ export async function GET(request: NextRequest) {
       if (startDate) q = q.gte('date', startDate);
       if (endDate) q = q.lte('date', endDate);
       if (shift) q = q.eq('shift', shift);
+      // NULL 비교는 `.eq()` 로 되지 않는다(SQL 에서 `col = NULL` 은 NULL). `.is()` 를 써야 한다.
+      if (defectStatus === 'pending') q = q.is('defect_qty', null);
+      else if (defectStatus === 'confirmed') q = q.not('defect_qty', 'is', null);
       // 청크가 하나면 DB 가 페이지를 잘라 준다. 여럿이면 병합을 위해 앞에서부터 받는다.
       return singleScope ? q.range(pageStart, pageEnd) : q.range(0, pageEnd);
     };
@@ -195,7 +211,22 @@ export async function GET(request: NextRequest) {
       actual_runtime: record.actual_runtime ?? null,
       ideal_runtime: record.ideal_runtime ?? null,
       output_qty: record.output_qty || 0,
-      defect_qty: record.defect_qty || 0,
+      /**
+       * 미검사(NULL)를 0 으로 접지 않는다.
+       *
+       * 교대 마감은 `output_qty` 만 확정하고 `defect_qty` 는 NULL 로 남긴다 — 다음날 검사
+       * 결과가 나와야 확정할 수 있기 때문이다(2단계 확정 모델). 그런데 이 줄이 그 NULL 을
+       * 0 으로 바꿔 보내면 **브라우저는 "불량 0건 확정"과 "아직 안 셌다"를 영영 구분할 수
+       * 없다** — 프런트에서 되살릴 방법이 없다.
+       *
+       * 표시만 틀리는 게 아니었다. 목록의 수정 모달은 이 값을 그대로 prefill 하므로,
+       * 미검사 행에서 생산량만 고쳐 저장해도 `defect_qty: 0` 이 함께 전송되고 서버는 그것을
+       * **명시적 0 확정**으로 해석해 quality/OEE 까지 계산해 버렸다. 검사하지 않은 교대가
+       * 조용히 "불량 0건, 품질 100%"로 확정되는 경로였다.
+       *
+       * 바로 아래 availability/performance/quality/oee 가 이미 `?? null` 인 것과 같은 규약이다.
+       */
+      defect_qty: record.defect_qty ?? null,
       // ✅ OEE 관련 필드 추가 (Supabase에 저장된 실제 값)
       availability: record.availability ?? null,
       performance: record.performance ?? null,

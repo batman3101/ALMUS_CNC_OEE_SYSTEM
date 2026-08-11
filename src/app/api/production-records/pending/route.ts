@@ -26,8 +26,17 @@ export async function GET(request: NextRequest) {
 
     // 마감대기: 진척 보고(작업 증거)가 있는 교대 중 확정 record 없는 것. progress_reports 기반이라
     // 자동 바운드된다(과거 전체가 뜨지 않음). production_shift_states.status='WORKING' 은 수천 행이라
-    // 마감대기 도출에 쓰면 안 된다(실측). 종이값만 있는(진척 미입력) 교대는 콘솔에서 작업자가
-    // 대상 교대를 직접 골라 마감한다(Plan 2 — 백로그는 nudge, 유일 경로 아님).
+    // 마감대기 도출에 쓰면 안 된다(실측).
+    //
+    // 종이값만 있는(진척 미입력) 교대는 **이 목록에 잡히지 않는다** — 진척 보고가 없으니
+    // 파생될 근거가 없다. 그 교대는 콘솔의 `ManualCloseShiftSection`(지난 교대 직접 마감)에서
+    // 날짜·교대를 직접 골라 마감한다. 즉 이 백로그는 nudge 이고 유일 경로가 아니다.
+    //
+    // ⚠ 2026-08-11 정정: 예전 주석은 그 직접 마감 경로가 **이미 있다**고 단언했지만 실제로는
+    // 없었다. `CloseShiftSection` 은 이 목록이 비면 카드를 통째로 숨겨서(`if (!selected)
+    // return null`), 진척을 한 번도 저장하지 않은 교대는 화면에서 마감할 방법이 없었다.
+    // 주석이 존재하지 않는 경로를 보증하는 바람에 그 공백이 오래 드러나지 않았다.
+    // 지금은 실제로 존재한다 — 주석을 고치는 대신 경로를 만들었다.
     const { data: progressed, error: pErr } = await supabaseAdmin
       .from('production_progress_reports')
       .select('date, shift, shift_output_qty').eq('machine_id', machineId).gte('date', cutoff);

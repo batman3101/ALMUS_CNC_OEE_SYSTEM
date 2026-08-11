@@ -314,7 +314,9 @@ export async function GET(request: NextRequest) {
       planned_runtime: toNullableNumber(record.planned_runtime),
       ideal_runtime: toNullableNumber(record.ideal_runtime),
       output_qty: record.output_qty || 0,
-      defect_qty: record.defect_qty || 0,
+      // 미검사(NULL)를 0 으로 접지 않는다 — 위 지표들과 같은 규약이다(NULL≠0).
+      // 0 으로 내보내면 소비자가 "불량 0건 확정"과 구분할 수 없다.
+      defect_qty: toNullableNumber(record.defect_qty),
       downtime_minutes: record.downtime_minutes,
       created_at: record.created_at,
       updated_at: record.created_at

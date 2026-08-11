@@ -67,6 +67,9 @@ const POLICY: Record<string, Record<string, string>> = {
   'production-records/[recordId]': { GET: AEO, PUT: AEO, DELETE: AE, PATCH: AEO },
   'production-records/[recordId]/defect': { PATCH: AEO },
   'production-records/close-shift': { POST: AEO },
+  // 전사 마감 대기 큐(읽기 전용). 운영자도 본다 — 다만 라우트가 `assignedMachineIds` 로
+  // 스코프를 좁히므로 남의 설비는 나오지 않는다. 마감 **쓰기**는 여전히 close-shift 하나뿐이다.
+  'production-records/close-queue': { GET: AEO },
   'production-records/daily': { POST: AEO },
   'production-records/pending': { GET: AEO },
   'productivity-analysis': { GET: AE },

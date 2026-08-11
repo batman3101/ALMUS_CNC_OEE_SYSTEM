@@ -138,6 +138,23 @@
     "dayShiftRecordId": "주간조 기록 ID",
     "nightShiftRecordId": "야간조 기록 ID"
   },
+  "closeQueue": {
+    "title": "교대 마감 대기",
+    "description": "진척 보고는 있으나 아직 마감되지 않은 교대입니다. 행마다 최종 생산수량을 확인해 개별 마감하세요. 일괄 자동 마감은 제공하지 않습니다.",
+    "lastProgress": "마지막 진척",
+    "finalQty": "최종수량",
+    "status": "상태",
+    "statusPending": "마감 대기",
+    "close": "마감",
+    "closeSuccess": "{{machine}} 교대를 마감했습니다",
+    "loadError": "마감 대기 목록을 불러오지 못했습니다",
+    "empty": "마감 대기 중인 교대가 없습니다",
+    "truncated": "조회 범위가 너무 넓어 일부만 표시했습니다. 날짜 범위를 좁혀 주세요.",
+    "errorGeneric": "마감에 실패했습니다",
+    "errorTooEarly": "아직 끝나지 않은 교대입니다",
+    "errorBelowProgress": "진척({{qty}}개)보다 적습니다. 현장 콘솔에서 사유와 함께 마감하세요",
+    "errorBelowDefect": "확정된 불량({{qty}}개)보다 적습니다"
+  },
   "recordList": {
     "title": "생산 기록 관리",
     "description": "생산 기록을 조회하고 수정, 삭제할 수 있습니다",
@@ -163,6 +180,21 @@
     },
     "edit": "수정",
     "delete": "삭제",
+    "confirmDefect": "NG 확정",
+    "defectPending": "미검사",
+    "goodQtyUnknown": "미확정",
+    "defectStatus": "NG 상태",
+    "defectStatusAll": "전체",
+    "defectStatusPending": "미검사",
+    "defectStatusConfirmed": "확인 완료",
+    "defectModal": {
+      "title": "불량(NG) 확정",
+      "placeholder": "불량 수량을 입력하세요",
+      "hint": "불량이 없었다면 0 을 입력해 확정하세요. 저장하면 품질과 OEE가 다시 계산됩니다.",
+      "confirm": "확정",
+      "confirmSuccess": "불량 수량이 확정되었습니다",
+      "confirmFailed": "불량 확정에 실패했습니다"
+    },
     "editModal": {
       "title": "생산 기록 수정",
       "recordInfo": "기록 정보",
@@ -174,6 +206,7 @@
       "defectQty": "불량 수량",
       "outputQtyRequired": "생산량을 입력하세요",
       "defectQtyRequired": "불량 수량을 입력하세요",
+      "defectQtyPendingHint": "아직 검사 전입니다. 비워 두면 미검사 상태가 유지됩니다. 불량 확정은 목록의 [NG 확정] 버튼을 사용하세요.",
       "minZero": "0 이상의 값을 입력하세요",
       "defectExceedsOutput": "불량 수량은 생산량보다 클 수 없습니다",
       "cancel": "취소",

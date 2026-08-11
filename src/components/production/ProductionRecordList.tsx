@@ -25,7 +25,8 @@ import {
   DeleteOutlined,
   SearchOutlined,
   ReloadOutlined,
-  LockOutlined
+  LockOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { useMachines } from '@/hooks/useMachines';
@@ -46,7 +47,14 @@ interface ProductionRecord {
   date: string;
   shift: 'A' | 'B';
   output_qty: number;
-  defect_qty: number;
+  /**
+   * NULL = **미검사**다. 불량 0건과 다르다.
+   *
+   * 교대 마감은 생산량만 확정하고 이 값을 NULL 로 남긴다 — 검사 결과는 다음날 나온다.
+   * `number` 로 적으면 그 세 번째 상태를 표현할 수 없고, 그 타입 거짓말이 실제로
+   * "미검사 행을 0건으로 확정 저장"하는 버그를 만들었다(같은 교훈이 아래 지표 필드들).
+   */
+  defect_qty: number | null;
   // 비가동/실가동이 확인되지 않은 기록은 서버가 NULL 로 남긴다(0 으로 추정하지 않는다).
   // null 을 표현할 수 있어야 "미보고"와 "실제 0%"를 구분할 수 있다.
   planned_runtime?: number | null;
@@ -90,6 +98,13 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [selectedShift, setSelectedShift] = useState<string | null>(null);
+  // NG 확정 상태 필터('pending' = 미검사). 다음날 불량 입력의 작업 목록을 만드는 수단이다.
+  const [defectStatus, setDefectStatus] = useState<'pending' | 'confirmed' | null>(null);
+
+  // NG 확정 전용 모달 상태 — 일반 수정(PUT)과 **다른 경로**(/defect PATCH)를 쓴다.
+  const [defectModalRecord, setDefectModalRecord] = useState<ProductionRecord | null>(null);
+  const [defectQtyInput, setDefectQtyInput] = useState<number | null>(null);
+  const [confirmingDefect, setConfirmingDefect] = useState(false);
 
   // 수정 모달 상태
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -119,6 +134,11 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       }
       if (selectedShift) {
         params.append('shift', selectedShift);
+      }
+      // 서버에서 거른다. 받은 페이지를 클라이언트에서 다시 거르면 페이지네이션 총계가
+      // 어긋나 "20건 중 3건"처럼 보인다(필터는 조회 조건이지 표시 조건이 아니다).
+      if (defectStatus) {
+        params.append('defect_status', defectStatus);
       }
 
       const response = await authFetch(`/api/production-records?${params.toString()}`);
@@ -151,7 +171,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.current, pagination.pageSize, selectedMachineId, dateRange, selectedShift, messageApi, t]);
+  }, [pagination.current, pagination.pageSize, selectedMachineId, dateRange, selectedShift, defectStatus, messageApi, t]);
 
   useEffect(() => {
     fetchRecords();
@@ -171,13 +191,29 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
   const handleEditSave = async () => {
     if (!editingRecord) return;
 
-    let values: { output_qty: number; defect_qty: number };
+    let values: { output_qty: number; defect_qty?: number | null };
     try {
       values = await editForm.validateFields();
     } catch {
       // 유효성 검사 실패: AntD가 필드별 오류를 이미 표시하므로 저장 실패 메시지는 띄우지 않음
       return;
     }
+
+    /**
+     * 불량 칸이 비어 있으면 `defect_qty` 를 **보내지 않는다**.
+     *
+     * 서버의 `buildUpdateData` 는 `undefined` 를 "이 필드는 건드리지 않음"으로 읽어 기존 값을
+     * 그대로 둔다. 반대로 `0` 을 보내면 그것은 **"불량 0건으로 확정한다"는 선언**이라
+     * quality/OEE 까지 계산된다.
+     *
+     * 예전에는 목록 API 가 NULL 을 0 으로 바꿔 내려보냈고 모달이 그 0 을 prefill 했기 때문에,
+     * 생산량 한 자리만 고쳐도 미검사 교대가 "불량 0건 검사 완료"로 확정 저장됐다.
+     * 이 화면은 일반 정정용이다 — 불량 확정은 전용 버튼(`/defect`)이 담당한다.
+     */
+    const payload: { output_qty: number; defect_qty?: number } =
+      values.defect_qty === null || values.defect_qty === undefined
+        ? { output_qty: values.output_qty }
+        : { output_qty: values.output_qty, defect_qty: values.defect_qty };
 
     try {
       setSaving(true);
@@ -187,10 +223,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          output_qty: values.output_qty,
-          defect_qty: values.defect_qty
-        })
+        body: JSON.stringify(payload)
       });
 
       // 본문을 **먼저** 읽는다. 예전에는 `!response.ok` 이면 status 만 보고 바로 던져서,
@@ -259,11 +292,51 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
     }
   };
 
+  /**
+   * NG 확정 — 일반 수정(PUT)이 아니라 **전용 경로**(`PATCH .../defect`)를 쓴다.
+   *
+   * 두 경로는 하는 일이 다르다. PUT 은 행 전체를 읽어 파생지표를 다시 계산해 덮어쓰고,
+   * `/defect` 는 `confirm_shift_defect` RPC 가 교대 잠금(machine·date·shift) 아래에서
+   * quality/oee 만 재파생한다 — 가동률·성능 스냅샷은 그대로 둔다. 다음날 불량 입력 때문에
+   * 그 교대의 가동 이력이 오늘 값으로 덮이면 안 되기 때문이다.
+   */
+  const handleConfirmDefect = async () => {
+    if (!defectModalRecord || defectQtyInput === null) return;
+
+    try {
+      setConfirmingDefect(true);
+      const response = await authFetch(
+        `/api/production-records/${defectModalRecord.record_id}/defect`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defect_qty: defectQtyInput })
+        }
+      );
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.error || `HTTP ${response.status}`);
+      }
+
+      messageApi.success(t('recordList.defectModal.confirmSuccess'));
+      setDefectModalRecord(null);
+      setDefectQtyInput(null);
+      fetchRecords();
+    } catch (error) {
+      console.error('Error confirming defect:', error);
+      reportFailure(t('recordList.defectModal.confirmFailed'), error);
+    } finally {
+      setConfirmingDefect(false);
+    }
+  };
+
   // 필터 초기화
   const resetFilters = () => {
     setSelectedMachineId(null);
     setDateRange(null);
     setSelectedShift(null);
+    setDefectStatus(null);
     setPagination(prev => ({ ...prev, current: 1 }));
   };
 
@@ -313,11 +386,18 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       key: 'defect_qty',
       width: 100,
       align: 'right' as const,
-      render: (qty: number) => (
-        <Text type={qty > 0 ? 'danger' : undefined}>
-          {qty?.toLocaleString() || 0} {t('common.pieces')}
-        </Text>
-      )
+      // 세 상태를 **구분해서** 보여준다: 미검사 / 0건 확정 / 실제 불량.
+      // 예전에는 `qty || 0` 이라 미검사가 "0개"로 보였고, 사용자는 검사가 끝난 줄 알았다.
+      render: (qty: number | null | undefined) => {
+        if (qty === null || qty === undefined) {
+          return <Tag color="warning">{t('recordList.defectPending')}</Tag>;
+        }
+        return (
+          <Text type={qty > 0 ? 'danger' : undefined}>
+            {qty.toLocaleString()} {t('common.pieces')}
+          </Text>
+        );
+      }
     },
     {
       title: t('recordList.columns.goodQty'),
@@ -325,7 +405,12 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       width: 100,
       align: 'right' as const,
       render: (_: unknown, record: ProductionRecord) => {
-        const goodQty = Math.max(0, (record.output_qty || 0) - (record.defect_qty || 0));
+        // 불량이 미검사면 양품수량은 **아직 모른다**. `output - 0` 으로 확정하면 전량이
+        // 양품인 것처럼 보이고, 그게 곧 "검사 완료"라는 오해가 된다.
+        if (record.defect_qty === null || record.defect_qty === undefined) {
+          return <Text type="secondary">{t('recordList.goodQtyUnknown')}</Text>;
+        }
+        const goodQty = Math.max(0, (record.output_qty || 0) - record.defect_qty);
         return <Text type="success">{goodQty.toLocaleString()} {t('common.pieces')}</Text>;
       }
     },
@@ -352,9 +437,26 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
     {
       title: t('recordList.columns.actions'),
       key: 'actions',
-      width: 120,
+      width: 200,
       render: (_: unknown, record: ProductionRecord) => (
         <Space size="small">
+          {/*
+            미검사 행에만 NG 확정 버튼을 띄운다. 이 버튼이 다음날 불량 입력의 **주 경로**다 —
+            일반 수정 모달은 정정용이고 확정의 의미를 갖지 않는다.
+          */}
+          {(record.defect_qty === null || record.defect_qty === undefined) && (
+            <Button
+              type="link"
+              size="small"
+              icon={<CheckCircleOutlined />}
+              onClick={() => {
+                setDefectModalRecord(record);
+                setDefectQtyInput(null);
+              }}
+            >
+              {t('recordList.confirmDefect')}
+            </Button>
+          )}
           <Button
             type="link"
             size="small"
@@ -455,7 +557,25 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
               </Select>
             </Space>
           </Col>
-          <Col xs={24} sm={12} md={8}>
+          <Col xs={24} sm={12} md={4}>
+            <Space direction="vertical" style={{ width: '100%' }} size={4}>
+              <Text strong>{t('recordList.defectStatus')}</Text>
+              <Select
+                placeholder={t('recordList.defectStatusAll')}
+                allowClear
+                value={defectStatus}
+                onChange={(value) => {
+                  setDefectStatus(value ?? null);
+                  setPagination(prev => ({ ...prev, current: 1 }));
+                }}
+                style={{ width: '100%' }}
+              >
+                <Option value="pending">{t('recordList.defectStatusPending')}</Option>
+                <Option value="confirmed">{t('recordList.defectStatusConfirmed')}</Option>
+              </Select>
+            </Space>
+          </Col>
+          <Col xs={24} sm={12} md={4}>
             <Space style={{ marginTop: 22 }}>
               <Button
                 type="primary"
@@ -517,6 +637,65 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
           locale={{ emptyText: t('recordList.noRecords') }}
         />
       </Card>
+
+      {/* NG 확정 전용 모달 — 다음날 불량 입력의 주 경로(/defect RPC) */}
+      <Modal
+        title={t('recordList.defectModal.title')}
+        open={defectModalRecord !== null}
+        onCancel={() => {
+          setDefectModalRecord(null);
+          setDefectQtyInput(null);
+        }}
+        footer={[
+          <Button
+            key="cancel"
+            onClick={() => {
+              setDefectModalRecord(null);
+              setDefectQtyInput(null);
+            }}
+          >
+            {t('recordList.editModal.cancel')}
+          </Button>,
+          <Button
+            key="confirm"
+            type="primary"
+            loading={confirmingDefect}
+            // 비어 있으면 확정할 수 없다 — "0건 확정"은 0 을 **명시적으로** 입력해야 한다.
+            disabled={defectQtyInput === null}
+            onClick={handleConfirmDefect}
+          >
+            {t('recordList.defectModal.confirm')}
+          </Button>
+        ]}
+      >
+        {defectModalRecord && (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Text type="secondary">
+              {defectModalRecord.machine?.name} · {defectModalRecord.date} ·{' '}
+              {defectModalRecord.shift === 'A' ? t('shift.dayShift') : t('shift.nightShift')}
+            </Text>
+            <Text>
+              {t('recordList.columns.outputQty')}:{' '}
+              <Text strong>{defectModalRecord.output_qty?.toLocaleString()} {t('common.pieces')}</Text>
+            </Text>
+            <InputNumber
+              autoFocus
+              value={defectQtyInput}
+              onChange={setDefectQtyInput}
+              min={0}
+              max={defectModalRecord.output_qty}
+              precision={0}
+              style={{ width: '100%' }}
+              size="large"
+              addonAfter={t('common.pieces')}
+              placeholder={t('recordList.defectModal.placeholder')}
+            />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {t('recordList.defectModal.hint')}
+            </Text>
+          </Space>
+        )}
+      </Modal>
 
       {/* 수정 모달 */}
       <Modal
@@ -599,12 +778,26 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
               addonAfter={t('common.pieces')}
             />
           </Form.Item>
+          {/*
+            미검사 행에서는 불량 칸을 **필수로 만들지 않는다**. 필수로 두면 생산량 한 자리를
+            고치려는 사람이 아무 숫자나 넣어야 하고, 그 숫자가 곧 "검사 완료" 확정이 된다.
+            비워 두면 미검사 상태가 그대로 유지된다(위 payload 주석 참고).
+          */}
           <Form.Item
             name="defect_qty"
             label={t('recordList.editModal.defectQty')}
             dependencies={['output_qty']}
+            extra={
+              editingRecord?.defect_qty === null || editingRecord?.defect_qty === undefined
+                ? t('recordList.editModal.defectQtyPendingHint')
+                : undefined
+            }
             rules={[
-              { required: true, message: t('recordList.editModal.defectQtyRequired') },
+              // 이미 확정된 값이 있는 행에서만 필수다 — 확정 불량을 실수로 지우지 못하게.
+              {
+                required: !(editingRecord?.defect_qty === null || editingRecord?.defect_qty === undefined),
+                message: t('recordList.editModal.defectQtyRequired')
+              },
               { type: 'number', min: 0, message: t('recordList.editModal.minZero') },
               ({ getFieldValue }) => ({
                 validator(_, value) {
