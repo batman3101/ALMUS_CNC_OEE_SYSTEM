@@ -12,6 +12,7 @@ import { useMachinesTranslation } from '@/hooks/useTranslation';
 import { ProgressInputSection } from './ProgressInputSection';
 import { DowntimeAndonSection } from './DowntimeAndonSection';
 import { CloseShiftSection } from './CloseShiftSection';
+import { ManualCloseShiftSection } from './ManualCloseShiftSection';
 import { DefectPendingSection } from './DefectPendingSection';
 import { DowntimeBreakdownCard } from '@/components/downtime';
 
@@ -166,6 +167,20 @@ export const MachineConsole: React.FC<Props> = ({
       <DefectPendingSection
         item={defectPending}
         onConfirmed={() => backlog.refresh()}
+      />
+
+      {/*
+        진척 보고가 **없는** 지난 교대를 직접 마감하는 경로. 위 마감대기 카드는 진척 보고가
+        있는 교대만 띄우므로, 교대 내내 누적수량을 저장하지 않은 설비는 그 카드가 아예 뜨지
+        않는다. 종이 카운터를 보고 다음날 처음 입력하는 흐름이 그 경우다.
+        평소엔 접어 두어 주 동선(마감대기 → 불량확정)을 가리지 않는다.
+      */}
+      <ManualCloseShiftSection
+        key={`manual:${machineId}`}
+        machineId={machineId}
+        date={date}
+        shift={shift}
+        onClosed={() => backlog.refresh()}
       />
     </Space>
   );

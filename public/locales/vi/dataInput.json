@@ -138,6 +138,23 @@
     "dayShiftRecordId": "ID bản ghi ca ngày",
     "nightShiftRecordId": "ID bản ghi ca đêm"
   },
+  "closeQueue": {
+    "title": "Ca chờ chốt",
+    "description": "Các ca đã có báo cáo tiến độ nhưng chưa được chốt. Hãy kiểm tra sản lượng cuối của từng dòng và chốt riêng lẻ. Không hỗ trợ chốt hàng loạt tự động.",
+    "lastProgress": "Tiến độ cuối",
+    "finalQty": "Sản lượng cuối",
+    "status": "Trạng thái",
+    "statusPending": "Chờ chốt",
+    "close": "Chốt ca",
+    "closeSuccess": "Đã chốt ca cho {{machine}}",
+    "loadError": "Không tải được danh sách ca chờ chốt",
+    "empty": "Không có ca nào đang chờ chốt",
+    "truncated": "Phạm vi truy vấn quá rộng nên chỉ hiển thị một phần. Vui lòng thu hẹp khoảng ngày.",
+    "errorGeneric": "Chốt ca thất bại",
+    "errorTooEarly": "Ca này chưa kết thúc",
+    "errorBelowProgress": "Nhỏ hơn tiến độ ({{qty}} cái). Hãy chốt kèm lý do tại bảng điều khiển hiện trường",
+    "errorBelowDefect": "Nhỏ hơn số lượng lỗi đã xác nhận ({{qty}} cái)"
+  },
   "recordList": {
     "title": "Quản lý bản ghi sản xuất",
     "description": "Xem, chỉnh sửa và xóa bản ghi sản xuất",
@@ -163,6 +180,21 @@
     },
     "edit": "Sửa",
     "delete": "Xóa",
+    "confirmDefect": "Xác nhận NG",
+    "defectPending": "Chưa kiểm tra",
+    "goodQtyUnknown": "Chưa xác định",
+    "defectStatus": "Trạng thái NG",
+    "defectStatusAll": "Tất cả",
+    "defectStatusPending": "Chưa kiểm tra",
+    "defectStatusConfirmed": "Đã xác nhận",
+    "defectModal": {
+      "title": "Xác nhận số lượng lỗi (NG)",
+      "placeholder": "Nhập số lượng lỗi",
+      "hint": "Nếu không có lỗi, hãy nhập 0 để xác nhận. Sau khi lưu, chất lượng và OEE sẽ được tính lại.",
+      "confirm": "Xác nhận",
+      "confirmSuccess": "Đã xác nhận số lượng lỗi",
+      "confirmFailed": "Xác nhận số lượng lỗi thất bại"
+    },
     "editModal": {
       "title": "Chỉnh sửa bản ghi sản xuất",
       "recordInfo": "Thông tin bản ghi",
@@ -174,6 +206,7 @@
       "defectQty": "Số lượng lỗi",
       "outputQtyRequired": "Nhập sản lượng",
       "defectQtyRequired": "Nhập số lượng lỗi",
+      "defectQtyPendingHint": "Chưa kiểm tra. Để trống sẽ giữ nguyên trạng thái chưa kiểm tra. Để xác nhận lỗi, hãy dùng nút [Xác nhận NG] trong danh sách.",
       "minZero": "Nhập giá trị từ 0 trở lên",
       "defectExceedsOutput": "Số lượng lỗi không thể lớn hơn sản lượng",
       "cancel": "Hủy",

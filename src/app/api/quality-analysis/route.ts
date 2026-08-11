@@ -282,8 +282,16 @@ export async function GET(request: NextRequest) {
         quality: Math.round(toQualityPercent(record.quality) * 100) / 100,
         output_qty: record.output_qty,
         defect_qty: record.defect_qty,
-        good_qty: (record.output_qty || 0) - (record.defect_qty || 0),
-        defect_rate: record.output_qty > 0 ? Math.round(((record.defect_qty / record.output_qty) * 100) * 100) / 100 : 0,
+        // 불량 미검사(NULL)면 양품수량도 불량률도 **아직 없다**. 0 으로 접으면 검사도 하지
+        // 않은 교대가 "전량 양품·불량률 0%"로 집계돼 품질이 실제보다 좋아 보인다(NULL≠0).
+        good_qty: record.defect_qty === null || record.defect_qty === undefined
+          ? null
+          : (record.output_qty || 0) - record.defect_qty,
+        defect_rate: record.defect_qty === null || record.defect_qty === undefined
+          ? null
+          : record.output_qty > 0
+            ? Math.round(((record.defect_qty / record.output_qty) * 100) * 100) / 100
+            : 0,
         meets_threshold: toQualityPercent(record.quality) >= qualityThreshold
       }));
       detailTotal = count || 0;
