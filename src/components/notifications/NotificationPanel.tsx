@@ -121,8 +121,13 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   };
 
   // 시간 포맷팅
-  const formatTime = (dateString: string) => {
+  //
+  // `null` 은 "사건 시각을 특정할 수 없다"는 뜻이다. 현재 시각으로 대체하면 사흘 전 사건이
+  // "방금 전"으로 표시되므로, 모른다고 표시한다.
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return t('notifications.unknownTime');
     const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return t('notifications.unknownTime');
     const locale = language === 'ko' ? ko : vi;
     return formatDistanceToNow(date, { 
       addSuffix: true, 

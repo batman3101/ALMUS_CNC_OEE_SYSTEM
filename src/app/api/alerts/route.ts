@@ -40,13 +40,22 @@ interface Alert {
   id: string;
   machine_id: string;
   machine_name: string;
-  alert_type: 'oee' | 'availability' | 'performance' | 'quality' | 'downtime' | 'maintenance';
+  alert_type: 'oee' | 'availability' | 'performance' | 'quality' | 'downtime';
   severity: 'critical' | 'warning' | 'info';
   title: string;
   message: string;
   current_value: number;
   threshold_value: number;
-  timestamp: string;
+  /**
+   * 이 알림이 가리키는 **사건이 실제로 일어난 시각**.
+   *
+   * 조회 시각이 아니다. 예전에는 여기에 `new Date()` 를 넣어서, 사흘 전에 고장 난 설비와
+   * 방금 고장 난 설비가 화면에서 같은 1초로 표시됐다. 정렬도 무의미해지고 "언제부터"를
+   * 알 수 없게 된다.
+   *
+   * 출처를 특정할 수 없으면 `null` 이다 — 현재 시각으로 메우지 않는다.
+   */
+  timestamp: string | null;
   is_active: boolean;
   acknowledged: boolean;
 }
@@ -89,31 +98,6 @@ export async function GET(request: NextRequest) {
     );
 
     const pageSize = 1000;
-    // 현재 운영 중인 설비 상태도 Supabase 행 상한을 넘길 수 있으므로 전 페이지를 읽는다.
-    const currentStatus: Array<{
-      id: string;
-      name: string;
-      current_state: string;
-      equipment_type?: string | null;
-      location?: string | null;
-      updated_at?: string | null;
-    }> = [];
-    for (let from = 0; ; from += pageSize) {
-      let query = supabaseAdmin
-        .from('machines')
-        .select('id, name, current_state, equipment_type, location, updated_at')
-        .eq('is_active', true)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (machineId) query = query.eq('id', machineId);
-      const { data, error } = await query;
-      if (error) {
-        console.error('설비 상태 조회 오류:', error);
-        return NextResponse.json({ error: 'Failed to fetch machine status' }, { status: 500 });
-      }
-      currentStatus.push(...((data || []) as typeof currentStatus));
-      if (!data || data.length < pageSize) break;
-    }
 
     // Supabase의 행 상한 때문에 일부 설비가 알림 대상에서 사라지지 않도록 전 페이지를 읽는다.
     const performanceData: Array<{
@@ -272,6 +256,8 @@ export async function GET(request: NextRequest) {
       latest_performance: number | null;
       latest_quality: number | null;
       source_key: string;
+      /** 이 지표가 담긴 생산실적이 등록된 시각. 지표 알림의 사건 시각이다. */
+      recorded_at: string | null;
       record_count: number;
     }> = {};
 
@@ -290,6 +276,7 @@ export async function GET(request: NextRequest) {
           // One production row is one stable source event. Acknowledgement survives
           // repeated polling for that event, while a later record starts a new incident.
           source_key: record.record_id || record.created_at || `${record.date}:${record.shift}`,
+          recorded_at: record.created_at ?? null,
           record_count: 1
         };
       } else {
@@ -321,7 +308,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 OEE가 ${oee.toFixed(1)}%로 임계값(${alertThresholds.oee.critical}%)을 하회했습니다.`,
           current_value: oee,
           threshold_value: alertThresholds.oee.critical,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -336,7 +323,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 OEE가 ${oee.toFixed(1)}%로 경고 수준입니다.`,
           current_value: oee,
           threshold_value: alertThresholds.oee.warning,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -354,7 +341,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 가용성이 ${availability.toFixed(1)}%로 임계값을 하회했습니다.`,
           current_value: availability,
           threshold_value: alertThresholds.availability.critical,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -369,7 +356,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 가용성이 ${availability.toFixed(1)}%로 경고 수준입니다.`,
           current_value: availability,
           threshold_value: alertThresholds.availability.warning,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -387,7 +374,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 성능이 ${performance.toFixed(1)}%로 임계값을 하회했습니다.`,
           current_value: performance,
           threshold_value: alertThresholds.performance.critical,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -402,7 +389,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 성능이 ${performance.toFixed(1)}%로 경고 수준입니다.`,
           current_value: performance,
           threshold_value: alertThresholds.performance.warning,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -420,7 +407,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 품질이 ${quality.toFixed(1)}%로 임계값을 하회했습니다.`,
           current_value: quality,
           threshold_value: alertThresholds.quality.critical,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -435,7 +422,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.machine_name}의 품질이 ${quality.toFixed(1)}%로 경고 수준입니다.`,
           current_value: quality,
           threshold_value: alertThresholds.quality.warning,
-          timestamp: currentTime.toISOString(),
+          timestamp: machine.recorded_at,
           is_active: true,
           acknowledged: false
         });
@@ -487,40 +474,20 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 3. 설비 상태 기반 알림 생성
-    (currentStatus || []).forEach(machine => {
-      if (machine.current_state !== 'NORMAL_OPERATION') {
-        let severity: 'critical' | 'warning' | 'info' = 'info';
-        let title = '설비 상태 변경';
-
-        if (machine.current_state === 'BREAKDOWN_REPAIR') {
-          severity = 'critical';
-          title = '설비 긴급 상황';
-        } else if (
-          machine.current_state === 'INSPECTION' ||
-          machine.current_state === 'PM_MAINTENANCE' ||
-          machine.current_state === 'MODEL_CHANGE'
-        ) {
-          severity = 'warning';
-          title = '설비 작업 중';
-        }
-
-        alerts.push({
-          id: `maintenance:${machine.id}:${machine.current_state}:${machine.updated_at || 'unknown'}`,
-          machine_id: machine.id,
-          machine_name: machine.name,
-          alert_type: 'maintenance',
-          severity: severity,
-          title: title,
-          message: `${machine.name}이 현재 ${machine.current_state} 상태입니다.`,
-          current_value: 0,
-          threshold_value: 0,
-          timestamp: currentTime.toISOString(),
-          is_active: true,
-          acknowledged: false
-        });
-      }
-    });
+    // 3. 설비 상태 기반 알림은 **여기서 만들지 않는다.**
+    //
+    // `current_state !== 'NORMAL_OPERATION'` 이라는 똑같은 술어를 `NotificationContext` 가
+    // 이미 평가한다. 판정이 같으니 둘 중 하나는 순수 잉여였고, 관리자 화면에는 같은 고장이
+    // 세 번(여기 + NotificationContext + 아래 다운타임) 나열됐다 — 설비 17대에 알림 51건.
+    //
+    // 남길 쪽으로 `NotificationContext` 를 골랐다. 그쪽만 번역 키를 쓰기 때문이다. 여기서
+    // 만들던 문구는 한국어가 하드코딩돼 있고 `BREAKDOWN_REPAIR` 같은 enum 을 그대로 노출해,
+    // 베트남어 사용자에게는 읽을 수 없는 문자열이었다. 브라우저 알림·소리와 "정상 복귀 시
+    // 확인 이력 정리"도 그쪽에만 있다.
+    //
+    // 커버리지는 줄지 않는다. `NotificationContext` 는 임계값과 무관하게 모든 비정상 상태를
+    // 다루므로, 짧은 비정상 상태도 그대로 보고된다. 아래 다운타임 알림은 "임계값을 넘겨
+    // 지속되고 있다"는 **다른 사실**을 말하므로 그대로 둔다.
 
     const acknowledgementRows: Array<{ alert_key: string; action: string }> = [];
     let acknowledgementError: { code?: string } | null = null;
@@ -578,7 +545,14 @@ export async function GET(request: NextRequest) {
         return severityDiff;
       }
       
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      // 시각 미상(null)은 심각도 그룹 안에서 뒤로 보낸다. `new Date(null)` 은 1970년이 되어
+      // "가장 오래된 알림"으로 둔갑하는데, 모른다는 것과 오래됐다는 것은 다른 사실이다.
+      const at = a.timestamp ? Date.parse(a.timestamp) : NaN;
+      const bt = b.timestamp ? Date.parse(b.timestamp) : NaN;
+      if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+      if (Number.isNaN(at)) return 1;
+      if (Number.isNaN(bt)) return -1;
+      return bt - at;
     });
 
     // 결과 제한
@@ -597,8 +571,7 @@ export async function GET(request: NextRequest) {
         availability: filteredAlerts.filter(a => a.alert_type === 'availability').length,
         performance: filteredAlerts.filter(a => a.alert_type === 'performance').length,
         quality: filteredAlerts.filter(a => a.alert_type === 'quality').length,
-        downtime: filteredAlerts.filter(a => a.alert_type === 'downtime').length,
-        maintenance: filteredAlerts.filter(a => a.alert_type === 'maintenance').length
+        downtime: filteredAlerts.filter(a => a.alert_type === 'downtime').length
       }
     };
 

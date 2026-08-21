@@ -17,7 +17,7 @@ import { DashboardAlerts } from '@/components/notifications';
 import { OEEMetrics, Machine } from '@/types';
 import { useClientOnly } from '@/hooks/useClientOnly';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { useDashboardTranslation } from '@/hooks/useTranslation';
+import { useCommonTranslation, useDashboardTranslation } from '@/hooks/useTranslation';
 import { useRealtimeProductionRecords } from '@/hooks/useRealtimeProductionRecords';
 import { useOperationalAlerts } from '@/hooks/useOperationalAlerts';
 import { useOEEGrading } from '@/hooks/useOEEThresholds';
@@ -64,6 +64,10 @@ interface AdminOeeAnalytics {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   const { t, i18n } = useDashboardTranslation();
+  // 알림 문구의 번역 키(`notifications.machineState.*`)는 `common` 네임스페이스에 있다.
+  // `dashboard` 에 묶인 `t` 로 찾으면 i18next 는 조용히 **키 문자열 자체**를 렌더한다 —
+  // 화면에 `notifications.machineState.BREAKDOWN_REPAIR` 가 그대로 보였던 이유다.
+  const { t: tCommon } = useCommonTranslation();
   const isClient = useClientOnly();
   const reportFailure = useFailureReport();
   const router = useRouter();
@@ -1032,14 +1036,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               id: notification.id,
               priority: notification.severity,
               // 알림은 번역 키를 들고 다니므로 여기서 현재 언어로 렌더링한다.
-              message: t(notification.messageKey, notification.messageParams),
+              // 키는 `common` 네임스페이스 소속이므로 `tCommon` 을 쓴다.
+              message: tCommon(notification.messageKey, notification.messageParams),
               machineName: notification.machine_name,
               timestamp: notification.created_at,
               acknowledged: notification.acknowledged,
               type: 'general' as const // 일반 알림 표시
             })),
             ...realtimeAlerts.map(alert => ({ ...alert, type: 'realtime' as const }))
-          ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          ].sort((a, b) => {
+            // 시각 미상(null)은 최신도 최오래도 아니다. 정렬 기준이 없으므로 뒤로 보낸다 —
+            // `new Date(null)` 은 1970년이 되어 미상 알림이 목록 맨 아래에 조용히 파묻힌다.
+            const at = a.timestamp ? Date.parse(a.timestamp) : NaN;
+            const bt = b.timestamp ? Date.parse(b.timestamp) : NaN;
+            if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+            if (Number.isNaN(at)) return 1;
+            if (Number.isNaN(bt)) return -1;
+            return bt - at;
+          });
 
           // 필터링 적용
           const filteredAlerts = allAlerts.filter(alert => {
@@ -1114,7 +1128,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                     <div>
                       <div>{alert.message}</div>
                       <Text type="secondary" style={{ fontSize: '12px' }}>
-                        {new Date(alert.timestamp).toLocaleString()}
+                        {alert.timestamp && !Number.isNaN(Date.parse(alert.timestamp))
+                          ? new Date(alert.timestamp).toLocaleString()
+                          : t('alerts.unknownTime')}
                       </Text>
                     </div>
                   }

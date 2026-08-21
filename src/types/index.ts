@@ -81,6 +81,20 @@ export interface Machine {
   created_at?: string;               // DB nullable
   updated_at?: string;               // DB nullable
 
+  /**
+   * `current_state` 가 **시작된 시각** (열려 있는 `machine_logs` 행의 `start_time`).
+   *
+   * `updated_at` 과 다르다. `updated_at` 은 모델 변경 같은 상태와 무관한 수정에도 갱신되므로
+   * "언제부터 고장인가"의 답이 될 수 없다(실측: CNC-618 은 17시간 어긋났다).
+   *
+   * `null` 은 "시각을 특정할 수 없다"는 뜻이다 — 열린 로그가 없거나, 열린 로그의 상태가
+   * `current_state` 와 어긋난 경우. **현재 시각으로 대체하지 말 것.** 그렇게 하면 사흘 전
+   * 사건이 방금 일어난 일로 보인다.
+   *
+   * `GET /api/machines` 가 채운다. 다른 경로(뷰·직접 쿼리)로 얻은 Machine 에는 없을 수 있다.
+   */
+  state_started_at?: string | null;
+
   // 조인된 정보들 (machines_with_production_info 뷰에서 가져올 때 — flat 형태)
   production_model_name?: string;
   production_model_description?: string;

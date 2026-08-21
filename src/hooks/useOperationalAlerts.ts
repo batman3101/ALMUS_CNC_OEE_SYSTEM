@@ -9,7 +9,8 @@ interface ApiOperationalAlert {
   machine_name?: string;
   severity: 'critical' | 'warning' | 'info';
   message: string;
-  timestamp: string;
+  /** 사건 발생 시각. 특정할 수 없으면 `null` — 서버가 현재 시각으로 메우지 않는다. */
+  timestamp: string | null;
   acknowledged: boolean;
   alert_type: string;
 }
@@ -19,7 +20,8 @@ export interface OperationalAlert {
   priority: 'critical' | 'high' | 'low';
   message: string;
   machineName?: string;
-  timestamp: string;
+  /** 사건 발생 시각. 특정할 수 없으면 `null`. 현재 시각으로 대체하지 말 것. */
+  timestamp: string | null;
   acknowledged: boolean;
   type: string;
 }
@@ -46,7 +48,7 @@ export function useOperationalAlerts() {
             : 'low' as const,
         message: alert.message,
         machineName: alert.machine_name,
-        timestamp: alert.timestamp,
+        timestamp: alert.timestamp ?? null,
         acknowledged: alert.acknowledged,
         type: alert.alert_type,
       }));

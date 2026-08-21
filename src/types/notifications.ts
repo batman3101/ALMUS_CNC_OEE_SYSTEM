@@ -35,7 +35,15 @@ export interface Notification {
   messageParams?: Record<string, string | number>;
   threshold_value?: number;
   current_value?: number;
-  created_at: string;
+  /**
+   * 알림이 가리키는 **사건이 실제로 일어난 시각**.
+   *
+   * 이 객체가 만들어진 시각이 아니다. 예전에는 `new Date()` 를 넣었고, 알림 목록은 폴링마다
+   * 통째로 재생성되므로 사흘 전 고장과 방금 난 고장이 화면에서 같은 1초로 표시됐다.
+   *
+   * `null` 은 "시각을 특정할 수 없다"는 뜻이다. 현재 시각으로 메우지 말 것.
+   */
+  created_at: string | null;
 
   // 알림을 생성한 사용자 (NotificationContext 에서 항상 설정)
   user_id?: string;

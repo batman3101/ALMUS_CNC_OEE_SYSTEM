@@ -86,7 +86,8 @@
     "oeeBelowMessage": "OEE 60% 미만 지속",
     "maintenanceTimeoutMessage": "점검 시간 초과",
     "statusCheckRequiredMessage": "설비 상태 확인 필요",
-    "clickForDetails": "클릭하여 상세 정보 보기"
+    "clickForDetails": "클릭하여 상세 정보 보기",
+    "unknownTime": "시각 미상"
   },
   "charts": {
     "downtimeReasons": "다운타임 원인",
