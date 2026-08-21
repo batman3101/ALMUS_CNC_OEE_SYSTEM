@@ -171,7 +171,8 @@
       "TOOL_CHANGE": "{{machineName}} đang thay dụng cụ.",
       "PLANNED_STOP": "{{machineName}} đang dừng theo kế hoạch.",
       "unknown": "Vui lòng kiểm tra trạng thái của {{machineName}}."
-    }
+    },
+    "unknownTime": "Không rõ thời gian"
   },
   "settings": {
     "title": "Cài đặt hệ thống",

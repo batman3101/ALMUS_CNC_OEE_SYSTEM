@@ -1039,7 +1039,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
               type: 'general' as const // 일반 알림 표시
             })),
             ...realtimeAlerts.map(alert => ({ ...alert, type: 'realtime' as const }))
-          ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          ].sort((a, b) => {
+            // 시각 미상(null)은 최신도 최오래도 아니다. 정렬 기준이 없으므로 뒤로 보낸다 —
+            // `new Date(null)` 은 1970년이 되어 미상 알림이 목록 맨 아래에 조용히 파묻힌다.
+            const at = a.timestamp ? Date.parse(a.timestamp) : NaN;
+            const bt = b.timestamp ? Date.parse(b.timestamp) : NaN;
+            if (Number.isNaN(at) && Number.isNaN(bt)) return 0;
+            if (Number.isNaN(at)) return 1;
+            if (Number.isNaN(bt)) return -1;
+            return bt - at;
+          });
 
           // 필터링 적용
           const filteredAlerts = allAlerts.filter(alert => {
@@ -1114,7 +1123,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
                     <div>
                       <div>{alert.message}</div>
                       <Text type="secondary" style={{ fontSize: '12px' }}>
-                        {new Date(alert.timestamp).toLocaleString()}
+                        {alert.timestamp && !Number.isNaN(Date.parse(alert.timestamp))
+                          ? new Date(alert.timestamp).toLocaleString()
+                          : t('alerts.unknownTime')}
                       </Text>
                     </div>
                   }

@@ -86,7 +86,8 @@
     "oeeBelowMessage": "OEE duy trì dưới 60%",
     "maintenanceTimeoutMessage": "Vượt quá thời gian bảo trì",
     "statusCheckRequiredMessage": "Cần kiểm tra trạng thái thiết bị",
-    "clickForDetails": "Nhấp để xem chi tiết"
+    "clickForDetails": "Nhấp để xem chi tiết",
+    "unknownTime": "Không rõ thời gian"
   },
   "charts": {
     "downtimeReasons": "Nguyên nhân ngừng máy",

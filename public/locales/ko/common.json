@@ -171,7 +171,8 @@
       "TOOL_CHANGE": "{{machineName}}에서 공구 교환 중입니다.",
       "PLANNED_STOP": "{{machineName}}이(가) 계획 정지 상태입니다.",
       "unknown": "{{machineName}}의 상태를 확인해주세요."
-    }
+    },
+    "unknownTime": "시각 미상"
   },
   "settings": {
     "title": "시스템 설정",

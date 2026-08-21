@@ -241,7 +241,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             machine_id: machine.id,
             machine_name: machine.name,
             user_id: user?.id || '',
-            created_at: new Date().toISOString(),
+            // 사건 시각은 설비가 이 상태로 들어간 시각이다 — 이 목록을 만든 시각이 아니다.
+            // 값이 없으면 미상(null)으로 둔다. `new Date()` 로 메우면 사흘 전 고장이
+            // 방금 일어난 일로 보이고, 알림 51건이 전부 같은 1초로 찍힌다.
+            created_at: machine.state_started_at ?? null,
             read: false,
             acknowledged: false,
             status: 'active'

@@ -148,12 +148,56 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 현재 상태가 **언제 시작됐는지**를 함께 싣는다.
+    //
+    // `machines` 행은 "지금 무슨 상태인가"만 안다. "언제부터인가"는 열려 있는 `machine_logs`
+    // 행에만 있다. 이 값이 없으면 알림 화면은 사건 시각을 알 수 없고, 예전에는 그 자리를
+    // `new Date()` 로 메워서 사흘 전 고장과 방금 난 고장이 같은 시각으로 표시됐다.
+    //
+    // 열린 로그의 상태가 `current_state` 와 다르면 둘이 어긋난 것이다. 그때는 시각을 특정할
+    // 수 없으므로 `null` 로 둔다 — 어긋남을 그럴듯한 시각으로 덮지 않는다.
+    const openLogStart = new Map<string, string>();
+    const returnedIds = (machines as Array<{ id: string }>).map(machine => machine.id);
+    // `in` 필터는 URL 길이 상한이 있어 설비 800대를 한 번에 넣을 수 없다 — 목록 조회와 같은
+    // 헬퍼로 쪼갠다.
+    outer: for (const logIdChunk of chunkIdsForInFilter(returnedIds)) {
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabaseAdmin
+          .from('machine_logs')
+          .select('machine_id, state, start_time')
+          .is('end_time', null)
+          .in('machine_id', logIdChunk)
+          .order('machine_id', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) {
+          // 상태 시작 시각을 못 읽는 것과 설비 목록을 못 읽는 것은 다른 사건이다.
+          // 목록은 그대로 돌려주고, 시각만 미상(null)으로 남긴다.
+          console.error('열린 설비 로그 조회 실패 — 상태 시작 시각을 미상으로 둔다:', error);
+          break outer;
+        }
+        (data || []).forEach((log: { machine_id: string; state: string; start_time: string }) => {
+          const key = `${log.machine_id}:${log.state}`;
+          const existing = openLogStart.get(key);
+          if (!existing || log.start_time > existing) openLogStart.set(key, log.start_time);
+        });
+        if (!data || data.length < pageSize) break;
+      }
+    }
+
+    const machinesWithStateStart = (machines as Array<{ id: string; current_state?: string | null }>)
+      .map(machine => ({
+        ...machine,
+        state_started_at: machine.current_state
+          ? openLogStart.get(`${machine.id}:${machine.current_state}`) ?? null
+          : null,
+      }));
+
     console.log(`Successfully fetched ${machines.length} machines`);
 
     return NextResponse.json({ 
       success: true,
-      machines,
-      count: machines.length
+      machines: machinesWithStateStart,
+      count: machinesWithStateStart.length
     });
   } catch (error: unknown) {
     const authResponse = apiAuthErrorResponse(error);
