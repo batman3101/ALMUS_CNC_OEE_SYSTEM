@@ -25,15 +25,20 @@
 
 begin;
 -- ALT 는 backfill 이 이미 만들었다. ALV 만 추가한다.
+-- 시드(seed_browser_check.sql)가 이미 ALV 를 만들었을 수 있다. 이 파일은 시드 유무와
+-- 무관하게 돌아야 하므로 멱등하게 둔다.
 insert into public.factories (id, code, name, timezone, default_language)
-values ('22222222-2222-2222-2222-222222222222','ALV','ALMUS VINA','Asia/Ho_Chi_Minh','vi');
+values ('22222222-2222-2222-2222-222222222222','ALV','ALMUS VINA','Asia/Ho_Chi_Minh','vi')
+on conflict (code) do nothing;
 
 \set alt '(select id from public.factories where code=''ALT'')'
 
 insert into public.machines (id, factory_id, name)
-values ('aaaaaaaa-0000-0000-0000-000000000001', (select id from public.factories where code='ALT'), 'ISO-TEST-01');
+values ('aaaaaaaa-0000-0000-0000-000000000001', (select id from public.factories where code='ALT'), 'ISO-TEST-01')
+on conflict (id) do nothing;
 insert into public.machines (id, factory_id, name)
-values ('bbbbbbbb-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222','ISO-TEST-01');
+values ('bbbbbbbb-0000-0000-0000-000000000001', (select id from public.factories where code='ALV'), 'ISO-TEST-01')
+on conflict (id) do nothing;
 
 \echo '=== 1) 같은 설비명이 두 공장에 공존한다 (공장 범위 유일성) ==='
 select f.code, m.name from public.machines m join public.factories f on f.id=m.factory_id
@@ -52,7 +57,7 @@ rollback to sp1;
 savepoint sp2;
 do $$ begin
   insert into public.production_records (factory_id, machine_id, date, shift, output_qty)
-  values ('22222222-2222-2222-2222-222222222222','aaaaaaaa-0000-0000-0000-000000000001','2026-08-21','A',10);
+  values ((select id from public.factories where code='ALV'),'aaaaaaaa-0000-0000-0000-000000000001','2026-08-21','A',10);
   raise notice 'FAIL: 교차 공장 생산기록이 통과했다';
 exception when foreign_key_violation then raise notice 'PASS: 교차 공장 생산기록 거부됨'; end $$;
 rollback to sp2;
@@ -94,7 +99,8 @@ rollback to sp6;
 \echo '=== 8) 교차 공장 모델 지정 거부 ==='
 savepoint sp7;
 insert into public.product_models (id, factory_id, model_name)
-  values ('cccccccc-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222','ISO-MODEL-X');
+  values ('cccccccc-0000-0000-0000-000000000001', (select id from public.factories where code='ALV'), 'ISO-MODEL-X')
+  on conflict (id) do nothing;
 do $$ begin
   update public.machines set production_model_id='cccccccc-0000-0000-0000-000000000001'
    where id='aaaaaaaa-0000-0000-0000-000000000001';
@@ -106,9 +112,29 @@ rollback to sp7;
 savepoint sp8;
 do $$ begin
   insert into public.system_settings (factory_id, category, setting_key, setting_value, default_value)
-  values ('22222222-2222-2222-2222-222222222222','general','company_name','{"value":"ALMUS VINA"}','{"value":""}');
+  values ((select id from public.factories where code='ALV'),'general','iso_test_key','{"value":"x"}','{"value":""}');
+  insert into public.system_settings (factory_id, category, setting_key, setting_value, default_value)
+  values ((select id from public.factories where code='ALT'),'general','iso_test_key','{"value":"y"}','{"value":""}');
   raise notice 'PASS: 같은 설정 키가 다른 공장에 공존 가능';
 exception when unique_violation then raise notice 'FAIL: 전역 설정 유일성이 남아 있다'; end $$;
 rollback to sp8;
 
 rollback;
+
+-- ---------------------------------------------------------------------------
+-- RLS cutover 이후: 인자 없는 helper 의 fail-closed 성질
+-- ---------------------------------------------------------------------------
+-- 아래는 DB 제약이 아니라 **정책 술어**를 보는 검사다. 실제 JWT 로 PostgREST 를 치는
+-- 검증(V2)은 supabase/tests/README 의 절차를 따르고, 여기서는 helper 자체의 성질만 본다.
+\echo '=== 10) membership 이 없으면 current_user_factory() 는 NULL 이다 ==='
+do $$
+declare v uuid;
+begin
+  -- auth.uid() 가 NULL 인 컨텍스트(=인증 없음)에서는 매칭되는 membership 이 없다.
+  select public.current_user_factory() into v;
+  if v is null then
+    raise notice 'PASS: 인증 없는 컨텍스트에서 NULL — factory_id = NULL 은 어떤 행과도 매치되지 않는다';
+  else
+    raise notice 'FAIL: 인증 없이 공장이 특정됐다 (%)', v;
+  end if;
+end $$;

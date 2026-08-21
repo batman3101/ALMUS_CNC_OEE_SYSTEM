@@ -104,7 +104,13 @@ describe('RLS 정책 원장', () => {
   it('핵심 테이블의 정책은 역할 또는 담당 설비로 범위를 좁힌다', () => {
     const unscoped = protectedPolicies
       .filter(p => /to\s+authenticated/i.test(p.body))
-      .filter(p => !/current_user_role\(\)|current_user_machines\(\)|user_profiles/i.test(p.body))
+      // 범위를 좁히는 것으로 인정되는 술어.
+      //
+      // 앞의 셋은 역할/담당설비 기반(전환 이전), 뒤의 셋은 공장 기반(멀티테넌시 cutover)이다.
+      // 이 테스트의 명제는 "무범위 authenticated 정책이 없다" 이지 "특정 helper 를 쓴다"가
+      // 아니므로, 새 경계가 생기면 목록도 함께 넓힌다. 좁히는 근거가 무엇이든 좁히기만
+      // 하면 된다 — 넓은 정책이 남는 것만이 결함이다.
+      .filter(p => !/current_user_role\(\)|current_user_machines\(\)|user_profiles|current_user_factory\(\)|current_user_factory_role\(\)|current_factory_machine_ids\(\)/i.test(p.body))
       .map(p => `${p.table} / "${p.name}" (${p.file})`);
 
     expect(unscoped).toEqual([]);

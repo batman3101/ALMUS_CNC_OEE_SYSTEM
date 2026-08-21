@@ -117,9 +117,12 @@ on conflict (machine_id, date, shift) do nothing;
 -- 설정 — 공장마다 다른 회사명
 -- ---------------------------------------------------------------------------
 -- 브랜딩이 공장별로 갈리는지 화면에서 바로 확인할 수 있는 가장 단순한 지표다.
+-- 두 공장 모두에 넣는다. ALT 쪽을 빠뜨리면 조회가 비고, 앱이 하드코딩 fallback
+-- ('ALMUS TECH')으로 떨어져 **우연히 맞는 답**이 나온다 — 격리가 동작하는지 알 수 없다.
 insert into public.system_settings (factory_id, category, setting_key, setting_value, default_value, data_type, is_active)
 values
-  ('22222222-2222-2222-2222-222222222222', 'general', 'company_name', '{"value":"ALMUS VINA"}', '{"value":""}', 'string', true)
+  ((select id from public.factories where code='ALT'), 'general', 'company_name', '{"value":"ALMUS TECH"}', '{"value":""}', 'string', true),
+  ('22222222-2222-2222-2222-222222222222',             'general', 'company_name', '{"value":"ALMUS VINA"}', '{"value":""}', 'string', true)
 on conflict do nothing;
 
 commit;

@@ -224,6 +224,47 @@ describe('공장 격리 원장', () => {
     expect(sql).toMatch(/grant\s+all\s+on\s+public\.global_admins\s+to\s+service_role/i);
   });
 
+  describe('RLS cutover', () => {
+    it('공장 소유 테이블마다 공장 인지 읽기 정책이 있다', () => {
+      // 정책이 0개면 deny-all 이라 "안전"해 보이지만, 그 상태에서는 브라우저가 아무것도
+      // 읽지 못해 앱이 Service Role 에만 의존하게 된다 — 계약 1절의 "최종 보안 경계는 RLS"
+      // 가 성립하지 않는다.
+      for (const table of FACTORY_OWNED) {
+        expect(sql).toMatch(
+          new RegExp(`create\\s+policy\\s+"factory read ${table}"\\s+on\\s+public\\.${table}`, 'i')
+        );
+      }
+    });
+
+    it('읽기 정책은 factory_id 를 current_user_factory() 와 비교한다', () => {
+      // 인자 있는 helper(has_factory_membership(factory_id))를 술어로 쓰면 factory_id 가
+      // 컬럼이라 **행마다** 호출된다. 6만행 테이블에서 치명적이다.
+      // 인자 없는 helper 는 InitPlan 으로 한 번만 평가되고 factory 선두 index 를 탄다.
+      const matches = sql.match(/factory_id = \(select public\.current_user_factory\(\)\)/g) ?? [];
+      expect(matches.length).toBeGreaterThanOrEqual(FACTORY_OWNED.length - 2);
+    });
+
+    it('operator 담당 설비는 in(select unnest(..)) 로 비교한다', () => {
+      // 이 저장소는 RLS 술어를 in(select unnest(..)) 로 바꿔 166배를 얻은 적이 있다
+      // (2026-07-29). 같은 형태를 유지한다.
+      expect(sql).toMatch(/in \(select unnest\(\(select public\.current_factory_machine_ids\(\)\)\)\)/);
+    });
+
+    it('낡은 무범위 정책을 제거한다', () => {
+      // Postgres 의 여러 PERMISSIVE 정책은 OR 로 결합된다. 좁은 정책을 추가해도 넓은
+      // 정책이 남아 있으면 넓은 쪽이 이긴다.
+      expect(sql).toMatch(/drop policy if exists "모든 인증된 사용자는 시스템 설정을 볼 수 있"/);
+      expect(sql).toMatch(/drop policy if exists "Authenticated users can modify machines"/);
+      expect(sql).toMatch(/drop policy if exists "Scoped read machines"/);
+    });
+
+    it('current_user_factory() 는 membership 이 정확히 하나일 때만 값을 준다', () => {
+      // 2개 이상에서 아무거나 고르면 사용자가 어느 공장에 쓰고 있는지 모르는 채로 쓰게 된다.
+      // 서버 계약(requireFactoryUser)이 같은 이유로 거부한다 — 두 층의 판정이 일치해야 한다.
+      expect(sql).toMatch(/case when count\(\*\) = 1 then \(array_agg\(fm\.factory_id\)\)\[1\] end/);
+    });
+  });
+
   it('global_admins 는 authenticated 에게 읽기조차 주지 않는다', () => {
     // 전역 권한자 명단은 일반 사용자가 알아야 할 정보가 아니다.
     expect(sql).not.toMatch(/grant\s+select\s+on\s+public\.global_admins\s+to\s+authenticated/i);
