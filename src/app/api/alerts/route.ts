@@ -533,8 +533,25 @@ export async function GET(request: NextRequest) {
           title = '설비 작업 중';
         }
 
+        const stateStart = stateStartByMachine.get(`${machine.id}:${machine.current_state}`) ?? null;
+
+        // 알림 id 는 **사건의 정체성**이다 — 확인(acknowledge)이 그 id 에 붙기 때문이다.
+        //
+        // 예전에는 `machine.updated_at` 을 썼다. 그래서 생산 모델을 바꾸는 것처럼 상태와
+        // 무관한 수정만으로도 id 가 바뀌어, 관리자가 이미 확인한 알림이 되살아났다. 사건은
+        // 그대로인데 식별자만 흔들린 것이다.
+        //
+        // 상태 시작 시각이 사건 하나를 정확히 가리킨다. 설비가 복구됐다가 다시 고장 나면
+        // 새 `machine_logs` 행이 열려 시각이 바뀌므로 **다른 사건**으로 다시 알린다 — 이건
+        // 의도된 동작이다.
+        //
+        // 시각을 모를 때는 `updated_at` 으로 내려간다. 그러면 옛 동작대로 확인이 자주 풀리지만,
+        // 안전 알림에서 실패 방향은 **침묵이 아니라 재알림**이어야 한다. `machine_logs` 와
+        // `machines` 가 어긋난 상태에서 경보가 조용해지는 쪽이 훨씬 위험하다.
+        const eventKey = stateStart ?? machine.updated_at ?? 'unknown';
+
         alerts.push({
-          id: `maintenance:${machine.id}:${machine.current_state}:${machine.updated_at || 'unknown'}`,
+          id: `maintenance:${machine.id}:${machine.current_state}:${eventKey}`,
           machine_id: machine.id,
           machine_name: machine.name,
           alert_type: 'maintenance',
@@ -543,7 +560,7 @@ export async function GET(request: NextRequest) {
           message: `${machine.name}이 현재 ${machine.current_state} 상태입니다.`,
           current_value: 0,
           threshold_value: 0,
-          timestamp: stateStartByMachine.get(`${machine.id}:${machine.current_state}`) ?? null,
+          timestamp: stateStart,
           is_active: true,
           acknowledged: false
         });

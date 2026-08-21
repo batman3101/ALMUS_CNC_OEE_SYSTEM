@@ -556,6 +556,91 @@ describe('GET /api/alerts', () => {
     });
   });
 
+  /**
+   * 알림 id 는 **사건의 정체성**이다 — 확인(acknowledge)이 그 id 에 붙는다.
+   *
+   * 예전에는 `machines.updated_at` 을 썼다. 상태와 무관한 수정만으로도 id 가 바뀌어, 관리자가
+   * 이미 확인한 알림이 되살아났다. 사건은 그대로인데 식별자만 흔들린 것이다.
+   */
+  describe('설비 상태 알림 id 는 사건을 가리킨다', () => {
+    const machineRow = (overrides: Record<string, unknown> = {}) => ({
+      id: 'machine-1', name: 'M1', current_state: 'BREAKDOWN_REPAIR',
+      updated_at: '2026-07-15T02:59:00.000Z', ...overrides,
+    });
+    const openLog = (startTime: string) => ({
+      machine_id: 'machine-1', state: 'BREAKDOWN_REPAIR',
+      start_time: startTime, end_time: null, duration: null, machines: { name: 'M1' },
+    });
+
+    async function maintenanceAlertId() {
+      const response = await GET({ url: 'http://localhost/api/alerts?limit=50' } as never);
+      const body = await response.json() as { alerts: Array<{ alert_type: string; id: string }> };
+      return body.alerts.find(alert => alert.alert_type === 'maintenance')?.id;
+    }
+
+    beforeEach(() => {
+      results.production_records = { data: [], error: null };
+    });
+
+    it('상태 시작 시각을 사건 식별자로 쓴다', async () => {
+      results.machines = { data: [machineRow()], error: null };
+      results.machine_logs = { data: [openLog('2026-07-12T01:02:03.000Z')], error: null };
+
+      expect(await maintenanceAlertId())
+        .toBe('maintenance:machine-1:BREAKDOWN_REPAIR:2026-07-12T01:02:03.000Z');
+    });
+
+    it('상태와 무관한 설비 수정으로는 id 가 바뀌지 않는다 — 확인이 유지된다', async () => {
+      results.machines = { data: [machineRow()], error: null };
+      results.machine_logs = { data: [openLog('2026-07-12T01:02:03.000Z')], error: null };
+      const before = await maintenanceAlertId();
+
+      // 생산 모델 변경 등으로 updated_at 만 갱신된 상황. 사건은 그대로다.
+      results.machines = {
+        data: [machineRow({ updated_at: '2026-07-15T02:59:59.000Z' })],
+        error: null,
+      };
+      const after = await maintenanceAlertId();
+
+      // 이 둘이 달라지는 것이 "확인한 알림이 되살아난다"의 정체였다.
+      expect(after).toBe(before);
+    });
+
+    it('복구 후 다시 고장 나면 다른 사건이므로 id 가 바뀐다', async () => {
+      results.machines = { data: [machineRow()], error: null };
+      results.machine_logs = { data: [openLog('2026-07-12T01:02:03.000Z')], error: null };
+      const first = await maintenanceAlertId();
+
+      // 복구 후 재고장 = 새 machine_logs 행이 열린다.
+      results.machine_logs = { data: [openLog('2026-07-14T22:00:00.000Z')], error: null };
+      const second = await maintenanceAlertId();
+
+      expect(second).not.toBe(first);
+    });
+
+    it('상태 시작 시각을 모르면 updated_at 으로 내려간다 — 침묵보다 재알림', async () => {
+      results.machines = { data: [machineRow()], error: null };
+      results.machine_logs = { data: [], error: null };
+
+      // 고정 문자열('unknown')을 쓰면 확인이 (설비, 상태) 에 영원히 눌어붙어 경보가 조용해진다.
+      expect(await maintenanceAlertId())
+        .toBe('maintenance:machine-1:BREAKDOWN_REPAIR:2026-07-15T02:59:00.000Z');
+    });
+
+    it('id 가 updated_at 으로 내려가도 표시 시각은 지어내지 않는다', async () => {
+      results.machines = { data: [machineRow()], error: null };
+      results.machine_logs = { data: [], error: null };
+
+      const response = await GET({ url: 'http://localhost/api/alerts?limit=50' } as never);
+      const body = await response.json() as {
+        alerts: Array<{ alert_type: string; timestamp: string | null }>;
+      };
+      const maintenance = body.alerts.find(alert => alert.alert_type === 'maintenance');
+      // 식별자로 쓸 수 있다는 것과 사건 시각이라는 것은 다른 주장이다.
+      expect(maintenance!.timestamp).toBeNull();
+    });
+  });
+
   it('persists acknowledgement for the authenticated administrator', async () => {
     const response = await POST({
       json: async () => ({ alert_id: 'downtime:machine-1:event-1', action: 'acknowledge' }),
