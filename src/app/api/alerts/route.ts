@@ -40,7 +40,7 @@ interface Alert {
   id: string;
   machine_id: string;
   machine_name: string;
-  alert_type: 'oee' | 'availability' | 'performance' | 'quality' | 'downtime' | 'maintenance';
+  alert_type: 'oee' | 'availability' | 'performance' | 'quality' | 'downtime';
   severity: 'critical' | 'warning' | 'info';
   title: string;
   message: string;
@@ -98,31 +98,6 @@ export async function GET(request: NextRequest) {
     );
 
     const pageSize = 1000;
-    // 현재 운영 중인 설비 상태도 Supabase 행 상한을 넘길 수 있으므로 전 페이지를 읽는다.
-    const currentStatus: Array<{
-      id: string;
-      name: string;
-      current_state: string;
-      equipment_type?: string | null;
-      location?: string | null;
-      updated_at?: string | null;
-    }> = [];
-    for (let from = 0; ; from += pageSize) {
-      let query = supabaseAdmin
-        .from('machines')
-        .select('id, name, current_state, equipment_type, location, updated_at')
-        .eq('is_active', true)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (machineId) query = query.eq('id', machineId);
-      const { data, error } = await query;
-      if (error) {
-        console.error('설비 상태 조회 오류:', error);
-        return NextResponse.json({ error: 'Failed to fetch machine status' }, { status: 500 });
-      }
-      currentStatus.push(...((data || []) as typeof currentStatus));
-      if (!data || data.length < pageSize) break;
-    }
 
     // Supabase의 행 상한 때문에 일부 설비가 알림 대상에서 사라지지 않도록 전 페이지를 읽는다.
     const performanceData: Array<{
@@ -499,73 +474,20 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 3. 설비 상태 기반 알림 생성
+    // 3. 설비 상태 기반 알림은 **여기서 만들지 않는다.**
     //
-    // 사건 시각은 **열려 있는 `machine_logs` 행의 `start_time`** 이다 — 설비가 지금 상태로
-    // 들어간 순간. `machines.updated_at` 은 상태와 무관한 컬럼 수정에도 갱신되므로 쓰지 않는다
-    // (실측: CNC-618 은 updated_at 이 상태 시작보다 17시간 늦다).
+    // `current_state !== 'NORMAL_OPERATION'` 이라는 똑같은 술어를 `NotificationContext` 가
+    // 이미 평가한다. 판정이 같으니 둘 중 하나는 순수 잉여였고, 관리자 화면에는 같은 고장이
+    // 세 번(여기 + NotificationContext + 아래 다운타임) 나열됐다 — 설비 17대에 알림 51건.
     //
-    // 열린 로그의 상태가 `current_state` 와 다르면 둘이 어긋난 것이므로 시각을 특정할 수 없다.
-    // 그때는 `null` 로 둔다 — 현재 시각으로 메우면 그 불일치가 "방금 일어난 일"로 보인다.
-    const stateStartByMachine = new Map<string, string>();
-    machineLogDowntimeData.forEach(log => {
-      if (log.end_time !== null) return;
-      const existing = stateStartByMachine.get(`${log.machine_id}:${log.state}`);
-      if (!existing || log.start_time > existing) {
-        stateStartByMachine.set(`${log.machine_id}:${log.state}`, log.start_time);
-      }
-    });
-
-    (currentStatus || []).forEach(machine => {
-      if (machine.current_state !== 'NORMAL_OPERATION') {
-        let severity: 'critical' | 'warning' | 'info' = 'info';
-        let title = '설비 상태 변경';
-
-        if (machine.current_state === 'BREAKDOWN_REPAIR') {
-          severity = 'critical';
-          title = '설비 긴급 상황';
-        } else if (
-          machine.current_state === 'INSPECTION' ||
-          machine.current_state === 'PM_MAINTENANCE' ||
-          machine.current_state === 'MODEL_CHANGE'
-        ) {
-          severity = 'warning';
-          title = '설비 작업 중';
-        }
-
-        const stateStart = stateStartByMachine.get(`${machine.id}:${machine.current_state}`) ?? null;
-
-        // 알림 id 는 **사건의 정체성**이다 — 확인(acknowledge)이 그 id 에 붙기 때문이다.
-        //
-        // 예전에는 `machine.updated_at` 을 썼다. 그래서 생산 모델을 바꾸는 것처럼 상태와
-        // 무관한 수정만으로도 id 가 바뀌어, 관리자가 이미 확인한 알림이 되살아났다. 사건은
-        // 그대로인데 식별자만 흔들린 것이다.
-        //
-        // 상태 시작 시각이 사건 하나를 정확히 가리킨다. 설비가 복구됐다가 다시 고장 나면
-        // 새 `machine_logs` 행이 열려 시각이 바뀌므로 **다른 사건**으로 다시 알린다 — 이건
-        // 의도된 동작이다.
-        //
-        // 시각을 모를 때는 `updated_at` 으로 내려간다. 그러면 옛 동작대로 확인이 자주 풀리지만,
-        // 안전 알림에서 실패 방향은 **침묵이 아니라 재알림**이어야 한다. `machine_logs` 와
-        // `machines` 가 어긋난 상태에서 경보가 조용해지는 쪽이 훨씬 위험하다.
-        const eventKey = stateStart ?? machine.updated_at ?? 'unknown';
-
-        alerts.push({
-          id: `maintenance:${machine.id}:${machine.current_state}:${eventKey}`,
-          machine_id: machine.id,
-          machine_name: machine.name,
-          alert_type: 'maintenance',
-          severity: severity,
-          title: title,
-          message: `${machine.name}이 현재 ${machine.current_state} 상태입니다.`,
-          current_value: 0,
-          threshold_value: 0,
-          timestamp: stateStart,
-          is_active: true,
-          acknowledged: false
-        });
-      }
-    });
+    // 남길 쪽으로 `NotificationContext` 를 골랐다. 그쪽만 번역 키를 쓰기 때문이다. 여기서
+    // 만들던 문구는 한국어가 하드코딩돼 있고 `BREAKDOWN_REPAIR` 같은 enum 을 그대로 노출해,
+    // 베트남어 사용자에게는 읽을 수 없는 문자열이었다. 브라우저 알림·소리와 "정상 복귀 시
+    // 확인 이력 정리"도 그쪽에만 있다.
+    //
+    // 커버리지는 줄지 않는다. `NotificationContext` 는 임계값과 무관하게 모든 비정상 상태를
+    // 다루므로, 짧은 비정상 상태도 그대로 보고된다. 아래 다운타임 알림은 "임계값을 넘겨
+    // 지속되고 있다"는 **다른 사실**을 말하므로 그대로 둔다.
 
     const acknowledgementRows: Array<{ alert_key: string; action: string }> = [];
     let acknowledgementError: { code?: string } | null = null;
@@ -649,8 +571,7 @@ export async function GET(request: NextRequest) {
         availability: filteredAlerts.filter(a => a.alert_type === 'availability').length,
         performance: filteredAlerts.filter(a => a.alert_type === 'performance').length,
         quality: filteredAlerts.filter(a => a.alert_type === 'quality').length,
-        downtime: filteredAlerts.filter(a => a.alert_type === 'downtime').length,
-        maintenance: filteredAlerts.filter(a => a.alert_type === 'maintenance').length
+        downtime: filteredAlerts.filter(a => a.alert_type === 'downtime').length
       }
     };
 
