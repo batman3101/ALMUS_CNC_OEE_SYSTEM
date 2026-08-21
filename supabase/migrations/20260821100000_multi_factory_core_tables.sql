@@ -196,6 +196,25 @@ revoke all on public.factory_memberships      from public, anon;
 revoke all on public.user_machine_assignments from public, anon;
 revoke all on public.global_admins            from public, anon;
 
+-- ⚠ service_role 에 명시적으로 되돌려 준다.
+--
+-- 위 `revoke all ... from public` 은 service_role 이 **PUBLIC 을 통해** 갖던 권한까지
+-- 끊는다. 이 저장소의 교훈("권한은 열거하지 말고 전수 회수한다")을 따르면 회수는 옳지만,
+-- **회수 후 필요한 것을 되돌려주는 절반**을 빠뜨리면 서버가 통째로 멈춘다.
+--
+-- 실측(2026-08-21, 로컬 격리 검증): 이 grant 가 없으면 PostgREST 가
+--   {"code":"42501","message":"permission denied for table factory_memberships"}
+-- 를 돌려주고, `requireFactoryUser` 를 쓰는 **모든 Route 가 500** 이 된다. 이 앱은 Route
+-- 44개 중 40개가 Service Role 로 동작하므로 사실상 전면 장애다.
+--
+-- 정적 검사도, 계약 테스트도, psql 로 돌린 격리 테스트도 이것을 잡지 못했다 —
+-- 전부 `postgres` 슈퍼유저로 실행되기 때문이다. 실제 역할로 HTTP 를 쳐 봐야 드러난다.
+grant all on public.factories                to service_role;
+grant all on public.factory_domains          to service_role;
+grant all on public.factory_memberships      to service_role;
+grant all on public.user_machine_assignments to service_role;
+grant all on public.global_admins            to service_role;
+
 -- authenticated 는 RLS 를 통과하는 읽기만 갖는다. 쓰기는 서버(Service Role)와 승인된 RPC 만
 -- 한다 — 사용자가 자기 membership 을 스스로 만들 수 있으면 그것은 권한 상승이다.
 grant select on public.factories           to authenticated;

@@ -206,6 +206,24 @@ describe('공장 격리 원장', () => {
     );
   });
 
+  it('전수 회수 뒤 service_role 에 권한을 되돌려 준다', () => {
+    // `revoke all ... from public` 은 service_role 이 PUBLIC 을 통해 갖던 권한까지 끊는다.
+    // 회수는 옳지만 **되돌려주는 절반**을 빠뜨리면 서버가 통째로 멈춘다.
+    //
+    // 실측: 이 grant 없이 PostgREST 는 42501 permission denied 를 돌려주고,
+    // requireFactoryUser 를 쓰는 모든 Route 가 500 이 된다. 이 앱은 Route 44개 중 40개가
+    // Service Role 로 동작한다.
+    //
+    // 정적 검사도 psql 격리 테스트도 이것을 잡지 못했다 — 전부 postgres 슈퍼유저로
+    // 실행되기 때문이다. 실제 역할로 HTTP 를 쳐 봐야 드러난다. 그 실측을 여기 되먹인다.
+    for (const table of FACTORY_CORE) {
+      expect(sql).toMatch(
+        new RegExp(`grant\\s+all\\s+on\\s+public\\.${table}\\s+to\\s+service_role`, 'i')
+      );
+    }
+    expect(sql).toMatch(/grant\s+all\s+on\s+public\.global_admins\s+to\s+service_role/i);
+  });
+
   it('global_admins 는 authenticated 에게 읽기조차 주지 않는다', () => {
     // 전역 권한자 명단은 일반 사용자가 알아야 할 정보가 아니다.
     expect(sql).not.toMatch(/grant\s+select\s+on\s+public\.global_admins\s+to\s+authenticated/i);

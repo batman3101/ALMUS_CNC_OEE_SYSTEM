@@ -164,6 +164,17 @@ function extractByMethod(source: string): Record<string, string> {
       continue;
     }
 
+    // 공장 인지 계약으로 전환된 메서드도 같은 원장에 들어간다.
+    //
+    // 역할 목록은 그대로이고 공장 경계가 **추가**된 것이므로, 원장의 역할 값은 바뀌지
+    // 않아야 한다. 전환하면서 역할이 넓어지면 이 검사가 잡는다 — 경계를 하나 더하면서
+    // 다른 하나를 느슨하게 푸는 것이 이행 중 가장 흔한 사고다.
+    const fm = block.match(/requireFactoryUser\(\s*request\s*,\s*\[([^\]]*)\]/);
+    if (fm) {
+      result[marks[i].method] = expandRoleTokens(fm[1]).sort().join('+');
+      continue;
+    }
+
     const rm = block.match(/requireUser\(\s*request\s*,\s*\[([^\]]*)\]/);
     result[marks[i].method] = rm
       ? expandRoleTokens(rm[1]).sort().join('+')

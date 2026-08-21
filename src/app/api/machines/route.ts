@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MACHINE_STATES, isMachineState } from '@/types';
 import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { chunkIdsForInFilter } from '@/lib/idFilter';
 
 // 입력값 검증 및 보안 함수들
@@ -50,10 +51,14 @@ function validateCurrentState(state: string | null): string | null {
 }
 
 // GET /api/machines - 모든 설비 목록 조회 (인증된 사용자용)
+//
+// ⚠ 이 Route 는 **공장 인지 계약으로 전환됐다**(계약 5.3).
+// `requireFactoryUser` 는 host 와 membership 으로 공장을 확정하고, 아래 모든 query 는
+// 그 공장으로 제한된다. 요청이 보낸 factory 값은 신뢰하지 않는다.
 export async function GET(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    console.log('GET /api/machines called');
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
+    console.log('GET /api/machines called', { factory: authenticatedUser.factoryCode });
     
     const { searchParams } = new URL(request.url);
     const isActive = searchParams.get('is_active');
@@ -133,6 +138,9 @@ export async function GET(request: NextRequest) {
           .order('id', { ascending: true })
           .range(from, from + pageSize - 1);
 
+        // 공장 제한이 이 Route 의 경계다. 역할·담당설비 필터보다 **먼저** 걸려야 한다 —
+        // 나머지 조건이 모두 참이어도 다른 공장의 행은 나오면 안 되기 때문이다.
+        query = query.eq('factory_id', authenticatedUser.factoryId);
         if (isActive !== 'false') query = query.eq('is_active', true);
         if (validatedLocation) query = query.eq('location', validatedLocation);
         if (validatedCurrentState) query = query.eq('current_state', validatedCurrentState);
@@ -165,6 +173,7 @@ export async function GET(request: NextRequest) {
         const { data, error } = await supabaseAdmin
           .from('machine_logs')
           .select('machine_id, state, start_time')
+          .eq('factory_id', authenticatedUser.factoryId)
           .is('end_time', null)
           .in('machine_id', logIdChunk)
           .order('machine_id', { ascending: true })

@@ -9,6 +9,30 @@ import { createClient } from '@supabase/supabase-js';
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 /**
+ * 로컬 Supabase 스택인가.
+ *
+ * 아래 URL 검증은 운영에서 **옳다** — service role key 를 평문으로 보내면 안 되고,
+ * 엉뚱한 도메인을 가리키면 데이터가 남의 프로젝트로 간다.
+ *
+ * 그러나 그 규칙이 `supabase start` 로 띄운 로컬 스택(`http://localhost:54321`)까지 막았다.
+ * 그래서 격리 staging 에서 실제 역할로 앱을 검증할 방법이 없었고, 그 결과 슈퍼유저로는
+ * 보이지 않는 권한 결함(service_role 에 grant 누락)이 정적 검사·계약 테스트·psql 격리
+ * 테스트를 모두 통과했다.
+ *
+ * 그래서 예외를 **개발 모드 + 루프백 호스트**로만 좁혀 연다. 두 조건을 모두 요구하므로
+ * 프로덕션 빌드에서는 어떤 값을 넣어도 이 경로로 들어올 수 없다.
+ */
+function isLocalSupabase(rawUrl: string): boolean {
+  if (!isDevelopment) return false;
+  try {
+    const { hostname } = new URL(rawUrl);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 환경 변수 유효성 검증
  */
 function validateEnvironmentVariables(): { url: string; serviceRoleKey: string } {
@@ -32,7 +56,8 @@ function validateEnvironmentVariables(): { url: string; serviceRoleKey: string }
 
   // 2단계: URL 형식 검증
   const trimmedUrl = url.trim();
-  if (!trimmedUrl.startsWith('https://')) {
+  const localStack = isLocalSupabase(trimmedUrl);
+  if (!localStack && !trimmedUrl.startsWith('https://')) {
     const error = isDevelopment
       ? 'SUPABASE_URL은 https://로 시작해야 합니다.'
       : 'Supabase URL 설정이 올바르지 않습니다.';
@@ -42,7 +67,8 @@ function validateEnvironmentVariables(): { url: string; serviceRoleKey: string }
   // URL 형식 상세 검증
   try {
     const urlObj = new URL(trimmedUrl);
-    if (!urlObj.hostname.includes('supabase')) {
+    // 로컬 스택의 호스트는 `localhost` 라 'supabase' 를 포함하지 않는다.
+    if (!localStack && !urlObj.hostname.includes('supabase')) {
       const error = isDevelopment
         ? 'SUPABASE_URL이 유효한 Supabase 도메인이 아닙니다.'
         : 'Supabase 도메인 설정이 올바르지 않습니다.';

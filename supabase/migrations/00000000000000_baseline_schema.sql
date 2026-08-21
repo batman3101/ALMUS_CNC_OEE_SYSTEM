@@ -365,4 +365,24 @@ alter table public.production_progress_reports enable row level security;
 alter table public.alert_acknowledgements      enable row level security;
 alter table public.audit_log                   enable row level security;
 
+-- ---------------------------------------------------------------------------
+-- Supabase 기본 권한 재현
+-- ---------------------------------------------------------------------------
+-- 운영에서 이 테이블들은 Supabase 대시보드/SQL 에디터로 만들어졌고, 그때
+-- `anon, authenticated, service_role` 이 기본 권한을 받았다. 이후 마이그레이션들이
+-- (20260715200000, 20260729180000 등) anon 을 걷어내며 경계를 좁혔다.
+--
+-- baseline 이 그 **시작 권한**을 재현하지 않으면 궤적이 어긋난다. 실측(2026-08-21):
+--
+--   {"code":"42501","message":"permission denied for table user_profiles"}
+--
+-- service_role 로 user_profiles 를 읽지 못해 `requireFactoryUser` 가 403 을 냈다. 운영에서는
+-- 같은 코드가 동작하므로, 이것은 앱의 결함이 아니라 **재현의 결함**이다.
+--
+-- anon 에게도 주는 것이 이상해 보이지만 그것이 운영의 실제 시작 상태이고, 이후
+-- 마이그레이션이 회수하는 대상이다. 회수할 것이 없으면 그 마이그레이션들은 아무것도
+-- 검증하지 못한 채 통과한다 — 재현의 값어치가 사라진다.
+grant all on all tables in schema public to postgres, anon, authenticated, service_role;
+grant all on all sequences in schema public to postgres, anon, authenticated, service_role;
+
 commit;
