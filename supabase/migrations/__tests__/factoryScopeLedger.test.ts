@@ -170,6 +170,42 @@ describe('공장 격리 원장', () => {
     }
   });
 
+  it('전역 유일성 제약이 제거된다', () => {
+    // 로컬 격리 검증에서 실제로 걸린 결함이다:
+    //   ERROR: duplicate key value violates unique constraint "machines_name_key"
+    //
+    // 공장 범위 UNIQUE 를 **추가**해도 전역 UNIQUE 가 남아 있으면 넓은 쪽이 아니라
+    // 좁은 쪽이 이긴다 — ALT 와 ALV 가 같은 설비명을 쓸 수 없다.
+    //
+    // "추가했다"는 grep 으로 확인되지만 "낡은 것이 남아 있다"는 실제로 넣어 봐야 드러난다.
+    // 그 실측을 여기 정적 검사로 되먹인다.
+    expect(sql).toMatch(/drop\s+constraint\s+if\s+exists\s+machines_name_key/i);
+    expect(sql).toMatch(/drop\s+constraint\s+if\s+exists\s+product_models_model_name_key/i);
+    expect(sql).toMatch(/drop\s+constraint\s+if\s+exists\s+system_settings_setting_key_key/i);
+  });
+
+  it('공장 소유 테이블의 factory_id 가 최종적으로 NOT NULL 이다', () => {
+    // 계약 1절: "NULL factory_id = ALT 같은 영구 호환 규칙은 금지한다."
+    // expand 의 nullable 은 임시이며 contract 가 닫아야 한다. 닫지 않으면 "공장을 모르는
+    // 데이터" 라는 상태가 영구히 남고, 그것이 곧 금지된 호환 규칙이 된다.
+    for (const table of FACTORY_OWNED) {
+      expect(sql).toMatch(
+        new RegExp(`alter\\s+table\\s+public\\.${table}\\s+alter\\s+column\\s+factory_id\\s+set\\s+not\\s+null`, 'i')
+      );
+    }
+  });
+
+  it('행을 INSERT 하는 트리거가 factory_id 를 채운다', () => {
+    // contract 적용 후 정상 생산기록 저장이 실패했다:
+    //   ERROR: null value in column "factory_id" of relation "production_shift_states"
+    //
+    // 스키마만 factory-aware 가 되고 트리거가 그대로면 앱이 아예 동작하지 않는다.
+    // 계약 4.3: "trigger/RPC 는 공장을 parent 에서 파생한다."
+    expect(sql).toMatch(
+      /insert\s+into\s+public\.production_shift_states\s*\(\s*factory_id\s*,/i
+    );
+  });
+
   it('global_admins 는 authenticated 에게 읽기조차 주지 않는다', () => {
     // 전역 권한자 명단은 일반 사용자가 알아야 할 정보가 아니다.
     expect(sql).not.toMatch(/grant\s+select\s+on\s+public\.global_admins\s+to\s+authenticated/i);

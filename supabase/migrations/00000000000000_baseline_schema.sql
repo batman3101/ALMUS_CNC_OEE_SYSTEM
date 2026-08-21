@@ -318,6 +318,33 @@ create table if not exists public.production_records_ghost_backup_20260714 (
 );
 
 -- ---------------------------------------------------------------------------
+-- 과도기 유물: oee_calculations (대체된 설계의 잔해)
+-- ---------------------------------------------------------------------------
+-- 역시 현재 운영에 없다. 시퀀스가 두 번에 걸쳐 다룬다:
+--
+--   20260804110000_master_write_boundary.sql   -- 열린 ALL 정책을 닫고 쓰기 권한 회수
+--   20260804140000_drop_oee_calculations.sql   -- drop table
+--
+-- 설비 × 날짜 일별 OEE 미리계산 테이블이었다. 그 배치는 끝내 동작한 적이 없고
+-- (`pg_cron` 미설치), `analytics_*` RPC 가 그 역할을 대체했다.
+--
+-- 아래 정의는 추측이 아니다 — 드롭 마이그레이션이 **제거 시점의 정의를 주석으로 보존**해
+-- 두었고 그것을 그대로 옮겼다. 운영에서 뽑을 수 없는 객체를 저장소가 스스로 되돌려 준 셈이다.
+create table if not exists public.oee_calculations (
+  id               uuid primary key default gen_random_uuid(),
+  machine_id       uuid not null references public.machines(id)
+                     on update cascade on delete cascade,
+  calculation_date date,
+  availability     numeric,
+  performance      numeric,
+  quality          numeric,
+  oee              numeric,
+  created_at       timestamptz default now()
+);
+create index if not exists idx_oee_calculations_date       on public.oee_calculations(calculation_date);
+create index if not exists idx_oee_calculations_machine_id on public.oee_calculations(machine_id);
+
+-- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
 -- 정책은 뒤따르는 마이그레이션이 만든다. 여기서는 활성화만 한다 —

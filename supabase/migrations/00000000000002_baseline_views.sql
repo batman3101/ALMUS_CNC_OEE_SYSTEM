@@ -99,6 +99,19 @@ create or replace view public.machines_with_production_info as
      LEFT JOIN product_models pm ON m.production_model_id = pm.id
      LEFT JOIN model_processes mp ON m.current_process_id = mp.id;
 
+-- 과도기 유물: RLS 디버그 뷰.
+--
+-- ghost backup 테이블과 같은 경우다 — 현재 운영에 **없지만** 시퀀스가 그것을 전제한다:
+--
+--   20260715210000_security_invoker_views.sql  -- alter view ... security_invoker = true
+--   20260729180000_lock_down_anon_access.sql   -- drop view if exists
+--
+-- 정의는 운영에서 뽑을 수 없다(이미 드롭됐다). 20260715210000 의 주석이 그 성질을 적어
+-- 두었다: "reads no base tables (only auth.uid()/auth.jwt())". 그 서술대로 최소 재현한다.
+-- 어차피 두 마이그레이션 뒤에 드롭되며 그 사이 아무도 읽지 않는다.
+create or replace view public.user_profiles_rls_debug as
+  select auth.uid() as current_uid, auth.jwt() as current_jwt;
+
 create or replace view public.recent_machine_status_changes as
  SELECT msh.id,
     msh.machine_id,
