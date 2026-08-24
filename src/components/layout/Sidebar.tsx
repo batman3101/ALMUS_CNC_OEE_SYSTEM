@@ -89,7 +89,8 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
   const { t } = useLanguage();
   const { user } = useAuth();
-  const { getCompanyInfo, isLoading } = useSystemSettings();
+  // 회사명은 더 이상 읽지 않는다(브랜드는 ALMUS 고정). 로고 URL 만 설정에서 온다.
+  const { getCompanyInfo } = useSystemSettings();
   const router = useRouter();
   const pathname = usePathname();
   const screens = useBreakpoint();
@@ -170,9 +171,18 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onCollapse }) => {
           unoptimized={logo.unoptimized}
           priority
         />
+        {/*
+          앱 브랜드는 공장과 무관하게 ALMUS 로 고정한다(운영 결정 2026-08-24).
+          어느 공장을 보고 있는지는 헤더의 공장 배지(FactorySwitcher)가 말한다.
+
+          예전에는 여기에 설정의 회사명을 그렸다. 그러면 공장마다 다른 이름이 나오는데,
+          그 값은 RLS 를 타므로 공장을 특정하지 못하는 순간 엉뚱한 공장 이름이 뜬다
+          (다중 소속 관리자에게 실제로 그랬다). 브랜드를 상수로 두면 그 실패 자체가
+          사라진다 — 표시할 수 없는 것을 감추는 게 아니라, 애초에 공장에 의존하지 않는다.
+        */}
         {!collapsed && (
           <span className={`${styles.logoText} ${!screens.lg ? styles.logoTextMobile : ''}`}>
-            {isLoading ? 'Loading...' : companyInfo.name}
+            ALMUS
           </span>
         )}
       </div>

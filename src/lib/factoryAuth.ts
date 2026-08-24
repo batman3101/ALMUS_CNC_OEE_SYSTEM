@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { ApiAuthError, type UserRole } from '@/lib/apiAuth';
+import { FACTORY_COOKIE } from '@/lib/factoryConstants';
 
 /**
  * 공장 인지 서버 인가 (서버 전용).
@@ -55,6 +56,37 @@ function isUserRole(value: unknown): value is UserRole {
  * 포트와 대소문자를 지운다 — `factory_domains.hostname` 은 소문자로만 저장되며,
  * 대소문자가 섞이면 같은 호스트가 두 공장에 바인딩될 수 있고 그것이 곧 잘못된 공장에 쓰기다.
  */
+/**
+ * 사용자가 UI 에서 고른 공장 코드.
+ *
+ * ## 이 값은 권위가 없다
+ *
+ * 쿠키는 브라우저가 마음대로 쓸 수 있다. 그래서 이 값으로 공장을 **정하지 않는다** —
+ * 아래 `requireFactoryUser` 가 이 코드에 해당하는 **활성 membership 이 있는지** 확인하고,
+ * 없으면 거부한다. 위조해 봐야 자기가 소속된 공장 밖으로는 못 나간다.
+ *
+ * 계약 절대조건 4번("요청이 전달한 factory_id 는 권위 있는 값이 아니다")과 어긋나지 않는다.
+ * 그 조항이 막는 것은 "요청이 시키는 대로 공장을 정하는 것"이지, 사용자가 자기 소속 중
+ * 하나를 고르는 것이 아니다.
+ *
+ * ## 왜 헤더가 아니라 쿠키인가
+ *
+ * 쿠키는 페이지 이동·새로고침·서버 렌더링에서 자동으로 따라간다. 헤더로 하면 모든 fetch
+ * 호출에 손으로 붙여야 하고, 하나라도 빠뜨리면 그 요청만 조용히 다른 공장으로 간다.
+ */
+// 쿠키 이름은 클라이언트도 써야 하므로 별도 모듈에 두고 여기서 재수출한다 —
+// 이 파일은 service role key 를 import 하므로 클라이언트가 직접 읽으면 안 된다.
+export { FACTORY_COOKIE } from '@/lib/factoryConstants';
+
+export function readSelectedFactoryCode(request: NextRequest): string | null {
+  const raw = request.cookies?.get?.(FACTORY_COOKIE)?.value
+    ?? request.headers.get('cookie')?.match(/(?:^|;\s*)almus_factory=([^;]+)/)?.[1];
+  if (!raw) return null;
+  const code = decodeURIComponent(raw).trim().toUpperCase();
+  // factories.code 의 CHECK 제약과 같은 모양만 통과시킨다. 이상한 값은 아예 무시한다.
+  return /^[A-Z][A-Z0-9_]{1,15}$/.test(code) ? code : null;
+}
+
 export function normalizeHostname(request: NextRequest): string | null {
   const raw = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
   if (!raw) return null;
@@ -165,10 +197,27 @@ export async function requireFactoryUser(
 
   const hostname = normalizeHostname(request);
   const hostFactory = await resolvePublicFactoryByHost(hostname);
+  const selectedCode = readSelectedFactoryCode(request);
 
   let selected: ActiveMembership | undefined;
 
-  if (hostFactory) {
+  // 사용자가 UI 에서 고른 공장이 최우선이다.
+  //
+  // 이 앱은 **도메인 하나**로 운영한다(운영 결정 2026-08-24). 그래서 host 는 대부분의 배포에서
+  // 공장을 구분하지 못하고, 실제 선택 수단은 사용자의 명시적 선택이다.
+  //
+  // 선택값 자체는 신뢰하지 않는다 — 그 코드의 **활성 membership 이 있을 때만** 통과한다.
+  // 없으면 조용히 다른 공장으로 넘기지 않고 거부한다. 조용히 넘기면 관리자는 자기가 어느
+  // 공장을 보고 있는지 모른 채로 쓰게 된다.
+  if (selectedCode) {
+    selected = memberships.find(row => {
+      const f = Array.isArray(row.factories) ? row.factories[0] : row.factories;
+      return f?.code === selectedCode;
+    });
+    if (!selected) {
+      throw new ApiAuthError('선택한 공장에 대한 권한이 없습니다', 403);
+    }
+  } else if (hostFactory) {
     // host 가 공장을 지목했다. 그 공장의 membership 이 없으면 거부다 —
     // host 는 선택자일 뿐이므로 여기서 통과시키면 경계가 사라진다.
     selected = memberships.find(row => row.factory_id === hostFactory.id);
@@ -176,14 +225,34 @@ export async function requireFactoryUser(
       throw new ApiAuthError('이 공장에 대한 권한이 없습니다', 403);
     }
   } else if (memberships.length === 1) {
-    // 도메인 매핑이 아직 없다(D3 미확정). 활성 membership 이 하나면 모호함이 없다.
+    // 도메인 매핑이 아직 없다. 활성 membership 이 하나면 모호함이 없다.
     selected = memberships[0];
   } else if (memberships.length === 0) {
     throw new ApiAuthError('소속된 공장이 없습니다', 403);
   } else {
-    // 2개 이상. 승인된 공장 선택 UX 가 없으므로 구성 오류로 본다(계약 1절).
-    // 임의로 하나를 고르면 사용자가 어느 공장에 쓰고 있는지 모르는 채로 쓰게 된다.
-    throw new ApiAuthError('여러 공장에 소속되어 있어 공장을 특정할 수 없습니다', 403);
+    // 2개 이상이고 host 가 공장을 지목하지 못했다.
+    //
+    // 시스템 관리자는 ALT/ALV 를 모두 관리한다(운영 결정 2026-08-24). 그런데 프론트엔드에
+    // 공장 전환 토글은 두지 않기로 했다(같은 결정 3번). 그래서 이 사용자에게 host 는
+    // 유일한 선택 수단이고, host 가 해석되지 않으면 들어갈 공장이 정해지지 않는다.
+    //
+    // 해법은 "여러 공장이면 아무거나"가 아니라 **명시적 기본 공장**이다. 어느 쪽을 고를지
+    // 사람이 미리 적어 두면 임의 선택이 아니게 된다 — 사용자는 자기가 어느 공장에 쓰고
+    // 있는지 항상 알 수 있다.
+    //
+    // 기본 공장이 없으면 예전대로 거부한다. 관리자를 양쪽에 넣어 두고 기본값을 안 정하면
+    // 그것은 구성이 덜 끝난 상태이지, 아무 공장이나 써도 된다는 뜻이 아니다.
+    const homeFactoryId = await resolveHomeFactoryId(userId);
+    selected = homeFactoryId
+      ? memberships.find(row => row.factory_id === homeFactoryId)
+      : undefined;
+
+    if (!selected) {
+      throw new ApiAuthError(
+        '여러 공장에 소속되어 있고 기본 공장이 지정되지 않았습니다',
+        403
+      );
+    }
   }
 
   const factory = Array.isArray(selected.factories) ? selected.factories[0] : selected.factories;
@@ -236,6 +305,30 @@ export async function requireFactoryUser(
     assignedMachineIds,
     isGlobalAdmin: Boolean(globalAdmin),
   };
+}
+
+/**
+ * 여러 공장에 소속된 사용자의 **기본 공장**.
+ *
+ * `global_admins.home_factory_id` 에 사람이 명시적으로 적어 둔 값이다. 없으면 `null` 이고,
+ * 호출자는 그때 거부한다 — 기본값 없는 다중 소속은 "아무 공장이나 좋다"가 아니라
+ * "구성이 덜 끝났다"이다.
+ *
+ * host 가 공장을 지목했다면 이 함수는 아예 불리지 않는다. 기본 공장은 host 를 덮지 않고
+ * host 가 없을 때만 쓰인다 — 그래야 `alv.<domain>` 으로 들어간 관리자가 ALV 를 본다.
+ */
+async function resolveHomeFactoryId(userId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('global_admins')
+    .select('home_factory_id, is_active, expires_at')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error || !data?.home_factory_id) return null;
+  // 만료된 전역 권한으로 기본 공장을 얻으면 권한이 조용히 연장된 것과 같다.
+  if (data.expires_at && Date.parse(data.expires_at) <= Date.now()) return null;
+  return data.home_factory_id;
 }
 
 /**

@@ -122,12 +122,12 @@ export async function GET(request: NextRequest) {
           current_process_id,
           created_at,
           updated_at,
-          product_models:production_model_id (
+          product_models:product_models!machines_factory_production_model_fkey (
             id,
             model_name,
             description
           ),
-          model_processes:current_process_id (
+          model_processes:model_processes!machines_factory_current_process_fkey (
             id,
             process_name,
             process_order,

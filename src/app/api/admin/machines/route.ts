@@ -12,11 +12,11 @@ export async function GET(request: NextRequest) {
       .from('machines')
       .select(`
         *,
-        product_models:production_model_id (
+        product_models:product_models!machines_factory_production_model_fkey (
           model_name,
           description
         ),
-        model_processes:current_process_id (
+        model_processes:model_processes!machines_factory_current_process_fkey (
           process_name,
           tact_time_seconds
         )

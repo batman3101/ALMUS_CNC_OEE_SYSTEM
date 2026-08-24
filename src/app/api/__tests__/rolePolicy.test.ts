@@ -45,6 +45,8 @@ const POLICY: Record<string, Record<string, string>> = {
   'downtime-analysis': { GET: AE },
   'downtime-entries': { POST: AEO, GET: AEO },
   'downtime-entries/[id]': { DELETE: AEO, PATCH: AEO },
+  // 현재 세션의 공장과 이동 가능한 공장 목록. 자기 소속만 돌려주므로 세 역할 모두 허용한다.
+  'factory-context': { GET: AEO },
   'machine-status-descriptions': { GET: AEO },
   'machines': { GET: AEO, POST: AE, DELETE: AE },
   'machines/[machineId]': { GET: AEO, PUT: AE, PATCH: AEO },
