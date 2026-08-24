@@ -9,9 +9,17 @@
 --
 -- 두 군데가 사실과 다르다:
 --
---   1. **`audit_role_change` 라는 함수는 존재하지 않는다.** 마이그레이션 전체를 훑어
---      각 함수의 최종 정의를 모아 확인했다.
---   2. 실제 쓰기 경로는 **두 개**이고 둘 다 운영 중인 기능이다:
+--   1. `audit_role_change` 는 **함수로는 존재하지만 한 번도 실행되지 않는다.**
+--      `00000000000001_baseline_functions.sql:66` 에 정의가 있고, `user_profiles.role` 이
+--      바뀌면 감사 기록을 남기도록 쓰였다. 그런데 운영 DB 의 `pg_trigger` 를 직접 확인하니
+--      `user_profiles` 에 붙은 트리거는 `update_user_profiles_updated_at` 하나뿐이다
+--      (2026-08-24 실측). 즉 어디에도 부착되지 않은 죽은 코드다.
+--
+--      ※ 이 파일의 초판은 "그런 함수는 존재하지 않는다"고 적었다. 그것은 틀렸다 —
+--        마이그레이션을 훑을 때 정규식이 대소문자를 구분해, baseline 의 대문자
+--        `CREATE OR REPLACE FUNCTION` 정의를 통째로 못 봤다. 결론(감사 기록을 남기는
+--        살아있는 경로가 아니다)은 우연히 맞았지만 근거가 틀렸다.
+--   2. 실제로 실행되는 쓰기 경로는 **두 개**이고 둘 다 운영 중인 기능이다:
 --
 --      | 함수 | 화면 기능 | 기록 조건 |
 --      |---|---|---|
@@ -119,6 +127,10 @@ revoke all on function public.derive_factory_from_audit_target() from public, an
 -- ---------------------------------------------------------------------------
 -- 20260824210000 의 확인 블록은 `production_records` 하나만 넣어 봤고, 그래서 audit_log 가
 -- 통째로 빠진 것을 못 봤다. 여기서는 **실제로 쓰이는 두 조합을 모두** 넣어 본다.
+-- `audit_log` 에는 트리거가 없어(2026-08-24 운영 실측) 넣었다 지우는 것으로 흔적이 남지
+-- 않는다. 그래도 하위 트랜잭션으로 감싼다 — 나중에 이 테이블에 트리거가 붙는 순간
+-- "넣었다 지웠으니 괜찮다"가 조용히 틀린 말이 되기 때문이다. 실제로 `production_records`
+-- 에서 그 일이 있었다(20260824210000 주석 참조).
 do $$
 declare
   v_machine  uuid;
@@ -128,54 +140,69 @@ declare
   v_id       uuid;
   v_got      uuid;
   v_raised   boolean := false;
+  v_passed   boolean := false;
+  v_failure  text;
 begin
   select id, factory_id into v_machine, v_mfactory from public.machines limit 1;
   select record_id, factory_id into v_record, v_rfactory from public.production_records limit 1;
 
-  -- 1) table_name = 'machines'
-  if v_machine is not null then
-    insert into public.audit_log (table_name, record_id, action)
-    values ('machines', v_machine, 'derive_test')
-    returning id, factory_id into v_id, v_got;
-
-    if v_got is distinct from v_mfactory then
-      raise exception 'machines 감사 유도 실패: 기대 % / 실제 %', v_mfactory, v_got;
-    end if;
-    delete from public.audit_log where id = v_id;
-    raise notice 'PASS: machines 감사 기록이 설비에서 공장을 유도한다';
-  else
-    raise notice 'SKIP: 설비가 없어 machines 경로를 확인할 수 없다';
-  end if;
-
-  -- 2) table_name = 'production_records'
-  if v_record is not null then
-    insert into public.audit_log (table_name, record_id, action)
-    values ('production_records', v_record, 'derive_test')
-    returning id, factory_id into v_id, v_got;
-
-    if v_got is distinct from v_rfactory then
-      raise exception 'production_records 감사 유도 실패: 기대 % / 실제 %', v_rfactory, v_got;
-    end if;
-    delete from public.audit_log where id = v_id;
-    raise notice 'PASS: production_records 감사 기록이 생산기록에서 공장을 유도한다';
-  else
-    raise notice 'SKIP: 생산기록이 없어 production_records 경로를 확인할 수 없다';
-  end if;
-
-  -- 3) 모르는 대상은 거부되어야 한다. 이것이 통과하면 트리거는 "있지만 아무것도 안 하는"
-  --    상태다 — 20260824210000 의 주석이 경고한 바로 그 실패 형태다.
   begin
-    insert into public.audit_log (table_name, record_id, action)
-    values ('user_profiles', gen_random_uuid(), 'derive_test');
-    raise notice 'FAIL: 모르는 감사 대상이 통과했다';
-  exception when not_null_violation then
-    v_raised := true;
+    -- 1) table_name = 'machines'
+    if v_machine is not null then
+      insert into public.audit_log (table_name, record_id, action)
+      values ('machines', v_machine, 'derive_test')
+      returning id, factory_id into v_id, v_got;
+
+      if v_got is distinct from v_mfactory then
+        v_failure := format('machines 유도 실패: 기대 %s / 실제 %s', v_mfactory, v_got);
+        raise exception 'SELFTEST_ROLLBACK';
+      end if;
+    end if;
+
+    -- 2) table_name = 'production_records'
+    if v_record is not null then
+      insert into public.audit_log (table_name, record_id, action)
+      values ('production_records', v_record, 'derive_test')
+      returning id, factory_id into v_id, v_got;
+
+      if v_got is distinct from v_rfactory then
+        v_failure := format('production_records 유도 실패: 기대 %s / 실제 %s', v_rfactory, v_got);
+        raise exception 'SELFTEST_ROLLBACK';
+      end if;
+    end if;
+
+    -- 3) 모르는 대상은 거부되어야 한다. 이것이 통과하면 트리거는 "있지만 아무것도 안 하는"
+    --    상태다 — 마이그레이션이 적용돼도 동작하지 않는 가장 흔한 실패 형태다.
+    --
+    --    `audit_role_change`(baseline_functions.sql)가 바로 이 경로로 쓴다:
+    --    table_name='user_profiles'. 그 함수는 **운영에 트리거로 붙어 있지 않아**
+    --    한 번도 실행되지 않지만(2026-08-24 pg_trigger 실측), 누군가 되살리면 여기서
+    --    이름이 찍힌 채 멈춘다 — 조용히 다른 공장 라벨을 다는 것보다 낫다.
+    begin
+      insert into public.audit_log (table_name, record_id, action)
+      values ('user_profiles', gen_random_uuid(), 'derive_test');
+    exception when not_null_violation then
+      v_raised := true;
+    end;
+
+    if not v_raised then
+      v_failure := '모르는 table_name 이 거부되지 않았다 — 트리거가 동작하지 않는다';
+      raise exception 'SELFTEST_ROLLBACK';
+    end if;
+
+    v_passed := true;
+    raise exception 'SELFTEST_ROLLBACK';
+  exception when others then
+    if sqlerrm <> 'SELFTEST_ROLLBACK' then
+      v_failure := sqlerrm;
+      v_passed := false;
+    end if;
   end;
 
-  if not v_raised then
-    raise exception '모르는 table_name 이 거부되지 않았다 — 트리거가 동작하지 않는다';
+  if not v_passed then
+    raise exception 'audit_log 공장 유도 확인 실패: %', coalesce(v_failure, '(원인 불명)');
   end if;
-  raise notice 'PASS: 모르는 감사 대상은 이름이 찍힌 채 거부된다';
+  raise notice 'PASS: audit_log 가 감사 대상에서 공장을 유도하고, 모르는 대상은 거부한다';
 end $$;
 
 commit;

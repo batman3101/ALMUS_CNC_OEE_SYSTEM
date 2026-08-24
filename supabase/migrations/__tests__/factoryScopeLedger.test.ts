@@ -47,6 +47,33 @@ const FACTORY_OWNED = [
   'audit_log',
 ] as const;
 
+/**
+ * 배포 창(window) 동안만 남겨 두는 예외.
+ *
+ * ## 왜 하나 있는가
+ *
+ * `update_system_setting` 은 설정이 없을 때 `system_settings` 에 새 행을 만든다. 그 INSERT 는
+ * `factory_id` 를 넣지 않으므로 contract 이후 실패한다. 그런데 이 함수는 **고칠 수 없다** —
+ * 인자에 공장이 없고, 그것을 알 방법이 함수 안에 없다. 부모도 없으니 유도 트리거도 못 만든다.
+ *
+ * 새 앱은 이 함수를 부르지 않는다(`update_system_setting_scoped` 를 쓰고,
+ * `factoryScopedRoutes.test.ts` 의 "공장을 모르는 RPC" 검사가 그것을 강제한다).
+ * 이 함수가 남아 있는 이유는 오직 **마이그레이션과 새 코드 배포 사이의 창** 때문이다.
+ * 그동안 운영에 떠 있는 옛 앱이 이것을 부른다.
+ *
+ * ## 지우지 않고 남기는 것이 왜 더 나은가
+ *
+ * 지우면 창 동안 옛 앱의 설정 저장이 **전부** 실패한다(함수 없음).
+ * 남기면 **새 설정을 만드는 경우에만** 실패하고, 기존 설정 수정은 UPDATE 경로라 동작한다.
+ * 둘 다 나쁘지만 후자가 덜 나쁘다.
+ *
+ * ## 제거 조건
+ *
+ * 새 코드가 운영에 배포되고 나면 호출자가 없다. 그때 이 함수를 DROP 하고 여기 목록과
+ * 아래 개수 검사를 함께 지운다. 그 전에는 지우지 않는다.
+ */
+const WINDOW_ONLY_LEGACY: string[] = ['update_system_setting -> system_settings'];
+
 /** 공장 개념을 지탱하는 신설 테이블. 하나라도 없으면 격리가 성립하지 않는다. */
 const FACTORY_CORE = [
   'factories',
@@ -123,7 +150,10 @@ function finalFunctionBodies(): Map<string, string> {
  */
 function insertTargets(body: string): Array<{ table: string; columns: string | null }> {
   const out: Array<{ table: string; columns: string | null }> = [];
-  const re = /insert\s+into\s+public\.(\w+)/gi;
+  // `public.` 은 **선택**이다. baseline 의 함수들은 `INSERT INTO audit_log (...)` 처럼
+  // 스키마를 적지 않는다(search_path 에 의존한다). 접두사를 강제하던 초판은 그 함수들을
+  // 통째로 못 봤고, 그래서 `audit_role_change` 가 원장 밖에 있었다.
+  const re = /insert\s+into\s+(?:public\.)?(\w+)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
     const rest = body.slice(m.index + m[0].length);
@@ -315,11 +345,18 @@ describe('공장 격리 원장', () => {
         if (!FACTORY_OWNED.includes(table as (typeof FACTORY_OWNED)[number])) continue;
         if (columns !== null && /\bfactory_id\b/.test(columns)) continue;
         if (derived.has(table)) continue;
+        if (WINDOW_ONLY_LEGACY.includes(`${fn} -> ${table}`)) continue;
         offenders.push(`${fn} -> ${table}`);
       }
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  it('배포 창 전용 예외가 늘어나지 않는다', () => {
+    // 예외를 허용하는 순간 목록은 자란다. 자라는 것을 막는 유일한 방법은 **개수를 못 박는
+    // 것**이다. 새 예외를 넣으려면 이 숫자를 고쳐야 하고, 그때 사유를 적게 된다.
+    expect(WINDOW_ONLY_LEGACY).toHaveLength(1);
   });
 
   it('유도 트리거 목록이 비어 있지 않다', () => {

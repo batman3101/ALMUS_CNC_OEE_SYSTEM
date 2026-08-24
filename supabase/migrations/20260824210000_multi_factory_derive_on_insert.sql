@@ -51,8 +51,9 @@
 -- 원래 여기에는 "`audit_log` 의 유일한 쓰기 경로인 `audit_role_change` 는 역할 변경을
 -- 기록하므로 공장 귀속에 운영 결정이 필요하다"고 적혀 있었다. **둘 다 사실이 아니었다:**
 --
---   - `audit_role_change` 라는 함수는 이 저장소에 존재하지 않는다.
---   - 실제 쓰기 경로는 `correct_open_downtime_reason`(비가동 사유 정정, 무조건)과
+--   - `audit_role_change` 는 함수로는 존재하지만(baseline_functions.sql:66) 어느 테이블에도
+--     트리거로 붙어 있지 않아 한 번도 실행되지 않는다(운영 pg_trigger 실측).
+--   - 실제로 실행되는 쓰기 경로는 `correct_open_downtime_reason`(비가동 사유 정정, 무조건)과
 --     `close_shift_upsert_v3`(하향 마감)이다. 둘 다 운영 중인 기능이다.
 --
 -- 없는 함수를 근거로 예외 처리한 탓에, `audit_log.factory_id` 가 NOT NULL 이 된 뒤로
@@ -138,13 +139,37 @@ revoke all on function public.derive_factory_from_setting() from public, anon, a
  *
  * 마이그레이션이 "적용됐다"와 "동작한다"는 다르다. 트리거는 이름만 맞고 아무것도 안 할 수
  * 있다(조건이 틀렸거나, AFTER 로 걸렸거나). 실제로 factory_id 없이 한 행을 넣어 본다.
+ *
+ * ## 넣었다 지우는 것으로는 부족하다 (2026-08-24 정정)
+ *
+ * 처음에는 생산기록을 하나 INSERT 하고 DELETE 했다. 그것으로 원상복구가 된다고 봤는데,
+ * `production_records` 에는 트리거가 붙어 있다(20260715160000):
+ *
+ *   INSERT -> production_shift_states 를 'WORKING' 으로 upsert
+ *   DELETE -> **지우지 않고** 'MISSING' 으로 upsert
+ *
+ * 즉 DELETE 가 흔적을 지우기는커녕 하나 더 만든다. 결과는 임의의 설비에 남는
+ * **`1900-01-01 / A / MISSING`** 교대 상태 행이고, 이 앱에서 MISSING 은 "미입력"이라는
+ * 의미를 갖는 실제 상태다(CLAUDE.md: MISSING 은 OFF/HOLIDAY 와 구별된다). 운영 데이터에
+ * 영구히 커밋된다.
+ *
+ * ## 그래서 하위 트랜잭션에서 돌리고 되감는다
+ *
+ * plpgsql 의 `begin … exception … end` 는 하위 트랜잭션을 연다. 그 안에서 예외를 던지면
+ * **그 블록이 한 일이 전부 되감긴다** — 직접 쓴 행도, 트리거가 쓴 행도 함께.
+ * 반면 변수는 되감기지 않으므로 판정 결과는 밖으로 가지고 나올 수 있다.
+ *
+ * "지웠으니 됐다"는 **자기가 직접 쓴 것만** 세는 생각이다. 트리거가 있는 테이블에서는
+ * 언제나 틀린다.
  */
 do $$
 declare
-  v_machine uuid;
+  v_machine  uuid;
   v_expected uuid;
-  v_got uuid;
-  v_rec uuid;
+  v_got      uuid;
+  v_rec      uuid;
+  v_passed   boolean := false;
+  v_failure  text;
 begin
   select id, factory_id into v_machine, v_expected from public.machines limit 1;
   if v_machine is null then
@@ -152,16 +177,30 @@ begin
     return;
   end if;
 
-  insert into public.production_records (machine_id, date, shift, output_qty)
-  values (v_machine, date '1900-01-01', 'A', 0)
-  returning record_id, factory_id into v_rec, v_got;
+  begin
+    insert into public.production_records (machine_id, date, shift, output_qty)
+    values (v_machine, date '1900-01-01', 'A', 0)
+    returning record_id, factory_id into v_rec, v_got;
 
-  if v_got is distinct from v_expected then
-    raise exception 'factory_id 유도 실패: 기대 % / 실제 %', v_expected, v_got;
+    if v_got is distinct from v_expected then
+      v_failure := format('기대 %s / 실제 %s', v_expected, v_got);
+    else
+      v_passed := true;
+    end if;
+
+    -- 검사가 성공했든 실패했든 여기서 되감는다. 이 예외는 "실패"가 아니라 **되감기 수단**이다.
+    raise exception 'SELFTEST_ROLLBACK';
+  exception when others then
+    if sqlerrm <> 'SELFTEST_ROLLBACK' then
+      v_failure := sqlerrm;
+      v_passed := false;
+    end if;
+  end;
+
+  if not v_passed then
+    raise exception 'factory_id 유도 실패: %', coalesce(v_failure, '(원인 불명)');
   end if;
-
-  delete from public.production_records where record_id = v_rec;
-  raise notice 'PASS: factory_id 가 설비에서 유도된다';
+  raise notice 'PASS: factory_id 가 설비에서 유도된다 (흔적 없음)';
 end $$;
 
 commit;

@@ -99,10 +99,59 @@ update public.downtime_entries de
   from public.machines m
  where de.machine_id = m.id and de.factory_id is null;
 
+-- `production_records` 의 UPDATE 는 트리거를 깨운다 — 그리고 그 트리거는 교대 상태를
+-- 다시 쓴다(20260715160000 의 `sync_production_shift_state_after_write`):
+--
+--   INSERT INTO production_shift_states (...) VALUES (..., 'WORKING')
+--   ON CONFLICT DO UPDATE SET status=..., updated_at=clock_timestamp(), version=version+1
+--
+-- factory_id 만 채우는 이 UPDATE 는 교대 상태와 아무 상관이 없는데, 그대로 두면
+-- **55,782행의 `updated_at` 과 `version` 이 바뀐다.** 결과는 두 가지로 나쁘다:
+--
+--   1. 아무도 손대지 않은 교대가 "방금 수정됨"으로 보인다. 나중에 "누가 이걸 바꿨나"를
+--      되짚을 때 이 마이그레이션이 모든 흔적을 덮어쓴 상태다.
+--   2. `version` 은 낙관적 동시성(CAS)의 지문이다. 전부 밀리면 그 순간 화면을 열어 둔
+--      사용자는 저장할 때 영문 모를 충돌을 맞는다.
+--
+-- 상태 값 자체가 뒤집힐 위험은 데이터가 배제한다 — 2026-08-24 실측으로 "비-WORKING 인데
+-- 생산기록이 있는" 교대는 0건이다. 그래도 위 두 부작용은 남으므로 트리거를 잠시 끈다.
+-- (같은 트리거 때문에 유령 행이 생겼던 전례가 있다: 2026-07-16 데이터 정리.)
+--
+-- 트리거 이름이 없을 수도 있으므로 존재를 확인하고 끈다. `disable trigger` 는 이 트랜잭션
+-- 안에서만 유효하지 않다 — 아래에서 반드시 되돌린다. 마이그레이션 전체가 begin/commit 로
+-- 감싸져 있어 중간 실패 시에도 원래 상태로 돌아간다.
+do $$
+begin
+  if exists (
+    select 1 from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = 'production_records'
+      and t.tgname = 'sync_production_shift_state_after_write'
+  ) then
+    alter table public.production_records
+      disable trigger sync_production_shift_state_after_write;
+  end if;
+end $$;
+
 update public.production_records pr
    set factory_id = m.factory_id
   from public.machines m
  where pr.machine_id = m.id and pr.factory_id is null;
+
+do $$
+begin
+  if exists (
+    select 1 from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = 'production_records'
+      and t.tgname = 'sync_production_shift_state_after_write'
+  ) then
+    alter table public.production_records
+      enable trigger sync_production_shift_state_after_write;
+  end if;
+end $$;
 
 update public.production_shift_states pss
    set factory_id = m.factory_id

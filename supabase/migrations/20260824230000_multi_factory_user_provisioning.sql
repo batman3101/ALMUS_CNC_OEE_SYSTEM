@@ -196,8 +196,20 @@ grant execute on function public.create_factory_user(uuid, uuid, text, text, tex
 -- ---------------------------------------------------------------------------
 -- 자체 확인 — 트리거는 이름만 맞고 아무것도 안 할 수 있다
 -- ---------------------------------------------------------------------------
--- 실제 사용자 한 명을 왕복시킨다. 전체가 하나의 트랜잭션이므로, 중간에 어긋나면 확인용
--- 변경까지 함께 롤백된다.
+-- 실제 사용자 한 명을 왕복시킨다. 그런데 "왕복시켰으니 원상복구"는 **자기가 직접 쓴 것만**
+-- 세는 생각이고, 트리거가 있는 테이블에서는 언제나 틀린다:
+--
+--   - `user_profiles` 에는 `update_user_profiles_updated_at` 이 붙어 있다 → 되돌려도
+--     `updated_at` 은 지금 시각으로 남는다. 아무도 손대지 않은 계정이 "방금 수정됨"이 된다.
+--   - 담당 설비를 왕복시키면 `user_machine_assignments` 행이 지워졌다 다시 생기므로
+--     `created_at` 이 바뀐다.
+--
+-- 그래서 하위 트랜잭션 안에서 돌리고 통째로 되감는다. plpgsql 의 `begin … exception … end`
+-- 는 하위 트랜잭션이라, 그 안에서 예외를 던지면 직접 쓴 행도 트리거가 쓴 행도 함께
+-- 되감긴다. 변수는 되감기지 않으므로 판정만 밖으로 가지고 나온다.
+--
+-- 같은 함정이 20260824210000 에서 실제로 터졌다(생산기록을 넣었다 지우면 교대 상태에
+-- `MISSING` 유령 행이 남는다). 여기서도 같은 방식으로 막는다.
 do $$
 declare
   v_user     uuid;
@@ -208,6 +220,8 @@ declare
   v_machine  uuid;
   v_before   text[];
   v_count    bigint;
+  v_passed   boolean := false;
+  v_failure  text;
 begin
   select fm.user_id, fm.factory_id, up.role
     into v_user, v_factory, v_role
@@ -221,52 +235,64 @@ begin
     return;
   end if;
 
-  -- (1) 역할 동기화
-  v_other := case when v_role = 'operator' then 'engineer' else 'operator' end;
-
-  update public.user_profiles set role = v_other where user_id = v_user;
-  select role into v_got from public.factory_memberships
-   where user_id = v_user and factory_id = v_factory;
-  if v_got is distinct from v_other then
-    raise exception '역할 동기화 실패: membership 이 % 인데 프로필은 %', v_got, v_other;
-  end if;
-
-  update public.user_profiles set role = v_role where user_id = v_user;
-  select role into v_got from public.factory_memberships
-   where user_id = v_user and factory_id = v_factory;
-  if v_got is distinct from v_role then
-    raise exception '역할 되돌리기 실패: membership 이 % 로 남았다', v_got;
-  end if;
-  raise notice 'PASS: 역할 변경이 membership 에 반영된다';
-
-  -- (2) 담당 설비 동기화
   select id into v_machine from public.machines where factory_id = v_factory limit 1;
-  if v_machine is null then
-    raise notice 'SKIP: 이 공장에 설비가 없어 담당 설비 동기화를 확인할 수 없다';
-    return;
-  end if;
-
   select assigned_machines into v_before from public.user_profiles where user_id = v_user;
 
-  update public.user_profiles
-     set assigned_machines = array[v_machine::text]
-   where user_id = v_user;
+  begin
+    -- (1) 역할 동기화
+    v_other := case when v_role = 'operator' then 'engineer' else 'operator' end;
 
-  select count(*) into v_count from public.user_machine_assignments
-   where user_id = v_user and machine_id = v_machine and factory_id = v_factory and is_active;
-  if v_count <> 1 then
-    raise exception '담당 설비 동기화 실패: 배정 행이 % 개다 (기대 1)', v_count;
+    update public.user_profiles set role = v_other where user_id = v_user;
+    select role into v_got from public.factory_memberships
+     where user_id = v_user and factory_id = v_factory;
+    if v_got is distinct from v_other then
+      v_failure := format('역할 동기화 실패: membership 이 %s 인데 프로필은 %s', v_got, v_other);
+      raise exception 'SELFTEST_ROLLBACK';
+    end if;
+
+    -- (2) 담당 설비 동기화
+    if v_machine is null then
+      v_passed := true;   -- 역할은 확인됐다. 설비가 없으면 그 부분만 건너뛴다.
+      raise exception 'SELFTEST_ROLLBACK';
+    end if;
+
+    update public.user_profiles
+       set assigned_machines = array[v_machine::text]
+     where user_id = v_user;
+
+    select count(*) into v_count from public.user_machine_assignments
+     where user_id = v_user and machine_id = v_machine and factory_id = v_factory and is_active;
+    if v_count <> 1 then
+      v_failure := format('담당 설비 동기화 실패: 배정 행이 %s 개다 (기대 1)', v_count);
+      raise exception 'SELFTEST_ROLLBACK';
+    end if;
+
+    -- 줄이는 방향도 확인한다. 늘리기만 되고 줄이기가 안 되면, 담당에서 뺀 설비를 계속 본다.
+    update public.user_profiles set assigned_machines = '{}' where user_id = v_user;
+    select count(*) into v_count from public.user_machine_assignments where user_id = v_user;
+    if v_count <> 0 then
+      v_failure := format('담당 설비 축소 실패: 배정 행이 %s 개 남았다', v_count);
+      raise exception 'SELFTEST_ROLLBACK';
+    end if;
+
+    v_passed := true;
+    raise exception 'SELFTEST_ROLLBACK';
+  exception when others then
+    if sqlerrm <> 'SELFTEST_ROLLBACK' then
+      v_failure := sqlerrm;
+      v_passed := false;
+    end if;
+  end;
+
+  if not v_passed then
+    raise exception '사용자 동기화 확인 실패: %', coalesce(v_failure, '(원인 불명)');
   end if;
 
-  -- 줄이는 방향도 확인한다. 늘리기만 되고 줄이기가 안 되면, 담당에서 뺀 설비를 계속 본다.
-  update public.user_profiles set assigned_machines = '{}' where user_id = v_user;
-  select count(*) into v_count from public.user_machine_assignments where user_id = v_user;
-  if v_count <> 0 then
-    raise exception '담당 설비 축소 실패: 배정 행이 % 개 남았다', v_count;
+  if v_machine is null then
+    raise notice 'PASS: 역할 변경이 membership 에 반영된다 (설비가 없어 담당 설비는 건너뜀)';
+  else
+    raise notice 'PASS: 역할·담당 설비 변경이 반영된다 (늘리기·줄이기 모두, 흔적 없음)';
   end if;
-
-  update public.user_profiles set assigned_machines = v_before where user_id = v_user;
-  raise notice 'PASS: 담당 설비 변경이 배정 테이블에 반영된다 (늘리기·줄이기 모두)';
 end $$;
 
 commit;
