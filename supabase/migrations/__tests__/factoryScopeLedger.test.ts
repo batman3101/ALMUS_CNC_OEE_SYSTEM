@@ -86,6 +86,100 @@ function stripComments(sql: string): string {
   return sql.replace(/^\s*--.*$/gm, '');
 }
 
+/**
+ * 각 함수의 **최종 정의**를 모은다.
+ *
+ * `create or replace function` 은 같은 이름을 여러 마이그레이션이 덮어쓴다. 그러니
+ * "어딘가에 있다"가 아니라 **마지막으로 적힌 것**을 봐야 한다. 실제로 `audit_log` 에 쓰는
+ * 함수를 세다가 이 구분을 놓치면, 이미 교체된 옛 정의를 근거로 판단하게 된다.
+ * (`machineStateLockProtocol.test.ts` 가 같은 방식을 쓴다.)
+ */
+function finalFunctionBodies(): Map<string, string> {
+  const final = new Map<string, string>();
+  for (const { sql } of readMigrationsInOrder()) {
+    const clean = stripComments(sql);
+    const re = /create\s+(?:or\s+replace\s+)?function\s+public\.(\w+)/gi;
+    const marks: Array<{ name: string; at: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(clean)) !== null) marks.push({ name: m[1], at: m.index });
+    marks.forEach((mark, i) => {
+      const hardEnd = i + 1 < marks.length ? marks[i + 1].at : clean.length;
+      // 함수는 `$$;` / `$function$;` 로 끝난다. 거기서 자르지 않으면 뒤따르는 do 블록의
+      // 자체 확인용 INSERT 까지 이 함수의 것으로 세어진다 — 실제로 그렇게 오탐이 났다.
+      const tail = clean.slice(mark.at, hardEnd);
+      const term = tail.search(/\$(?:function)?\$\s*;/);
+      const end = term === -1 ? hardEnd : mark.at + term;
+      final.set(mark.name, clean.slice(mark.at, end));
+    });
+  }
+  return final;
+}
+
+/**
+ * `insert into public.<t>` 를 찾아 컬럼 목록과 함께 돌려준다.
+ *
+ * 컬럼 목록이 없는 형태(`insert into public.x values (...)`, `... select ...`)는 `null` 로
+ * 표시한다 — 그 경우 factory_id 를 넣었는지 정적으로 알 수 없으므로 통과시키지 않는다.
+ */
+function insertTargets(body: string): Array<{ table: string; columns: string | null }> {
+  const out: Array<{ table: string; columns: string | null }> = [];
+  const re = /insert\s+into\s+public\.(\w+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    const rest = body.slice(m.index + m[0].length);
+    const open = rest.match(/^\s*\(/);
+    if (!open) {
+      out.push({ table: m[1], columns: null });
+      continue;
+    }
+    const start = rest.indexOf('(');
+    const close = rest.indexOf(')', start);
+    out.push({ table: m[1], columns: close === -1 ? null : rest.slice(start + 1, close) });
+  }
+  return out;
+}
+
+/**
+ * BEFORE INSERT 유도 트리거가 달린 테이블.
+ *
+ * AFTER 는 NOT NULL 검사보다 늦어 소용없으므로 BEFORE 만 센다.
+ *
+ * 트리거를 만드는 형태가 두 가지다:
+ *   1. 그대로 적은 것          — `create trigger … before insert on public.audit_log …`
+ *   2. do 블록에서 만든 것     — 6개 테이블을 `array[…]` 로 돌며 `execute format(…%I…)`
+ *
+ * 2번을 빼먹으면 그 6개가 "유도 없음"으로 세어져, 이미 트리거가 있는 함수들이 전부
+ * 위반으로 찍힌다. 실제로 첫 시도에서 그렇게 났다 — 형태 하나만 보면 원장이 거짓말을 한다.
+ */
+function derivedInsertTables(): Set<string> {
+  const clean = stripComments(allMigrationSql());
+  const out = new Set<string>();
+
+  const literal = /create\s+trigger\s+\w+\s+before\s+insert\s+(?:or\s+update[^\n]*?)?\s*on\s+public\.(\w+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = literal.exec(clean)) !== null) {
+    if (/execute\s+function\s+public\.derive_/i.test(clean.slice(m.index, m.index + 400))) {
+      out.add(m[1]);
+    }
+  }
+
+  // do 블록: `before insert on public.%I` + `derive_` 앞의 가장 가까운 array[...] 가 대상이다.
+  const templated = /before\s+insert\s+on\s+public\.%I/gi;
+  while ((m = templated.exec(clean)) !== null) {
+    if (!/derive_/i.test(clean.slice(m.index, m.index + 400))) continue;
+    const before = clean.slice(0, m.index);
+    const arrayStart = before.toLowerCase().lastIndexOf('array[');
+    if (arrayStart === -1) continue;
+    const arrayEnd = before.indexOf(']', arrayStart);
+    if (arrayEnd === -1) continue;
+    for (const q of before.slice(arrayStart, arrayEnd).matchAll(/'([a-z_]+)'/g)) {
+      out.add(q[1]);
+    }
+  }
+
+  return out;
+}
+
 function allMigrationSql(): string {
   return readMigrationsInOrder().map(({ sql }) => stripComments(sql)).join('\n');
 }
@@ -195,15 +289,46 @@ describe('공장 격리 원장', () => {
     }
   });
 
-  it('행을 INSERT 하는 트리거가 factory_id 를 채운다', () => {
-    // contract 적용 후 정상 생산기록 저장이 실패했다:
-    //   ERROR: null value in column "factory_id" of relation "production_shift_states"
+  it('공장 소유 테이블에 INSERT 하는 함수는 예외 없이 factory_id 를 채운다', () => {
+    // ## 이 검사의 초판이 놓친 것
     //
-    // 스키마만 factory-aware 가 되고 트리거가 그대로면 앱이 아예 동작하지 않는다.
-    // 계약 4.3: "trigger/RPC 는 공장을 parent 에서 파생한다."
-    expect(sql).toMatch(
-      /insert\s+into\s+public\.production_shift_states\s*\(\s*factory_id\s*,/i
-    );
+    // 초판은 `production_shift_states` **한 테이블**만 봤다:
+    //
+    //   expect(sql).toMatch(/insert into public.production_shift_states\s*\(\s*factory_id,/i)
+    //
+    // 그래서 `audit_log` 에 쓰는 두 함수(`correct_open_downtime_reason`,
+    // `close_shift_upsert_v3`)를 통째로 놓쳤고, contract 가 그 컬럼을 NOT NULL 로 만든 뒤
+    // **비가동 사유 정정이 100% 실패하고 하향 마감이 트랜잭션째 롤백되는** 상태였다.
+    // 존재를 세면 전수를 놓친다 — 이 저장소에서 같은 형태로 반복된 실패다.
+    //
+    // ## 두 가지 통과 조건
+    //
+    //   1. INSERT 가 컬럼 목록에 `factory_id` 를 직접 적는다, 또는
+    //   2. 그 테이블에 BEFORE INSERT 유도 트리거가 있다(20260824210000 / 20260824220000).
+    //
+    // 어느 쪽도 아니면 그 함수는 실행되는 순간 NOT NULL 로 실패한다.
+    const derived = derivedInsertTables();
+    const offenders: string[] = [];
+
+    for (const [fn, body] of finalFunctionBodies()) {
+      for (const { table, columns } of insertTargets(body)) {
+        if (!FACTORY_OWNED.includes(table as (typeof FACTORY_OWNED)[number])) continue;
+        if (columns !== null && /\bfactory_id\b/.test(columns)) continue;
+        if (derived.has(table)) continue;
+        offenders.push(`${fn} -> ${table}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('유도 트리거 목록이 비어 있지 않다', () => {
+    // 위 검사가 "유도 트리거가 전부 있다"로 공허하게 통과하는 상황을 배제한다.
+    // 파싱이 깨져 derived 가 모든 테이블을 담으면 위 검사는 무엇도 잡지 못한다.
+    const derived = derivedInsertTables();
+    expect(derived.size).toBeGreaterThan(0);
+    expect(derived.size).toBeLessThan(FACTORY_OWNED.length);
+    expect(derived.has('audit_log')).toBe(true);
   });
 
   it('전수 회수 뒤 service_role 에 권한을 되돌려 준다', () => {

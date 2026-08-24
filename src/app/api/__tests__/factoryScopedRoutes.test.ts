@@ -29,12 +29,42 @@ import path from 'path';
  *
  * 새 Route 가 공장 소유 테이블을 만지기 시작하면 이 테스트를 고치지 않아도 자동으로
  * 검사 대상이 된다.
+ *
+ * ## 세는 단위는 파일이 아니라 **핸들러**다 (2026-08-24 정정)
+ *
+ * 초판은 파일 단위로 판정했다. 그래서 `machines/route.ts` 의 GET 이 전환돼 있으면 파일
+ * 전체가 "전환됨"으로 세어졌고, 같은 파일의 POST·DELETE 는 보이지 않았다. 그 DELETE 는
+ *
+ *   await requireUser(request, ['admin', 'engineer']);   // 공장을 묻지 않는다
+ *   supabaseAdmin.from('machines').update({ is_active: false }).in('id', machineIds)
+ *
+ * 였다 — ALV 의 engineer 가 ALT 설비 800대를 비활성화할 수 있었고, 이 원장은 통과시켰다.
+ *
+ * 이것이 같은 형태의 **네 번째** 실패다: RPC 전용 Route → 뷰 → lib 경유 → 핸들러.
+ * 매번 세는 단위가 결함의 단위보다 컸다. 결함은 핸들러 하나에서 나므로 핸들러로 센다.
+ *
+ * 모듈 최상위 코드(공용 헬퍼)는 모든 핸들러에 붙여서 본다 — 어느 핸들러가 부를지 정적으로
+ * 알 수 없으므로, 헬퍼가 거는 필터는 모든 핸들러의 것으로 친다. 느슨한 쪽으로 틀리지만
+ * 파일 전체를 한 덩어리로 보던 초판보다는 **언제나 더 좁다.**
  */
 
 const API_ROOT = path.join(process.cwd(), 'src/app/api');
 
 /** 공장 제한의 형태는 하나로 고정한다 — 표기를 여러 개 허용하면 검사가 헐거워진다. */
 const FACTORY_FILTER = /\.eq\('factory_id',/;
+
+/**
+ * 쓰기 경로에서 공장을 정하는 형태. 읽기의 `.eq('factory_id', …)` 에 대응한다.
+ *
+ * 핸들러 단위로 세기 시작하자 INSERT 전용 핸들러(`admin/machines#POST`,
+ * `product-models#POST`)가 "전환됐는데 필터가 없다"로 걸렸다. 맞는 지적이 아니었다 —
+ * INSERT 는 거를 것이 없고, 대신 **넣는 값**으로 공장을 정한다.
+ *
+ * 값은 반드시 세션에서 와야 한다. `factory_id: body.factory_id` 를 허용하면 요청이 공장을
+ * 고르게 되어 인가가 사라지므로, `….factoryId` 형태만 인정한다. 즉 이 완화는 검사를
+ * 느슨하게 만드는 것이 아니라 **쓰기 쪽 규칙을 하나 더 못 박는 것**이다.
+ */
+const FACTORY_INSERT = /factory_id:\s*[A-Za-z_$][\w$]*\.factoryId\b/;
 
 /** 공장 소유 테이블 (docs/workflows/D1_D2_INVENTORY_LEDGER.md 5절). */
 const FACTORY_OWNED = [
@@ -141,7 +171,31 @@ function viewQueryLacksFactory(source: string, view: string): boolean {
   return false;
 }
 
+/**
+ * 파일을 **핸들러 단위**로 쪼갠다.
+ *
+ * 각 조각은 `모듈 최상위 코드 + 그 핸들러 본문` 이다. 마지막 핸들러는 파일 끝까지 간다.
+ */
+function splitHandlers(source: string): Array<{ method: string; body: string }> {
+  const re = /export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)\s*\(/g;
+  const marks: Array<{ method: string; at: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source)) !== null) {
+    marks.push({ method: m[1], at: m.index });
+  }
+  if (marks.length === 0) return [];
+
+  const moduleScope = source.slice(0, marks[0].at);
+  return marks.map((mark, i) => ({
+    method: mark.method,
+    body:
+      moduleScope +
+      source.slice(mark.at, i + 1 < marks.length ? marks[i + 1].at : source.length),
+  }));
+}
+
 interface RouteFact {
+  /** `machines#DELETE` 처럼 핸들러까지 찍는다. 파일 이름만으로는 어디를 고칠지 모른다. */
   key: string;
   tables: string[];
   views: string[];
@@ -152,23 +206,20 @@ interface RouteFact {
 }
 
 function analyze(): RouteFact[] {
-  return collectRouteFiles(API_ROOT).map(file => {
-    const raw = fs.readFileSync(file, 'utf8');
-    const source = stripComments(raw);
-    return {
-      key: routeKey(file),
-      tables: FACTORY_OWNED.filter(t => new RegExp(`from\\('${t}'\\)`).test(source)),
-      views: FACTORY_OWNED_VIEWS.filter(v => viewQueryLacksFactory(source, v)),
-      usesServiceRole: /supabase-admin/.test(source),
-      usesFactoryAuth: /requireFactoryUser/.test(source),
-      // 공장 제한의 형태는 하나로 고정한다 — 다양한 표기를 허용하면 검사가 헐거워진다.
-      scopesByFactory: FACTORY_FILTER.test(source),
+  return collectRouteFiles(API_ROOT).flatMap(file => {
+    const source = stripComments(fs.readFileSync(file, 'utf8'));
+    return splitHandlers(source).map(({ method, body }) => ({
+      key: `${routeKey(file)}#${method}`,
+      tables: FACTORY_OWNED.filter(t => new RegExp(`from\\('${t}'\\)`).test(body)),
+      views: FACTORY_OWNED_VIEWS.filter(v => viewQueryLacksFactory(body, v)),
+      usesServiceRole: /supabase-admin/.test(body),
+      usesFactoryAuth: /requireFactoryUser/.test(body),
+      // 읽기는 걸러서, 쓰기는 넣어서 공장을 정한다. 둘 다 형태를 하나로 고정한다.
+      scopesByFactory: FACTORY_FILTER.test(body) || FACTORY_INSERT.test(body),
       // `rpc('analytics_quality'` 는 잡고 `rpc('analytics_quality_scoped'` 는 넘긴다.
       // 닫는 따옴표까지 봐야 접두사가 같은 새 이름이 걸리지 않는다.
-      blindRpcs: FACTORY_BLIND_RPCS.filter(fn =>
-        new RegExp(`rpc\\('${fn}'`).test(source)
-      ),
-    };
+      blindRpcs: FACTORY_BLIND_RPCS.filter(fn => new RegExp(`rpc\\('${fn}'`).test(body)),
+    }));
   });
 }
 
@@ -226,6 +277,44 @@ describe('공장 범위 Route 원장', () => {
     const offenders = facts
       .filter(f => f.views.length > 0)
       .map(f => `${f.key} -> ${f.views.join(', ')}`);
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('공장 소유 테이블에 INSERT 하는 핸들러는 세션에서 factory_id 를 넣는다', () => {
+    // 위 검사들은 **읽기**를 본다. 쓰기는 거를 것이 없으므로 그 그물에 걸리지 않는다.
+    // 실제로 `machines#POST` 는 `factory_id` 를 넣지 않아 NOT NULL 로 실패했는데, 같은
+    // 파일의 GET 이 필터를 갖고 있어 파일 단위 검사도 이 검사도 통과했다.
+    //
+    // 유도 트리거가 있는 테이블은 제외한다 — 그쪽은 DB 가 부모에서 채운다. 그 목록의 진위는
+    // `supabase/migrations/__tests__/factoryScopeLedger.test.ts` 가 마이그레이션에서
+    // 직접 확인한다. 여기 적힌 것은 그 결과의 사본이므로, 트리거를 늘리면 함께 늘린다.
+    const DERIVED = [
+      'production_records',
+      'machine_logs',
+      'machine_status_history',
+      'downtime_entries',
+      'production_shift_states',
+      'production_progress_reports',
+      'system_settings_audit',
+      'audit_log',
+    ];
+
+    const offenders: string[] = [];
+    for (const file of collectRouteFiles(API_ROOT)) {
+      const source = stripComments(fs.readFileSync(file, 'utf8'));
+      for (const { method, body } of splitHandlers(source)) {
+        for (const table of FACTORY_OWNED) {
+          if (DERIVED.includes(table)) continue;
+          const writes = new RegExp(
+            `from\\('${table}'\\)[\\s\\S]{0,200}?\\.(insert|upsert)\\(`
+          ).test(body);
+          if (writes && !FACTORY_INSERT.test(body)) {
+            offenders.push(`${routeKey(file)}#${method} -> ${table}`);
+          }
+        }
+      }
+    }
 
     expect(offenders).toEqual([]);
   });
