@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { unwrapJoin } from '@/types';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { getBusinessDateAt, getShiftAt } from '@/utils/downtimeIntervals';
 import {
   DEFAULT_ALERT_THRESHOLDS,
@@ -15,10 +16,11 @@ import {
  *
  * 알림 엔드포인트는 대시보드가 주기적으로 부른다. 같은 테이블을 두 번 읽을 이유가 없다.
  */
-async function loadAlertConfig(): Promise<ReturnType<typeof resolveAlertConfig>> {
+async function loadAlertConfig(factoryId: string): Promise<ReturnType<typeof resolveAlertConfig>> {
   const { data, error } = await supabaseAdmin
     .from('system_settings')
     .select('category, setting_key, setting_value')
+    .eq('factory_id', factoryId)
     .in('category', ['general', 'shift', 'oee'])
     .eq('is_active', true);
 
@@ -68,7 +70,10 @@ interface MachineJoin {
 // GET /api/alerts - 실시간 알림 조회
 export async function GET(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer']);
+    // 공장 인지 계약. 아래 모든 query 가 이 공장으로 제한된다 — Service Role 은 RLS 를
+    // 우회하므로, 여기서 걸지 않으면 DB 를 나눠 놓아도 두 공장 알림이 섞인다.
+    // 실측(2026-08-24): 전환 전에는 ALT/ALV 가 똑같이 6건을 받았다.
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const severity = searchParams.get('severity'); // 'critical', 'warning', 'info'
@@ -84,7 +89,7 @@ export async function GET(request: NextRequest) {
     const currentTime = new Date();
     const recentTime = new Date(currentTime.getTime() - 30 * 60 * 1000); // 최근 30분
     const { clock: businessClock, thresholds: alertThresholds, thresholdFallbacks } =
-      await loadAlertConfig();
+      await loadAlertConfig(authenticatedUser.factoryId);
     const currentBusinessDate = getBusinessDateAt(
       currentTime,
       businessClock.timezone,
@@ -127,6 +132,7 @@ export async function GET(request: NextRequest) {
           created_at,
           machines!inner(name, equipment_type)
         `)
+        .eq('factory_id', authenticatedUser.factoryId)
         .eq('date', currentBusinessDate)
         .eq('shift', currentShift)
         .order('date', { ascending: false })
@@ -164,6 +170,7 @@ export async function GET(request: NextRequest) {
           duration,
           machines!inner(name, equipment_type)
         `)
+        .eq('factory_id', authenticatedUser.factoryId)
         .or(`end_time.is.null,start_time.gte.${recentTime.toISOString()}`)
         .neq('state', 'NORMAL_OPERATION')
         .order('start_time', { ascending: false })
@@ -202,6 +209,7 @@ export async function GET(request: NextRequest) {
           duration_minutes,
           machines!inner(name, equipment_type)
         `)
+        .eq('factory_id', authenticatedUser.factoryId)
         .or(`end_time.is.null,start_time.gte.${recentTime.toISOString()}`)
         .order('start_time', { ascending: false })
         .range(from, from + pageSize - 1);
@@ -495,6 +503,7 @@ export async function GET(request: NextRequest) {
       const { data, error } = await supabaseAdmin
         .from('alert_acknowledgements')
         .select('alert_key, action')
+        .eq('factory_id', authenticatedUser.factoryId)
         .eq('user_id', authenticatedUser.userId)
         .order('alert_key', { ascending: true })
         .range(from, from + pageSize - 1);
@@ -624,7 +633,7 @@ export async function GET(request: NextRequest) {
 // POST /api/alerts - 알림 상태 업데이트 (확인 처리 등)
 export async function POST(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
     const body = await request.json();
     const { alert_id, action } = body; // action: 'acknowledge', 'dismiss'
 
@@ -642,10 +651,12 @@ export async function POST(request: NextRequest) {
       .from('alert_acknowledgements')
       .upsert({
         alert_key: alert_id,
+        // 확인 이력도 공장에 속한다. 서버가 stamp 하며 요청 값은 쓰지 않는다.
+        factory_id: authenticatedUser.factoryId,
         user_id: authenticatedUser.userId,
         action,
         updated_at: updatedAt,
-      }, { onConflict: 'alert_key,user_id' });
+      }, { onConflict: 'factory_id,alert_key,user_id' });
 
     if (persistenceError) {
       console.error('알림 확인 상태 저장 오류:', persistenceError);
