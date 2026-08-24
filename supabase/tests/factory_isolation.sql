@@ -138,3 +138,93 @@ begin
     raise notice 'FAIL: 인증 없이 공장이 특정됐다 (%)', v;
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 공장 범위 RPC (2026-08-24)
+-- ---------------------------------------------------------------------------
+-- 위 1~10 은 **제약**을 본다 — 잘못된 쓰기가 거부되는가. 아래는 **읽기·집계**를 본다.
+-- 이 둘은 다른 종류의 실패다. 제약은 어긋나면 소리를 내지만, 집계가 두 공장을 합치면
+-- 아무 소리도 나지 않는다. 그냥 숫자가 커질 뿐이다.
+--
+-- 왜 "합보다 작다"를 보는가: 각 공장 결과가 전체보다 작다는 것만으로는 부족하다(둘 다
+-- 전체일 수도 있다). ALT + ALV = 전체 이면서 각각이 전체보다 작아야 진짜로 나뉜 것이다.
+
+\echo '=== 11) 분석 RPC 가 공장별로 나뉜다 ==='
+do $$
+declare
+  v_alt uuid := (select id from public.factories where code='ALT');
+  v_alv uuid := (select id from public.factories where code='ALV');
+  v_all bigint;
+  v_a   bigint;
+  v_b   bigint;
+begin
+  select total_records into v_all from public.analytics_oee_records_summary('2000-01-01');
+  select total_records into v_a   from public.analytics_oee_records_summary_scoped(v_alt,'2000-01-01');
+  select total_records into v_b   from public.analytics_oee_records_summary_scoped(v_alv,'2000-01-01');
+
+  if v_all = 0 then
+    raise notice 'SKIP: production_records 가 비어 있어 판정할 수 없다 (0 은 분리도 누수도 증명하지 못한다)';
+  elsif v_a + v_b = v_all and v_a < v_all and v_b < v_all then
+    raise notice 'PASS: 요약 통계가 분리됨 (전체 % = ALT % + ALV %)', v_all, v_a, v_b;
+  else
+    raise notice 'FAIL: 요약 통계가 새고 있다 (전체 % / ALT % / ALV %)', v_all, v_a, v_b;
+  end if;
+end $$;
+
+-- 12·13 은 행을 만든다. 위 1~9 의 트랜잭션은 이미 rollback 되었으므로 여기서 새로 연다.
+begin;
+
+\echo '=== 12) 설비가 없는 공장은 빈 결과를 낸다 (NULL 이 아니라 빈 배열) ==='
+-- 래퍼가 `p_machine_ids => NULL` 을 넘기면 원본은 "설비 조건 없음" = 전 공장으로 읽는다.
+-- 설비가 하나도 없는 공장에서 그 실수가 일어나면 **다른 공장 전체**가 결과로 나온다.
+-- 가장 조용한 형태의 누수라서 따로 못박는다.
+do $$
+declare
+  v_empty uuid;
+  v_ids uuid[];
+  v_rows bigint;
+begin
+  -- timezone 은 NOT NULL 이고 기본값이 없다. 기존 공장의 값을 빌려 온다 — 여기에 상수를
+  -- 적으면 이 파일이 두 번째 타임존 원본이 되고, 언젠가 실제 설정과 갈라진다.
+  insert into public.factories (code, name, timezone, is_active)
+  select 'ISOEMPTY', 'ISO 빈 공장', f.timezone, true
+  from public.factories f where f.code = 'ALT'
+  returning id into v_empty;
+
+  select public.factory_machine_ids(v_empty, null) into v_ids;
+  select count(*) into v_rows from public.analytics_oee_by_machine_scoped(v_empty, '2000-01-01');
+
+  if v_ids = '{}'::uuid[] and v_rows = 0 then
+    raise notice 'PASS: 설비 없는 공장 -> 빈 배열, 결과 0행';
+  else
+    raise notice 'FAIL: 설비 없는 공장이 %행을 돌려줬다 (ids=%)', v_rows, v_ids;
+  end if;
+end $$;
+
+\echo '=== 13) 설정 쓰기가 다른 공장을 건드리지 않는다 ==='
+do $$
+declare
+  v_alt uuid := (select id from public.factories where code='ALT');
+  v_alv uuid := (select id from public.factories where code='ALV');
+  v_alt_after text;
+  v_alv_after text;
+begin
+  perform public.update_system_setting_scoped(v_alt,'general','iso_rpc_key','ALT_VALUE','iso');
+  perform public.update_system_setting_scoped(v_alv,'general','iso_rpc_key','ALV_VALUE','iso');
+  -- ALV 만 다시 쓴다. ALT 는 그대로여야 한다.
+  perform public.update_system_setting_scoped(v_alv,'general','iso_rpc_key','ALV_CHANGED','iso');
+
+  select setting_value->>'value' into v_alt_after
+    from public.system_settings where factory_id=v_alt and category='general' and setting_key='iso_rpc_key';
+  select setting_value->>'value' into v_alv_after
+    from public.system_settings where factory_id=v_alv and category='general' and setting_key='iso_rpc_key';
+
+  if v_alt_after = 'ALT_VALUE' and v_alv_after = 'ALV_CHANGED' then
+    raise notice 'PASS: ALV 변경이 ALT 를 건드리지 않음 (ALT=% / ALV=%)', v_alt_after, v_alv_after;
+  else
+    raise notice 'FAIL: 설정 쓰기가 공장을 넘었다 (ALT=% / ALV=%)', v_alt_after, v_alv_after;
+  end if;
+end $$;
+
+-- 검사용으로 만든 공장·설정은 남기지 않는다.
+rollback;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // GET /api/model-processes/[id] - 특정 공정 정보 조회
 export async function GET(
@@ -9,7 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    await requireUser(request, ['admin', 'engineer', 'operator']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/model-processes/[id] called with id:', id);
 
     const { data: process, error } = await supabaseAdmin
@@ -28,6 +29,7 @@ export async function GET(
           description
         )
       `)
+      .eq('factory_id', factoryUser.factoryId)
       .eq('id', id)
       .single();
 
@@ -87,7 +89,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const body = await request.json();
     const processName =
@@ -117,6 +119,7 @@ export async function PUT(
       })
       .eq('id', id)
       .select()
+      .eq('factory_id', factoryUser.factoryId)
       .maybeSingle();
 
     if (error) {
@@ -148,13 +151,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const { data: deleted, error } = await supabaseAdmin
       .from('model_processes')
       .delete()
       .eq('id', id)
       .select('id')
+      .eq('factory_id', factoryUser.factoryId)
       .maybeSingle();
 
     if (error) {

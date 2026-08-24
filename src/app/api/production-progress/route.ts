@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
 import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 import { calculateVerifiedDowntimeMinutesForWindow } from '@/app/api/production-records/daily/downtimeCalculation';
@@ -28,7 +29,7 @@ interface ProgressBody {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const body = (await request.json()) as ProgressBody;
 
     const machineId = typeof body.machine_id === 'string' ? body.machine_id : '';
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     // 예전에는 검사가 없어, 담당 설비를 가진 운영자가 API 를 직접 호출하면 임의의 과거·미래
     // 교대에 진척을 넣을 수 있었다(Codex 감사 2026-07-29 #5). 그 값은 마감이 output_qty 로
     // 승격시키므로 과거 실적과 backlog 를 오염시킨다.
-    const reporting = await getShiftReportingWindow(date, shift);
+    const reporting = await getShiftReportingWindow(date, shift, user.factoryId);
     if (!reporting) {
       return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
     }
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
 
     const machineId = searchParams.get('machine_id') ?? '';
@@ -172,6 +173,7 @@ export async function GET(request: NextRequest) {
     const { data: lastReport, error: reportError } = await supabaseAdmin
       .from('production_progress_reports')
       .select('shift_output_qty, reported_at')
+      .eq('factory_id', user.factoryId)
       .eq('machine_id', machineId)
       .eq('date', date)
       .eq('shift', shift)
@@ -186,7 +188,7 @@ export async function GET(request: NextRequest) {
 
     // 휴식 총량은 비가동 계산(계획정지·휴식 겹침 판정)과 아래 설정 일치 검사에 함께 쓰므로
     // 한 번만 읽는다.
-    const configuredBreakMinutes = await getBreakTimeMinutes();
+    const configuredBreakMinutes = await getBreakTimeMinutes(user.factoryId);
 
     // 비가동을 확정 OEE 와 동일 계약으로 계산한다. calculateVerifiedDowntimeMinutesForWindow 는
     // 계획정지가 휴식과 겹쳐 이중 차감이 우려되면 null(계산 보류)을 돌려준다 — 그 null 을
@@ -198,7 +200,7 @@ export async function GET(request: NextRequest) {
     let shiftStartIso!: string;
     let operatingMinutes!: number;
     try {
-      const window = await getShiftWindow(date, shift);
+      const window = await getShiftWindow(date, shift, user.factoryId);
       if (!window) {
         return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
       }
@@ -224,6 +226,9 @@ export async function GET(request: NextRequest) {
     const { data: tactRow } = await supabaseAdmin
       .from('machines_with_production_info')
       .select('current_tact_time')
+      // tact 는 OEE 의 분자다(ideal_runtime = output_qty × tact / 60). 남의 공장 tact 로
+      // 계산된 성능은 틀렸다는 표시 없이 스냅샷으로 박힌다 — 나중에 고쳐도 그 행은 남는다.
+      .eq('factory_id', user.factoryId)
       .eq('id', machineId)
       .maybeSingle();
 

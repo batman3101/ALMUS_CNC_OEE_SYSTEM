@@ -37,7 +37,15 @@ import { DEFAULT_SHIFT_CHANGE_BUFFER_MINUTES } from '@/lib/shiftDefaults';
  * - 조회 자체가 실패 → throw. 호출자가 500 으로 알린다.
  * - 조회는 됐는데 해당 키가 없음 → 기본값. 이것만이 기본값이 정당한 경우다.
  */
-export async function getBusinessTimeConfig(): Promise<BusinessTimeConfig> {
+/**
+ * 공장을 **필수 인자**로 받는다.
+ *
+ * 공장을 걸지 않으면 아래 select 가 두 공장의 `timezone`·`shift_a_start` 를 모두 가져오고,
+ * 값 추출은 정렬 없는 결과에서 먼저 온 것을 집는다 — 어느 공장 값인지 보장이 없다.
+ * 그리고 타임존이 어긋나면 업무일이 어긋나며, B교대는 자정을 넘으므로 하루치 실적이
+ * 통째로 옆날로 간다. 조용히 틀리는 쪽이라 인자를 선택적으로 둘 수 없다.
+ */
+export async function getBusinessTimeConfig(factoryId: string): Promise<BusinessTimeConfig> {
   const defaults: BusinessTimeConfig = {
     timezone: DEFAULT_BUSINESS_TIMEZONE,
     shiftAStart: DEFAULT_SHIFT_A_START,
@@ -48,6 +56,7 @@ export async function getBusinessTimeConfig(): Promise<BusinessTimeConfig> {
   const { data, error } = await supabaseAdmin
     .from('system_settings')
     .select('category, setting_key, setting_value')
+    .eq('factory_id', factoryId)
     .in('category', ['general', 'shift'])
     .eq('is_active', true);
 

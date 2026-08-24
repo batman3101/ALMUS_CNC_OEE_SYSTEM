@@ -5,8 +5,8 @@ import { buildShiftWindows } from '@/utils/downtimeIntervals';
 import {
   apiAuthErrorResponse,
   assertMachineAccess,
-  requireUser,
 } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 // 교대 경계 설정은 정본 하나만 쓴다. 이 파일에 있던 사본은 조회 실패를 기본값으로
 // 위장했고(Codex 감사 2026-07-29 #7), 사본이 셋이라 한 곳만 고치면 나머지가 남았다.
 import { getBusinessTimeConfig } from '@/lib/shiftConfig';
@@ -44,7 +44,7 @@ function rpcErrorResponse(error: { code?: string; message?: string }) {
 // POST /api/downtime-entries - 생산실적과 독립적으로 비가동 사건을 즉시 생성한다.
 export async function POST(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const body: Partial<DowntimeEntry> & { version?: number } = await request.json();
     const { machine_id, date, shift, start_time, reason, description, operator_id } = body;
 
@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
     const { data: machine, error: machineError } = await supabaseAdmin
       .from('machines')
       .select('id, name, is_active')
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('id', machine_id)
       .single();
     if (machineError || !machine) {
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
 // GET /api/downtime-entries - 입력 날짜 라벨이 아니라 실제 교대 시간과 겹치는 사건을 조회한다.
 export async function GET(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const date = searchParams.get('date');
@@ -177,7 +178,7 @@ export async function GET(request: NextRequest) {
     }
     assertMachineAccess(authenticatedUser, machineId);
 
-    const timeConfig = await getBusinessTimeConfig();
+    const timeConfig = await getBusinessTimeConfig(authenticatedUser.factoryId);
     const windows = buildShiftWindows({
       startDate: date,
       endDate: date,
@@ -190,6 +191,7 @@ export async function GET(request: NextRequest) {
     const { data: entries, error: fetchError } = await supabaseAdmin
       .from('downtime_entries')
       .select('*')
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('machine_id', machineId)
       .lt('start_time', windowEnd)
       .or(`end_time.is.null,end_time.gt.${windowStart}`)

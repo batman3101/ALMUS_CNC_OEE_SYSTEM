@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { validateSettingValue } from '@/lib/settingsRegistry';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 /**
  * Service Role을 사용하여 시스템 설정 업데이트 (RLS 우회)
@@ -88,16 +90,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── 인가: 호출자가 실제로 관리자인지 확인한다 ──────────────────────────────
-    const authHeader = request.headers.get('authorization');
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { success: false, error: '인증이 필요합니다.' },
-        { status: 401 }
-      );
-    }
+    // ── 인가: 호출자가 실제로 관리자인지, 그리고 **어느 공장**인지 확인한다 ─────
+    //
+    // 예전에는 여기서 토큰을 직접 뜯어 user_profiles.role 을 봤다. 그 검사는 역할만 알고
+    // 공장을 모른다. 설정은 공장마다 다른 값이므로, "관리자다"만으로는 어느 행을 고쳐야
+    // 할지 정할 수 없다 — 그리고 정하지 못한 채 쓰면 아무 공장 행이나 고쳐진다.
+    //
+    // `requireFactoryUser` 가 세션·역할·공장을 한 번에 확정한다. 그 판정은 쿠키가 아니라
+    // 활성 membership 이 내리므로, 쿠키를 위조해도 자기 소속 밖으로는 못 나간다.
+    const authenticatedUser = await requireFactoryUser(request, ['admin']);
 
     // Service Role Key 확인
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -126,27 +127,6 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 토큰이 유효한 사용자인지, 그리고 그 사용자가 관리자인지 확인한다.
-    const { data: authData, error: authError } = await serviceClient.auth.getUser(accessToken);
-    if (authError || !authData?.user) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 세션입니다.' },
-        { status: 401 }
-      );
-    }
-
-    const { data: profile, error: profileError } = await serviceClient
-      .from('user_profiles')
-      .select('role, is_active')
-      .eq('user_id', authData.user.id)
-      .single();
-
-    if (profileError || profile?.role !== 'admin' || profile.is_active !== true) {
-      return NextResponse.json(
-        { success: false, error: '시스템 설정은 관리자만 변경할 수 있습니다.' },
-        { status: 403 }
-      );
-    }
     // ──────────────────────────────────────────────────────────────────────────
 
     // 계약 검사는 배치·단건 **양쪽 모두** 거친다. 한쪽만 막으면 다른 쪽이 레거시 키를 계속
@@ -170,7 +150,8 @@ export async function POST(request: NextRequest) {
 
       // plpgsql 함수 하나 = 한 트랜잭션. 중간에 실패하면 앞선 UPDATE 도 함께 되돌아가고,
       // 감사 로그도 같은 트랜잭션이라 이력이 어긋나지 않는다.
-      const { data, error } = await serviceClient.rpc('update_system_settings_batch', {
+      const { data, error } = await serviceClient.rpc('update_system_settings_batch_scoped', {
+        p_factory_id: authenticatedUser.factoryId,
         p_updates: updates.map(u => ({
           category: u.category,
           setting_key: u.setting_key,
@@ -178,6 +159,7 @@ export async function POST(request: NextRequest) {
           setting_value: String(u.setting_value),
         })),
         p_reason: reason,
+        p_changed_by: authenticatedUser.userId,
       });
 
       const result = data as { ok?: boolean; reason?: string; updated?: number } | null;
@@ -202,11 +184,13 @@ export async function POST(request: NextRequest) {
 
     // RPC 함수 호출
     const { data, error } = await serviceClient
-      .rpc('update_system_setting', {
+      .rpc('update_system_setting_scoped', {
+        p_factory_id: authenticatedUser.factoryId,
         p_category: category,
         p_key: setting_key,
         p_value: setting_value,
-        p_reason: reason
+        p_reason: reason,
+        p_changed_by: authenticatedUser.userId
       });
 
     if (error) {
@@ -221,6 +205,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data });
 
   } catch (error) {
+    // 인가 실패(401/403)를 여기서 변환하지 않으면 전부 500 이 된다 — 호출자는 "서버가
+    // 고장났다"와 "권한이 없다"를 구분하지 못한다.
+    const authResponse = apiAuthErrorResponse(error);
+    if (authResponse) return authResponse;
+
     console.error('❌ API 라우트에서 예외 발생:', error);
     return NextResponse.json(
       { 

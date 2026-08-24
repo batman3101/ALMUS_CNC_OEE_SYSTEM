@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { getBreakTimeMinutes } from '@/lib/plannedRuntime';
 import { getShiftReportingWindow, loadDowntimeSourceRows } from '@/lib/shiftDowntime';
 import { isShiftCloseAllowed } from '@/utils/shiftReportingWindow';
@@ -18,7 +19,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const body = await request.json() as {
       machine_id?: unknown; date?: unknown; shift?: unknown; final_qty?: unknown;
       below_progress_reason?: unknown;
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
       const { data: last } = await supabaseAdmin
         .from('production_progress_reports')
         .select('shift_output_qty')
+      .eq('factory_id', user.factoryId)
         .eq('machine_id', machineId).eq('date', date).eq('shift', shift)
         .order('reported_at', { ascending: false }).limit(1).maybeSingle();
       outputQty = last?.shift_output_qty ?? null;
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
     if (outputQty === null) return NextResponse.json({ error: 'no quantity to close (진척·final_qty 없음)' }, { status: 400 });
 
     // 비가동 = 확정 OEE 와 동일 계약. tact = 뷰.
-    const reporting = await getShiftReportingWindow(date, shift);
+    const reporting = await getShiftReportingWindow(date, shift, user.factoryId);
     if (!reporting) return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
     const { window, bufferMinutes } = reporting;
     // 마감은 **진척 창이 완전히 닫힌 뒤에만**(늦은 마감은 무기한 허용, 이른 마감은 금지).
@@ -93,14 +95,19 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = await loadDowntimeSourceRows(machineId, windowStartIso, windowEndIso);
-    const breakMinutes = await getBreakTimeMinutes();
+    const breakMinutes = await getBreakTimeMinutes(user.factoryId);
     const downtimeMinutes = calculateVerifiedDowntimeMinutesForWindow(rows, window, breakMinutes, Date.now());
     const operatingMinutes = Math.round((window.end - window.start) / 60_000);
 
     // tact 없음 = 공정 기준 미확인 → null. 임의 기본값(과거 120초)으로 성능을 날조해
     // 확정 저장하면 안 된다(NULL≠0 원칙, daily 라우트의 processStandardKnown 과 동일 정책).
     const { data: tactRow } = await supabaseAdmin
-      .from('machines_with_production_info').select('current_tact_time').eq('id', machineId).maybeSingle();
+      .from('machines_with_production_info')
+        .select('current_tact_time')
+        // tact 는 OEE 의 분자다. 다른 공장 값으로 계산된 성능이 스냅샷으로 박히면 되돌릴 수 없다.
+        .eq('factory_id', user.factoryId)
+        .eq('id', machineId)
+        .maybeSingle();
     const tactSeconds = tactRow?.current_tact_time && tactRow.current_tact_time > 0 ? tactRow.current_tact_time : null;
 
     // quality/oee 는 여기서 만들지 않는다 — 기존 확정 불량(F2 보존)을 읽어 재파생하는 일은

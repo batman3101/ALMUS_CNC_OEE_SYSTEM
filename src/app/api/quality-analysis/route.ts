@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { unwrapJoin } from '@/types';
 import { calculateWeightedQualityPercent, parseDetailPagination } from './qualityRules';
 
@@ -93,7 +94,7 @@ type QualityTrend = 'improving' | 'stable' | 'declining';
 // GET /api/quality-analysis - 품질 분석 데이터 조회
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
@@ -122,7 +123,9 @@ export async function GET(request: NextRequest) {
       ? shift.split(',').map(s => s.trim()).filter(Boolean)
       : [];
 
-    const { data, error: recordsError } = await supabaseAdmin.rpc('analytics_quality', {
+    // 설비 미지정(null)은 원본 함수에서 "전 공장"을 뜻한다 — 래퍼로 공장을 좁힌다.
+    const { data, error: recordsError } = await supabaseAdmin.rpc('analytics_quality_scoped', {
+      p_factory_id: factoryUser.factoryId,
       p_start_date: fromDateStr,
       p_end_date: toDateStr,
       p_machine_ids: machineIds.length > 0 ? machineIds : null,
@@ -240,6 +243,7 @@ export async function GET(request: NextRequest) {
           defect_qty,
           machines!inner(name)
         `, { count: 'exact' })
+      .eq('factory_id', factoryUser.factoryId)
         .gte('date', fromDateStr)
         .lte('date', toDateStr)
         .not('output_qty', 'is', null)

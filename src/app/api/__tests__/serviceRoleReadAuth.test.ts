@@ -27,6 +27,19 @@ jest.mock('@/lib/apiAuth', () => ({
   },
 }));
 
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ * 별도 mock 을 두면 두 벌이 되고, 한쪽만 고쳐지는 순간 검사가 헐거워진다.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireUser(...args),
+  assertFactoryMachineAccess: (...args: unknown[]) => mockAssertMachineAccess(...args),
+}));
+
+
 const mockQuery = {
   select: jest.fn(),
   eq: jest.fn(),

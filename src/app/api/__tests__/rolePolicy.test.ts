@@ -79,6 +79,10 @@ const POLICY: Record<string, Record<string, string>> = {
   'system-settings': { GET: AEO, PUT: A, POST: A, DELETE: A },
   'system-settings/[category]': { GET: AEO, PUT: A, DELETE: A },
   'system-settings/service-role': { GET: AEO },
+  // 2026-08-24: 인라인 관리자 검증에서 표준 계약으로 옮겨졌다. 예전 검사는 역할만 알고
+  // **공장을 몰랐다** — 설정은 공장마다 다른 행이라, 어느 행을 고칠지 정하지 못한 채
+  // 쓰게 된다. 그래서 EXEMPT 에서 여기로 왔다.
+  'system-settings/update': { POST: A },
   'upload/image': { POST: A, GET: NONE }, // GET 은 405 스텁(작업 없음) → 인증 불필요
   'user-profiles': { GET: A },
 };
@@ -88,7 +92,6 @@ const EXEMPT: Record<string, string> = {
   'auth/login': '사전 인증 엔드포인트 (세션이 아직 없다)',
   'auth/logout': '사전/사후 인증 엔드포인트',
   'auth/profile': '자기 프로필 조회/수정 — 토큰 자체 검증',
-  'system-settings/update': '인라인 관리자 검증 (Service Role 사용 전 role=admin + is_active 확인)',
 };
 
 const API_ROOT = path.join(__dirname, '..');

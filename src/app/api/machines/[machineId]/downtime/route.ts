@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { assertFactoryMachineAccess, requireFactoryUser } from '@/lib/factoryAuth';
+import { assertMachineInFactory, machineUpdateErrorResponse } from '@/lib/machineUpdate';
 import { getBusinessTimeConfig } from '@/lib/shiftConfig';
 import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 import { getBusinessDayWindow, getShiftWindow, loadDowntimeDetailRows } from '@/lib/shiftDowntime';
@@ -36,7 +38,7 @@ const isValidBusinessDate = (value: string): boolean => {
 /** POST /api/machines/[machineId]/downtime — andon 한 동작(start+reason / resume). */
 export async function POST(request: NextRequest, ctx: { params: Promise<{ machineId: string }> }) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { machineId } = await ctx.params;
     const body = await request.json() as { action?: unknown; reason?: unknown };
     const action = body.action === 'start' || body.action === 'resume' ? body.action : null;
@@ -46,10 +48,14 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ machin
     if (action === 'start' && !DOWNTIME_REASONS.has(reason))
       return NextResponse.json({ error: 'reason must be a valid non-normal machine_status' }, { status: 400 });
 
-    assertMachineAccess(user, machineId);
+    assertFactoryMachineAccess(user, machineId);
+    // andon RPC 는 p_machine_id 만 받는다. 공장을 확인하지 않으면 설비 id 하나로 다른
+    // 공장의 비가동을 켜고 끌 수 있다. 인자를 늘리는 대신 앞에서 끊는다 — factory_id 는
+    // 불변이라 이 확인과 RPC 사이가 벌어져도 결론이 바뀌지 않는다.
+    await assertMachineInFactory(machineId, user.factoryId);
 
     // downtime_entries.date = 업무일자(시작 시각의 shift 귀속). RPC 로 넘긴다.
-    const cfg = await getBusinessTimeConfig();
+    const cfg = await getBusinessTimeConfig(user.factoryId);
     const businessDate = getBusinessDateAt(new Date(), cfg.timezone, cfg.shiftAStart);
 
     const { data, error } = await supabaseAdmin.rpc('toggle_machine_downtime', {
@@ -66,6 +72,10 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ machin
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;
+    // 다른 공장 설비 id 는 MachineNotFoundError 로 온다. 여기서 변환하지 않으면 404 가
+    // 되어야 할 응답이 500 으로 나가고, 로그에는 처리되지 않은 예외로 쌓인다.
+    const mapped = machineUpdateErrorResponse(error);
+    if (mapped) return mapped;
     throw error;
   }
 }
@@ -87,7 +97,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ machin
  */
 export async function GET(request: NextRequest, ctx: { params: Promise<{ machineId: string }> }) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { machineId } = await ctx.params;
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') ?? '';
@@ -100,14 +110,18 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
     }
 
     // 읽기에도 담당 설비 검사를 건다 — 같은 파일의 POST 및 production-progress GET 과 동일.
-    assertMachineAccess(user, machineId);
+    assertFactoryMachineAccess(user, machineId);
+    // andon RPC 는 p_machine_id 만 받는다. 공장을 확인하지 않으면 설비 id 하나로 다른
+    // 공장의 비가동을 켜고 끌 수 있다. 인자를 늘리는 대신 앞에서 끊는다 — factory_id 는
+    // 불변이라 이 확인과 RPC 사이가 벌어져도 결론이 바뀌지 않는다.
+    await assertMachineInFactory(machineId, user.factoryId);
 
     // 업무일 창(A교대 시작 ~ 다음날 A교대 시작 직전)과 그 안의 두 교대 창. 셋 다 같은
     // 설정(timezone·shiftAStart/BStart)에서 나오므로 경계가 어긋나지 않는다.
     const [businessWindow, dayWindow, nightWindow] = await Promise.all([
-      getBusinessDayWindow(date),
-      getShiftWindow(date, 'A'),
-      getShiftWindow(date, 'B'),
+      getBusinessDayWindow(date, user.factoryId),
+      getShiftWindow(date, 'A', user.factoryId),
+      getShiftWindow(date, 'B', user.factoryId),
     ]);
     if (!businessWindow || !dayWindow || !nightWindow) {
       return NextResponse.json({ error: 'Shift time configuration is invalid' }, { status: 500 });
@@ -118,7 +132,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
 
     // 업무일 창 전체에 대해 한 번만 로드하고, 총합·소계·목록 모두 이걸 재사용한다.
     const rows = await loadDowntimeDetailRows(machineId, windowStartIso, windowEndIso);
-    const breakMinutes = await getBreakTimeMinutes();
+    const breakMinutes = await getBreakTimeMinutes(user.factoryId);
     const nowMs = Date.now();
     const sourceRows = rows.map(({ start_time, end_time, is_planned }) => ({ start_time, end_time, is_planned }));
 
@@ -166,6 +180,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;
+    // 다른 공장 설비 id 는 MachineNotFoundError 로 온다. 여기서 변환하지 않으면 404 가
+    // 되어야 할 응답이 500 으로 나가고, 로그에는 처리되지 않은 예외로 쌓인다.
+    const mapped = machineUpdateErrorResponse(error);
+    if (mapped) return mapped;
     throw error;
   }
 }
@@ -178,7 +196,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ machine
  */
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ machineId: string }> }) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { machineId } = await ctx.params;
     const body = await request.json() as { reason?: unknown };
     const reason = typeof body.reason === 'string' ? body.reason : '';
@@ -192,7 +210,11 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ machi
       );
     }
 
-    assertMachineAccess(user, machineId);
+    assertFactoryMachineAccess(user, machineId);
+    // andon RPC 는 p_machine_id 만 받는다. 공장을 확인하지 않으면 설비 id 하나로 다른
+    // 공장의 비가동을 켜고 끌 수 있다. 인자를 늘리는 대신 앞에서 끊는다 — factory_id 는
+    // 불변이라 이 확인과 RPC 사이가 벌어져도 결론이 바뀌지 않는다.
+    await assertMachineInFactory(machineId, user.factoryId);
 
     const { data, error } = await supabaseAdmin.rpc('correct_open_downtime_reason', {
       p_machine_id: machineId,
@@ -218,6 +240,10 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ machi
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;
+    // 다른 공장 설비 id 는 MachineNotFoundError 로 온다. 여기서 변환하지 않으면 404 가
+    // 되어야 할 응답이 500 으로 나가고, 로그에는 처리되지 않은 예외로 쌓인다.
+    const mapped = machineUpdateErrorResponse(error);
+    if (mapped) return mapped;
     throw error;
   }
 }

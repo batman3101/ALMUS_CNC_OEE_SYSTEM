@@ -35,10 +35,19 @@ export { DEFAULT_BREAK_TIME_MINUTES } from '@/lib/shiftDefaults';
  *
  * 그래서 (a)만 기본값을 쓰고, (b)와 (c)는 던진다.
  */
-export async function getBreakTimeMinutes(): Promise<number> {
+/**
+ * 공장을 **필수 인자**로 받는다.
+ *
+ * 선택 인자로 두면 빠뜨려도 조용히 통과하고, 그것이 정확히 없애려는 실패다. 두 공장이 같은
+ * 키를 가지면 아래 `maybeSingle()` 은 행이 2개라 **에러**를 낸다 — 그러면 이 함수가 던지고
+ * 계획가동시간 계산이 통째로 멈춘다. 시끄럽게 깨지는 쪽이라 그나마 낫지만, 깨지는 것이
+ * 정상은 아니다.
+ */
+export async function getBreakTimeMinutes(factoryId: string): Promise<number> {
   const { data, error } = await supabaseAdmin
     .from('system_settings')
     .select('setting_value')
+    .eq('factory_id', factoryId)
     .eq('category', 'shift')
     .eq('setting_key', 'break_time_minutes')
     .eq('is_active', true)

@@ -16,8 +16,13 @@ describe('machine OEE route operational rules', () => {
   });
 
   it('protects service-role reads and does not fabricate an active cycle', () => {
-    expect(source).toMatch(/requireUser\(request, \['admin', 'engineer', 'operator'\]\)/);
-    expect(source).toMatch(/assertMachineAccess/);
+    // 공장 인지 계약으로 전환됐다(2026-08-24). 이름만 바뀐 것이 아니라 **공장까지** 확정
+    // 하므로, 옛 이름을 그대로 두면 이 검사가 이제 존재하지 않는 것을 요구하게 된다.
+    expect(source).toMatch(/requireFactoryUser\(request, \['admin', 'engineer', 'operator'\]\)/);
+    expect(source).toMatch(/assertFactoryMachineAccess/);
+    // 설비를 확인했다고 자식(production_records)이 안전한 것은 아니다 — 공장 조건이
+    // 자식 조회에도 걸려 있어야 한다.
+    expect(source).toMatch(/\.eq\('factory_id', authenticatedUser\.factoryId\)/);
     expect(source).toMatch(/current_cycle:\s*null/);
   });
 

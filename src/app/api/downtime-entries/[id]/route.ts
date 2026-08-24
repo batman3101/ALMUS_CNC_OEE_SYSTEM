@@ -4,9 +4,9 @@ import {
   ApiAuthError,
   apiAuthErrorResponse,
   assertMachineAccess,
-  requireUser,
   type AuthenticatedUser,
 } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 interface ExistingDowntimeEntry {
   id: string;
@@ -58,10 +58,18 @@ function rpcErrorResponse(error: { code?: string; message?: string }) {
   return null;
 }
 
-async function findEntry(id: string): Promise<ExistingDowntimeEntry | null> {
+/**
+ * 단건 조회는 `(factory_id, id)` 로 한다.
+ *
+ * `id` 만으로 찾으면 다른 공장의 비가동 기록을 id 만 알아도 읽거나 고칠 수 있다(IDOR).
+ * 공장을 인자로 받는 이유는 이 함수가 요청 컨텍스트를 모르기 때문이다 — 호출자가
+ * `requireFactoryUser` 로 확정한 값을 넘긴다.
+ */
+async function findEntry(id: string, factoryId: string): Promise<ExistingDowntimeEntry | null> {
   const { data, error } = await supabaseAdmin
     .from('downtime_entries')
     .select('id, machine_id, date, shift, start_time, end_time, reason, description, operator_id, version')
+    .eq('factory_id', factoryId)
     .eq('id', id)
     .single();
   if (error || !data) return null;
@@ -74,7 +82,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { id } = await params;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Downtime entry ID is required' }, { status: 400 });
@@ -88,7 +96,7 @@ export async function DELETE(
       );
     }
 
-    const existingEntry = await findEntry(id);
+    const existingEntry = await findEntry(id, authenticatedUser.factoryId);
     if (!existingEntry) {
       return NextResponse.json({ success: false, error: 'Downtime entry not found' }, { status: 404 });
     }
@@ -123,7 +131,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { id } = await params;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Downtime entry ID is required' }, { status: 400 });
@@ -143,7 +151,7 @@ export async function PATCH(
       );
     }
 
-    const existingEntry = await findEntry(id);
+    const existingEntry = await findEntry(id, authenticatedUser.factoryId);
     if (!existingEntry) {
       return NextResponse.json({ success: false, error: 'Downtime entry not found' }, { status: 404 });
     }

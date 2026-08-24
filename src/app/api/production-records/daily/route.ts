@@ -20,8 +20,8 @@ import { computeShiftSnapshot } from '@/lib/shiftMetrics';
 import {
   apiAuthErrorResponse,
   assertMachineAccess,
-  requireUser,
 } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // 교대별 입력 데이터 (클라이언트 폼에서 전송)
 interface ShiftInputData {
@@ -115,7 +115,7 @@ async function loadDowntimeMinutes(
 // POST /api/production-records/daily - 일일 생산 데이터 저장
 export async function POST(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     console.log('POST /api/production-records/daily called');
 
     const body: DailyProductionRequest = await request.json();
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const businessTime = await getBusinessTimeConfig();
+    const businessTime = await getBusinessTimeConfig(authenticatedUser.factoryId);
     const [dayWindow] = buildShiftWindows({
       startDate: date,
       endDate: date,
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
     }
     // 비가동 원본은 클라이언트 합계가 아니라 서버 DB에서 직접 읽는다. 조회 실패 시
     // 생산수량 저장은 계속하되 OEE 런타임 계열을 NULL로 남겨 잘못된 100%를 만들지 않는다.
-    const breakMinutes = await getBreakTimeMinutes();
+    const breakMinutes = await getBreakTimeMinutes(authenticatedUser.factoryId);
     const downtimeByShift = await loadDowntimeMinutes(machine_id, {
       A: dayWindow,
       B: nightWindow,
@@ -186,6 +186,7 @@ export async function POST(request: NextRequest) {
     const { data: machine, error: machineError } = await supabaseAdmin
       .from('machines')
       .select('id, name, is_active')
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('id', machine_id)
       .single();
 
@@ -211,11 +212,14 @@ export async function POST(request: NextRequest) {
       supabaseAdmin
         .from('machines_with_production_info')
         .select('current_tact_time, current_cavity_count')
+        // tact 는 OEE 의 분자다. 다른 공장 값으로 계산된 성능이 스냅샷으로 박히면 되돌릴 수 없다.
+        .eq('factory_id', authenticatedUser.factoryId)
         .eq('id', machine_id)
         .maybeSingle(),
       supabaseAdmin
         .from('production_records')
         .select('shift, output_qty, ideal_runtime, tact_time_seconds, cavity_count')
+      .eq('factory_id', authenticatedUser.factoryId)
         .eq('machine_id', machine_id)
         .eq('date', date)
         .in('shift', ['A', 'B'])

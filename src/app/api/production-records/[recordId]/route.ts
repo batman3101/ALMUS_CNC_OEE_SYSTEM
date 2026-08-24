@@ -10,8 +10,8 @@ import { synchronizeDowntime } from '../oeeRules';
 import {
   apiAuthErrorResponse,
   assertMachineAccess,
-  requireUser,
 } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { PRODUCTION_RECORD_DELETE_ROLES } from '@/lib/pageAccess';
 
 // cavity_count 는 참고용(사이클 수 환산·JIG 구성 기록)으로 스냅샷에만 보존하고
@@ -120,11 +120,15 @@ const CONCURRENCY_GUARD_COLUMNS = [
 async function updateRecordIfUnchanged(
   recordId: string,
   existing: ExistingRecord,
-  updateData: Record<string, number | null>
+  updateData: Record<string, number | null>,
+  // 이 헬퍼는 요청 컨텍스트를 모른다. 호출자가 requireFactoryUser 로 확정한 값을 넘긴다.
+  factoryId: string
 ) {
   let query = supabaseAdmin
     .from('production_records')
     .update(updateData)
+    // 갱신 대상도 공장으로 제한한다 — record_id 만으로 찾으면 다른 공장 기록을 고칠 수 있다.
+    .eq('factory_id', factoryId)
     .eq('record_id', recordId);
 
   for (const column of CONCURRENCY_GUARD_COLUMNS) {
@@ -152,10 +156,13 @@ const concurrentModificationResponse = () =>
 // 설비의 현재 공정 기준 Tact Time 조회 (서버 기준값).
 // current_tact_time 은 개당(1 piece) 가공시간이다. cavity 는 계산에 쓰지 않으므로
 // 조회하지 않는다.
-async function getMachineTactInfo(machineId: string) {
+// 공장은 인자로 받는다 — 이 헬퍼는 요청 컨텍스트를 모른다. 호출자가 requireFactoryUser
+// 로 확정한 값을 넘긴다. 남의 공장 tact 로 계산된 성능은 되돌릴 수 없는 스냅샷이 된다.
+async function getMachineTactInfo(machineId: string, factoryId: string) {
   const { data } = await supabaseAdmin
     .from('machines_with_production_info')
     .select('current_tact_time')
+    .eq('factory_id', factoryId)
     .eq('id', machineId)
     .maybeSingle();
 
@@ -199,11 +206,14 @@ function resolveSavedMinutesPerUnit(existing: ExistingRecord): number | null {
   return null;
 }
 
-async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number | null> {
+// 공장은 호출자에서 내려온다. 이 체인(resolveMinutesPerUnit -> getMachineTactInfo)은
+// 전부 요청 컨텍스트 밖이라, 중간에서 "알아서" 공장을 구할 방법이 없다 — 있다면 그것은
+// 요청과 무관한 다른 출처이고, 곧 잘못된 공장이다.
+async function resolveMinutesPerUnit(existing: ExistingRecord, factoryId: string): Promise<number | null> {
   const savedMinutesPerUnit = resolveSavedMinutesPerUnit(existing);
   if (savedMinutesPerUnit !== null) return savedMinutesPerUnit;
 
-  const { tactSeconds } = await getMachineTactInfo(existing.machine_id);
+  const { tactSeconds } = await getMachineTactInfo(existing.machine_id, factoryId);
   if (tactSeconds === null) return null;
   return tactSeconds / 60;
 }
@@ -215,7 +225,10 @@ async function resolveMinutesPerUnit(existing: ExistingRecord): Promise<number |
  */
 async function buildUpdateData(
   body: Record<string, unknown>,
-  existing: ExistingRecord
+  existing: ExistingRecord,
+  // tact 조회까지 내려가는 체인이라 공장이 여기서부터 실려야 한다. 중간에서 스스로 공장을
+  // 구하면 그것은 요청과 무관한 출처이고, 곧 잘못된 공장이다.
+  factoryId: string
 ): Promise<{ updateData?: Record<string, number | null>; error?: string }> {
   const baseFields = ['output_qty', 'defect_qty', 'actual_runtime', 'planned_runtime'] as const;
   const hasBaseField = baseFields.some(field => body[field] !== undefined);
@@ -243,10 +256,10 @@ async function buildUpdateData(
     if (body.planned_runtime === null) {
       plannedRuntime = null;
     } else if (body.planned_runtime !== undefined) {
-      const breakMinutes = await getBreakTimeMinutes();
+      const breakMinutes = await getBreakTimeMinutes(factoryId);
       plannedRuntime = resolvePlannedRuntime(Number(body.planned_runtime), breakMinutes);
     } else if (plannedRuntime === null) {
-      const breakMinutes = await getBreakTimeMinutes();
+      const breakMinutes = await getBreakTimeMinutes(factoryId);
       plannedRuntime = resolvePlannedRuntime(DEFAULT_OPERATING_MINUTES, breakMinutes);
     }
   }
@@ -269,7 +282,7 @@ async function buildUpdateData(
   // 현재 공정이 아니라 "이 기록이 만들어질 때의 조건"으로 계산한다 (역사 덮어쓰기 방지)
   // 수량만 수정하는 경우 저장 당시 조건을 증명할 수 없으면 현재 공정/기본값을 끌어오지 않는다.
   const minutesPerUnit = runtimeWasEdited
-    ? await resolveMinutesPerUnit(existing)
+    ? await resolveMinutesPerUnit(existing, factoryId)
     : resolveSavedMinutesPerUnit(existing);
 
   const outputQtyValue = outputQty as number;
@@ -328,7 +341,7 @@ export async function GET(
 ) {
   try {
     const { recordId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/production-records/[recordId] called with id:', recordId);
 
     const { data: record, error } = await supabaseAdmin
@@ -355,6 +368,7 @@ export async function GET(
           equipment_type
         )
       `)
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('record_id', recordId)
       .single();
 
@@ -403,7 +417,7 @@ export async function PUT(
 ) {
   try {
     const { recordId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     console.log('PUT /api/production-records/[recordId] called with id:', recordId);
 
     const body = await request.json();
@@ -413,6 +427,7 @@ export async function PUT(
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
       .select(EXISTING_RECORD_COLUMNS)
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('record_id', recordId)
       .single();
 
@@ -426,7 +441,7 @@ export async function PUT(
     assertMachineAccess(authenticatedUser, existingRecord.machine_id);
 
     // 업데이트할 데이터 구성 (파생 지표는 서버에서 재계산)
-    const { updateData, error: buildError } = await buildUpdateData(body, existingRecord);
+    const { updateData, error: buildError } = await buildUpdateData(body, existingRecord, authenticatedUser.factoryId);
 
     if (buildError || !updateData) {
       return NextResponse.json(
@@ -436,11 +451,7 @@ export async function PUT(
     }
 
     // 읽은 스냅샷 그대로일 때만 쓴다 — 마감·불량확정과 경쟁해 확정값을 덮어쓰지 않게.
-    const { data: updatedRecord, error: updateError } = await updateRecordIfUnchanged(
-      recordId,
-      existingRecord,
-      updateData
-    );
+    const { data: updatedRecord, error: updateError } = await updateRecordIfUnchanged(recordId, existingRecord, updateData, authenticatedUser.factoryId);
 
     if (updateError) {
       console.error('Update error:', updateError);
@@ -485,8 +496,41 @@ export async function DELETE(
   try {
     const { recordId } = await params;
     // 역할 목록을 여기 다시 적지 않는다 — 목록 화면의 삭제 버튼과 **같은 규칙**을 읽는다.
-    await requireUser(request, [...PRODUCTION_RECORD_DELETE_ROLES]);
+    const factoryUser = await requireFactoryUser(request, [...PRODUCTION_RECORD_DELETE_ROLES]);
     console.log('DELETE /api/production-records/[recordId] called with id:', recordId);
+
+    // `delete_production_record` 는 record_id 만 받는다. 공장을 확인하지 않으면 남의 공장
+    // record_id 를 아는 것만으로 그 기록을 지울 수 있다.
+    //
+    // RPC 인자를 늘리지 않는 이유는 CLAUDE.md 가 적어 둔 그대로다 — 인자가 다르면
+    // `create or replace` 가 오버로드를 만들고, 옛 함수를 DROP 하는 순간 마이그레이션과
+    // 배포 사이에 "함수 없음" 창이 생긴다.
+    //
+    // 앞선 조회로 대신해도 되는 이유: 검사하는 값(`factory_id`)이 불변이고, 검사와 RPC
+    // 사이에 그 행이 사라지면 RPC 가 not-found 를 돌려준다. 어느 쪽으로 어긋나도 잘못된
+    // 삭제로는 이어지지 않는다.
+    const { data: owned, error: ownedError } = await supabaseAdmin
+      .from('production_records')
+      .select('record_id')
+      .eq('factory_id', factoryUser.factoryId)
+      .eq('record_id', recordId)
+      .maybeSingle();
+
+    if (ownedError) {
+      console.error('생산실적 소유 공장 확인 실패:', ownedError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to delete production record' },
+        { status: 500 }
+      );
+    }
+
+    // 남의 공장 기록은 이 공장에서 **없는 것**이다. 403 은 그 id 의 존재를 알려 준다.
+    if (!owned) {
+      return NextResponse.json(
+        { success: false, error: 'Production record not found' },
+        { status: 404 }
+      );
+    }
 
     // 생산실적만 삭제하고 해당 교대 상태를 MISSING으로 기록한다.
     // 비가동은 생산실적 유무와 무관한 현장 사건이므로 삭제하거나 롤백하지 않는다.
@@ -539,7 +583,7 @@ export async function PATCH(
 ) {
   try {
     const { recordId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     console.log('PATCH /api/production-records/[recordId] called with id:', recordId);
 
     const body = await request.json();
@@ -549,6 +593,7 @@ export async function PATCH(
     const { data: existingRecord, error: checkError } = await supabaseAdmin
       .from('production_records')
       .select(EXISTING_RECORD_COLUMNS)
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('record_id', recordId)
       .single();
 
@@ -562,7 +607,7 @@ export async function PATCH(
     assertMachineAccess(authenticatedUser, existingRecord.machine_id);
 
     // 업데이트할 데이터 구성 (파생 지표는 서버에서 재계산)
-    const { updateData, error: buildError } = await buildUpdateData(body, existingRecord);
+    const { updateData, error: buildError } = await buildUpdateData(body, existingRecord, authenticatedUser.factoryId);
 
     if (buildError || !updateData) {
       return NextResponse.json(
@@ -572,11 +617,7 @@ export async function PATCH(
     }
 
     // 읽은 스냅샷 그대로일 때만 쓴다 (PUT 과 동일 규율).
-    const { data: updatedRecord, error: updateError } = await updateRecordIfUnchanged(
-      recordId,
-      existingRecord,
-      updateData
-    );
+    const { data: updatedRecord, error: updateError } = await updateRecordIfUnchanged(recordId, existingRecord, updateData, authenticatedUser.factoryId);
 
     if (updateError) {
       console.error('PATCH update error:', updateError);

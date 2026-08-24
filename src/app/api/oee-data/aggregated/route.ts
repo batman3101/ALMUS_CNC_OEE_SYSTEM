@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { calculateWeightedOEE } from '@/utils/weightedOee';
 import {
   calculateChronologicalTrend,
@@ -94,7 +95,7 @@ const emptyBucket = (): PeriodBucket => ({
 // GET /api/oee-data/aggregated - 집계된 OEE 데이터 조회
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const requestedPeriod = searchParams.get('period') || 'daily';
@@ -140,7 +141,12 @@ export async function GET(request: NextRequest) {
       const effectiveEndDate = requestedEndDate ?? now.toISOString().split('T')[0];
 
       // 집계는 DB에서 수행한다.
-      const { data, error } = await supabaseAdmin.rpc('analytics_oee_daily', {
+      // `analytics_oee_daily` 는 p_machine_id 가 NULL 이면 **전체 설비**를 집계한다 —
+      // 추이 화면의 기본값이 바로 그 NULL 이라, 공장을 걸지 않으면 ALV 화면에 두 공장을
+      // 합친 숫자가 뜬다. 값이 비거나 오류가 나지 않고 그럴듯하게 커지기만 해서 눈에
+      // 띄지 않는다. 공장 인자를 받는 변형을 쓴다(20260824160000).
+      const { data, error } = await supabaseAdmin.rpc('analytics_oee_daily_scoped', {
+        p_factory_id: authenticatedUser.factoryId,
         p_start_date: effectiveStartDate,
         p_machine_id: machineId,
       });

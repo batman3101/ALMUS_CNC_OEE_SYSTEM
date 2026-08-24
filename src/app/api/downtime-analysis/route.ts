@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -32,7 +33,7 @@ const DOWNTIME_SOURCE_POLICY = 'manual_overrides_overlap' as const;
 // GET /api/downtime-analysis - 다운타임 분석 데이터 조회
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     console.info('📊 다운타임 분석 API 요청:', { machineId, startDate, endDate, analysisType, shift });
 
-    const businessConfig = await getBusinessTimeConfig();
+    const businessConfig = await getBusinessTimeConfig(factoryUser.factoryId);
 
     // 영업일은 A교대 시작부터 다음 영업일 A교대 시작 직전까지다.
     // 단일 날짜 B교대의 자정 이후 00:00~08:00을 포함하도록 달력 day 경계를 사용하지 않는다.
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest) {
         created_at,
         machines!inner(name, equipment_type, location)
       `)
+      .eq('factory_id', factoryUser.factoryId)
       .lt('start_time', toDate.toISOString())
       .or(`end_time.is.null,end_time.gt.${fromDate.toISOString()}`)
       .neq('state', 'NORMAL_OPERATION')
@@ -136,6 +138,7 @@ export async function GET(request: NextRequest) {
         created_at,
         machines!inner(name, equipment_type, location)
       `)
+      .eq('factory_id', factoryUser.factoryId)
       .lt('start_time', toDate.toISOString())
       .or(`end_time.is.null,end_time.gt.${fromDate.toISOString()}`)
       .order('start_time', { ascending: false });

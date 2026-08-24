@@ -96,6 +96,40 @@ export function pickMachineUpdates(body: Record<string, unknown>): MachineUpdate
  * 실행된다. RPC 는 advisory lock 을 잡은 뒤 읽으므로 판단과 쓰기가 같은 잠금 아래 있다.
  * (덤으로 DB 왕복이 2회에서 1회로 준다 — DB 가 싱가포르라 왕복 비용이 작지 않다)
  */
+/**
+ * 이 설비가 **이 공장의 설비인지** 확인한다. 아니면 `MachineNotFoundError`.
+ *
+ * ## 왜 404 이고 403 이 아닌가
+ *
+ * 403 은 "그건 있는데 너는 못 본다"는 뜻이라, 다른 공장에 어떤 설비 id 가 존재하는지
+ * 알려 준다. 남의 공장 설비는 이 공장 입장에서 **없는 것**이 맞다.
+ *
+ * ## 왜 RPC 밖의 사전 조회가 여기서는 괜찮은가
+ *
+ * CLAUDE.md 는 "판단과 쓰기는 같은 잠금 아래 있어야 한다"고 못박는다. 그 규칙이 겨냥한
+ * 것은 `is_active` 처럼 **조회와 쓰기 사이에 바뀔 수 있는 값**이다 — 그런 값을 잠금 밖에서
+ * 읽으면 검사를 통과한 쓰기가 이미 무효가 되어 있을 수 있다.
+ *
+ * `factory_id` 는 다르다. NOT NULL 이고(20260821140000), `ALLOWED_KEYS` 화이트리스트에
+ * 없어 어떤 요청으로도 갱신되지 않으며, 설비를 공장 사이로 옮기는 경로 자체가 없다.
+ * **변하지 않는 값에는 TOCTOU 가 없다.** 그래서 여기서는 사전 조회가 잠금 안의 검사와
+ * 같은 결론을 준다.
+ *
+ * 이 성질이 깨지는 날 — 설비 이관 기능이 생기는 날 — 이 검사는 RPC 안으로 들어가야 한다.
+ * 그때는 인자를 늘리는 대신 새 이름의 함수를 만들고 구버전을 남기는 3단계 배포를 쓴다.
+ */
+export async function assertMachineInFactory(machineId: string, factoryId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from('machines')
+    .select('id')
+    .eq('factory_id', factoryId)
+    .eq('id', machineId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new MachineNotFoundError('Machine not found');
+}
+
 export async function applyMachineUpdate(
   machineId: string,
   updates: MachineUpdates,

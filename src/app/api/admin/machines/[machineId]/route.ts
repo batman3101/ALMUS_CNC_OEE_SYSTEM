@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { ApiAuthError, requireUser } from '@/lib/apiAuth';
+import { ApiAuthError } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import {
   applyMachineUpdate,
+  assertMachineInFactory,
   machineUpdateErrorResponse,
   pickMachineUpdates
 } from '@/lib/machineUpdate';
@@ -27,7 +29,9 @@ export async function PUT(
 ) {
   try {
     const { machineId } = await params;
-    const { userId } = await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
+    // 남의 공장 설비는 이 공장에서 **없는 것**이다. RPC 를 부르기 전에 끊는다.
+    await assertMachineInFactory(machineId, authenticatedUser.factoryId);
 
     const body = await request.json();
 
@@ -48,7 +52,7 @@ export async function PUT(
       machineId,
       updates,
       typeof body.change_reason === 'string' ? body.change_reason : null,
-      userId
+      authenticatedUser.userId
     );
 
     return NextResponse.json({ success: true, machine: result.machine });
@@ -72,12 +76,15 @@ export async function DELETE(
 ) {
   try {
     const { machineId } = await params;
-    await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     // 생산·비가동·상태 이력 보존을 위해 물리 삭제하지 않는다.
     const { data: deleted, error } = await supabaseAdmin
       .from('machines')
       .update({ is_active: false, updated_at: new Date().toISOString() })
+      // 공장 조건이 UPDATE 의 WHERE 에 함께 들어가야 한다. 사전 조회로 대신하면 조회와
+      // 쓰기가 갈라지고, 그 틈이 곧 다른 공장 설비를 끄는 경로다.
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('id', machineId)
       .select('id')
       .maybeSingle();

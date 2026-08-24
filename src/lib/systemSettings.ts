@@ -157,29 +157,22 @@ export class SystemSettingsService {
         return { data: null, error: 'Failed to fetch with service role' };
       }
       
-      // 서버 사이드에서는 직접 Service Role 사용
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (!serviceRoleKey) {
-        return { data: null, error: 'Service role key not available' };
-      }
-      
-      const { createClient } = await import('@supabase/supabase-js');
-      const serviceClient = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        serviceRoleKey,
-        {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
-        }
-      );
-      
-      return await serviceClient
-        .from('system_settings')
-        .select('*')
-        .eq('is_active', true)
-        .order('category, setting_key');
+      // ── 서버에서는 이 모듈을 쓰지 않는다 ─────────────────────────────────────
+      //
+      // 여기서 Service Role 클라이언트를 만들면 RLS 를 우회하고, 그 쿼리에는 공장 조건이
+      // 없다. 즉 서버에서 이 경로에 들어오는 것 자체가 공장 경계를 넘는 것이다 — 우연이
+      // 아니라 구조다(서버에는 세션이 없으므로 위의 RLS 경로는 **항상** 0행을 주고, 항상
+      // 여기로 떨어진다).
+      //
+      // 서버 호출자는 `@/lib/factorySettings` 를 쓴다. 그 모듈은 공장을 **필수 인자**로
+      // 받으므로 빠뜨릴 수 없다.
+      //
+      // 조용히 우회하는 대신 시끄럽게 거부한다. 이 오류가 보이면 서버 코드가 브라우저용
+      // 모듈을 부른 것이고, 고칠 곳은 호출자다.
+      return {
+        data: null,
+        error: '서버에서는 systemSettingsService 로 설정을 읽을 수 없습니다. @/lib/factorySettings 를 쓰십시오.',
+      };
     } catch (error) {
       console.error('Error in getSettingsWithServiceRole:', error);
       return { data: null, error };
@@ -421,32 +414,16 @@ export class SystemSettingsService {
       return { success: true };
     }
 
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!serviceRoleKey || !supabaseUrl) {
-      return { success: false, error: 'Service Role이 구성되지 않았습니다.' };
-    }
-
-    const { createClient } = await import('@supabase/supabase-js');
-    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const { data, error } = await serviceClient.rpc('update_system_settings_batch', {
-      p_updates: wireUpdates,
-      p_reason: changeReason ?? null,
-    });
-
-    // 이 RPC 는 실패를 예외가 아니라 `{ok:false, reason}` 으로도 돌려준다. `error` 만 보면
-    // "성공했는데 아무것도 안 바뀜"을 성공으로 읽는다 — 호출자가 가장 알아채기 어려운 실패다.
-    const result = data as { ok?: boolean; reason?: string; updated?: number } | null;
-    if (error || !result?.ok) {
-      return {
-        success: false,
-        error: `설정 업데이트 실패: ${error?.message ?? result?.reason ?? 'unknown'}`,
-      };
-    }
-    return { success: true };
+    // 서버 경로는 `@/lib/factorySettings.writeFactorySettings` 가 담당한다. 여기서
+    // Service Role 로 `update_system_settings_batch`(공장 무지 버전)를 부르면 어느 공장
+    // 행이 바뀔지 보장이 없다 — plpgsql 의 `SELECT ... INTO` 는 여러 행이 와도 오류 없이
+    // 첫 행을 집는다. 조용히 틀리는 것보다 거부가 낫다.
+    void wireUpdates;
+    void changeReason;
+    return {
+      success: false,
+      error: '서버에서는 systemSettingsService 로 설정을 저장할 수 없습니다. @/lib/factorySettings 를 쓰십시오.',
+    };
   }
 
   /**
@@ -487,38 +464,12 @@ export class SystemSettingsService {
         }
       }
       
-      // 서버 사이드에서는 직접 Service Role 사용
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (!serviceRoleKey) {
-        return { success: false, error: 'Service Role Key를 사용할 수 없습니다' };
-      }
-      
-      const { createClient } = await import('@supabase/supabase-js');
-      const serviceClient = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        serviceRoleKey,
-        {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
-        }
-      );
-      
-      const { error: rpcError } = await serviceClient
-        .rpc('update_system_setting', {
-          p_category: update.category,
-          p_key: update.setting_key,
-          p_value: valueToSave,
-          p_reason: update.change_reason
-        });
-
-      if (rpcError) {
-        console.error('Service Role RPC 호출 실패:', rpcError);
-        return { success: false, error: rpcError.message };
-      }
-
-      return { success: true };
+      // 단건도 같다 — 서버 경로는 `@/lib/factorySettings` 를 쓴다.
+      void valueToSave;
+      return {
+        success: false,
+        error: '서버에서는 systemSettingsService 로 설정을 저장할 수 없습니다. @/lib/factorySettings 를 쓰십시오.',
+      };
     } catch (error) {
       console.error('Service Role 업데이트 중 오류:', error);
       return { success: false, error: `Service Role 처리 중 오류: ${error}` };

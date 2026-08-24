@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // GET /api/admin/machines - 모든 설비 목록 조회 (활성/비활성 모두)
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     // JOIN 쿼리를 사용한 단일 쿼리로 최적화 (N+1 쿼리 문제 해결)
     const { data: machines, error } = await supabaseAdmin
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
           tact_time_seconds
         )
       `)
+      .eq('factory_id', authenticatedUser.factoryId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
   try {
     // 이 라우트는 서비스 롤(RLS 우회)로 동작하고 middleware 는 /api 를 건너뛰므로,
     // 세션·역할 검사를 하지 않으면 누구나 설비를 생성할 수 있다.
-    await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const body = await request.json();
     const { name, location, equipment_type, production_model_id, current_process_id, is_active } = body;
@@ -71,6 +73,9 @@ export async function POST(request: NextRequest) {
     const { data: machine, error } = await supabaseAdmin
       .from('machines')
       .insert([{
+        // 공장은 요청이 아니라 세션에서 온다. body 에 factory_id 가 있어도 무시한다 —
+        // 요청이 전달한 공장을 믿는 순간 인가는 사라진다.
+        factory_id: authenticatedUser.factoryId,
         name,
         location,
         equipment_type,
@@ -79,6 +84,10 @@ export async function POST(request: NextRequest) {
         is_active: is_active !== undefined ? is_active : true,
         current_state: 'NORMAL_OPERATION'
       }])
+      // production_model_id / current_process_id 는 body 에서 온다. 다른 공장의 모델을
+      // 가리키면 복합 FK `(factory_id, production_model_id)` 가 DB 에서 거부한다
+      // (20260821110000). 여기서 다시 확인하지 않는 이유는, 검사와 쓰기 사이가 비어 있는
+      // 애플리케이션 검사보다 제약이 더 강하기 때문이다.
       .select()
       .single();
 

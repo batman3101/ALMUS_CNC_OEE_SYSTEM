@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getBreakTimeMinutes, resolvePlannedRuntime } from '@/lib/plannedRuntime';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { chunkIdsForInFilter } from '@/lib/idFilter';
 import {
   calculateOeeMetrics,
@@ -63,7 +64,7 @@ function calculateOEEMetrics(params: {
 // GET /api/production-records - 생산 기록 목록 조회
 export async function GET(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     // ✅ 파라미터 이름 통일: camelCase 사용
@@ -147,6 +148,7 @@ export async function GET(request: NextRequest) {
             location
           )
         `, { count: 'exact' })
+      .eq('factory_id', authenticatedUser.factoryId)
         .order('date', { ascending: false })
         // (machine_id, date, shift)가 유니크하므로 date만으로는 정렬이 불안정함 → record_id로 tiebreak
         .order('record_id', { ascending: false });
@@ -241,6 +243,7 @@ export async function GET(request: NextRequest) {
       const { data, error: shiftStateError } = await supabaseAdmin
         .from('production_shift_states')
         .select('shift, status, version')
+      .eq('factory_id', authenticatedUser.factoryId)
         .eq('machine_id', machineId)
         .eq('date', startDate)
         .in('shift', ['A', 'B']);
@@ -273,7 +276,7 @@ export async function GET(request: NextRequest) {
 // POST /api/production-records - 새 생산 기록 생성
 export async function POST(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const body = await request.json();
     const {
       machine_id,
@@ -307,6 +310,7 @@ export async function POST(request: NextRequest) {
     const { data: machine, error: machineError } = await supabaseAdmin
       .from('machines')
       .select('id, is_active')
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('id', machine_id)
       .single();
 
@@ -327,6 +331,9 @@ export async function POST(request: NextRequest) {
     const { data: productionInfo } = await supabaseAdmin
       .from('machines_with_production_info')
       .select('current_tact_time, current_cavity_count')
+      // tact 는 OEE 의 분자다(ideal_runtime = output_qty × tact / 60). 남의 공장 tact 로
+      // 계산된 성능은 틀렸다는 표시 없이 스냅샷으로 박힌다 — 나중에 고쳐도 그 행은 남는다.
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('id', machine_id)
       .maybeSingle();
 
@@ -345,7 +352,7 @@ export async function POST(request: NextRequest) {
 
     // OEE 계산 (계획 가동시간 = 가동시간 - 휴식시간, Cavity 반영, 0~1 클램프)
     // 요청의 planned_runtime 은 교대 가동시간(분)으로 해석하며, 미전송 시 12시간(720분)을 사용한다.
-    const breakMinutes = await getBreakTimeMinutes();
+    const breakMinutes = await getBreakTimeMinutes(authenticatedUser.factoryId);
     const metrics = calculateOEEMetrics({
       operatingMinutes: Number(planned_runtime),
       breakMinutes,
@@ -360,6 +367,7 @@ export async function POST(request: NextRequest) {
     const { data: newRecord, error: insertError } = await supabaseAdmin
       .from('production_records')
       .insert({
+        factory_id: authenticatedUser.factoryId,
         machine_id,
         date,
         shift,

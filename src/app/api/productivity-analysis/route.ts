@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
@@ -128,7 +129,7 @@ const compareNullableDesc = (left: number | null, right: number | null): number 
 // GET /api/productivity-analysis - 생산성 분석 데이터 조회
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
@@ -155,7 +156,11 @@ export async function GET(request: NextRequest) {
       ? shift.split(',').map(s => s.trim()).filter(Boolean)
       : [];
 
-    const { data, error: recordsError } = await supabaseAdmin.rpc('analytics_productivity', {
+    // p_machine_ids 에 null 을 넘기면 원본 함수는 "설비 조건 없음" = **전 공장**으로 읽는다.
+    // 화면에서 설비를 고르지 않았을 때가 기본값이라, 그 null 하나가 ALV 화면에 ALT 800대를
+    // 섞어 넣는다. 래퍼가 공장 설비 목록으로 좁혀 준다(20260824170000).
+    const { data, error: recordsError } = await supabaseAdmin.rpc('analytics_productivity_scoped', {
+      p_factory_id: factoryUser.factoryId,
       p_start_date: fromDateStr,
       p_end_date: toDateStr,
       p_machine_ids: machineIds.length > 0 ? machineIds : null,
@@ -362,6 +367,7 @@ export async function GET(request: NextRequest) {
           defect_qty,
           machines!inner(name)
         `, { count: 'exact' })
+      .eq('factory_id', factoryUser.factoryId)
         .gte('date', fromDateStr)
         .lte('date', toDateStr)
         .order('date', { ascending: false })

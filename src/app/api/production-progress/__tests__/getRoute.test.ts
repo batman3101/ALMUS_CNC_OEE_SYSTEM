@@ -19,6 +19,18 @@ jest.mock('@/lib/apiAuth', () => ({
   assertMachineAccess: (...a: unknown[]) => mockAssertMachineAccess(...a),
   apiAuthErrorResponse: () => null,
 }));
+
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...a: unknown[]) => mockRequireUser(...a),
+  assertFactoryMachineAccess: (...a: unknown[]) => mockAssertMachineAccess(...a),
+}));
+
 jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { from: (...a: unknown[]) => mockFrom(...a) },
 }));
@@ -36,6 +48,7 @@ jest.mock('@/lib/shiftDowntime', () => ({
 import { GET } from '../route';
 import { TOTAL_BREAK_MINUTES } from '@/utils/shiftBreaks';
 
+const FACTORY = '00000000-0000-4000-8000-00000000a17e';
 const MACHINE = '11111111-1111-4111-8111-111111111111';
 
 // 2026-07-17 A교대 시간창 (08:00~20:00 +07).
@@ -72,19 +85,22 @@ const mockTables = ({
   tact?: number | null;
 } = {}) => {
   mockFrom.mockImplementation((table: string) => {
+    // 필터 메서드는 자신을 돌려주고 종단만 결과를 준다. 예전 mock 은 `.eq` 를 정확히 세 번
+    // 받도록 중첩돼 있어서, 공장 조건이 하나 붙자 이 파일 전체가 무관한 이유로 깨졌다.
+    // 실제 PostgREST 빌더와 같은 모양으로 두면 필터가 늘어도 검사 내용만 남는다.
+    const chain = (result: unknown) => {
+      const q: Record<string, unknown> = {};
+      for (const m of ['select', 'eq', 'in', 'gte', 'lte', 'order', 'limit']) q[m] = () => q;
+      q.maybeSingle = async () => result;
+      q.then = (resolve: (v: unknown) => unknown) => resolve(result);
+      return q;
+    };
+
     if (table === 'production_progress_reports') {
-      return {
-        select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({
-          order: () => ({ limit: () => ({ maybeSingle: async () => ({ data: lastReport, error: null }) }) }),
-        }) }) }) }),
-      };
+      return chain({ data: lastReport, error: null });
     }
     if (table === 'machines_with_production_info') {
-      return {
-        select: () => ({ eq: () => ({ maybeSingle: async () => ({
-          data: tact === null ? null : { current_tact_time: tact }, error: null,
-        }) }) }),
-      };
+      return chain({ data: tact === null ? null : { current_tact_time: tact }, error: null });
     }
     throw new Error(`unexpected table ${table}`);
   });
@@ -93,7 +109,7 @@ const mockTables = ({
 describe('GET /api/production-progress', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockRequireUser.mockResolvedValue({ userId: 'op-1', role: 'operator', assignedMachineIds: [MACHINE] });
+    mockRequireUser.mockResolvedValue({ userId: 'op-1', factoryId: FACTORY, role: 'operator', assignedMachineIds: [MACHINE] });
     mockAssertMachineAccess.mockReturnValue(undefined);
     mockGetBreakTimeMinutes.mockResolvedValue(TOTAL_BREAK_MINUTES);
     mockGetShiftWindow.mockResolvedValue(WINDOW);
@@ -132,7 +148,10 @@ describe('GET /api/production-progress', () => {
 
   it('확정 OEE 와 같은 창·같은 사용자로 비가동 원천을 로드한다', async () => {
     await call(`machine_id=${MACHINE}&date=2026-07-17&shift=A`);
-    expect(mockGetShiftWindow).toHaveBeenCalledWith('2026-07-17', 'A');
+        // 교대 창은 **그 공장의** 설정(timezone·shift_a_start)에서 나와야 한다. 공장을 넘기지
+    // 않으면 설정 조회가 두 공장 행을 받고 아무거나 집는다 — 타임존이 어긋나면 업무일이
+    // 어긋나고, B교대는 자정을 넘으므로 하루치가 통째로 옆날로 간다.
+    expect(mockGetShiftWindow).toHaveBeenCalledWith('2026-07-17', 'A', FACTORY);
     expect(mockLoadRows).toHaveBeenCalledWith(
       MACHINE,
       new Date(WINDOW.start).toISOString(),

@@ -30,6 +30,25 @@ jest.mock('@/lib/apiAuth', () => {
     },
   };
 });
+/**
+ * 설비 관리 라우트는 공장 인지 계약으로 전환됐다. 같은 mock 함수에 연결해 "인가가 쓰기보다
+ * 먼저 실행된다"는 이 파일의 주장이 그대로 유지되게 한다.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireUser(...args),
+  assertFactoryMachineAccess: jest.fn(),
+}));
+
+/**
+ * `assertMachineInFactory` 는 DB 를 친다. 이 파일은 **거부 경로**만 보므로, 인가가 먼저
+ * 막으면 여기까지 오지 않는다. 통과 경로에서는 소유 확인을 통과시킨다 — 그 검사 자체는
+ * `supabase/tests/factory_isolation.sql` 과 라우트 원장이 따로 지킨다.
+ */
+jest.mock('@/lib/machineUpdate', () => ({
+  ...jest.requireActual('@/lib/machineUpdate'),
+  assertMachineInFactory: jest.fn(async () => undefined),
+}));
+
 
 const mockFrom = jest.fn();
 const mockListUsers = jest.fn();

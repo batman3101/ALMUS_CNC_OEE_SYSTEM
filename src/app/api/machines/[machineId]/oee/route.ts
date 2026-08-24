@@ -1,19 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import {
-  apiAuthErrorResponse,
-  assertMachineAccess,
-  requireUser,
-} from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { assertFactoryMachineAccess, requireFactoryUser } from '@/lib/factoryAuth';
 import { calculateWeightedOEE } from '@/utils/weightedOee';
 import { getBusinessDateAt } from '@/utils/downtimeIntervals';
 
 const DEFAULT_BUSINESS_CLOCK = { timezone: 'Asia/Ho_Chi_Minh', shiftAStart: '08:00' };
 
-async function getBusinessClock() {
+/**
+ * 영업일 기준(타임존·A교대 시작)을 **그 공장의 설정**에서 읽는다.
+ *
+ * 공장을 걸지 않으면 두 공장의 `timezone` 행이 둘 다 돌아오고, 아래 `.find()` 는 정렬이
+ * 없는 결과에서 먼저 온 것을 집는다 — 어느 공장 값인지 보장이 없다. 그리고 타임존이
+ * 어긋나면 영업일이 어긋나고, B교대는 자정을 넘으므로 하루치 실적이 통째로 옆날로 간다.
+ */
+async function getBusinessClock(factoryId: string) {
   const { data, error } = await supabaseAdmin
     .from('system_settings')
     .select('category, setting_key, setting_value')
+    .eq('factory_id', factoryId)
     .in('category', ['general', 'shift'])
     .eq('is_active', true);
   if (error || !data) return DEFAULT_BUSINESS_CLOCK;
@@ -58,8 +63,8 @@ export async function GET(
 ) {
   try {
     const { machineId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    assertMachineAccess(authenticatedUser, machineId);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
+    assertFactoryMachineAccess(authenticatedUser, machineId);
 
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('start_date');
@@ -80,6 +85,7 @@ export async function GET(
     const { data: machine, error: machineError } = await supabaseAdmin
       .from('machines')
       .select('id, name, current_state, equipment_type, location, is_active, updated_at')
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('id', machineId)
       .single();
     if (machineError || !machine) {
@@ -88,7 +94,7 @@ export async function GET(
 
     if (realtime) {
       const currentTime = new Date();
-      const businessClock = await getBusinessClock();
+      const businessClock = await getBusinessClock(authenticatedUser.factoryId);
       const businessDate = getBusinessDateAt(
         currentTime,
         businessClock.timezone,
@@ -98,6 +104,9 @@ export async function GET(
         supabaseAdmin
           .from('production_records')
           .select('*')
+          // 부모(설비)를 확인했으니 자식은 안전하다고 넘기면 안 된다. machine_id 는 요청이
+          // 준 값이고, 공장 조건이 없으면 그 값 하나로 남의 공장 실적에 닿는다.
+          .eq('factory_id', authenticatedUser.factoryId)
           .eq('machine_id', machineId)
           .eq('date', businessDate)
           .order('created_at', { ascending: false })
@@ -106,6 +115,7 @@ export async function GET(
         supabaseAdmin
           .from('production_records')
           .select('planned_runtime, actual_runtime, output_qty, defect_qty, downtime_minutes')
+          .eq('factory_id', authenticatedUser.factoryId)
           .eq('machine_id', machineId)
           .eq('date', businessDate),
       ]);
@@ -164,6 +174,7 @@ export async function GET(
       let query = supabaseAdmin
         .from('production_records')
         .select('*')
+        .eq('factory_id', authenticatedUser.factoryId)
         .eq('machine_id', machineId)
         .gte('date', effectiveStartDate)
         .order('date', { ascending: false })

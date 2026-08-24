@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('start_date');
@@ -41,7 +42,10 @@ export async function GET(request: NextRequest) {
       ? shiftParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
       : null;
 
-    const { data, error } = await supabaseAdmin.rpc('analytics_oee_by_machine', {
+    // 요청이 준 설비 id 를 그대로 믿지 않는다 — 래퍼가 이 공장 설비와 교집합을 취하므로,
+    // 남의 공장 id 를 섞어 보내도 목록에서 빠진다. 지정이 없으면(null) 이 공장 전체다.
+    const { data, error } = await supabaseAdmin.rpc('analytics_oee_by_machine_scoped', {
+      p_factory_id: authenticatedUser.factoryId,
       p_start_date: startDate,
       p_end_date: endDate || null,
       p_machine_ids: machineIds,
