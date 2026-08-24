@@ -16,6 +16,8 @@ import { supabase } from '@/lib/supabase';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import { showBrowserNotification } from '@/utils/browserNotification';
 import { playNotificationSound } from '@/utils/notificationSound';
+import { useFactory } from '@/contexts/FactoryContext';
+import { factoryChannelName, realtimeFilterOption } from '@/lib/realtimeScope';
 
 // Realtime 이벤트가 연달아 오면(대량 상태 변경) 매번 재조회하지 않도록 묶는다.
 const REALTIME_DEBOUNCE_MS = 1_000;
@@ -133,6 +135,20 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
    * 값이 없는 것(`new Set()`)과 구분해야 한다 — 아래 첫 조회 처리를 보라.
    */
   const announcedIdsRef = useRef<Set<string> | null>(null);
+
+  /**
+   * 현재 공장. 구독을 **좁히는** 용도다 — 경계는 RLS 가 지킨다(@/lib/realtimeScope).
+   *
+   * ref 로 두는 이유: 구독 설정이 useCallback/useEffect 안에 있어서, 공장을 의존성에 넣으면
+   * 확정되는 순간 구독이 통째로 다시 열린다. 여기서는 필터를 좁히는 것이 목적이고 못 좁혀도
+   * 안전하므로, 다음 구독 갱신 때 반영되면 충분하다.
+   */
+  const { factoryId: scopeFactoryId, factoryCode: scopeFactoryCode } = useFactory();
+  const factoryIdRef = useRef<string | null>(null);
+  const factoryCodeRef = useRef<string | null>(null);
+  factoryIdRef.current = scopeFactoryId;
+  factoryCodeRef.current = scopeFactoryCode;
+
 
 
   // 로컬스토리지에서 확인된 알림 조회
@@ -603,10 +619,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     let channel: RealtimeChannel | null = null;
     try {
       channel = supabase
-        .channel('notification-machine-changes')
+        .channel(factoryChannelName('notification-machine-changes', factoryCodeRef.current))
         .on(
           'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'machines' },
+          // 알림은 이 공장 설비의 상태 변경만 보면 된다. 경계는 RLS 가 지키고 이 필터는
+          // 팬아웃을 줄인다(@/lib/realtimeScope).
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'machines',
+            ...realtimeFilterOption(undefined, factoryIdRef.current),
+          },
           () => {
             // 대량 상태 변경이 연달아 들어와도 한 번만 재조회한다.
             // Realtime 은 실제 상태 변경 신호이므로 폴링 백오프를 우회한다(doRefresh).

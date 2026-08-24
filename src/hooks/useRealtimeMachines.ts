@@ -6,6 +6,8 @@ import { Machine } from '@/types';
 import { authFetch } from '@/lib/authFetch';
 import { createReadinessGate } from './subscriptionGate';
 import { replayBufferedUpdates } from './realtimeBuffer';
+import { useFactory } from '@/contexts/FactoryContext';
+import { factoryChannelName, realtimeFilterOption } from '@/lib/realtimeScope';
 
 /**
  * `SUBSCRIBED` 를 기다리는 한계. `useRealtimeData` 와 같은 값을 쓴다 —
@@ -61,6 +63,20 @@ export const useRealtimeMachines = ({
   // 최신 machines 값을 realtime 콜백에서 동기적으로 읽기 위한 ref
   // (postgres_changes 콜백은 구독 시점의 클로저를 사용하므로 state를 직접 참조하면 stale 값을 볼 수 있음)
   const machinesRef = useRef<Machine[]>(initialData);
+
+  /**
+   * 현재 공장. 구독을 **좁히는** 용도다 — 경계는 RLS 가 지킨다(@/lib/realtimeScope).
+   *
+   * ref 로 두는 이유: 구독 설정이 useCallback/useEffect 안에 있어서, 공장을 의존성에 넣으면
+   * 확정되는 순간 구독이 통째로 다시 열린다. 여기서는 필터를 좁히는 것이 목적이고 못 좁혀도
+   * 안전하므로, 다음 구독 갱신 때 반영되면 충분하다.
+   */
+  const { factoryId: scopeFactoryId, factoryCode: scopeFactoryCode } = useFactory();
+  const factoryIdRef = useRef<string | null>(null);
+  const factoryCodeRef = useRef<string | null>(null);
+  factoryIdRef.current = scopeFactoryId;
+  factoryCodeRef.current = scopeFactoryCode;
+
   useEffect(() => {
     machinesRef.current = machines;
   }, [machines]);
@@ -227,13 +243,14 @@ export const useRealtimeMachines = ({
          * 교체하며 이미 도착한 이벤트를 지우는 것)는 위의 버퍼가 받는다.
          */
         subscription = supabase
-          .channel('machines-channel')
+          .channel(factoryChannelName('machines-channel', factoryCodeRef.current))
           .on(
             'postgres_changes',
             {
               event: '*', // INSERT, UPDATE, DELETE 모든 이벤트
               schema: 'public',
-              table: 'machines'
+              table: 'machines',
+              ...realtimeFilterOption(undefined, factoryIdRef.current),
             },
             async (payload) => {
               console.log('Realtime event received:', payload);

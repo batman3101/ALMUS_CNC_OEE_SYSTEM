@@ -2,6 +2,7 @@
 
 import { supabase } from './supabase';
 import { log, LogCategories } from './logger';
+import { factoryChannelName, getCurrentFactoryScope } from './realtimeScope';
 import { SETTINGS_REGISTRY, validateSettingValue as validateAgainstRegistry } from './settingsRegistry';
 import type {
   SystemSetting,
@@ -681,7 +682,11 @@ export class SystemSettingsService {
   private async broadcastSettingChange(update: SettingUpdate): Promise<void> {
     try {
       // Supabase Realtime을 통한 브로드캐스트
-      const channel = supabase.channel('system_settings_changes');
+      // broadcast 는 RLS 를 타지 않는다. 토픽을 공장별로 갈라 두지 않으면 이 저장이
+      // 다른 공장 클라이언트를 재조회시킨다(@/lib/realtimeScope).
+      const channel = supabase.channel(
+        factoryChannelName('system_settings_changes', getCurrentFactoryScope())
+      );
       await channel.send({
         type: 'broadcast',
         event: 'setting_changed',

@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { collectOeeDataPages, OeeDataPage } from '@/lib/oeeDataPages';
 import { authFetch } from '@/lib/authFetch';
 import { createReadinessGate } from './subscriptionGate';
+import { useFactory } from '@/contexts/FactoryContext';
+import { factoryChannelName, realtimeFilterOption } from '@/lib/realtimeScope';
 
 /** `SUBSCRIBED` 를 기다리는 한계. 세 Realtime 훅이 같은 값을 쓴다. */
 const SUBSCRIPTION_READY_TIMEOUT_MS = 3000;
@@ -112,6 +114,17 @@ export const useRealtimeProductionRecords = ({
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const initialDataRef = useRef(initialData);
   const initialDataConsumedRef = useRef(false);
+
+  /**
+   * 현재 공장. 구독을 **좁히는** 용도다 — 경계는 RLS 가 지킨다(@/lib/realtimeScope).
+   * ref 로 두는 이유: 공장을 구독 이펙트의 의존성에 넣으면 확정되는 순간 구독이 통째로
+   * 다시 열린다. 못 좁혀도 안전하므로 다음 구독 갱신 때 반영되면 충분하다.
+   */
+  const { factoryId: scopeFactoryId, factoryCode: scopeFactoryCode } = useFactory();
+  const factoryIdRef = useRef<string | null>(null);
+  const factoryCodeRef = useRef<string | null>(null);
+  factoryIdRef.current = scopeFactoryId;
+  factoryCodeRef.current = scopeFactoryCode;
 
   const replaceRecordWindow = useCallback((next: RecordWindow) => {
     recordWindowRef.current = next;
@@ -328,13 +341,14 @@ export const useRealtimeProductionRecords = ({
       try {
         // **구독을 먼저 연다.** 첫 조회는 구독이 준비된 뒤로 미룬다(위 게이트 설명 참조).
         const channel = supabase
-          .channel(`production-records-channel-${++channelSequence}`)
+          .channel(factoryChannelName(`production-records-channel-${++channelSequence}`, factoryCodeRef.current))
           .on(
             'postgres_changes',
             {
               event: '*', // INSERT, UPDATE, DELETE 모든 이벤트
               schema: 'public',
-              table: 'production_records'
+              table: 'production_records',
+              ...realtimeFilterOption(undefined, factoryIdRef.current),
             },
             async (payload) => {
               if (cancelled) return;

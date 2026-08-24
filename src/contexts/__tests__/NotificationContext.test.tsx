@@ -44,6 +44,21 @@ jest.mock('../AuthContext', () => ({
   useAuth: () => ({ user: { id: 'test-user-1' } })
 }));
 
+/**
+ * 알림 구독은 이제 공장 범위다. 공장을 고정해 두면 아래 단언이 "채널이 걸렸다"가 아니라
+ * **"이 공장 채널이 걸렸다"** 를 검사하게 된다 — 그것이 지키려는 성질이다.
+ */
+jest.mock('@/contexts/FactoryContext', () => ({
+  useFactory: () => ({
+    factoryId: '00000000-0000-4000-8000-00000000a17e',
+    factoryCode: 'ALT',
+    isGlobalAdmin: false,
+    canSwitch: false,
+    available: [],
+    resolved: true,
+  }),
+}));
+
 jest.mock('../LanguageContext', () => ({
   useLanguage: () => ({ t: (key: string) => key })
 }));
@@ -145,7 +160,10 @@ describe('NotificationContext', () => {
     await waitFor(() => expect(seen.current).toHaveLength(0));
 
     // machines 테이블 구독이 실제로 걸렸는지 확인
-    expect(supabase.channel).toHaveBeenCalledWith('notification-machine-changes');
+    // 채널 이름에 공장이 실려 있어야 한다. broadcast 가 아니라 postgres_changes 라서 이름이
+    // 곧 경계는 아니지만(경계는 RLS), 이름이 갈려 있지 않으면 로그에서 어느 공장의 구독인지
+    // 구분할 수 없고 나중에 누가 같은 토픽으로 broadcast 를 붙이면 실제로 섞인다.
+    expect(supabase.channel).toHaveBeenCalledWith('notification-machine-changes:ALT');
     expect(subscribeMock).toHaveBeenCalled();
     expect(realtimeHandler).not.toBeNull();
 

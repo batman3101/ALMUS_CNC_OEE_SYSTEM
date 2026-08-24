@@ -45,7 +45,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      current: { code: user.factoryCode, role: user.role },
+      // id 를 함께 돌려준다. Realtime 구독의 서버 측 필터(`factory_id=eq.<id>`)는 코드가
+      // 아니라 id 를 요구한다. 비밀이 아니다 — 경계는 RLS 가 지키고, id 를 알아도 남의
+      // 공장 행에는 닿지 못한다.
+      current: { id: user.factoryId, code: user.factoryCode, role: user.role },
       isGlobalAdmin: user.isGlobalAdmin,
       // 선택기는 갈 곳이 둘 이상일 때만 의미가 있다. 판정을 서버에서 끝내 두면
       // 화면은 이 값만 보고 그리면 된다.

@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Machine, unwrapJoin } from '@/types';
 import { authFetch } from '@/lib/authFetch';
+import { useFactory } from '@/contexts/FactoryContext';
+import { factoryChannelName, realtimeFilterOption } from '@/lib/realtimeScope';
 
 export interface UseMachinesOptions {
   enableAutoRefresh?: boolean;
@@ -26,9 +28,26 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  /**
+   * 현재 공장. 구독을 **좁히는** 용도다 — 경계는 RLS 가 지킨다(@/lib/realtimeScope).
+   *
+   * ref 로 두는 이유: 구독 설정이 useCallback/useEffect 안에 있어서, 공장을 의존성에 넣으면
+   * 확정되는 순간 구독이 통째로 다시 열린다. 여기서는 필터를 좁히는 것이 목적이고 못 좁혀도
+   * 안전하므로, 다음 구독 갱신 때 반영되면 충분하다.
+   */
+  const { factoryId: scopeFactoryId, factoryCode: scopeFactoryCode } = useFactory();
+  const factoryIdRef = useRef<string | null>(null);
+  const factoryCodeRef = useRef<string | null>(null);
+  factoryIdRef.current = scopeFactoryId;
+  factoryCodeRef.current = scopeFactoryCode;
+
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const isComponentMountedRef = useRef(true);
   // 훅 인스턴스별 고유 Realtime 채널 이름 (동시 마운트 시 채널 충돌 방지)
+  // 인스턴스마다 고유한 이름(같은 페이지에 이 훅이 둘 있으면 토픽이 충돌한다) + 공장.
+  // 공장 부분을 손으로 이어 붙이지 않고 규칙 함수를 거치는 이유는, 발신자와 수신자가 같은
+  // 형식을 쓰도록 강제하기 위해서다(@/lib/realtimeScope).
   const channelNameRef = useRef(`machines-changes-${Math.random().toString(36).slice(2)}`);
 
   const fetchMachines = useCallback(async (isBackgroundRefresh: boolean = false) => {
@@ -151,13 +170,16 @@ export const useMachines = (options: UseMachinesOptions = {}) => {
 
       // 새 채널 생성 (인스턴스별 고유 이름 사용)
       const channel = supabase
-        .channel(channelNameRef.current)
+        .channel(factoryChannelName(channelNameRef.current, factoryCodeRef.current))
         .on(
           'postgres_changes',
           {
             event: '*', // 모든 변경사항 감지 (INSERT, UPDATE, DELETE)
             schema: 'public',
-            table: 'machines'
+            table: 'machines',
+            // 공장 필터는 PK 가 아니므로 DELETE 이벤트를 걸러낸다 — 설비 삭제 반영은
+            // 재조회가 맡는다(@/lib/realtimeScope).
+            ...realtimeFilterOption(undefined, factoryIdRef.current),
           },
           (payload) => {
             console.log('Realtime change received:', payload);

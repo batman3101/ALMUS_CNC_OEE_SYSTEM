@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // 이미지 업로드 제한 설정
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -69,7 +70,7 @@ function validateFileSize(size: number): boolean {
 // POST /api/upload/image - 이미지 업로드
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin']);
     console.log('POST /api/upload/image called');
 
     // FormData로부터 파일 추출
@@ -119,8 +120,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 고유 파일명 생성
-    const uniqueFileName = generateUniqueFileName(file.name);
+    // 고유 파일명 생성 — 공장별 디렉터리 아래에 둔다.
+    //
+    // 이것은 격리 수정이 아니다. 버킷은 공개이고 파일명은 고유하므로(`upsert: false`)
+    // 두 공장의 파일이 서로를 덮거나 섞이지 않는다. 그리고 이 URL 을 가리키는 설정 행은
+    // 이미 공장 범위다.
+    //
+    // 그런데도 경로를 나누는 이유: 평평한 한 디렉터리에서는 **어느 파일이 어느 공장 것인지
+    // 알 수 없다.** 공장을 정리하거나(ALV 중단) 용량을 따질 때 그 정보가 없으면 아무것도
+    // 못 한다. 파일이 쌓인 뒤에는 되돌리기 어려우므로 지금 나눈다.
+    const uniqueFileName = `factories/${authenticatedUser.factoryCode}/${generateUniqueFileName(file.name)}`;
     console.log('Generated unique filename:', uniqueFileName);
 
     // 파일을 ArrayBuffer로 변환
