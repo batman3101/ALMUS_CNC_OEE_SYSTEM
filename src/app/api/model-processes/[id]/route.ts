@@ -23,7 +23,7 @@ export async function GET(
         tact_time_seconds,
         created_at,
         updated_at,
-        product_models:model_id (
+        product_models:product_models!model_processes_factory_model_id_fkey (
           id,
           model_name,
           description

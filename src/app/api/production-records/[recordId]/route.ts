@@ -361,7 +361,7 @@ export async function GET(
         quality,
         oee,
         created_at,
-        machines:machine_id (
+        machines:machines!production_records_factory_machine_id_fkey (
           id,
           name,
           location,

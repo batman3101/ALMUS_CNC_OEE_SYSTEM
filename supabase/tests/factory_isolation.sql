@@ -327,3 +327,71 @@ end $$;
 
 -- 검사 흔적을 남기지 않는다.
 rollback;
+
+-- ---------------------------------------------------------------------------
+-- 쓰기 경로의 factory_id 유도 (2026-08-24)
+-- ---------------------------------------------------------------------------
+-- 이 검사가 존재하는 이유: 공장 소유 테이블에 INSERT 하는 **12개 함수가 factory_id 를 전혀
+-- 언급하지 않았다**(save_daily_production, close_shift_upsert_v3, upsert_downtime_entry,
+-- toggle_machine_downtime, apply_machine_update, report_shift_progress ...).
+--
+-- NOT NULL 이 막아 준 덕에 조용한 오염은 없었지만, 앱은 **아무것도 저장할 수 없는 상태**
+-- 였다. 브라우저에서 생산 데이터를 넣어 보고서야 드러났다.
+--
+-- 함수마다 인자를 늘리는 대신 부모 행에서 유도한다(20260824210000). 그 유도가 실제로
+-- 동작하는지 여기서 못박는다 — 트리거는 이름만 맞고 아무것도 안 할 수 있다.
+
+begin;
+
+\echo '=== 16) factory_id 없이 INSERT 하면 설비에서 유도된다 ==='
+do $$
+declare
+  v_machine uuid;
+  v_expected uuid;
+  v_got uuid;
+begin
+  select id, factory_id into v_machine, v_expected from public.machines limit 1;
+  if v_machine is null then
+    raise notice 'SKIP: 설비가 없어 판정할 수 없다';
+    return;
+  end if;
+
+  insert into public.production_records (machine_id, date, shift, output_qty)
+  values (v_machine, date '1900-01-01', 'A', 0)
+  returning factory_id into v_got;
+
+  if v_got = v_expected then
+    raise notice 'PASS: production_records.factory_id 가 설비에서 유도됨';
+  else
+    raise notice 'FAIL: 기대 % / 실제 %', v_expected, v_got;
+  end if;
+end $$;
+
+\echo '=== 17) 명시적으로 준 factory_id 는 덮어쓰지 않는다 ==='
+-- 유도는 편의이지 경계가 아니다. 값이 이미 있으면 그대로 두고, 부모와 어긋나면 복합 FK 가
+-- 거부한다 — 트리거가 "고쳐 주면" 잘못된 공장 쓰기가 조용히 성공하게 된다.
+do $$
+declare
+  v_machine uuid;
+  v_own uuid;
+  v_other uuid;
+begin
+  select id, factory_id into v_machine, v_own from public.machines limit 1;
+  select id into v_other from public.factories where id <> v_own limit 1;
+
+  if v_machine is null or v_other is null then
+    raise notice 'SKIP: 다른 공장이 없어 판정할 수 없다';
+    return;
+  end if;
+
+  begin
+    insert into public.production_records (factory_id, machine_id, date, shift, output_qty)
+    values (v_other, v_machine, date '1900-01-02', 'A', 0);
+    raise notice 'FAIL: 설비와 다른 공장으로 기록이 저장됐다';
+  exception when foreign_key_violation then
+    raise notice 'PASS: 설비와 다른 공장 지정은 복합 FK 가 거부';
+  end;
+end $$;
+
+-- 검사 흔적을 남기지 않는다.
+rollback;
