@@ -46,7 +46,9 @@ const POLICY: Record<string, Record<string, string>> = {
   'downtime-entries': { POST: AEO, GET: AEO },
   'downtime-entries/[id]': { DELETE: AEO, PATCH: AEO },
   // 현재 세션의 공장과 이동 가능한 공장 목록. 자기 소속만 돌려주므로 세 역할 모두 허용한다.
-  'factory-context': { GET: AEO },
+  // POST 는 공장을 바꾼다. 역할 제한은 GET 과 같다 — 전환은 권한을 넓히지 않고, 목적지
+  // 공장의 membership 이 없으면 `saveFactorySelection` 이 403 으로 막는다.
+  'factory-context': { GET: AEO, POST: AEO },
   'machine-status-descriptions': { GET: AEO },
   'machines': { GET: AEO, POST: AE, DELETE: AE },
   'machines/[machineId]': { GET: AEO, PUT: AE, PATCH: AEO },

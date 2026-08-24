@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { ApiAuthError, type UserRole } from '@/lib/apiAuth';
-import { FACTORY_COOKIE } from '@/lib/factoryConstants';
 
 /**
  * 공장 인지 서버 인가 (서버 전용).
@@ -57,34 +56,86 @@ function isUserRole(value: unknown): value is UserRole {
  * 대소문자가 섞이면 같은 호스트가 두 공장에 바인딩될 수 있고 그것이 곧 잘못된 공장에 쓰기다.
  */
 /**
- * 사용자가 UI 에서 고른 공장 코드.
+ * 이 사용자가 고른 공장(저장된 선택). 없으면 null.
+ *
+ * ## 왜 쿠키가 아닌가 (2026-08-24 변경)
+ *
+ * 예전에는 `almus_factory` 쿠키였다. 쿠키는 요청 헤더로 오므로 서버 Route 는 읽지만
+ * **RLS 정책은 읽지 못한다** — 정책은 DB 안에서 돌고, 요청에 무엇이 실렸는지 알 방법이 없다.
+ *
+ * 그래서 두 층이 서로 다른 공장을 가리켰다(브랜치 브라우저 검증 실측):
+ *
+ *   쿠키 ALV -> Route(Service Role)      -> 설비 350대  (ALV)
+ *   쿠키 ALV -> 브라우저 직접 조회(RLS)  -> 교대 08:00  (ALT)
+ *
+ * 소속이 하나인 사용자는 RLS 가 그 하나로 확정되므로 영향이 없다. 영향받는 것은 정확히
+ * **양쪽을 오가는 사람**, 즉 이 기능을 실제로 쓰는 사람이다.
+ *
+ * 선택을 DB 행으로 두면 `current_user_factory()` 도 **같은 행**을 읽는다. 같은 것을 읽으면
+ * 어긋날 수 없다 — 그것이 이 변경의 전부다.
  *
  * ## 이 값은 권위가 없다
  *
- * 쿠키는 브라우저가 마음대로 쓸 수 있다. 그래서 이 값으로 공장을 **정하지 않는다** —
- * 아래 `requireFactoryUser` 가 이 코드에 해당하는 **활성 membership 이 있는지** 확인하고,
- * 없으면 거부한다. 위조해 봐야 자기가 소속된 공장 밖으로는 못 나간다.
- *
- * 계약 절대조건 4번("요청이 전달한 factory_id 는 권위 있는 값이 아니다")과 어긋나지 않는다.
- * 그 조항이 막는 것은 "요청이 시키는 대로 공장을 정하는 것"이지, 사용자가 자기 소속 중
- * 하나를 고르는 것이 아니다.
- *
- * ## 왜 헤더가 아니라 쿠키인가
- *
- * 쿠키는 페이지 이동·새로고침·서버 렌더링에서 자동으로 따라간다. 헤더로 하면 모든 fetch
- * 호출에 손으로 붙여야 하고, 하나라도 빠뜨리면 그 요청만 조용히 다른 공장으로 간다.
+ * 저장돼 있다고 통과시키지 않는다. 아래 `requireFactoryUser` 가 **활성 membership 안에
+ * 있는지** 확인한다 — membership 은 선택을 저장한 뒤에 사라질 수 있고, 그때 이 행은 조용히
+ * 낡는다.
  */
-// 쿠키 이름은 클라이언트도 써야 하므로 별도 모듈에 두고 여기서 재수출한다 —
-// 이 파일은 service role key 를 import 하므로 클라이언트가 직접 읽으면 안 된다.
-export { FACTORY_COOKIE } from '@/lib/factoryConstants';
+export async function readStoredFactorySelection(userId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('user_factory_selection')
+    .select('factory_id')
+    .eq('user_id', userId)
+    .maybeSingle();
 
-export function readSelectedFactoryCode(request: NextRequest): string | null {
-  const raw = request.cookies?.get?.(FACTORY_COOKIE)?.value
-    ?? request.headers.get('cookie')?.match(/(?:^|;\s*)almus_factory=([^;]+)/)?.[1];
-  if (!raw) return null;
-  const code = decodeURIComponent(raw).trim().toUpperCase();
-  // factories.code 의 CHECK 제약과 같은 모양만 통과시킨다. 이상한 값은 아예 무시한다.
-  return /^[A-Z][A-Z0-9_]{1,15}$/.test(code) ? code : null;
+  // 조회 실패를 "선택 없음"으로 뭉개지 않는다. 뭉개면 사용자가 고른 공장이 아니라 기본
+  // 공장으로 조용히 넘어가고, 그것이 바로 없애려던 "모른 채로 쓰는" 상태다.
+  if (error) {
+    throw new ApiAuthError('공장 선택을 확인할 수 없습니다', 403);
+  }
+  return data?.factory_id ?? null;
+}
+
+/**
+ * 공장 선택을 저장한다.
+ *
+ * 목적지 공장의 권한을 **여기서** 검사한다. DB 트리거(20260824190000)가 마지막 방어선이지만,
+ * 트리거만 믿으면 실패가 23514 예외로 올라와 사용자에게 보여줄 문구를 만들 수 없고,
+ * 여기서만 검사하면 다른 쓰기 경로가 생겼을 때 무방비다. 두 곳 모두에 둔다.
+ */
+export async function saveFactorySelection(userId: string, factoryCode: string): Promise<{
+  factoryId: string;
+  factoryCode: string;
+}> {
+  const { data: membership, error } = await supabaseAdmin
+    .from('factory_memberships')
+    .select('factory_id, factories!inner(code, is_active)')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .eq('factories.code', factoryCode)
+    .maybeSingle();
+
+  if (error) {
+    throw new ApiAuthError('공장 권한을 확인할 수 없습니다', 403);
+  }
+  const factory = membership
+    ? (Array.isArray(membership.factories) ? membership.factories[0] : membership.factories)
+    : null;
+  if (!membership || !factory || factory.is_active !== true) {
+    throw new ApiAuthError('선택한 공장에 대한 권한이 없습니다', 403);
+  }
+
+  const { error: upsertError } = await supabaseAdmin
+    .from('user_factory_selection')
+    .upsert(
+      { user_id: userId, factory_id: membership.factory_id, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+
+  if (upsertError) {
+    throw new ApiAuthError('공장 선택을 저장하지 못했습니다', 403);
+  }
+
+  return { factoryId: membership.factory_id, factoryCode: factory.code };
 }
 
 export function normalizeHostname(request: NextRequest): string | null {
@@ -197,23 +248,29 @@ export async function requireFactoryUser(
 
   const hostname = normalizeHostname(request);
   const hostFactory = await resolvePublicFactoryByHost(hostname);
-  const selectedCode = readSelectedFactoryCode(request);
+  const storedSelection = await readStoredFactorySelection(userId);
 
   let selected: ActiveMembership | undefined;
 
-  // 사용자가 UI 에서 고른 공장이 최우선이다.
-  //
-  // 이 앱은 **도메인 하나**로 운영한다(운영 결정 2026-08-24). 그래서 host 는 대부분의 배포에서
-  // 공장을 구분하지 못하고, 실제 선택 수단은 사용자의 명시적 선택이다.
-  //
-  // 선택값 자체는 신뢰하지 않는다 — 그 코드의 **활성 membership 이 있을 때만** 통과한다.
-  // 없으면 조용히 다른 공장으로 넘기지 않고 거부한다. 조용히 넘기면 관리자는 자기가 어느
-  // 공장을 보고 있는지 모른 채로 쓰게 된다.
-  if (selectedCode) {
-    selected = memberships.find(row => {
-      const f = Array.isArray(row.factories) ? row.factories[0] : row.factories;
-      return f?.code === selectedCode;
-    });
+  /**
+   * 사용자가 UI 에서 고른 공장이 최우선이다.
+   *
+   * 이 앱은 **도메인 하나**로 운영한다(운영 결정 2026-08-24). 그래서 host 는 대부분의
+   * 배포에서 공장을 구분하지 못하고, 실제 선택 수단은 사용자의 명시적 선택이다.
+   *
+   * ## 순서는 current_user_factory() 와 같아야 한다
+   *
+   *   선택 -> host -> 단일 membership -> 명시적 기본 공장 -> 거부
+   *
+   * RLS 쪽에는 host 개념이 없다. 지금 배포에서 host 는 공장을 지목하지 못하므로 두 순서는
+   * 실질적으로 동일하다 — host 매핑을 쓰기 시작하면 그때 RLS 쪽도 함께 정해야 한다.
+   *
+   * 선택값 자체는 신뢰하지 않는다 — **활성 membership 안에 있을 때만** 통과한다. 없으면
+   * 조용히 다른 공장으로 넘기지 않고 거부한다. 조용히 넘기면 관리자는 자기가 어느 공장을
+   * 보고 있는지 모른 채로 쓰게 된다.
+   */
+  if (storedSelection) {
+    selected = memberships.find(row => row.factory_id === storedSelection);
     if (!selected) {
       throw new ApiAuthError('선택한 공장에 대한 권한이 없습니다', 403);
     }

@@ -5,7 +5,6 @@ import { Button, Dropdown, Tag, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownOutlined, CheckOutlined } from '@ant-design/icons';
 import { authFetch } from '@/lib/authFetch';
-import { FACTORY_COOKIE } from '@/lib/factoryConstants';
 
 interface FactoryOption {
   code: string;
@@ -62,14 +61,29 @@ export default function FactorySwitcher({ size = 'middle' }: { size?: 'small' | 
     return () => { cancelled = true; };
   }, []);
 
-  const switchTo = useCallback((code: string) => {
+  const switchTo = useCallback(async (code: string) => {
     if (code === ctx?.current.code) return;
     setSwitching(true);
-    // Secure 는 https 에서만 유효하다. 로컬(http)에서 붙이면 쿠키가 저장되지 않아
-    // 전환이 조용히 실패한다. SameSite=Lax 면 같은 사이트 이동에는 늘 따라간다.
-    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-    document.cookie = `${FACTORY_COOKIE}=${encodeURIComponent(code)}; path=/; max-age=31536000; SameSite=Lax${secure}`;
+    try {
+      // 선택은 **서버가 저장한다.** 쿠키로 두면 RLS 가 읽지 못해 Route 데이터와 브라우저
+      // 직접 조회가 서로 다른 공장을 가리킨다(@/lib/factoryAuth 의 설명).
+      const res = await authFetch('/api/factory-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        // 저장에 실패했으면 **이동하지 않는다.** 이동해 버리면 화면은 새 공장을 가리키는데
+        // 서버는 옛 공장을 쓰는, 정확히 없애려던 상태가 된다.
+        setSwitching(false);
+        return;
+      }
+    } catch {
+      setSwitching(false);
+      return;
+    }
     // replace 로 이동해 뒤로가기가 이전 공장 화면으로 돌아가지 않게 한다.
+    // 전체 페이지 이동이라 이전 공장의 channel·cache·snapshot 이 함께 사라진다(계약 5.1).
     window.location.replace('/dashboard');
   }, [ctx]);
 

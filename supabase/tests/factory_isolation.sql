@@ -228,3 +228,102 @@ end $$;
 
 -- 검사용으로 만든 공장·설정은 남기지 않는다.
 rollback;
+
+-- ---------------------------------------------------------------------------
+-- 공장 선택은 Route 와 RLS 가 함께 읽는다 (2026-08-24)
+-- ---------------------------------------------------------------------------
+-- 이 검사가 존재하는 이유: 선택이 쿠키에 있던 동안 **RLS 는 그것을 보지 못했다.** 그래서
+-- 다중 소속 사용자의 화면이 두 공장을 섞었다 — 배지와 설비 수는 ALV, 교대 설정은 ALT.
+--
+-- 소속이 하나인 사용자에게는 나타나지 않는다. 정확히 이 기능을 쓰는 사람만 겪는 결함이라
+-- "대충 돌려보기"로는 절대 안 잡힌다. 그래서 못박는다.
+
+begin;
+
+\echo '=== 14) current_user_factory() 가 저장된 선택을 따른다 ==='
+do $$
+declare
+  v_user uuid;
+  v_alt  uuid := (select id from public.factories where code = 'ALT');
+  v_alv  uuid := (select id from public.factories where code = 'ALV');
+  v_got  uuid;
+begin
+  -- 두 공장 모두에 활성 membership 이 있는 사용자가 필요하다. 없으면 이 검사는 성립하지
+  -- 않는다 — "통과"로 위장하지 않고 건너뛴다고 말한다.
+  select fm.user_id into v_user
+  from public.factory_memberships fm
+  where fm.is_active
+  group by fm.user_id
+  having count(distinct fm.factory_id) >= 2
+  limit 1;
+
+  if v_user is null then
+    raise notice 'SKIP: 다중 소속 사용자가 없어 판정할 수 없다 (이 결함은 다중 소속에서만 난다)';
+    return;
+  end if;
+
+  perform set_config('request.jwt.claims', json_build_object('sub', v_user)::text, true);
+
+  insert into public.user_factory_selection (user_id, factory_id) values (v_user, v_alv)
+    on conflict (user_id) do update set factory_id = excluded.factory_id;
+  select public.current_user_factory() into v_got;
+
+  if v_got = v_alv then
+    raise notice 'PASS: RLS 헬퍼가 선택(ALV)을 따른다';
+  else
+    raise notice 'FAIL: ALV 를 골랐는데 RLS 는 % 를 본다 — Route 와 어긋난다', v_got;
+  end if;
+
+  update public.user_factory_selection set factory_id = v_alt where user_id = v_user;
+  select public.current_user_factory() into v_got;
+  if v_got = v_alt then
+    raise notice 'PASS: 되돌리기도 따른다 (ALT)';
+  else
+    raise notice 'FAIL: ALT 로 되돌렸는데 RLS 는 % 를 본다', v_got;
+  end if;
+
+  perform set_config('request.jwt.claims', null, true);
+end $$;
+
+\echo '=== 15) 소속 밖 공장은 선택으로 저장되지 않는다 ==='
+do $$
+declare
+  v_user uuid;
+  v_other uuid;
+begin
+  -- 한 공장에만 속한 사용자를 찾아, 속하지 않은 공장을 선택해 본다.
+  select fm.user_id into v_user
+  from public.factory_memberships fm
+  where fm.is_active
+  group by fm.user_id
+  having count(distinct fm.factory_id) = 1
+  limit 1;
+
+  if v_user is null then
+    raise notice 'SKIP: 단일 소속 사용자가 없어 판정할 수 없다';
+    return;
+  end if;
+
+  select f.id into v_other from public.factories f
+  where f.id not in (
+    select fm.factory_id from public.factory_memberships fm
+    where fm.user_id = v_user and fm.is_active
+  )
+  limit 1;
+
+  if v_other is null then
+    raise notice 'SKIP: 이 사용자가 속하지 않은 공장이 없다';
+    return;
+  end if;
+
+  begin
+    insert into public.user_factory_selection (user_id, factory_id) values (v_user, v_other)
+      on conflict (user_id) do update set factory_id = excluded.factory_id;
+    raise notice 'FAIL: 소속 없는 공장이 선택으로 저장됐다';
+  exception when check_violation then
+    raise notice 'PASS: 소속 밖 공장 선택은 거부됨';
+  end;
+end $$;
+
+-- 검사 흔적을 남기지 않는다.
+rollback;
