@@ -247,11 +247,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
     try {
       setDashboardLoading(true);
 
+      // 조회가 **실패했다**는 사실은 아래 catch 가 `[]` 로 바꾸는 순간 사라진다.
+      // 그러면 남는 것은 길이 0 뿐이고, "설비가 없는 공장"과 "설비를 못 불러온 공장"이
+      // 구별되지 않는다. 그 구별이 사라진 채로 판단하면 빈 공장이 장애로 보인다
+      // (ALV 는 설비 0대로 시작하므로 실제로 그렇게 됐다).
+      let machinesFailed = false;
+
       // 병렬로 모든 데이터 가져오기
       // 설비 목록은 NotificationContext와 공유되는 캐시를 통해 조회한다 (중복 호출 제거)
       const [machinesData, modelsRes, statusDescRes] = await Promise.all([
         fetchMachines({ force: options?.force }).catch((error: unknown) => {
           console.error('Machines API failed:', error);
+          machinesFailed = true;
           return [] as Machine[];
         }),
         authFetch('/api/product-models', {
@@ -297,8 +304,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
         statusDescriptions = [];
       }
 
-      // 데이터가 하나도 없으면 에러 처리, 그렇지 않으면 저장
-      if (machinesData.length === 0) {
+      // **조회 실패일 때만** 에러다. 설비가 0대인 것은 실패가 아니라 사실이다 —
+      // 새로 만든 공장은 설비를 등록하기 전까지 0대이고, 그 상태에서 대시보드가
+      // "불러올 수 없습니다"를 띄우면 정상 상태를 장애로 보고하는 것이 된다.
+      if (machinesFailed) {
         throw new Error('설비 데이터를 불러올 수 없습니다. API 응답을 확인해주세요.');
       }
 
@@ -510,6 +519,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       // 로딩 중일 때는 빈 데이터 반환 (에러 없이)
       if (recordsLoading || dashboardLoading || analyticsLoading || aggregateSnapshot.scopeKey !== currentAggregateScope) {
         console.log('Data is loading, returning empty data');
+        return {
+          overallMetrics: null,
+          machineList: [],
+          alerts: [],
+          trendData: [],
+          machinesWithDataCount: 0
+        };
+      }
+
+      // 설비가 **0대인 공장**은 오류가 아니다.
+      //
+      // 위 분기는 `machines.length > 0` 을 요구하므로 빈 공장은 여기까지 떨어진다. 그런데
+      // 여기서 던지면 화면은 "대시보드를 불러오는 중 오류가 발생했습니다"가 되고, 관리자는
+      // 설비를 등록하러 갈 생각을 하지 못한다 — 시스템이 고장 났다고 말하기 때문이다.
+      //
+      // `dashboardData` 가 채워졌다는 것은 조회가 **성공했다**는 뜻이다(실패는 위
+      // `fetchDashboardData` 가 이미 던진다). 그러니 여기서 남은 0대는 사실이다.
+      if (dashboardData && Array.isArray(dashboardData.machines) && dashboardData.machines.length === 0) {
         return {
           overallMetrics: null,
           machineList: [],
