@@ -1,6 +1,6 @@
 {
   "note": "운영(wmtkkefsorrdlzprhlpr) 적용 원장 — MCP list_migrations 스냅샷. 파일명 타임스탬프와 적용 version 이 다르므로(런북 0절, db push 금지) 이름 기준으로 대조한다. 갱신: 마이그레이션을 적용한 세션이 applied 배열과 hashes(적용 시점 파일 sha256-16) 를 함께 갱신한다. 검사: npm run check:migrations (미적용 = 실패, 적용 후 파일 내용 드리프트 = 경고). | 2026-08-25: 공장 다중화 21개 운영 적용. baseline 3개는 **실행하지 않고** 원장에만 기록했다(migration repair 상당) — 그 파일들은 운영 스키마의 재구성본이고 마지막 줄의 `grant all ... to anon` 이 의도적 권한 회수를 되돌리기 때문이다.",
-  "snapshot_at": "2026-08-25T00:45:00.000Z",
+  "snapshot_at": "2026-08-25T01:15:00.000Z",
   "hashes": {
     "20251116070000_create_system_settings_audit_table": "02a1488bae1ef176",
     "20251116070100_create_recent_settings_changes_view": "d6add6dc43c42a32",
@@ -83,7 +83,8 @@
     "20260824200000_fix_summary_scoped_stale_body": "d98f818f52d0267c",
     "20260824210000_multi_factory_derive_on_insert": "cc03165a110c867f",
     "20260824220000_multi_factory_audit_log_factory": "2851989d9621816a",
-    "20260824230000_multi_factory_user_provisioning": "1da0c03cfcb83e9f"
+    "20260824230000_multi_factory_user_provisioning": "1da0c03cfcb83e9f",
+    "20260825010000_status_descriptions_factory_key": "876406f615d78e3a"
   },
   "applied": [
     {
@@ -537,6 +538,10 @@
     {
       "version": "20260824230000",
       "name": "multi_factory_user_provisioning"
+    },
+    {
+      "version": "20260825010000",
+      "name": "status_descriptions_factory_key"
     }
   ],
   "file_matches": {
