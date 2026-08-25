@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // POST /api/admin/setup-real-user - 실제 사용자를 user_profiles에 등록
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin']);
+    const actor = await requireFactoryUser(request, ['admin']);
 
     const body = await request.json();
     const { email, name, role = 'admin' } = body;
@@ -37,7 +38,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. user_profiles 테이블에 추가 또는 업데이트
+    // 2. 공장 membership 을 **먼저** 보장한다.
+    //
+    // 프로필만 만들면 그 사용자는 로그인은 되는데 `requireFactoryUser` 가 403 을 내고 RLS 의
+    // `current_user_factory()` 는 NULL 을 낸다 — 화면이 통째로 빈다. 이 경로는 관리자를
+    // 등록하는 자리라 그 상태가 특히 나쁘다(설정에 들어갈 사람이 없어진다).
+    //
+    // 공장은 지금 이 작업을 하는 관리자의 공장이다. 요청 본문은 공장을 정하지 못한다.
+    const { error: membershipError } = await supabaseAdmin
+      .from('factory_memberships')
+      .upsert(
+        {
+          factory_id: actor.factoryId,
+          user_id: authUser.id,
+          role,
+          is_active: true,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'factory_id,user_id' }
+      );
+
+    if (membershipError) {
+      console.error('Error upserting factory membership:', membershipError);
+      return NextResponse.json(
+        { error: '공장 구성원 등록에 실패했습니다' },
+        { status: 500 }
+      );
+    }
+
+    // 3. user_profiles 테이블에 추가 또는 업데이트
     const { data: userProfile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .upsert({

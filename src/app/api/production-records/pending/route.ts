@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,7 +17,7 @@ const BACKLOG_WINDOW_DAYS = 90;
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id') ?? '';
     if (!UUID.test(machineId)) return NextResponse.json({ error: 'machine_id is required' }, { status: 400 });
@@ -39,12 +40,14 @@ export async function GET(request: NextRequest) {
     // 지금은 실제로 존재한다 — 주석을 고치는 대신 경로를 만들었다.
     const { data: progressed, error: pErr } = await supabaseAdmin
       .from('production_progress_reports')
-      .select('date, shift, shift_output_qty').eq('machine_id', machineId).gte('date', cutoff);
+      .select('date, shift, shift_output_qty')
+      .eq('factory_id', user.factoryId).eq('machine_id', machineId).gte('date', cutoff);
     if (pErr) return NextResponse.json({ error: 'Failed to read progress' }, { status: 500 });
 
     const { data: records, error: rErr } = await supabaseAdmin
       .from('production_records')
-      .select('date, shift, record_id, defect_qty').eq('machine_id', machineId).gte('date', cutoff);
+      .select('date, shift, record_id, defect_qty')
+      .eq('factory_id', user.factoryId).eq('machine_id', machineId).gte('date', cutoff);
     if (rErr) return NextResponse.json({ error: 'Failed to read records' }, { status: 500 });
 
     const recKeys = new Set((records ?? []).map(r => `${r.date}|${r.shift}`));

@@ -117,8 +117,8 @@ function windowFromConfig(
   return window ?? null;
 }
 
-export async function getShiftWindow(date: string, shift: 'A' | 'B'): Promise<Interval | null> {
-  const cfg = await getBusinessTimeConfig();
+export async function getShiftWindow(date: string, shift: 'A' | 'B', factoryId: string): Promise<Interval | null> {
+  const cfg = await getBusinessTimeConfig(factoryId);
   return windowFromConfig(cfg, date, shift);
 }
 
@@ -131,8 +131,9 @@ export async function getShiftWindow(date: string, shift: 'A' | 'B'): Promise<In
 export async function getShiftReportingWindow(
   date: string,
   shift: 'A' | 'B',
+  factoryId: string,
 ): Promise<{ window: Interval; bufferMinutes: number } | null> {
-  const cfg = await getBusinessTimeConfig();
+  const cfg = await getBusinessTimeConfig(factoryId);
   const window = windowFromConfig(cfg, date, shift);
   return window ? { window, bufferMinutes: cfg.shiftChangeBufferMinutes } : null;
 }
@@ -142,8 +143,8 @@ export async function getShiftReportingWindow(
  * 포함한다. 교대 창 두 개를 만들어 병합할 필요가 없다 — buildBusinessRange 가 곧 그 구간이다.
  * 교대 창과 같은 설정(timezone·shiftAStart)에서 나오므로 경계가 어긋나지 않는다.
  */
-export async function getBusinessDayWindow(date: string): Promise<Interval | null> {
-  const cfg = await getBusinessTimeConfig();
+export async function getBusinessDayWindow(date: string, factoryId: string): Promise<Interval | null> {
+  const cfg = await getBusinessTimeConfig(factoryId);
   try {
     return buildBusinessRange(date, date, cfg.timezone, cfg.shiftAStart);
   } catch {

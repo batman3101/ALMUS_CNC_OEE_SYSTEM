@@ -16,6 +16,7 @@ import { canAccessPath, isPublicPath, type UserRole } from '@/lib/pageAccess';
 import { useFailureReport } from '@/hooks/useFailureReport';
 import LoginForm from '@/components/auth/LoginForm';
 import Sidebar from './Sidebar';
+import FactorySwitcher from './FactorySwitcher';
 import LanguageToggle from './LanguageToggle';
 import ThemeToggle from './ThemeToggle';
 import styles from './AppLayout.module.css';
@@ -253,6 +254,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
           
           <div className={styles.headerActions}>
+            {/*
+              현재 공장 표시 · 전환기.
+              소속이 하나인 사용자에게는 배지만 보이고 전환 메뉴는 나타나지 않는다.
+            */}
+            <FactorySwitcher size={screens.xs ? 'small' : 'middle'} />
+
             {/* 언어 전환 컴포넌트 */}
             <LanguageToggle size={screens.xs ? 'small' : 'middle'} />
 

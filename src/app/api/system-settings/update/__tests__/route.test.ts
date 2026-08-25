@@ -7,26 +7,55 @@ jest.mock('next/server', () => ({
   },
 }));
 
-const mockGetUser = jest.fn();
-const mockSelect = jest.fn();
-const mockSingle = jest.fn();
 const mockRpc = jest.fn();
-
-const profileQuery = {
-  select: mockSelect,
-  eq: jest.fn(),
-  single: mockSingle,
-};
-mockSelect.mockReturnValue(profileQuery);
-profileQuery.eq.mockReturnValue(profileQuery);
+const mockRequireFactoryUser = jest.fn();
 
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    auth: { getUser: mockGetUser },
-    from: jest.fn(() => profileQuery),
-    rpc: mockRpc,
-  })),
+  createClient: jest.fn(() => ({ rpc: mockRpc })),
 }));
+
+/**
+ * 인가는 더 이상 이 라우트가 직접 하지 않는다.
+ *
+ * 예전에는 여기서 토큰을 뜯어 `user_profiles.role` 을 읽었다. 그 검사는 역할만 알고
+ * **공장을 모른다** — 설정은 공장마다 다른 행이므로, 어느 행을 고칠지 정하지 못한 채
+ * 쓰게 된다. 이제 `requireFactoryUser` 가 세션·역할·공장을 한 번에 확정한다.
+ *
+ * 검사 **지점**이 옮겨졌을 뿐 이 테스트가 지키려는 성질은 그대로다:
+ *   - 비활성 관리자는 RPC 전에 거부된다 (requireFactoryUser 가 403 을 던진다)
+ *   - 계약 위반은 RPC 전에 400
+ *   - 인가가 계약 검사보다 먼저
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireFactoryUser(...args),
+}));
+
+class FakeAuthError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+jest.mock('@/lib/apiAuth', () => ({
+  apiAuthErrorResponse: (error: unknown) =>
+    error instanceof Error && 'status' in error
+      ? {
+          status: (error as { status: number }).status,
+          json: async () => ({ success: false, error: error.message }),
+        }
+      : null,
+}));
+
+const FACTORY_ID = '00000000-0000-4000-8000-00000000a17e';
+const activeAdmin = () =>
+  mockRequireFactoryUser.mockResolvedValue({
+    userId: 'active-admin',
+    factoryId: FACTORY_ID,
+    factoryCode: 'ALT',
+    role: 'admin',
+    assignedMachineIds: [],
+    isGlobalAdmin: false,
+  });
 
 import { POST } from '../route';
 
@@ -35,13 +64,8 @@ describe('POST /api/system-settings/update', () => {
     jest.clearAllMocks();
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
-    mockSelect.mockReturnValue(profileQuery);
-    profileQuery.eq.mockReturnValue(profileQuery);
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'inactive-admin' } }, error: null });
-    mockSingle.mockResolvedValue({
-      data: { role: 'admin', is_active: false },
-      error: null,
-    });
+    // 비활성 계정은 requireFactoryUser 안에서 403 이 된다 ('비활성화된 계정입니다').
+    mockRequireFactoryUser.mockRejectedValue(new FakeAuthError('비활성화된 계정입니다', 403));
     mockRpc.mockResolvedValue({ data: null, error: null });
   });
 
@@ -56,7 +80,8 @@ describe('POST /api/system-settings/update', () => {
     } as never);
 
     expect(response.status).toBe(403);
-    expect(mockSelect).toHaveBeenCalledWith('role, is_active');
+    // 요점은 상태 코드가 아니라 **RPC 가 돌지 않았다**는 것이다. 거부가 쓰기보다 늦으면
+    // 403 을 돌려주면서 이미 저장을 마친 상태가 된다.
     expect(mockRpc).not.toHaveBeenCalled();
   });
 });
@@ -79,10 +104,7 @@ describe('POST /api/system-settings/update — 설정 계약 검증', () => {
     jest.clearAllMocks();
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
-    mockSelect.mockReturnValue(profileQuery);
-    profileQuery.eq.mockReturnValue(profileQuery);
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'active-admin' } }, error: null });
-    mockSingle.mockResolvedValue({ data: { role: 'admin', is_active: true }, error: null });
+    activeAdmin();
     mockRpc.mockResolvedValue({ data: { ok: true, updated: 1 }, error: null });
   });
 
@@ -94,7 +116,10 @@ describe('POST /api/system-settings/update — 설정 계약 검증', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(mockRpc).toHaveBeenCalledWith('update_system_setting', expect.objectContaining({
+    expect(mockRpc).toHaveBeenCalledWith('update_system_setting_scoped', expect.objectContaining({
+      // 공장이 인자에 실려 있어야 한다. 빠지면 옛 함수처럼 (category, key) 만으로 찾게 되고,
+      // 두 공장에 같은 키가 있을 때 어느 행이 바뀔지 보장이 없다.
+      p_factory_id: FACTORY_ID,
       p_category: 'shift',
       p_key: 'shift_a_start',
     }));
@@ -166,7 +191,8 @@ describe('POST /api/system-settings/update — 설정 계약 검증', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(mockRpc).toHaveBeenCalledWith('update_system_settings_batch', expect.objectContaining({
+    expect(mockRpc).toHaveBeenCalledWith('update_system_settings_batch_scoped', expect.objectContaining({
+      p_factory_id: FACTORY_ID,
       p_updates: [
         { category: 'shift', setting_key: 'break_time_minutes', setting_value: '110' },
         { category: 'display', setting_key: 'compact_mode', setting_value: 'true' },
@@ -177,6 +203,7 @@ describe('POST /api/system-settings/update — 설정 계약 검증', () => {
   it('계약 검사보다 인가가 먼저다 — 인증 없이 키 목록을 훑을 수 없다', async () => {
     // 계약 위반 사유는 "어떤 키가 존재하는가"를 알려준다. 인가 앞에서 검사하면 401/400 차이만
     // 으로 설정 키를 열거할 수 있게 된다.
+    mockRequireFactoryUser.mockRejectedValue(new FakeAuthError('인증이 필요합니다', 401));
     const response = await POST({
       headers: new Headers(),
       json: async () => ({ category: 'ui', setting_key: 'language', setting_value: 'ko' }),

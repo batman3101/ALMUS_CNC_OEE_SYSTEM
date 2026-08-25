@@ -4,6 +4,8 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { systemSettingsService, mapDbKeyToCodeKey } from '@/lib/systemSettings';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFactory } from '@/contexts/FactoryContext';
+import { factoryChannelName } from '@/lib/realtimeScope';
 import type {
   AllSystemSettings,
   SettingUpdate,
@@ -51,6 +53,10 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // broadcast 토픽을 공장별로 갈라야 한다 — broadcast 는 RLS 를 타지 않아서 토픽 이름이
+  // 곧 경계다(@/lib/realtimeScope).
+  const { factoryCode } = useFactory();
 
   /**
    * 설정 데이터 로드
@@ -234,7 +240,9 @@ export function SystemSettingsProvider({ children }: SystemSettingsProviderProps
    */
   useEffect(() => {
     const channel = supabase
-      .channel('system_settings_changes')
+      // 발신 측(systemSettings.ts)과 **같은 규칙**으로 토픽을 만든다. 한쪽만 바꾸면
+      // 재조회가 영원히 오지 않는다.
+      .channel(factoryChannelName('system_settings_changes', factoryCode))
       .on('broadcast', { event: 'setting_changed' }, () => {
         void loadSettings();
       })

@@ -10,10 +10,40 @@ jest.mock('@/lib/apiAuth', () => ({
   assertMachineAccess: (...a: unknown[]) => mockAssert(...a),
   apiAuthErrorResponse: () => null,
 }));
+
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...a: unknown[]) => mockRequireUser(...a),
+  assertFactoryMachineAccess: (...a: unknown[]) => mockAssert(...a),
+}));
+
 jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { from: (...a: unknown[]) => mockFrom(...a), rpc: (...a: unknown[]) => mockRpc(...a) },
 }));
 import { PATCH } from '../route';
+
+/**
+ * PostgREST 빌더를 흉내낸다 — 필터 메서드는 **자신을 돌려주고** 종단만 결과를 준다.
+ *
+ * 예전 mock 들은 `select→eq→eq→...` 중첩 깊이를 코드에 박아 놨다. 그래서 쿼리에 필터가
+ * 하나 붙는 순간(여기서는 공장 조건) 검사 내용과 무관한 TypeError 로 전부 죽었고, 더 나쁘게는
+ * 그 500 이 원래 검증하려던 상태 코드를 가렸다.
+ */
+const chain = (result: unknown) => {
+  const q: Record<string, unknown> = {};
+  for (const m of ['select', 'eq', 'is', 'in', 'gte', 'lte', 'lt', 'or', 'neq', 'order', 'limit', 'range']) {
+    q[m] = () => q;
+  }
+  q.single = async () => result;
+  q.maybeSingle = async () => result;
+  q.then = (resolve: (v: unknown) => unknown) => resolve(result);
+  return q;
+};
 
 const REC = 'rec-1';
 // 검증·quality/oee 파생은 confirm_shift_defect RPC(advisory lock, 재마감과 동일 키)가 한다.
@@ -21,9 +51,7 @@ const REC = 'rec-1';
 const wire = ({ record = { record_id: REC, machine_id: 'm1' } as Record<string, unknown> | null,
                 rpc = { data: { ok: true, quality: 0.9, oee: 0.648 }, error: null } as { data: unknown; error: unknown } } = {}) => {
   mockFrom.mockImplementation((t: string) => {
-    if (t === 'production_records') return {
-      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: record, error: null }) }) }),
-    };
+    if (t === 'production_records') return chain({ data: record, error: null });
     throw new Error(`unexpected ${t}`);
   });
   mockRpc.mockResolvedValue(rpc);

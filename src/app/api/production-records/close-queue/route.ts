@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { chunkIdsForInFilter } from '@/lib/idFilter';
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,7 @@ const shiftRank = (s: string) => (s === 'A' ? 0 : 1);
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
 
     const machineId = searchParams.get('machine_id');
@@ -109,6 +110,7 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from('production_progress_reports')
         .select('machine_id, date, shift, shift_output_qty')
+      .eq('factory_id', user.factoryId)
         .gte('date', startDate).lte('date', endDate)
         .limit(SCAN_CAP),
       scope
@@ -117,6 +119,7 @@ export async function GET(request: NextRequest) {
       supabaseAdmin
         .from('production_records')
         .select('machine_id, date, shift')
+      .eq('factory_id', user.factoryId)
         .gte('date', startDate).lte('date', endDate)
         .limit(SCAN_CAP),
       scope
@@ -151,7 +154,8 @@ export async function GET(request: NextRequest) {
     const machineIds = [...new Set(pendingKeys.map(k => k.split('|')[0]))];
     const namePages = await Promise.all(
       chunkIdsForInFilter(machineIds).map(chunk =>
-        supabaseAdmin.from('machines').select('id, name').in('id', chunk))
+        supabaseAdmin.from('machines').select('id, name')
+      .eq('factory_id', user.factoryId).in('id', chunk))
     );
     const nameById = new Map<string, string>();
     for (const p of namePages) for (const m of p.data ?? []) nameById.set(m.id, m.name);

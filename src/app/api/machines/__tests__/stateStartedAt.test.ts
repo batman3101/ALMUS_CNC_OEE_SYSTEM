@@ -21,6 +21,12 @@ jest.mock('@/lib/apiAuth', () => ({
   apiAuthErrorResponse: () => null,
 }));
 
+// GET 은 공장 인지 계약으로 전환됐다. 이 테스트는 state_started_at 파생을 보는 것이므로
+// 인가는 통과시키고 공장만 고정한다.
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireUser(...args),
+}));
+
 type Row = Record<string, unknown>;
 const tables: { machines: Row[]; machine_logs: Row[] } = { machines: [], machine_logs: [] };
 let machineLogsError: { message: string } | null = null;
@@ -67,7 +73,7 @@ describe('GET /api/machines — state_started_at', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     machineLogsError = null;
-    mockRequireUser.mockResolvedValue({ userId: 'admin-1', role: 'admin', assignedMachineIds: null });
+    mockRequireUser.mockResolvedValue({ userId: 'admin-1', role: 'admin', assignedMachineIds: [], factoryId: 'factory-1', factoryCode: 'ALT', isGlobalAdmin: false });
     tables.machines = [
       { id: 'machine-1', name: 'M1', current_state: 'BREAKDOWN_REPAIR', updated_at: '2026-08-20T14:14:00.000Z' },
       { id: 'machine-2', name: 'M2', current_state: 'NORMAL_OPERATION', updated_at: '2026-08-20T14:14:00.000Z' },

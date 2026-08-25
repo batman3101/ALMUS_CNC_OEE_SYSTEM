@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer', 'operator']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/machine-status-descriptions called');
 
     const { data: statusDescriptions, error } = await supabaseAdmin
       .from('machine_status_descriptions')
       .select('*')
+      .eq('factory_id', factoryUser.factoryId)
       .order('display_order');
 
     if (error) {

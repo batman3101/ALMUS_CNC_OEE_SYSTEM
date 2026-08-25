@@ -9,7 +9,40 @@ jest.mock('@/lib/apiAuth', () => ({
   assertMachineAccess: (...a: unknown[]) => mockAssert(...a),
   apiAuthErrorResponse: () => null,
 }));
-jest.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { rpc: (...a: unknown[]) => mockRpc(...a) } }));
+
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...a: unknown[]) => mockRequireUser(...a),
+  assertFactoryMachineAccess: (...a: unknown[]) => mockAssert(...a),
+}));
+
+/**
+ * 이제 이 라우트는 andon RPC 앞에서 **공장 소유 확인**을 한다(`assertMachineInFactory`).
+ * 그 확인은 `machines` 를 읽으므로 mock 에 `from` 이 필요하다 — 없으면 라우트가
+ * "from is not a function" 으로 죽고, 이 파일이 검증하려는 비가동 계산에 닿지도 못한다.
+ *
+ * `ownedRow` 를 null 로 두면 "이 공장 설비가 아니다"를 흉내낼 수 있다.
+ */
+// MACHINE 상수는 아래에서 선언되므로 여기서 참조하면 TDZ 다. 값은 존재 여부만 쓰인다.
+const ownedRow: { id: string } | null = { id: 'owned' };
+
+jest.mock('@/lib/supabase-admin', () => ({
+  supabaseAdmin: {
+    rpc: (...a: unknown[]) => mockRpc(...a),
+    from: () => {
+      const q: Record<string, unknown> = {};
+      q.select = () => q;
+      q.eq = () => q;
+      q.maybeSingle = async () => ({ data: ownedRow, error: null });
+      return q;
+    },
+  },
+}));
 // 라우트가 업무일자 계산에 쓰는 의존성(RPC 인자 p_date). 라우트 로직만 검증하므로 고정 mock.
 jest.mock('@/lib/shiftConfig', () => ({ getBusinessTimeConfig: async () => ({ timezone: 'Asia/Ho_Chi_Minh', shiftAStart: '08:00', shiftBStart: '20:00' }) }));
 // getBusinessDateAt 만 POST 테스트용으로 고정하고, 나머지 실제 구간 유틸(clipInterval 등)은

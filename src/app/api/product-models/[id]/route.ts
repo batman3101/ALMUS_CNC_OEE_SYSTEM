@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // GET /api/product-models/[id] - 특정 생산 모델 조회
 export async function GET(
@@ -9,7 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    await requireUser(request, ['admin', 'engineer', 'operator']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     console.log('GET /api/product-models/[id] called with id:', id);
 
     const { data: model, error } = await supabaseAdmin
@@ -22,6 +23,7 @@ export async function GET(
         created_at,
         updated_at
       `)
+      .eq('factory_id', factoryUser.factoryId)
       .eq('id', id)
       .single();
 
@@ -77,7 +79,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const body = await request.json();
     const modelName = typeof body.model_name === 'string' ? body.model_name.trim() : '';
@@ -93,6 +95,7 @@ export async function PUT(
       .update({ model_name: modelName, description })
       .eq('id', id)
       .select()
+      .eq('factory_id', factoryUser.factoryId)
       .maybeSingle();
 
     if (error) {
@@ -131,13 +134,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     const { data: deactivated, error } = await supabaseAdmin
       .from('product_models')
       .update({ is_active: false })
       .eq('id', id)
       .select('id')
+      .eq('factory_id', factoryUser.factoryId)
       .maybeSingle();
 
     if (error) {

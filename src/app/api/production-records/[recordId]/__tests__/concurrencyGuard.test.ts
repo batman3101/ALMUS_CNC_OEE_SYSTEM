@@ -32,6 +32,19 @@ jest.mock('@/lib/apiAuth', () => ({
   apiAuthErrorResponse: () => null,
 }));
 
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ * 별도 mock 을 두면 두 벌이 되고, 한쪽만 고쳐지는 순간 검사가 헐거워진다.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireUser(...args),
+  assertFactoryMachineAccess: (...args: unknown[]) => mockAssertMachineAccess(...args),
+}));
+
+
 jest.mock('@/lib/plannedRuntime', () => ({
   DEFAULT_OPERATING_MINUTES: 720,
   getBreakTimeMinutes: jest.fn(async () => 60),
@@ -115,27 +128,30 @@ const makeUpdateChain = () => {
 jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: (table: string) => {
+      // 읽기 체인은 필터를 몇 개 받아도 같은 객체를 돌려준다. 예전에는 `select→eq→single`
+      // 깊이가 박혀 있어서 공장 조건이 붙자 TypeError 로 죽었다 — 이 파일이 검증하는
+      // 낙관적 동시성 지문에는 아무 관계가 없는 이유로.
+      //
+      // 갱신 체인(makeUpdateChain)은 그대로 둔다. 그쪽은 `.eq`/`.is` **호출 자체를 기록**해
+      // 지문을 검사하므로, 단순히 자신을 돌려주는 것으로 바꾸면 검사가 사라진다.
+      const readChain = (result: unknown) => {
+        const q: Record<string, unknown> = {};
+        for (const m of ['select', 'eq', 'is', 'order', 'limit']) q[m] = () => q;
+        q.single = async () => result;
+        q.maybeSingle = async () => result;
+        return q;
+      };
+
       if (table === 'production_records') {
-        return {
-          select: () => ({
-            eq: () => ({
-              single: async () => ({ data: existingRow, error: null }),
-            }),
-          }),
-          update: (payload: Record<string, unknown>) => {
-            appliedPayload = payload;
-            return makeUpdateChain();
-          },
+        const q = readChain({ data: existingRow, error: null }) as Record<string, unknown>;
+        q.update = (payload: Record<string, unknown>) => {
+          appliedPayload = payload;
+          return makeUpdateChain();
         };
+        return q;
       }
       if (table === 'machines_with_production_info') {
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: { current_tact_time: 576 }, error: null }),
-            }),
-          }),
-        };
+        return readChain({ data: { current_tact_time: 576 }, error: null });
       }
       throw new Error(`unexpected table ${table}`);
     },

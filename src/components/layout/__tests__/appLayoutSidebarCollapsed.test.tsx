@@ -77,6 +77,9 @@ jest.mock('../Sidebar', () => ({
 jest.mock('@/components/auth/LoginForm', () => ({ __esModule: true, default: () => null }));
 jest.mock('../LanguageToggle', () => ({ __esModule: true, default: () => null }));
 jest.mock('../ThemeToggle', () => ({ __esModule: true, default: () => null }));
+// FactorySwitcher 는 authFetch -> supabase 클라이언트를 끌어와 env 검증에 걸린다.
+// 이 테스트들이 보는 것은 레이아웃 게이트이지 공장 표시가 아니다.
+jest.mock('../FactorySwitcher', () => ({ __esModule: true, default: () => null }));
 
 const DESKTOP = { xs: false, sm: true, md: true, lg: true, xl: true, xxl: false };
 const MOBILE = { xs: true, sm: false, md: false, lg: false, xl: false, xxl: false };

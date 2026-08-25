@@ -22,15 +22,43 @@ jest.mock('next/server', () => ({
   },
 }));
 
-const mockRequireUserManager = jest.fn();
+const mockRequireFactoryUser = jest.fn();
 
 jest.mock('@/lib/apiAuth', () => ({
-  requireUserManager: (...args: unknown[]) => mockRequireUserManager(...args),
   fetchAccountRole: jest.fn(async () => 'operator'),
   assertCanManageAccount: jest.fn(),
   assertCanAssignRole: jest.fn(),
   apiAuthErrorResponse: () => null,
 }));
+
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireFactoryUser(...args),
+}));
+
+// 공장 가드는 여기서 통과시키고, **가드가 실제로 불리는지**는 아래 전용 검사가 본다.
+// 통째로 무력화한 채 두면 가드를 지워도 이 파일이 통과한다.
+const mockAssertTargetInFactory = jest.fn();
+const mockAssertSoleFactory = jest.fn();
+
+jest.mock('@/lib/factoryUserAdmin', () => {
+  class FactoryUserNotFoundError extends Error {}
+  class CrossFactoryUserError extends Error {}
+  return {
+    FactoryUserNotFoundError,
+    CrossFactoryUserError,
+    assertTargetInFactory: (...args: unknown[]) => mockAssertTargetInFactory(...args),
+    assertSoleFactory: (...args: unknown[]) => mockAssertSoleFactory(...args),
+    factoryUserErrorResponse: (error: unknown) => {
+      if (error instanceof FactoryUserNotFoundError) {
+        return { status: 404, json: async () => ({ error: error.message }) };
+      }
+      if (error instanceof CrossFactoryUserError) {
+        return { status: 409, json: async () => ({ error: error.message }) };
+      }
+      return null;
+    },
+  };
+});
 
 interface TableWrite {
   table: string;
@@ -79,11 +107,16 @@ const req = (body: unknown = {}) => ({ json: async () => body }) as never;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockRequireUserManager.mockResolvedValue({
+  mockRequireFactoryUser.mockResolvedValue({
     userId: 'admin-1',
+    factoryId: 'factory-alt',
+    factoryCode: 'ALT',
     role: 'admin',
     assignedMachineIds: [],
+    isGlobalAdmin: false,
   });
+  mockAssertTargetInFactory.mockResolvedValue(undefined);
+  mockAssertSoleFactory.mockResolvedValue(undefined);
   tableWrites = [];
   deletedFrom = [];
   authDeleteError = null;
@@ -193,5 +226,55 @@ describe('PUT /api/admin/users/[userId]', () => {
     const response = await PUT(req(editBody), ctx);
 
     expect(response.status).toBe(500);
+  });
+});
+
+/**
+ * 공장 가드가 **실제로 불리는지**.
+ *
+ * 위 검사들은 가드를 통과시켜 놓고 돌기 때문에, 가드를 라우트에서 지워도 전부 통과한다.
+ * 그래서 가드가 거부할 때 그 거부가 응답까지 도달하는지를 따로 본다 — 호출 여부와
+ * 오류 매핑을 한 번에 확인한다.
+ *
+ * 이 검사가 없던 동안 ALV 관리자가 ALT 사용자의 이름·역할·담당 설비를 바꾸고 계정을
+ * 지울 수 있었다. Service Role 로 도는 경로라 RLS 는 이것을 막지 못한다.
+ */
+describe('다른 공장 사용자는 손댈 수 없다', () => {
+  const { FactoryUserNotFoundError, CrossFactoryUserError } =
+    jest.requireMock('@/lib/factoryUserAdmin');
+
+  it('PUT 은 이 공장 사람이 아니면 404 이고 아무것도 쓰지 않는다', async () => {
+    mockAssertTargetInFactory.mockRejectedValue(
+      new FactoryUserNotFoundError('사용자를 찾을 수 없습니다')
+    );
+
+    const response = await PUT(req({ name: '이름', role: 'operator' }), ctx);
+
+    expect(response.status).toBe(404);
+    expect(tableWrites).toEqual([]);
+  });
+
+  it('DELETE 는 이 공장 사람이 아니면 404 이고 계정을 지우지 않는다', async () => {
+    mockAssertTargetInFactory.mockRejectedValue(
+      new FactoryUserNotFoundError('사용자를 찾을 수 없습니다')
+    );
+
+    const response = await DELETE(req(), ctx);
+
+    expect(response.status).toBe(404);
+    expect(deletedFrom).toEqual([]);
+  });
+
+  it('DELETE 는 여러 공장에 걸친 사용자를 거부한다(409)', async () => {
+    // 계정 삭제는 auth.users 까지 지운다. 한 공장의 결정으로 다른 공장에서 사람이
+    // 사라지면, 그쪽 관리자는 이유를 알 방법이 없다.
+    mockAssertSoleFactory.mockRejectedValue(
+      new CrossFactoryUserError('다른 공장에도 소속되어 있습니다')
+    );
+
+    const response = await DELETE(req(), ctx);
+
+    expect(response.status).toBe(409);
+    expect(deletedFrom).toEqual([]);
   });
 });

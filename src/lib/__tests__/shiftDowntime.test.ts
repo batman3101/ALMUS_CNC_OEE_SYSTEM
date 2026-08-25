@@ -18,14 +18,20 @@ const makeQuery = (data: unknown[]) => {
   return q;
 };
 
-/** system_settings 조회(getBusinessTimeConfig): select→in→eq 가 결과를 준다. */
+/**
+ * system_settings 조회(getBusinessTimeConfig).
+ *
+ * 필터 메서드는 자신을 돌려주고 종단은 thenable 이다 — 실제 PostgREST 빌더와 같은 모양.
+ * `.eq` 를 종단으로 두면 체인 순서가 코드에 박혀, 필터가 늘 때마다 무관한 이유로 깨진다.
+ */
 const settingsQuery = (rows: unknown[]) => {
   const q: Record<string, unknown> = {};
-  q.select = () => q;
-  q.in = () => q;
-  q.eq = async () => ({ data: rows, error: null });
+  for (const m of ['select', 'in', 'eq']) q[m] = () => q;
+  q.then = (resolve: (v: unknown) => unknown) => resolve({ data: rows, error: null });
   return q;
 };
+
+const FACTORY = '00000000-0000-4000-8000-00000000a17e';
 
 describe('loadDowntimeSourceRows', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -95,7 +101,7 @@ describe('getShiftWindow', () => {
       throw new Error(`unexpected table ${table}`);
     });
 
-    const window = await getShiftWindow('2026-07-17', 'A');
+    const window = await getShiftWindow('2026-07-17', 'A', FACTORY);
     expect(window).not.toBeNull();
     // 12시간 = 720분
     expect(Math.round((window!.end - window!.start) / 60000)).toBe(720);
@@ -107,11 +113,11 @@ describe('getShiftWindow', () => {
       throw new Error(`unexpected table ${table}`);
     });
 
-    const window = await getShiftWindow('2026-07-17', 'B');
+    const window = await getShiftWindow('2026-07-17', 'B', FACTORY);
     expect(window).not.toBeNull();
     expect(Math.round((window!.end - window!.start) / 60000)).toBe(720);
     // B교대 시작은 A교대 시작보다 뒤(같은 날 20:00)
-    const aWindow = await getShiftWindow('2026-07-17', 'A');
+    const aWindow = await getShiftWindow('2026-07-17', 'A', FACTORY);
     expect(window!.start).toBeGreaterThan(aWindow!.start);
   });
 });

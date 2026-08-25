@@ -24,6 +24,19 @@ jest.mock('@/lib/apiAuth', () => ({
       : null,
 }));
 
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ * 별도 mock 을 두면 두 벌이 되고, 한쪽만 고쳐지는 순간 검사가 헐거워진다.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireUser(...args),
+  assertFactoryMachineAccess: (...args: unknown[]) => mockAssertMachineAccess(...args),
+}));
+
+
 jest.mock('@/lib/plannedRuntime', () => ({
   getBreakTimeMinutes: jest.fn(async () => 60),
   resolvePlannedRuntime: jest.fn((operating: number, breaks: number) =>
@@ -34,24 +47,21 @@ jest.mock('@/lib/plannedRuntime', () => ({
 jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: jest.fn((table: string) => {
+      // 필터 메서드는 자신을 돌려준다. 예전 mock 은 `select→eq→single` 깊이가 박혀 있어,
+      // 공장 조건이 하나 붙자 검사 내용과 무관한 TypeError 로 전부 죽었다.
+      const chain = (result: unknown) => {
+        const q: Record<string, unknown> = {};
+        for (const m of ['select', 'eq', 'is', 'in', 'order', 'limit']) q[m] = () => q;
+        q.single = async () => result;
+        q.maybeSingle = async () => result;
+        return q;
+      };
+
       if (table === 'machines') {
-        return {
-          select: () => ({
-            eq: () => ({ single: async () => ({ data: { id: 'machine-1', is_active: machineActive }, error: null }) }),
-          }),
-        };
+        return chain({ data: { id: 'machine-1', is_active: machineActive }, error: null });
       }
       if (table === 'machines_with_production_info') {
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({
-                data: productionInfo,
-                error: null,
-              }),
-            }),
-          }),
-        };
+        return chain({ data: productionInfo, error: null });
       }
       if (table === 'production_records') return { insert };
       throw new Error(`unexpected table ${table}`);

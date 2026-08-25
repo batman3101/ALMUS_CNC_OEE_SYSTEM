@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ recordId: string }> }) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { recordId } = await ctx.params;
     const body = await request.json() as { defect_qty?: unknown };
     const defect = typeof body.defect_qty === 'number' ? body.defect_qty : Number.NaN;
@@ -20,6 +21,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ recor
     const { data: rec, error: readErr } = await supabaseAdmin
       .from('production_records')
       .select('record_id, machine_id')
+      .eq('factory_id', user.factoryId)
       .eq('record_id', recordId).maybeSingle();
     if (readErr) return NextResponse.json({ error: 'Failed to read record' }, { status: 500 });
     if (!rec) return NextResponse.json({ error: 'record not found' }, { status: 404 });

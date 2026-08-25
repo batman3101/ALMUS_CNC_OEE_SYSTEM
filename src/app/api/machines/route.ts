@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MACHINE_STATES, isMachineState } from '@/types';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { chunkIdsForInFilter } from '@/lib/idFilter';
 
 // 입력값 검증 및 보안 함수들
@@ -50,10 +51,14 @@ function validateCurrentState(state: string | null): string | null {
 }
 
 // GET /api/machines - 모든 설비 목록 조회 (인증된 사용자용)
+//
+// ⚠ 이 Route 는 **공장 인지 계약으로 전환됐다**(계약 5.3).
+// `requireFactoryUser` 는 host 와 membership 으로 공장을 확정하고, 아래 모든 query 는
+// 그 공장으로 제한된다. 요청이 보낸 factory 값은 신뢰하지 않는다.
 export async function GET(request: NextRequest) {
   try {
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    console.log('GET /api/machines called');
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
+    console.log('GET /api/machines called', { factory: authenticatedUser.factoryCode });
     
     const { searchParams } = new URL(request.url);
     const isActive = searchParams.get('is_active');
@@ -117,12 +122,12 @@ export async function GET(request: NextRequest) {
           current_process_id,
           created_at,
           updated_at,
-          product_models:production_model_id (
+          product_models:product_models!machines_factory_production_model_fkey (
             id,
             model_name,
             description
           ),
-          model_processes:current_process_id (
+          model_processes:model_processes!machines_factory_current_process_fkey (
             id,
             process_name,
             process_order,
@@ -133,6 +138,9 @@ export async function GET(request: NextRequest) {
           .order('id', { ascending: true })
           .range(from, from + pageSize - 1);
 
+        // 공장 제한이 이 Route 의 경계다. 역할·담당설비 필터보다 **먼저** 걸려야 한다 —
+        // 나머지 조건이 모두 참이어도 다른 공장의 행은 나오면 안 되기 때문이다.
+        query = query.eq('factory_id', authenticatedUser.factoryId);
         if (isActive !== 'false') query = query.eq('is_active', true);
         if (validatedLocation) query = query.eq('location', validatedLocation);
         if (validatedCurrentState) query = query.eq('current_state', validatedCurrentState);
@@ -165,6 +173,7 @@ export async function GET(request: NextRequest) {
         const { data, error } = await supabaseAdmin
           .from('machine_logs')
           .select('machine_id, state, start_time')
+          .eq('factory_id', authenticatedUser.factoryId)
           .is('end_time', null)
           .in('machine_id', logIdChunk)
           .order('machine_id', { ascending: true })
@@ -216,207 +225,31 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/machines - 새 설비 추가
-export async function POST(request: NextRequest) {
-  try {
-    await requireUser(request, ['admin', 'engineer']);
-    console.log('POST /api/machines called');
-    
-    const body = await request.json();
-    const {
-      name: rawName,
-      location: rawLocation,
-      equipment_type: rawEquipmentType,
-      is_active = true,
-      current_state: rawCurrentState = 'NORMAL_OPERATION',
-      production_model_id,
-      current_process_id
-    } = body;
-
-    // 필수 필드 검증
-    if (!rawName || !rawLocation) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: '설비명과 위치는 필수 입력 항목입니다.' 
-        },
-        { status: 400 }
-      );
-    }
-
-    // 입력값 검증 및 정제
-    let name: string;
-    let location: string;
-    let equipment_type: string | null = null;
-    let current_state: string;
-
-    try {
-      name = validateStringInput(rawName, '설비명') || '';
-      location = validateLocation(rawLocation) || '';
-      current_state = validateCurrentState(rawCurrentState) || 'NORMAL_OPERATION';
-      
-      if (rawEquipmentType) {
-        equipment_type = validateStringInput(rawEquipmentType, '설비 유형');
-      }
-
-      if (!name || !location) {
-        throw new Error('설비명과 위치는 필수 입력 항목입니다.');
-      }
-    } catch (validationError) {
-      console.error('Input validation error:', validationError);
-      return NextResponse.json(
-        { 
-          success: false,
-          error: '입력값 검증 실패',
-          message: validationError instanceof Error ? validationError.message : 'Invalid input'
-        },
-        { status: 400 }
-      );
-    }
-
-    // 설비명 중복 확인
-    const { data: existingMachine } = await supabaseAdmin
-      .from('machines')
-      .select('id, name')
-      .eq('name', name)
-      .single();
-
-    if (existingMachine) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `이미 존재하는 설비명입니다: ${name}` 
-        },
-        { status: 409 }
-      );
-    }
-
-    // 새 설비 추가
-    const { data: newMachine, error: insertError } = await supabaseAdmin
-      .from('machines')
-      .insert({
-        name,
-        location,
-        equipment_type,
-        is_active,
-        current_state,
-        production_model_id: production_model_id || null,
-        current_process_id: current_process_id || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select(`
-        id,
-        name,
-        location,
-        equipment_type,
-        is_active,
-        current_state,
-        production_model_id,
-        current_process_id,
-        created_at,
-        updated_at
-      `)
-      .single();
-
-    if (insertError) {
-      console.error('Insert error:', insertError);
-      
-      // 중복 에러 처리
-      if (insertError.code === '23505') {
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: '설비명이 이미 존재합니다.' 
-          },
-          { status: 409 }
-        );
-      }
-      
-      throw insertError;
-    }
-
-    console.log('Successfully created new machine:', newMachine?.name);
-
-    return NextResponse.json({
-      success: true,
-      message: '설비가 성공적으로 추가되었습니다.',
-      machine: newMachine
-    }, { status: 201 });
-
-  } catch (error: unknown) {
-    const authResponse = apiAuthErrorResponse(error);
-    if (authResponse) return authResponse;
-
-    console.error('Error in POST /api/machines:', error);
-    return NextResponse.json(
-      { 
-        success: false,
-        error: '설비 추가 중 오류가 발생했습니다.',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        details: process.env.NODE_ENV === 'development' ? error : undefined
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// DELETE /api/machines - 설비 삭제 (여러 개 동시 삭제 가능)
-export async function DELETE(request: NextRequest) {
-  try {
-    await requireUser(request, ['admin', 'engineer']);
-    console.log('DELETE /api/machines called');
-    
-    const body = await request.json();
-    const { machineIds } = body;
-
-    // 필수 필드 검증
-    if (!machineIds || !Array.isArray(machineIds) || machineIds.length === 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: '삭제할 설비 ID가 필요합니다.' 
-        },
-        { status: 400 }
-      );
-    }
-
-    // 생산·비가동 이력은 보존하고 설비 마스터만 비활성화한다.
-    const { data: deletedMachines, error: deleteError } = await supabaseAdmin
-      .from('machines')
-      .update({ 
-        is_active: false,
-        updated_at: new Date().toISOString()
-      })
-      .in('id', machineIds)
-      .select('id, name');
-
-    if (deleteError) {
-      console.error('Delete error:', deleteError);
-      throw deleteError;
-    }
-
-    console.log(`Successfully deactivated ${deletedMachines?.length || 0} machines`);
-
-    return NextResponse.json({
-      success: true,
-      message: `${deletedMachines?.length || 0}개의 설비가 비활성화되었습니다.`,
-      machines: deletedMachines
-    });
-
-  } catch (error: unknown) {
-    const authResponse = apiAuthErrorResponse(error);
-    if (authResponse) return authResponse;
-
-    console.error('Error in DELETE /api/machines:', error);
-    return NextResponse.json(
-      { 
-        success: false,
-        error: '설비 삭제 중 오류가 발생했습니다.',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        details: process.env.NODE_ENV === 'development' ? error : undefined
-      },
-      { status: 500 }
-    );
-  }
-}
+// ---------------------------------------------------------------------------
+// POST / DELETE 는 제거했다 (2026-08-24)
+// ---------------------------------------------------------------------------
+// 설비를 등록·비활성화하는 통로가 두 개였다. 화면이 실제로 쓰는 것은
+// `/api/admin/machines`(POST)와 `/api/admin/machines/[machineId]`(DELETE)이고,
+// 여기 있던 두 핸들러는 **어느 화면도 부르지 않았다**(`useMachines.ts` 는 GET 만 쓴다).
+//
+// 그런데 살아 있는 통로였고, 자물쇠가 헐거웠다:
+//
+//   await requireUser(request, ['admin', 'engineer']);   // 공장을 묻지 않는다
+//   supabaseAdmin.from('machines')                       // Service Role = RLS 우회
+//     .update({ is_active: false })
+//     .in('id', machineIds);                             // factory_id 조건 없음
+//
+// 즉 ALV 의 engineer 가 ALT 설비 ID 만 알면 ALT 설비를 전부 비활성화할 수 있었다.
+// 다중화가 막으려던 바로 그 일이다.
+//
+// POST 도 같은 문제에 더해 `factory_id` 를 넣지 않아 NOT NULL 로 실패했고, 설비명 중복
+// 검사가 `.eq('name', name).single()` 이라 두 공장이 같은 설비명을 쓰는 순간 "2행"으로
+// 터졌다.
+//
+// **고치지 않고 지운 이유**: 안 쓰는 통로는 잠그는 것보다 없애는 쪽이 안전하다. 잠긴 문은
+// 다음 사람이 다시 열 수 있지만, 없는 문은 그럴 수 없다. 등록·삭제가 다시 필요해지면
+// 이미 공장 인지로 전환된 `/api/admin/machines` 를 쓴다.
+//
+// 이 결함은 `factoryScopedRoutes` 원장이 **파일 단위**로 판정해서 숨어 있었다 — 같은
+// 파일의 GET 이 전환돼 있으면 파일 전체가 "전환됨"이 됐다. 그 원장은 이제 핸들러 단위로
+// 본다.

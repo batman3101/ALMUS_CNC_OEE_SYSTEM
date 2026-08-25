@@ -282,8 +282,33 @@ describe('사용자 관리 API 가 서버에서 같은 규칙을 강제한다', 
   it('더 이상 admin 만으로 하드코딩하지 않는다', () => {
     for (const source of [collection, item]) {
       expect(source).not.toMatch(/requireUser\(request,\s*\['admin'\]\)/);
-      expect(source).toContain('requireUserManager');
+      // 2026-08-24: 사용자 관리가 공장 인지로 전환되면서 `requireUserManager` 대신
+      // `requireFactoryUser(request, [...USER_MANAGEMENT_ROLES])` 를 쓴다. 이 검사가 지키려는
+      // 것은 함수 이름이 아니라 **역할 목록이 공유 상수에서 온다**는 것이므로, 그 상수를
+      // 확인한다. 역할을 손으로 적기 시작하면 여기서 걸린다.
+      expect(source).toContain('USER_MANAGEMENT_ROLES');
     }
+  });
+
+  it('사용자 관리는 공장 안에서만 동작한다', () => {
+    // 이 세 검사가 없던 동안 ALV 관리자가 ALT 사용자를 조회·수정·삭제할 수 있었다.
+    // Service Role 로 도는 경로라 RLS 는 이것을 막지 못한다 — 서버 코드가 유일한 경계다.
+    for (const source of [collection, item]) {
+      expect(source).toContain('requireFactoryUser');
+    }
+    // 목록은 공장 구성원으로 좁히고, 단건은 대상이 이 공장 사람인지 확인한다.
+    expect(collection).toContain('factoryMemberIds');
+    for (const source of [collection, item]) {
+      expect(source).toContain('assertTargetInFactory');
+      expect(source).toContain('assertSoleFactory');
+    }
+  });
+
+  it('신규 사용자는 프로필과 membership 을 함께 만든다', () => {
+    // membership 없이 프로필만 만들면 그 사용자는 로그인은 되는데 모든 API 가 403 이고
+    // 브라우저 조회는 0행이 된다. 그 상태는 사용자 관리 화면에 드러나지 않는다.
+    expect(collection).toContain('create_factory_user');
+    expect(collection).not.toMatch(/from\('user_profiles'\)\s*\.insert/);
   });
 
   it('생성은 대상 역할을 검사한다', () => {

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { format } from 'date-fns';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, assertMachineAccess, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { chunkIdsForInFilter } from '@/lib/idFilter';
 import {
   DEFAULT_PAGE_LIMIT,
@@ -104,7 +105,7 @@ function validateFilters(
 // GET /api/oee-data - OEE 원시 행 조회 (페이지네이션) + 전체 집합 기준 통계
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireUser(request, ['admin', 'engineer', 'operator']);
+    const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const machineId = searchParams.get('machine_id');
     const startDate = searchParams.get('start_date');
@@ -184,7 +185,11 @@ export async function GET(request: NextRequest) {
     // 통계는 전체 집합 위에서 DB 가 계산한다.
     // 행을 전송하지 않으므로 max-rows 한도의 영향을 받지 않는다.
     const summaryResult = includeStatistics
-      ? await supabaseAdmin.rpc('analytics_oee_records_summary', {
+      // 통계는 반환된 **페이지**가 아니라 필터 전체 집합에 대해 SQL 에서 계산된다.
+      // 그 "전체 집합"에 공장 조건이 없으면 두 공장의 평균이 되고, 페이지 목록과 통계가
+      // 서로 다른 모집단을 말하게 된다 — 화면에서는 둘 다 그럴듯해 보인다.
+      ? await supabaseAdmin.rpc('analytics_oee_records_summary_scoped', {
+          p_factory_id: user.factoryId,
           p_start_date: effectiveStartDate,
           p_end_date: effectiveEndDate,
           p_machine_id: machineId,
@@ -251,6 +256,7 @@ export async function GET(request: NextRequest) {
         created_at,
         machines!inner(name)
       `, isChunkedScope ? { count: 'exact' } : undefined)
+      .eq('factory_id', user.factoryId)
         .gte('date', effectiveStartDate)
         .order('date', { ascending: false })
         .order('created_at', { ascending: false })

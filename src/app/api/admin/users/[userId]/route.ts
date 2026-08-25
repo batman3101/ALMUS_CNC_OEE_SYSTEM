@@ -5,8 +5,14 @@ import {
   assertCanAssignRole,
   assertCanManageAccount,
   fetchAccountRole,
-  requireUserManager,
 } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
+import { USER_MANAGEMENT_ROLES } from '@/lib/pageAccess';
+import {
+  assertSoleFactory,
+  assertTargetInFactory,
+  factoryUserErrorResponse,
+} from '@/lib/factoryUserAdmin';
 
 // PUT /api/admin/users/[userId] - 사용자 정보 수정
 export async function PUT(
@@ -14,7 +20,7 @@ export async function PUT(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const actor = await requireUserManager(request);
+    const actor = await requireFactoryUser(request, [...USER_MANAGEMENT_ROLES]);
 
     const { userId } = await params;
     const body = await request.json();
@@ -25,6 +31,10 @@ export async function PUT(
     //     이메일만 바꿔도 그 주소로 비밀번호를 재설정해 그 계정이 될 수 있기 때문이다.
     //  2. 역할을 바꾸려 하는가 — 역할 변경은 시스템 관리자 전용이다.
     // 현재 역할은 본문이 아니라 DB 에서 읽는다(본문은 호출자가 지어낼 수 있다).
+    // 대상이 이 공장 사람인지 먼저 본다(404). 이것이 없으면 ALV 관리자가 ALT 사용자의
+    // 이름·역할·담당 설비를 바꿀 수 있었다 — Service Role 이라 RLS 도 막지 못한다.
+    await assertTargetInFactory(actor.factoryId, userId);
+
     const currentRole = await fetchAccountRole(userId);
     assertCanManageAccount(actor.role, currentRole);
     assertCanAssignRole(actor.role, currentRole, role);
@@ -97,6 +107,9 @@ export async function PUT(
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;
 
+    const factoryResponse = factoryUserErrorResponse(error);
+    if (factoryResponse) return factoryResponse;
+
     console.error('Error updating user:', error);
     return NextResponse.json(
       { error: 'Failed to update user' },
@@ -111,9 +124,15 @@ export async function DELETE(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const actor = await requireUserManager(request);
+    const actor = await requireFactoryUser(request, [...USER_MANAGEMENT_ROLES]);
 
     const { userId } = await params;
+
+    // 대상이 이 공장 사람인지, 그리고 이 공장이 그 사람의 유일한 공장인지 본다.
+    // 계정 삭제는 auth.users 까지 지우므로 공장 하나의 결정으로 끝날 일이 아니다.
+    await assertTargetInFactory(actor.factoryId, userId);
+    await assertSoleFactory(userId, actor.factoryId);
+
     // 관리자는 시스템 관리자 계정을 지울 수 없다 — 전부 지우면 아무도 설정에 못 들어간다.
     assertCanManageAccount(actor.role, await fetchAccountRole(userId));
 
@@ -204,6 +223,9 @@ export async function DELETE(
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;
+
+    const factoryResponse = factoryUserErrorResponse(error);
+    if (factoryResponse) return factoryResponse;
 
     console.error('Error deleting user:', error);
     return NextResponse.json(

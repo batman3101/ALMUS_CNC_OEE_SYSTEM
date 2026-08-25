@@ -10,6 +10,7 @@ import { LanguageProvider } from '@/contexts/LanguageContext';
 import { UserPreferencesProvider, useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { FactoryProvider } from '@/contexts/FactoryContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { SystemSettingsProvider } from '@/contexts/SystemSettingsContext';
 import { DateRangeProvider } from '@/contexts/DateRangeContext';
@@ -67,6 +68,10 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
   return (
     <I18nextProvider i18n={i18n}>
       <AuthProvider>
+        {/* 공장은 세션에서 나오고(Auth 아래), 설정·구독보다 먼저 정해져야 한다.
+            설정은 공장별로 다른 행이고 Realtime 구독도 공장으로 좁히므로, 이 provider 가
+            그 둘보다 위에 있어야 "어느 공장인지 모르는 채로" 읽거나 구독하지 않는다. */}
+        <FactoryProvider>
         <SystemSettingsProvider>
           {/* 개인 환경설정은 "내 프로필"(Auth)과 "시스템 기본값"(SystemSettings)을 모두 필요로 하므로
               둘 아래에 두고, 이를 소비하는 Language/Theme 계층보다는 위에 둔다. */}
@@ -86,6 +91,7 @@ export const Providers: React.FC<{ children: React.ReactNode }> = ({ children })
             </LanguageProvider>
           </UserPreferencesProvider>
         </SystemSettingsProvider>
+        </FactoryProvider>
       </AuthProvider>
     </I18nextProvider>
   );

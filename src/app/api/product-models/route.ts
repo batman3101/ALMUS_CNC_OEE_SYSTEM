@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // GET /api/product-models - 활성화된 제품 모델 목록 조회
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer', 'operator']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     
     const { data: models, error } = await supabaseAdmin
       .from('product_models')
       .select('*')
+      .eq('factory_id', factoryUser.factoryId)
       .eq('is_active', true)
       .order('model_name');
 
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
 // POST /api/product-models - 새로운 제품 모델 생성 (관리자용)
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
     const body = await request.json();
     
     const { model_name, description, is_active = true } = body;
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
     const { data: newModel, error } = await supabaseAdmin
       .from('product_models')
       .insert({
+        factory_id: factoryUser.factoryId,
         model_name,
         description,
         is_active

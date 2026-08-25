@@ -20,6 +20,12 @@ const mockRequireUser = jest.fn();
 const mockUpsert = jest.fn();
 const queryCalls: Array<{ table: string; method: string; args: unknown[] }> = [];
 
+// 이 Route 는 공장 인지 계약으로 전환됐다. 이 테스트가 보는 것은 알림 판정이므로
+// 인가는 통과시키고 공장만 고정한다.
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireUser(...args),
+}));
+
 jest.mock('@/lib/apiAuth', () => ({
   requireUser: (...args: unknown[]) => mockRequireUser(...args),
   apiAuthErrorResponse: (error: unknown) =>
@@ -87,7 +93,7 @@ describe('GET /api/alerts', () => {
     jest.clearAllMocks();
     jest.useFakeTimers().setSystemTime(new Date('2026-07-15T03:00:00.000Z'));
     queryCalls.length = 0;
-    mockRequireUser.mockResolvedValue({ userId: 'admin-1', role: 'admin' });
+    mockRequireUser.mockResolvedValue({ userId: 'admin-1', role: 'admin', factoryId: 'factory-alt', factoryCode: 'ALT', assignedMachineIds: [], isGlobalAdmin: false });
     results.machines = {
       data: [{ id: 'machine-1', name: 'M1', current_state: 'NORMAL_OPERATION' }],
       error: null,

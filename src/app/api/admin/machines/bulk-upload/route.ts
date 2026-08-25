@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 import { 
   parseMachineExcel, 
   convertToMachineData, 
@@ -31,7 +32,7 @@ interface BulkUploadResult {
 // POST /api/admin/machines/bulk-upload - Excel 파일로 설비 일괄 등록
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
     console.log('Content-Type:', request.headers.get('content-type'));
     const formData = await request.formData();
@@ -144,6 +145,10 @@ export async function POST(request: NextRequest) {
       const { data: productModel, error: modelError } = await supabaseAdmin
         .from('product_models')
         .select('id')
+        // 모델명은 공장 안에서만 유일하다(20260821140000). 공장을 걸지 않으면 두 공장이
+        // 같은 모델명을 쓰는 순간 `.single()` 이 "2행"으로 실패하고, 아래 `!productModel`
+        // 가 그것을 "모델을 찾을 수 없습니다"로 보고한다 — 있는데 없다고 말한다.
+        .eq('factory_id', authenticatedUser.factoryId)
         .eq('model_name', machine.production_model_name)
         .eq('is_active', true)
         .single();
@@ -162,6 +167,7 @@ export async function POST(request: NextRequest) {
       const { data: processData, error: processError } = await supabaseAdmin
         .from('model_processes')
         .select('id')
+        .eq('factory_id', authenticatedUser.factoryId)
         .eq('model_id', productModel.id)
         .eq('process_name', machine.process_name)
         .single();
@@ -178,6 +184,7 @@ export async function POST(request: NextRequest) {
 
       // DB에 삽입할 형태로 변환
       dbMachineData.push({
+        factory_id: authenticatedUser.factoryId,
         name: machine.name,
         location: machine.location,
         equipment_type: machine.equipment_type,
@@ -205,6 +212,9 @@ export async function POST(request: NextRequest) {
     const { data: existingMachines, error: checkError } = await supabaseAdmin
       .from('machines')
       .select('name')
+      // 설비명 유일성은 공장 범위다. 공장을 빼면 ALV 에 CNC-001 을 올릴 때 ALT 의 CNC-001
+      // 때문에 409 가 나고, 사용자는 자기 화면 어디에도 없는 "중복 설비"를 찾아 헤맨다.
+      .eq('factory_id', authenticatedUser.factoryId)
       .in('name', machineNames);
 
     if (checkError) {

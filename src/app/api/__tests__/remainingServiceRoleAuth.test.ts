@@ -25,6 +25,19 @@ jest.mock('@/lib/apiAuth', () => ({
   },
 }));
 
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ * 별도 mock 을 두면 두 벌이 되고, 한쪽만 고쳐지는 순간 검사가 헐거워진다.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...args: unknown[]) => mockRequireUser(...args),
+  assertFactoryMachineAccess: (...args: unknown[]) => mockAssertMachineAccess(...args),
+}));
+
+
 jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: (...args: unknown[]) => mockFrom(...args),
@@ -144,7 +157,7 @@ describe('remaining service-role route guards', () => {
     ['machine production', machineProduction.GET],
   ])('%s rejects an operator before querying an unassigned machine', async (_name, handler) => {
     const request = makeRequest();
-    const user = { userId: 'operator-1', role: 'operator', assignedMachineIds: [] };
+    const user = { userId: 'operator-1', factoryId: '00000000-0000-4000-8000-00000000a17e', role: 'operator', assignedMachineIds: [] };
     mockRequireUser.mockResolvedValue(user);
     mockAssertMachineAccess.mockImplementation(() => {
       throw { message: '담당 설비에 대한 권한이 없습니다', status: 403 };
@@ -167,16 +180,18 @@ describe('remaining service-role route guards', () => {
     mockAssertMachineAccess.mockImplementation(() => {
       throw { message: '담당 설비에 대한 권한이 없습니다', status: 403 };
     });
-    mockFrom.mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          single: jest.fn().mockResolvedValue({
-            data: { record_id: 'record-1', machine_id: 'machine-1' },
-            error: null,
-          }),
-        }),
-      }),
+    // 필터 메서드는 자신을 돌려주고 종단만 결과를 준다. 예전 mock 은 `.eq` 를 정확히 한 번
+    // 받도록 중첩돼 있어서, 공장 조건이 붙자 500(TypeError)이 되어 403 검사를 가렸다 —
+    // 인가 검사가 통과한 것처럼 보이는 대신 다른 이유로 실패했다.
+    const recordQuery: Record<string, unknown> = {};
+    recordQuery.select = () => recordQuery;
+    recordQuery.eq = () => recordQuery;
+    recordQuery.single = async () => ({
+      data: { record_id: 'record-1', machine_id: 'machine-1' },
+      error: null,
     });
+    recordQuery.maybeSingle = recordQuery.single;
+    mockFrom.mockReturnValue(recordQuery);
 
     await expect(
       invoke(productionItem.GET, request, { params: { recordId: 'record-1' } })

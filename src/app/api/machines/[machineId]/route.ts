@@ -2,14 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import {
   applyMachineUpdate,
+  assertMachineInFactory,
   machineUpdateErrorResponse,
   type MachineUpdates
 } from '@/lib/machineUpdate';
-import {
-  apiAuthErrorResponse,
-  assertMachineAccess,
-  requireUser,
-} from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { assertFactoryMachineAccess, requireFactoryUser } from '@/lib/factoryAuth';
 
 // GET /api/machines/[machineId] - 특정 설비 상세 정보 조회
 export async function GET(
@@ -18,8 +16,8 @@ export async function GET(
 ) {
   try {
     const { machineId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    assertMachineAccess(authenticatedUser, machineId);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
+    assertFactoryMachineAccess(authenticatedUser, machineId);
     console.log('GET /api/machines/[machineId] called with id:', machineId);
 
     const { data: machine, error } = await supabaseAdmin
@@ -35,18 +33,21 @@ export async function GET(
         current_process_id,
         created_at,
         updated_at,
-        product_models:production_model_id (
+        product_models:product_models!machines_factory_production_model_fkey (
           id,
           model_name,
           description
         ),
-        model_processes:current_process_id (
+        model_processes:model_processes!machines_factory_current_process_fkey (
           id,
           process_name,
           process_order,
           tact_time_seconds
         )
       `)
+      // 단건 조회에서 공장 조건이 빠지면 빈 목록이 아니라 **다른 공장의 실제 설비 한 건**이
+      // 200 으로 나간다. id 만 알면 되는 IDOR 이다. 없는 것으로 취급해 아래에서 404 가 된다.
+      .eq('factory_id', authenticatedUser.factoryId)
       .eq('id', machineId)
       .single();
 
@@ -93,7 +94,8 @@ export async function PUT(
 ) {
   try {
     const { machineId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer']);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
+    await assertMachineInFactory(machineId, authenticatedUser.factoryId);
     console.log('PUT /api/machines/[machineId] called with id:', machineId);
 
     const body = await request.json();
@@ -179,8 +181,11 @@ export async function PATCH(
 ) {
   try {
     const { machineId } = await params;
-    const authenticatedUser = await requireUser(request, ['admin', 'engineer', 'operator']);
-    assertMachineAccess(authenticatedUser, machineId);
+    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
+    assertFactoryMachineAccess(authenticatedUser, machineId);
+    // 공장 소유 확인은 RPC 밖에서 한다. factory_id 는 갱신 화이트리스트에 없어 변하지
+    // 않으므로, 아래 is_active 주석이 말하는 TOCTOU 문제가 이 값에는 없다.
+    await assertMachineInFactory(machineId, authenticatedUser.factoryId);
     console.log('PATCH /api/machines/[machineId] called with id:', machineId);
 
     // 비활성 설비 거부와 설비 존재 확인은 여기서 하지 않는다 — 아래 RPC 가 advisory lock 을

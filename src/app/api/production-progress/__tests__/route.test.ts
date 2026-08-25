@@ -18,6 +18,18 @@ jest.mock('@/lib/apiAuth', () => ({
   apiAuthErrorResponse: () => null,
 }));
 
+/**
+ * 이 Route 는 공장 인지 계약(`requireFactoryUser`)으로 전환됐다.
+ *
+ * 새 mock 을 따로 만들지 않고 **같은 함수**에 연결한다. 그래야 아래 단언들이 검증하던
+ * 성질이 그대로 유지된다 — 거부가 조회보다 먼저인가, 허용 역할 목록이 무엇인가.
+ */
+jest.mock('@/lib/factoryAuth', () => ({
+  requireFactoryUser: (...a: unknown[]) => mockRequireUser(...a),
+  assertFactoryMachineAccess: (...a: unknown[]) => mockAssertMachineAccess(...a),
+}));
+
+
 jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { rpc: (...a: unknown[]) => mockRpc(...a) },
 }));

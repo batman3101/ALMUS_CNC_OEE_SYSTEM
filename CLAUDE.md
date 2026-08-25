@@ -22,6 +22,27 @@ npm run build               # Build for production — webpack
 npm start                   # Start production server
 ```
 
+#### ⚠️ `supabase/config.toml` 의 `major_version` 은 **운영과 같아야 한다** (17)
+
+운영 DB 는 Postgres **17.6** 이다. `config.toml` 이 15 로 적혀 있던 동안
+`supabase db dump`/`db diff` 가 운영에 대해 아예 동작하지 않았다:
+
+```
+pg_dump: error: aborting because of server version mismatch
+pg_dump: detail: server version: 17.6; pg_dump version: 15.8
+```
+
+CLI 는 이 값으로 pg_dump/psql 컨테이너 이미지를 고른다. 그래서 이 값이 틀리면 **운영
+스키마·데이터를 뜰 수 없고**, 그 사실은 덤프를 시도할 때까지 드러나지 않는다.
+2026-08-24 에 17 로 올렸다.
+
+**로컬 스택은 재초기화가 필요하다.** 기존 볼륨은 15 로 만들어져 있어 17 로는 열리지 않는다:
+
+```bash
+npx supabase stop --no-backup   # 로컬 데이터가 사라진다 (개발용 픽스처뿐이다)
+npx supabase start
+```
+
 #### ⚠️ dev 는 Turbopack, build 는 webpack — 섞인 것이 아니라 각각 검증된 조합이다
 
 Next.js **16.3.0 의 webpack dev 경로는 이 앱에서 깨진다.** 화면이 통째로 뜨지 않고

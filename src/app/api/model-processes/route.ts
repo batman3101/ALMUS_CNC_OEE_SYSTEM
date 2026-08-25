@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { apiAuthErrorResponse, requireUser } from '@/lib/apiAuth';
+import { apiAuthErrorResponse } from '@/lib/apiAuth';
+import { requireFactoryUser } from '@/lib/factoryAuth';
 
 // GET /api/model-processes - 특정 모델의 공정 목록 조회
 export async function GET(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer', 'operator']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const { searchParams } = new URL(request.url);
     const modelId = searchParams.get('model_id');
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
           is_active
         )
       `)
+      .eq('factory_id', factoryUser.factoryId)
       .eq('model_id', modelId)
       .eq('product_models.is_active', true)
       .order('process_order');
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
 // POST /api/model-processes - 새로운 공정 생성 (관리자용)
 export async function POST(request: NextRequest) {
   try {
-    await requireUser(request, ['admin', 'engineer']);
+    const factoryUser = await requireFactoryUser(request, ['admin', 'engineer']);
     const body = await request.json();
     
     const { model_id, process_name, process_order, tact_time_seconds = 120 } = body;
@@ -70,6 +72,7 @@ export async function POST(request: NextRequest) {
     const { data: model, error: modelError } = await supabaseAdmin
       .from('product_models')
       .select('id, is_active')
+      .eq('factory_id', factoryUser.factoryId)
       .eq('id', model_id)
       .eq('is_active', true)
       .single();
@@ -84,6 +87,7 @@ export async function POST(request: NextRequest) {
     const { data: newProcess, error } = await supabaseAdmin
       .from('model_processes')
       .insert({
+        factory_id: factoryUser.factoryId,
         model_id,
         process_name,
         process_order,

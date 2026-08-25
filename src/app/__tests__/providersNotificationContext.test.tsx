@@ -13,6 +13,20 @@ jest.mock('@/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+// 이 파일은 provider **중첩 순서**만 본다. FactoryProvider 는 authFetch -> supabase 를
+// import 하므로(환경변수 검증이 걸린다) 통과용 껍데기로 둔다.
+jest.mock('@/contexts/FactoryContext', () => ({
+  FactoryProvider: ({ children }: { children: React.ReactNode }) => children,
+  useFactory: () => ({
+    factoryId: null,
+    factoryCode: null,
+    isGlobalAdmin: false,
+    canSwitch: false,
+    available: [],
+    resolved: true,
+  }),
+}));
+
 jest.mock('@/contexts/SystemSettingsContext', () => ({
   SystemSettingsProvider: ({ children }: { children: React.ReactNode }) => children,
 }));

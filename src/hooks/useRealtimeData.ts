@@ -7,6 +7,8 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { authFetch } from '@/lib/authFetch';
 import { replayBufferedUpdates } from './realtimeBuffer';
 import { createReadinessGate, type ReadinessGate } from './subscriptionGate';
+import { useFactory } from '@/contexts/FactoryContext';
+import { factoryChannelName, realtimeFilterOption } from '@/lib/realtimeScope';
 
 /**
  * 구독 준비를 기다리는 상한. 넘으면 스냅샷을 그냥 진행한다.
@@ -256,6 +258,18 @@ export const useRealtimeData = (
   // 운영자의 담당 설비 — 초기 조회에서 채워지고, 이후 구독 설정이 채널 필터로 쓴다.
   // undefined = 전체(관리자/엔지니어 또는 프로필 미조회).
   const assignedIdsRef = useRef<string[] | undefined>(undefined);
+  /**
+   * 현재 공장. 구독을 **좁히는** 데 쓴다 — 경계 자체는 RLS 가 지킨다(@/lib/realtimeScope).
+   *
+   * ref 로 들고 있는 이유는 구독 설정 함수가 useCallback 안에 있고, 그 의존성에 공장을
+   * 넣으면 공장이 확정되는 순간 함수 정체성이 바뀌어 마운트 이펙트가 다시 돌기 때문이다.
+   * 재구독은 아래 전용 이펙트가 **한 번만** 시킨다.
+   */
+  const { factoryId, factoryCode } = useFactory();
+  const factoryIdRef = useRef<string | null>(null);
+  const factoryCodeRef = useRef<string | null>(null);
+  factoryIdRef.current = factoryId;
+  factoryCodeRef.current = factoryCode;
   // 구독 세대. cleanupChannels() 의 unsubscribe() 는 정리한 채널의 상태 콜백을 CLOSED 로
   // 발화시키고, 그 CLOSED 핸들러가 scheduleReconnect() 를 부른다. 재연결은 다시
   // setupRealtimeSubscriptions → cleanupChannels 로 이어져 5초마다 무한 반복됐다
@@ -622,17 +636,21 @@ export const useRealtimeData = (
     const assignedIds = assignedIdsRef.current;
     const machineIdFilter = buildRealtimeInFilter('machine_id', assignedIds);
     const machinePkFilter = buildRealtimeInFilter('id', assignedIds);
+    // 담당 설비 필터가 있으면 그게 더 좁다(배정은 공장을 넘지 못한다). 없으면 공장으로
+    // 좁힌다 — 필터는 한 개만 걸 수 있으므로 둘을 함께 쓸 수는 없다.
+    const scopedFactoryId = factoryIdRef.current;
+    const scopedFactoryCode = factoryCodeRef.current;
 
     // 설비 로그 실시간 구독 (초기 조회를 건너뛴 경우 구독도 하지 않는다 — 실적과 동일 규율)
     const machineLogsChannel = !includeMachineLogs ? null : supabase
-      .channel('machine_logs_changes')
+      .channel(factoryChannelName('machine_logs_changes', scopedFactoryCode))
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'machine_logs',
-          ...(machineIdFilter ? { filter: machineIdFilter } : {})
+          ...realtimeFilterOption(machineIdFilter, scopedFactoryId)
         },
         (payload) => {
           console.log('📊 Machine log 변경:', payload.eventType, (payload.new as Partial<MachineLog>).log_id);
@@ -686,14 +704,14 @@ export const useRealtimeData = (
     // 구독만 살려두면 이벤트가 올 때마다 oeeMetrics 가 null(미조회)에서 부분 맵으로
     // 바뀌어, 조회한 적도 없는 지표가 생긴 것처럼 보인다.
     const productionChannel = !includeProductionRecords ? null : supabase
-      .channel('production_records_changes')
+      .channel(factoryChannelName('production_records_changes', scopedFactoryCode))
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'production_records',
-          ...(machineIdFilter ? { filter: machineIdFilter } : {})
+          ...realtimeFilterOption(machineIdFilter, scopedFactoryId)
         },
         (payload) => {
           console.log('Production record change:', payload);
@@ -778,15 +796,17 @@ export const useRealtimeData = (
 
     // 설비 정보 실시간 구독
     const machinesChannel = supabase
-      .channel('machines_changes')
+      .channel(factoryChannelName('machines_changes', scopedFactoryCode))
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'machines',
-          // machines 는 id 가 PK 라 DELETE 이벤트에도 필터가 적용된다.
-          ...(machinePkFilter ? { filter: machinePkFilter } : {})
+          // machines 는 id 가 PK 라 DELETE 이벤트에도 담당 설비 필터가 적용된다.
+          // 반면 공장 필터(factory_id)는 PK 가 아니므로 DELETE 를 걸러낸다 — 담당 필터가
+          // 없는 admin/engineer 경로에서 설비 삭제는 주기 새로고침이 반영한다.
+          ...realtimeFilterOption(machinePkFilter, scopedFactoryId)
         },
         (payload) => {
           console.log('Machine change:', payload);
@@ -882,6 +902,31 @@ export const useRealtimeData = (
       }
     };
   }, [loadInitialData, setupRealtimeSubscriptions, cleanupChannels]);
+
+  /**
+   * 공장이 **나중에** 확정되면 다시 구독한다.
+   *
+   * `FactoryProvider` 는 `/api/factory-context` 를 비동기로 읽으므로, 첫 구독은 공장을
+   * 모르는 상태에서 열릴 수 있다. 그러면 필터가 붙지 않아 전 공장 이벤트를 받고(RLS 가
+   * 버리므로 안전하지만 헛일이다) 채널 이름도 `:unscoped` 로 남는다.
+   *
+   * 재구독만 하지 않고 스냅샷까지 다시 읽는 이유: 채널을 갈아치우는 사이에 도착한 변경은
+   * 어느 쪽 채널도 받지 못한다. 그 창을 스냅샷이 덮는다(loadInitialData 가 구독 설정을
+   * 콜백으로 받아 순서를 보장한다 — 위 마운트 경로와 같은 규율).
+   *
+   * `initialFactoryRef` 로 **처음 확정될 때만** 반응한다. 매 렌더마다 비교하면 같은 값에도
+   * 재구독이 돌 수 있고, 재구독은 공짜가 아니다.
+   */
+  const appliedFactoryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isInitializedRef.current) return;
+    if (factoryId === appliedFactoryRef.current) return;
+    appliedFactoryRef.current = factoryId;
+    // 아직 아무 구독도 없으면 마운트 경로가 곧 처리한다.
+    if (channelsRef.current.length === 0) return;
+    console.log('🏭 공장 확정 — 구독을 공장 범위로 다시 연다:', factoryId ?? '(미확정)');
+    void loadInitialData(setupRealtimeSubscriptions);
+  }, [factoryId, loadInitialData, setupRealtimeSubscriptions]);
 
   // 수동 새로고침 함수 (최적화)
   const refresh = useCallback(() => {

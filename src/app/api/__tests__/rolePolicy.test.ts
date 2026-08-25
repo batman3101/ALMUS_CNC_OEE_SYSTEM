@@ -45,8 +45,14 @@ const POLICY: Record<string, Record<string, string>> = {
   'downtime-analysis': { GET: AE },
   'downtime-entries': { POST: AEO, GET: AEO },
   'downtime-entries/[id]': { DELETE: AEO, PATCH: AEO },
+  // 현재 세션의 공장과 이동 가능한 공장 목록. 자기 소속만 돌려주므로 세 역할 모두 허용한다.
+  // POST 는 공장을 바꾼다. 역할 제한은 GET 과 같다 — 전환은 권한을 넓히지 않고, 목적지
+  // 공장의 membership 이 없으면 `saveFactorySelection` 이 403 으로 막는다.
+  'factory-context': { GET: AEO, POST: AEO },
   'machine-status-descriptions': { GET: AEO },
-  'machines': { GET: AEO, POST: AE, DELETE: AE },
+  // POST/DELETE 는 2026-08-24 에 제거했다 — 화면이 안 쓰는데 공장을 묻지 않는 통로였다.
+  // 설비 등록·비활성화는 `admin/machines` 계열이 맡는다. (route.ts 상단 주석 참조)
+  'machines': { GET: AEO },
   'machines/[machineId]': { GET: AEO, PUT: AE, PATCH: AEO },
   'machines/[machineId]/downtime': { GET: AEO, PATCH: AEO, POST: AEO },
   'machines/[machineId]/oee': { GET: AEO },
@@ -77,6 +83,10 @@ const POLICY: Record<string, Record<string, string>> = {
   'system-settings': { GET: AEO, PUT: A, POST: A, DELETE: A },
   'system-settings/[category]': { GET: AEO, PUT: A, DELETE: A },
   'system-settings/service-role': { GET: AEO },
+  // 2026-08-24: 인라인 관리자 검증에서 표준 계약으로 옮겨졌다. 예전 검사는 역할만 알고
+  // **공장을 몰랐다** — 설정은 공장마다 다른 행이라, 어느 행을 고칠지 정하지 못한 채
+  // 쓰게 된다. 그래서 EXEMPT 에서 여기로 왔다.
+  'system-settings/update': { POST: A },
   'upload/image': { POST: A, GET: NONE }, // GET 은 405 스텁(작업 없음) → 인증 불필요
   'user-profiles': { GET: A },
 };
@@ -86,7 +96,6 @@ const EXEMPT: Record<string, string> = {
   'auth/login': '사전 인증 엔드포인트 (세션이 아직 없다)',
   'auth/logout': '사전/사후 인증 엔드포인트',
   'auth/profile': '자기 프로필 조회/수정 — 토큰 자체 검증',
-  'system-settings/update': '인라인 관리자 검증 (Service Role 사용 전 role=admin + is_active 확인)',
 };
 
 const API_ROOT = path.join(__dirname, '..');
@@ -161,6 +170,17 @@ function extractByMethod(source: string): Record<string, string> {
     );
     if (helper) {
       result[marks[i].method] = GUARD_HELPERS[helper];
+      continue;
+    }
+
+    // 공장 인지 계약으로 전환된 메서드도 같은 원장에 들어간다.
+    //
+    // 역할 목록은 그대로이고 공장 경계가 **추가**된 것이므로, 원장의 역할 값은 바뀌지
+    // 않아야 한다. 전환하면서 역할이 넓어지면 이 검사가 잡는다 — 경계를 하나 더하면서
+    // 다른 하나를 느슨하게 푸는 것이 이행 중 가장 흔한 사고다.
+    const fm = block.match(/requireFactoryUser\(\s*request\s*,\s*\[([^\]]*)\]/);
+    if (fm) {
+      result[marks[i].method] = expandRoleTokens(fm[1]).sort().join('+');
       continue;
     }
 
