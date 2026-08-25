@@ -1,6 +1,6 @@
 {
-  "note": "운영(wmtkkefsorrdlzprhlpr) 적용 원장 — MCP list_migrations 스냅샷. 파일명 타임스탬프와 적용 version 이 다르므로(런북 0절, db push 금지) 이름 기준으로 대조한다. 갱신: 마이그레이션을 적용한 세션이 applied 배열과 hashes(적용 시점 파일 sha256-16) 를 함께 갱신한다. 검사: npm run check:migrations (미적용 = 실패, 적용 후 파일 내용 드리프트 = 경고).",
-  "snapshot_at": "2026-08-06T06:01:30.584Z",
+  "note": "운영(wmtkkefsorrdlzprhlpr) 적용 원장 — MCP list_migrations 스냅샷. 파일명 타임스탬프와 적용 version 이 다르므로(런북 0절, db push 금지) 이름 기준으로 대조한다. 갱신: 마이그레이션을 적용한 세션이 applied 배열과 hashes(적용 시점 파일 sha256-16) 를 함께 갱신한다. 검사: npm run check:migrations (미적용 = 실패, 적용 후 파일 내용 드리프트 = 경고). | 2026-08-25: 공장 다중화 21개 운영 적용. baseline 3개는 **실행하지 않고** 원장에만 기록했다(migration repair 상당) — 그 파일들은 운영 스키마의 재구성본이고 마지막 줄의 `grant all ... to anon` 이 의도적 권한 회수를 되돌리기 때문이다.",
+  "snapshot_at": "2026-08-25T00:45:00.000Z",
   "hashes": {
     "20251116070000_create_system_settings_audit_table": "02a1488bae1ef176",
     "20251116070100_create_recent_settings_changes_view": "d6add6dc43c42a32",
@@ -59,9 +59,45 @@
     "20260804140000_drop_oee_calculations": "1aeff7c16fdf5441",
     "20260806020000_drop_close_shift_upsert_v2": "43877dcb4a68c532",
     "20260806030000_deactivate_legacy_settings_keys": "7d4da66f8f2ed791",
-    "20260806040000_add_alert_critical_thresholds": "295ce1caafee537e"
+    "20260806040000_add_alert_critical_thresholds": "295ce1caafee537e",
+    "00000000000000_baseline_schema": "ddccccd0b2893cd1",
+    "00000000000001_baseline_functions": "a6dc732ab0d29785",
+    "00000000000002_baseline_views": "c719db3a8f75e197",
+    "20260821100000_multi_factory_core_tables": "fb37c51b19b88e8a",
+    "20260821110000_multi_factory_expand_columns": "90e70a7c66a7b75a",
+    "20260821120000_multi_factory_rls_helpers": "8628fd163b18fb3f",
+    "20260821130000_multi_factory_alt_backfill": "20db1728b740ff72",
+    "20260821140000_multi_factory_contract": "331d86be088931c4",
+    "20260821150000_multi_factory_trigger_scope": "4e89830a28ca937b",
+    "20260821160000_multi_factory_rls_cutover": "807893e7b9ac2ce7",
+    "20260824100000_multi_factory_home_factory": "55abf2832862d6ae",
+    "20260824110000_multi_factory_alv_and_memberships": "4a36280b3421f6dd",
+    "20260824120000_multi_factory_drop_redundant_fks": "762c95f9b2e469c9",
+    "20260824130000_multi_factory_home_factory_in_rls": "e58f9c26e24a0375",
+    "20260824140000_multi_factory_ack_uniqueness": "06aff8fa49f329fa",
+    "20260824150000_multi_factory_settings_rpcs": "577da0d48de47adc",
+    "20260824160000_multi_factory_analytics_daily": "61f59a9db19985a9",
+    "20260824170000_multi_factory_analytics_scoped_wrappers": "f1db738600ca2c4a",
+    "20260824180000_multi_factory_machine_view": "a014dbc3378cc9db",
+    "20260824190000_multi_factory_selection": "7c37d64abc59bbe8",
+    "20260824200000_fix_summary_scoped_stale_body": "d98f818f52d0267c",
+    "20260824210000_multi_factory_derive_on_insert": "cc03165a110c867f",
+    "20260824220000_multi_factory_audit_log_factory": "2851989d9621816a",
+    "20260824230000_multi_factory_user_provisioning": "1da0c03cfcb83e9f"
   },
   "applied": [
+    {
+      "version": "00000000000000",
+      "name": "baseline_schema"
+    },
+    {
+      "version": "00000000000001",
+      "name": "baseline_functions"
+    },
+    {
+      "version": "00000000000002",
+      "name": "baseline_views"
+    },
     {
       "version": "20250820034518",
       "name": "add_foreign_key_oee_calculations"
@@ -417,6 +453,90 @@
     {
       "version": "20260806055947",
       "name": "add_alert_critical_thresholds"
+    },
+    {
+      "version": "20260821100000",
+      "name": "multi_factory_core_tables"
+    },
+    {
+      "version": "20260821110000",
+      "name": "multi_factory_expand_columns"
+    },
+    {
+      "version": "20260821120000",
+      "name": "multi_factory_rls_helpers"
+    },
+    {
+      "version": "20260821130000",
+      "name": "multi_factory_alt_backfill"
+    },
+    {
+      "version": "20260821140000",
+      "name": "multi_factory_contract"
+    },
+    {
+      "version": "20260821150000",
+      "name": "multi_factory_trigger_scope"
+    },
+    {
+      "version": "20260821160000",
+      "name": "multi_factory_rls_cutover"
+    },
+    {
+      "version": "20260824100000",
+      "name": "multi_factory_home_factory"
+    },
+    {
+      "version": "20260824110000",
+      "name": "multi_factory_alv_and_memberships"
+    },
+    {
+      "version": "20260824120000",
+      "name": "multi_factory_drop_redundant_fks"
+    },
+    {
+      "version": "20260824130000",
+      "name": "multi_factory_home_factory_in_rls"
+    },
+    {
+      "version": "20260824140000",
+      "name": "multi_factory_ack_uniqueness"
+    },
+    {
+      "version": "20260824150000",
+      "name": "multi_factory_settings_rpcs"
+    },
+    {
+      "version": "20260824160000",
+      "name": "multi_factory_analytics_daily"
+    },
+    {
+      "version": "20260824170000",
+      "name": "multi_factory_analytics_scoped_wrappers"
+    },
+    {
+      "version": "20260824180000",
+      "name": "multi_factory_machine_view"
+    },
+    {
+      "version": "20260824190000",
+      "name": "multi_factory_selection"
+    },
+    {
+      "version": "20260824200000",
+      "name": "fix_summary_scoped_stale_body"
+    },
+    {
+      "version": "20260824210000",
+      "name": "multi_factory_derive_on_insert"
+    },
+    {
+      "version": "20260824220000",
+      "name": "multi_factory_audit_log_factory"
+    },
+    {
+      "version": "20260824230000",
+      "name": "multi_factory_user_provisioning"
     }
   ],
   "file_matches": {
