@@ -20,6 +20,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { MachineState, DowntimeData } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useChartAnimation } from '@/hooks/useChartAnimation';
+import { compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
 
 ChartJS.register(
   CategoryScale,
@@ -86,10 +87,21 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   const totalDowntime = sortedData.reduce((sum, item) => sum + item.duration, 0);
   const totalCount = downtimeData.reduce((sum, item) => sum + item.count, 0);
   let cumulativePercentage = 0;
-  const chartData = sortedData.map(item => {
+  /**
+   * 파레토 순위와 누적비율을 **행 데이터에 실어 둔다.**
+   *
+   * 예전에는 표에서 `index + 1`(순위)과 `chartData[index]`(누적비율)로 화면 행 번호를 써서
+   * 값을 찾았다. 두 배열의 순서가 같아 우연히 맞았을 뿐이고, 표에 정렬을 붙이면 **A 행의
+   * 원인 이름에 B 행의 누적비율이 붙는다** — 순서가 아니라 숫자가 틀리는 종류의 오류다.
+   *
+   * 순위와 누적비율은 "지속시간 내림차순" 이라는 파레토 순서에서만 의미가 있으므로,
+   * 사용자가 다른 컬럼으로 정렬해도 각 행의 값은 그대로 따라다녀야 한다.
+   */
+  const chartData = sortedData.map((item, index) => {
     cumulativePercentage += totalDowntime > 0 ? (item.duration / totalDowntime) * 100 : 0;
     return {
       ...item,
+      rank: index + 1,
       cumulativePercentage
     };
   });
@@ -193,18 +205,26 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
   };
 
   // 테이블 컬럼 정의
-  const tableColumns: ColumnsType<DowntimeData & { key: number }> = [
+  type DowntimeRow = (typeof chartData)[number] & { key: number };
+
+  const tableColumns: ColumnsType<DowntimeRow> = [
     {
       title: t('dashboard:chart.rank'),
       dataIndex: 'rank',
       key: 'rank',
       width: 60,
-      render: (_: unknown, __: unknown, index: number) => index + 1,
+      // 화면 행 번호가 아니라 파레토 순위다. 다른 컬럼으로 정렬해도 순위는 따라다닌다.
+      sorter: (a: DowntimeRow, b: DowntimeRow, order?: SortOrder) =>
+        compareNullableNumber(a.rank, b.rank, order),
+      defaultSortOrder: 'ascend' as const,
     },
     {
       title: t('dashboard:chart.downtimeCause'),
       dataIndex: 'state',
       key: 'state',
+      // 화면에 보이는 번역 라벨로 정렬한다 — 사용자가 읽는 글자와 정렬 순서가 같아야 한다.
+      sorter: (a: DowntimeRow, b: DowntimeRow, order?: SortOrder) =>
+        compareText(getStateLabel(a.state), getStateLabel(b.state), order),
       render: (state: MachineState) => (
         <span style={{ color: stateColors[state] || '#8c8c8c', fontWeight: 'bold' }}>
           {getStateLabel(state)}
@@ -216,6 +236,8 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       dataIndex: 'duration',
       key: 'duration',
       align: 'right' as const,
+      sorter: (a: DowntimeRow, b: DowntimeRow, order?: SortOrder) =>
+        compareNullableNumber(a.duration, b.duration, order),
       render: (duration: number) => duration.toLocaleString(),
     },
     {
@@ -223,6 +245,8 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       dataIndex: 'count',
       key: 'count',
       align: 'right' as const,
+      sorter: (a: DowntimeRow, b: DowntimeRow, order?: SortOrder) =>
+        compareNullableNumber(a.count, b.count, order),
       render: (count: number) => count.toLocaleString(),
     },
     {
@@ -230,16 +254,18 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
       dataIndex: 'percentage',
       key: 'percentage',
       align: 'right' as const,
+      sorter: (a: DowntimeRow, b: DowntimeRow, order?: SortOrder) =>
+        compareNullableNumber(a.percentage, b.percentage, order),
       render: (percentage: number) => `${percentage.toFixed(1)}%`,
     },
     {
       title: t('dashboard:chart.cumulativeRatio'),
+      dataIndex: 'cumulativePercentage',
       key: 'cumulative',
       align: 'right' as const,
-      render: (_: unknown, __: unknown, index: number) => {
-        const cumulative = chartData[index]?.cumulativePercentage || 0;
-        return `${cumulative.toFixed(1)}%`;
-      },
+      sorter: (a: DowntimeRow, b: DowntimeRow, order?: SortOrder) =>
+        compareNullableNumber(a.cumulativePercentage, b.cumulativePercentage, order),
+      render: (cumulative: number) => `${(cumulative ?? 0).toFixed(1)}%`,
     },
   ];
 
@@ -301,7 +327,7 @@ export const DowntimeChart: React.FC<DowntimeChartProps> = ({
           </AntTitle>
           <Table
             columns={tableColumns}
-            dataSource={sortedData.map((item, index) => ({ ...item, key: index }))}
+            dataSource={chartData.map((item, index) => ({ ...item, key: index }))}
             pagination={false}
             size="small"
           />

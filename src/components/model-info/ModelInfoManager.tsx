@@ -29,6 +29,7 @@ import { authFetch } from '@/lib/authFetch';
 import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import type { ProductModel, ModelProcess } from '@/types/modelInfo';
 import { useFailureReport } from '@/hooks/useFailureReport';
+import { compareDate, compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
 
 /**
  * 마스터 쓰기는 서버 API 만 거친다.
@@ -260,17 +261,29 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       title: t('컬럼.모델명'),
       dataIndex: 'model_name',
       key: 'model_name',
+      sorter: (a: ProductModel, b: ProductModel, order?: SortOrder) =>
+        compareText(a.model_name, b.model_name, order),
       render: (text: string) => <Text strong>{text}</Text>
     },
     {
       title: t('컬럼.설명'),
       dataIndex: 'description',
       key: 'description',
+      // 설명이 비어 있는 모델은 방향과 무관하게 맨 뒤로 — 채워진 것부터 보게 한다.
+      sorter: (a: ProductModel, b: ProductModel, order?: SortOrder) =>
+        compareText(a.description, b.description, order),
       render: (text: string) => text || '-'
     },
     {
       title: t('컬럼.공정수'),
       key: 'process_count',
+      // 표시값과 같은 식으로 센다 — 화면 숫자와 정렬 기준이 어긋나면 안 된다.
+      sorter: (a: ProductModel, b: ProductModel, order?: SortOrder) =>
+        compareNullableNumber(
+          processes.filter(p => p.model_id === a.id).length,
+          processes.filter(p => p.model_id === b.id).length,
+          order
+        ),
       render: (_: unknown, record: ProductModel) => {
         const count = processes.filter(p => p.model_id === record.id).length;
         return <Tag color={count > 0 ? 'blue' : 'default'}>{t('단위.개값', { n: count })}</Tag>;
@@ -280,6 +293,8 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       title: t('컬럼.등록일'),
       dataIndex: 'created_at',
       key: 'created_at',
+      sorter: (a: ProductModel, b: ProductModel, order?: SortOrder) =>
+        compareDate(a.created_at, b.created_at, order),
       render: (date: string) => new Date(date).toLocaleDateString('ko-KR')
     },
     {
@@ -329,18 +344,27 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       dataIndex: 'process_order',
       key: 'process_order',
       width: 80,
+      sorter: (a: ModelProcess, b: ModelProcess, order?: SortOrder) =>
+        compareNullableNumber(a.process_order, b.process_order, order),
+      defaultSortOrder: 'ascend' as const,
       render: (order: number) => <Tag color="blue">{order}</Tag>
     },
     {
       title: t('컬럼.공정명'),
       dataIndex: 'process_name',
       key: 'process_name',
+      sorter: (a: ModelProcess, b: ModelProcess, order?: SortOrder) =>
+        compareText(a.process_name, b.process_name, order),
       render: (text: string) => <Text strong>{text}</Text>
     },
     {
       title: 'Tact Time',
       dataIndex: 'tact_time_seconds',
       key: 'tact_time_seconds',
+      // ⚠️ 개당 초다(사이클당이 아니다). 정렬은 저장된 값 그대로 비교한다 —
+      // cavity_count 로 나누지 않는다(CLAUDE.md 의 per-piece 규약).
+      sorter: (a: ModelProcess, b: ModelProcess, order?: SortOrder) =>
+        compareNullableNumber(a.tact_time_seconds, b.tact_time_seconds, order),
       render: (seconds: number) => t('단위.초값', { n: seconds })
     },
     {
@@ -348,11 +372,16 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
       dataIndex: 'cavity_count',
       key: 'cavity_count',
       width: 100,
+      // 표시가 `count || 1` 이므로 정렬도 같은 기본값을 써야 화면과 순서가 맞는다.
+      sorter: (a: ModelProcess, b: ModelProcess, order?: SortOrder) =>
+        compareNullableNumber(a.cavity_count || 1, b.cavity_count || 1, order),
       render: (count: number) => <Tag color="green">{count || 1}</Tag>
     },
     {
       title: t('컬럼.모델'),
       key: 'model_name',
+      sorter: (a: ModelProcess, b: ModelProcess, order?: SortOrder) =>
+        compareText(a.product_models?.model_name, b.product_models?.model_name, order),
       render: (record: ModelProcess) => record.product_models?.model_name || '-'
     },
     {

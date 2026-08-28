@@ -19,6 +19,7 @@ import { UserAddOutlined, ReloadOutlined, CheckCircleOutlined } from '@ant-desig
 import { useAdminTranslation } from '@/hooks/useTranslation';
 import { authFetch } from '@/lib/authFetch';
 import { useFailureReport } from '@/hooks/useFailureReport';
+import { compareDate, compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -118,18 +119,23 @@ const SetupUserPage: React.FC = () => {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
+      sorter: (a: AuthUser, b: AuthUser, order?: SortOrder) => compareText(a.email, b.email, order),
       render: (email: string) => <Text code>{email}</Text>,
     },
     {
       title: t('setupUser.columns.createdAt'),
       dataIndex: 'created_at',
       key: 'created_at',
+      sorter: (a: AuthUser, b: AuthUser, order?: SortOrder) => compareDate(a.created_at, b.created_at, order),
       render: (date: string) => new Date(date).toLocaleDateString(),
     },
     {
       title: t('setupUser.columns.emailVerified'),
       dataIndex: 'email_confirmed_at',
       key: 'email_confirmed_at',
+      // 미인증(값 없음)은 항상 뒤. 인증된 것끼리는 인증 시각순이라 "언제 인증했나" 도 같이 읽힌다.
+      sorter: (a: AuthUser, b: AuthUser, order?: SortOrder) =>
+        compareDate(a.email_confirmed_at, b.email_confirmed_at, order),
       render: (date?: string) => (
         date ? (
           <Tag color="green">{t('setupUser.tags.verified')}</Tag>
@@ -142,6 +148,9 @@ const SetupUserPage: React.FC = () => {
       title: t('setupUser.columns.profileStatus'),
       dataIndex: 'hasProfile',
       key: 'hasProfile',
+      // 미등록(0) → 등록(1). 오름차순 첫 화면이 "처리해야 할 계정" 이다.
+      sorter: (a: AuthUser, b: AuthUser, order?: SortOrder) =>
+        compareNullableNumber(a.hasProfile ? 1 : 0, b.hasProfile ? 1 : 0, order),
       render: (hasProfile: boolean, record: AuthUser) => (
         hasProfile ? (
           <Space>
@@ -159,6 +168,9 @@ const SetupUserPage: React.FC = () => {
       title: t('setupUser.columns.lastLogin'),
       dataIndex: 'last_sign_in_at',
       key: 'last_sign_in_at',
+      // 한 번도 로그인하지 않은 계정은 1970년이 아니라 "값 없음" 으로 맨 뒤에 간다.
+      sorter: (a: AuthUser, b: AuthUser, order?: SortOrder) =>
+        compareDate(a.last_sign_in_at, b.last_sign_in_at, order),
       render: (date?: string) => (
         date ? new Date(date).toLocaleString() : '-'
       ),

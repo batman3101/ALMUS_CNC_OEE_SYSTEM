@@ -10,6 +10,12 @@ import {
   DEFAULT_TACT_SECONDS,
   resolveActualRuntime,
 } from './oeeRules';
+import {
+  InvalidSortError,
+  buildSortSteps,
+  compareBySortSteps,
+  parseRecordSort,
+} from './recordSort';
 
 // 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량
 function validateQuantities(outputQty: unknown, defectQty: unknown): string | null {
@@ -84,6 +90,24 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+    /**
+     * 정렬. `?sort=oee&order=asc` 형태이며, 없으면 기존 동작(최신 날짜 먼저)이다.
+     *
+     * 이 목록은 서버가 페이지를 자르므로 **클라이언트 정렬로는 현재 페이지 안에서만**
+     * 정렬된다. 사용자에게는 전체가 정렬된 것처럼 보이므로, 정렬은 서버에서 해야 한다.
+     * 허용 목록과 비교 규칙은 `./recordSort` 한 곳에만 있다.
+     */
+    let sortSpec;
+    try {
+      sortSpec = parseRecordSort(searchParams.get('sort'), searchParams.get('order'));
+    } catch (sortError) {
+      if (sortError instanceof InvalidSortError) {
+        return NextResponse.json({ error: sortError.message }, { status: 400 });
+      }
+      throw sortError;
+    }
+    const sortSteps = buildSortSteps(sortSpec.field, sortSpec.direction);
+
     const requestedPage = Number.parseInt(searchParams.get('page') || '1', 10);
     const requestedLimit = Number.parseInt(searchParams.get('limit') || '100', 10);
     const page = Number.isFinite(requestedPage) ? Math.max(1, requestedPage) : 1;
@@ -148,10 +172,13 @@ export async function GET(request: NextRequest) {
             location
           )
         `, { count: 'exact' })
-      .eq('factory_id', authenticatedUser.factoryId)
-        .order('date', { ascending: false })
-        // (machine_id, date, shift)가 유니크하므로 date만으로는 정렬이 불안정함 → record_id로 tiebreak
-        .order('record_id', { ascending: false });
+      .eq('factory_id', authenticatedUser.factoryId);
+      // 정렬 단계는 `buildSortSteps` 하나가 정한다. 마지막은 언제나 record_id 이므로
+      // ((machine_id, date, shift)가 유니크해 date 만으로는 동점이 생긴다) 전순서가 된다.
+      // 아래 병합 정렬도 **같은 단계 목록**을 쓴다 — 둘이 갈리면 페이지 경계가 깨진다.
+      for (const step of sortSteps) {
+        q = q.order(step.column, { ascending: step.ascending, nullsFirst: step.nullsFirst });
+      }
       if (scope) q = q.in('machine_id', scope);
       if (machineId) q = q.eq('machine_id', machineId);
       if (startDate) q = q.gte('date', startDate);
@@ -188,16 +215,12 @@ export async function GET(request: NextRequest) {
     }
 
     const count = pages.reduce((sum, p) => sum + (p.count ?? 0), 0);
-    // 청크가 하나면 정렬은 DB 가 이미 끝냈다. 여럿일 때만 병합한다 — 비교 함수는 DB 의
-    // ORDER BY (date desc, record_id desc)와 **같은 말**이어야 한다. 달라지면 페이지 경계에서
-    // 행이 사라지거나 중복된다.
+    // 청크가 하나면 정렬은 DB 가 이미 끝냈다. 여럿일 때만 병합한다 — 비교 함수는 위
+    // `.order()` 체인과 **같은 말**이어야 한다. 달라지면 페이지 경계에서 행이 사라지거나
+    // 중복된다. 그래서 양쪽 다 `sortSteps` 하나를 읽는다 (규칙을 두 번 적지 않는다).
     const merged = pages.flatMap(p => p.data ?? []);
     if (scopeChunks.length > 1) {
-      merged.sort((a, b) =>
-        a.date === b.date
-          ? String(b.record_id).localeCompare(String(a.record_id))
-          : String(b.date).localeCompare(String(a.date))
-      );
+      merged.sort((a, b) => compareBySortSteps(a, b, sortSteps));
     }
     // 청크가 하나면 DB 가 이미 이 페이지만 돌려줬다 — 여기서 또 자르면 2페이지부터
     // 빈 배열이 된다(자르기가 두 번 적용됨). 여럿일 때만 병합 결과에서 잘라낸다.

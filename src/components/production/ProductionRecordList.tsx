@@ -36,6 +36,8 @@ import { authFetch } from '@/lib/authFetch';
 import { useFailureReport } from '@/hooks/useFailureReport';
 import { useAuth } from '@/contexts/AuthContext';
 import { canDeleteProductionRecord, type UserRole } from '@/lib/pageAccess';
+import type { RecordSortField } from '@/app/api/production-records/recordSort';
+import type { SorterResult } from 'antd/es/table/interface';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -94,6 +96,20 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
     total: 0
   });
 
+  /**
+   * 정렬 상태. **서버가 정렬한다.**
+   *
+   * 이 표는 서버가 페이지를 자르므로(한 번에 20건), antd 의 기본 클라이언트 정렬을 쓰면
+   * 받아온 20건 안에서만 정렬되고 사용자는 전체가 정렬된 줄 안다. 그래서 컬럼에는
+   * `sorter: true`(정렬 가능 표시만) 를 주고, 실제 순서는 `?sort=&order=` 로 서버에 맡긴다.
+   *
+   * `null` 이면 서버 기본 정렬(최신 날짜 먼저)이다.
+   */
+  const [sortState, setSortState] = useState<{
+    field: RecordSortField;
+    order: 'ascend' | 'descend';
+  } | null>(null);
+
   // 필터 상태
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
@@ -140,6 +156,11 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       if (defectStatus) {
         params.append('defect_status', defectStatus);
       }
+      // 정렬도 조회 조건이다 — 서버가 전체를 정렬한 뒤 페이지를 자른다.
+      if (sortState) {
+        params.append('sort', sortState.field);
+        params.append('order', sortState.order === 'ascend' ? 'asc' : 'desc');
+      }
 
       const response = await authFetch(`/api/production-records?${params.toString()}`);
 
@@ -171,7 +192,7 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.current, pagination.pageSize, selectedMachineId, dateRange, selectedShift, defectStatus, messageApi, t]);
+  }, [pagination.current, pagination.pageSize, selectedMachineId, dateRange, selectedShift, defectStatus, sortState, messageApi, t]);
 
   useEffect(() => {
     fetchRecords();
@@ -347,6 +368,8 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       dataIndex: 'date',
       key: 'date',
       width: 120,
+      sorter: true,
+      sortOrder: sortState?.field === 'date' ? sortState.order : null,
       render: (date: string) => dayjs(date).format('YYYY-MM-DD')
     },
     {
@@ -366,6 +389,8 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       dataIndex: 'shift',
       key: 'shift',
       width: 80,
+      sorter: true,
+      sortOrder: sortState?.field === 'shift' ? sortState.order : null,
       render: (shift: string) => (
         <Tag color={shift === 'A' ? 'orange' : 'blue'}>
           {shift === 'A' ? t('shift.dayShift') : t('shift.nightShift')}
@@ -378,6 +403,8 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       key: 'output_qty',
       width: 100,
       align: 'right' as const,
+      sorter: true,
+      sortOrder: sortState?.field === 'output_qty' ? sortState.order : null,
       render: (qty: number) => `${qty?.toLocaleString() || 0} ${t('common.pieces')}`
     },
     {
@@ -386,6 +413,8 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       key: 'defect_qty',
       width: 100,
       align: 'right' as const,
+      sorter: true,
+      sortOrder: sortState?.field === 'defect_qty' ? sortState.order : null,
       // 세 상태를 **구분해서** 보여준다: 미검사 / 0건 확정 / 실제 불량.
       // 예전에는 `qty || 0` 이라 미검사가 "0개"로 보였고, 사용자는 검사가 끝난 줄 알았다.
       render: (qty: number | null | undefined) => {
@@ -420,6 +449,8 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
       key: 'oee',
       width: 80,
       align: 'right' as const,
+      sorter: true,
+      sortOrder: sortState?.field === 'oee' ? sortState.order : null,
       render: (oee: number | null | undefined) => {
         // OEE 가 NULL 인 기록은 "0%"가 아니라 "미보고"다. 비가동/실가동이 확인되지
         // 않아 서버가 계산을 보류한 상태이며, 0 으로 뭉개면 정상 가동 중인 설비가
@@ -621,6 +652,24 @@ const ProductionRecordList: React.FC<ProductionRecordListProps> = ({ title }) =>
           dataSource={records}
           rowKey="record_id"
           loading={loading}
+          /** 정렬은 서버가 한다. antd 가 넘겨준 컬럼·방향을 상태에 담으면 다시 조회한다. */
+          onChange={(_pag, _filters, sorter) => {
+            const single = Array.isArray(sorter) ? sorter[0] : (sorter as SorterResult<ProductionRecord>);
+            const field = single?.columnKey as RecordSortField | undefined;
+            const order = single?.order;
+            const next = field && order ? { field, order } : null;
+            /**
+             * ⚠️ 이 콜백은 **페이지를 넘길 때도 호출된다.** 정렬이 그대로인데도 아래
+             * `current: 1` 을 실행하면, 사용자가 4페이지를 눌러도 곧바로 1페이지로
+             * 되돌아온다(2026-08-28 브라우저 테스트에서 실제로 그랬다).
+             * 그래서 정렬이 **바뀐 경우에만** 손댄다.
+             */
+            if (next?.field === sortState?.field && next?.order === sortState?.order) return;
+            setSortState(next);
+            // 순서가 달라졌는데 3페이지에 머물면 사용자가 보는 것은 "3번째 20건" 이라는
+            // 무의미한 창이다. 정렬을 바꾸면 처음으로 돌아간다.
+            setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+          }}
           pagination={{
             ...pagination,
             showSizeChanger: true,

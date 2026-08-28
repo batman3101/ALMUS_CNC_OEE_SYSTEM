@@ -24,6 +24,8 @@ import { useOEEGrading } from '@/hooks/useOEEThresholds';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { MachineConsole } from '@/components/dashboard/operator-console/MachineConsole';
 import { elapsedMinutesSince } from '@/utils/elapsedMinutes';
+import { compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
+import { compareMachineState } from '@/utils/machineStateOrder';
 
 const { useBreakpoint } = Grid;
 
@@ -274,6 +276,8 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       title: machinesT('labels.machineName'),
       dataIndex: 'name',
       key: 'name',
+      sorter: (a: MachineRowData, b: MachineRowData, order?: SortOrder) =>
+        compareText(a.name, b.name, order),
       render: (name: string, record: MachineRowData) => (
         <span
           style={{
@@ -291,6 +295,9 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       title: machinesT('labels.currentState'),
       dataIndex: 'current_state',
       key: 'current_state',
+      // 번역 라벨이 아니라 의미 순위로 정렬한다 (`@/utils/machineStateOrder`).
+      sorter: (a: MachineRowData, b: MachineRowData, order?: SortOrder) =>
+        compareMachineState(a.current_state, b.current_state, order),
       render: (state: MachineState) => (
         <Space>
           {getStateIcon(state)}
@@ -302,12 +309,17 @@ export const OperatorDashboard: React.FC<OperatorDashboardProps> = ({ onError })
       title: machinesT('labels.duration'),
       dataIndex: 'currentDuration',
       key: 'currentDuration',
+      sorter: (a: MachineRowData, b: MachineRowData, order?: SortOrder) =>
+        compareNullableNumber(a.currentDuration, b.currentDuration, order),
       render: (duration: number) => formatDuration(duration, machinesT)
     },
     {
       title: 'OEE',
       dataIndex: 'oee',
       key: 'oee',
+      // null 은 0% 가 아니다 — 어느 방향이든 맨 뒤.
+      sorter: (a: MachineRowData, b: MachineRowData, order?: SortOrder) =>
+        compareNullableNumber(a.oee, b.oee, order),
       // null 을 number 로 받던 시절에는 `(null * 100).toFixed(1)` 이 조용히 "0.0" 이 되어
       // 계산 불가인 설비가 빨간 0.0% 로 찍혔다. antd 의 render 타입이 느슨해
       // 컴파일러도 잡지 못했다.

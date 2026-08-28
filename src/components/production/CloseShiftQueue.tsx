@@ -10,6 +10,8 @@ import { authFetch } from '@/lib/authFetch';
 import { useMachines } from '@/hooks/useMachines';
 import { useDataInputTranslation } from '@/hooks/useTranslation';
 import { useFailureReport } from '@/hooks/useFailureReport';
+import type { QueueSortField } from '@/app/api/production-records/close-queue/queueSort';
+import type { SorterResult } from 'antd/es/table/interface';
 
 const { Text, Title } = Typography;
 const { Option } = Select;
@@ -47,6 +49,16 @@ export const CloseShiftQueue: React.FC = () => {
   const [truncated, setTruncated] = useState(false);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
 
+  /**
+   * 정렬 상태. **서버가 정렬한다** — 서버는 대기 목록 전체를 만들어 정렬한 뒤 페이지를
+   * 자르므로, 클라이언트 정렬이면 화면에 온 20건 안에서만 정렬됐을 것이다.
+   * `null` 이면 서버 기본값(오래된 교대 먼저)이다.
+   */
+  const [sortState, setSortState] = useState<{
+    field: QueueSortField;
+    order: 'ascend' | 'descend';
+  } | null>(null);
+
   const [machineId, setMachineId] = useState<string | null>(null);
   const [shift, setShift] = useState<'A' | 'B' | null>(null);
   const [range, setRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().subtract(6, 'day'), dayjs()]);
@@ -70,6 +82,10 @@ export const CloseShiftQueue: React.FC = () => {
       });
       if (machineId) params.append('machine_id', machineId);
       if (shift) params.append('shift', shift);
+      if (sortState) {
+        params.append('sort', sortState.field);
+        params.append('order', sortState.order === 'ascend' ? 'asc' : 'desc');
+      }
 
       const res = await authFetch(`/api/production-records/close-queue?${params.toString()}`, {
         cache: 'no-store',
@@ -94,7 +110,7 @@ export const CloseShiftQueue: React.FC = () => {
       if (reqId === reqRef.current) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.current, pagination.pageSize, machineId, shift, range, t]);
+  }, [pagination.current, pagination.pageSize, machineId, shift, range, sortState, t]);
 
   useEffect(() => { void fetchQueue(); }, [fetchQueue]);
   useEffect(() => () => { reqRef.current++; }, []);
@@ -154,16 +170,27 @@ export const CloseShiftQueue: React.FC = () => {
   const columns = [
     {
       title: t('recordList.columns.machine'),
-      key: 'machine',
+      key: 'machine_name',
       width: 140,
+      sorter: true,
+      sortOrder: sortState?.field === 'machine_name' ? sortState.order : null,
       render: (_: unknown, item: QueueItem) => <Text strong>{item.machine_name}</Text>,
     },
-    { title: t('recordList.columns.date'), dataIndex: 'date', key: 'date', width: 110 },
+    {
+      title: t('recordList.columns.date'),
+      dataIndex: 'date',
+      key: 'date',
+      width: 110,
+      sorter: true,
+      sortOrder: sortState?.field === 'date' ? sortState.order : null,
+    },
     {
       title: t('recordList.columns.shift'),
       dataIndex: 'shift',
       key: 'shift',
       width: 80,
+      sorter: true,
+      sortOrder: sortState?.field === 'shift' ? sortState.order : null,
       render: (s: string) => (
         <Tag color={s === 'A' ? 'orange' : 'blue'}>
           {s === 'A' ? t('shift.dayShift') : t('shift.nightShift')}
@@ -176,6 +203,8 @@ export const CloseShiftQueue: React.FC = () => {
       key: 'last_qty',
       width: 100,
       align: 'right' as const,
+      sorter: true,
+      sortOrder: sortState?.field === 'last_qty' ? sortState.order : null,
       render: (q: number | null) =>
         q === null ? <Text type="secondary">—</Text> : `${q.toLocaleString()} ${t('common.pieces')}`,
     },
@@ -303,6 +332,24 @@ export const CloseShiftQueue: React.FC = () => {
           rowKey={keyOf}
           loading={loading}
           size="small"
+          /** 정렬은 서버가 한다. antd 가 넘겨준 컬럼·방향을 상태에 담으면 다시 조회한다. */
+          onChange={(_pag, _filters, sorter) => {
+            const single = Array.isArray(sorter) ? sorter[0] : (sorter as SorterResult<QueueItem>);
+            const field = single?.columnKey as QueueSortField | undefined;
+            const order = single?.order;
+            const next = field && order ? { field, order } : null;
+            /**
+             * ⚠️ 이 콜백은 **페이지를 넘길 때도 호출된다.** 정렬이 그대로인데도 아래
+             * `current: 1` 을 실행하면, 사용자가 4페이지를 눌러도 곧바로 1페이지로
+             * 되돌아온다(2026-08-28 브라우저 테스트에서 실제로 그랬다).
+             * 그래서 정렬이 **바뀐 경우에만** 손댄다.
+             */
+            if (next?.field === sortState?.field && next?.order === sortState?.order) return;
+            setSortState(next);
+            // 순서가 달라졌는데 3페이지에 머물면 사용자가 보는 것은 "3번째 20건" 이라는
+            // 무의미한 창이다. 정렬을 바꾸면 처음으로 돌아간다.
+            setPagination(prev => (prev.current === 1 ? prev : { ...prev, current: 1 }));
+          }}
           pagination={{
             ...pagination,
             showSizeChanger: true,
