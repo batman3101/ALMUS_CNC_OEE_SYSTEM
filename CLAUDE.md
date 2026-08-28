@@ -8,19 +8,7 @@ CNC OEE Monitoring System - A real-time web application for monitoring and manag
 
 ## Development Commands
 
-### Setup & Installation
-```bash
-npm install                 # Install dependencies
-cp .env.example .env.local  # Create environment file (configure Supabase keys)
-```
-
 ### Development
-```bash
-npm run dev                 # Start development server (localhost:3000) — Turbopack
-npm run dev:clean           # Clean .next cache and start dev server
-npm run build               # Build for production — webpack
-npm start                   # Start production server
-```
 
 #### ⚠️ `supabase/config.toml` 의 `major_version` 은 **운영과 같아야 한다** (17)
 
@@ -59,73 +47,6 @@ This is a bug in Next.js.
 **이 조합을 되돌리기 전에 브라우저에서 화면이 뜨는지 먼저 확인할 것.** 타입 검사·lint·
 테스트·프로덕션 빌드가 **전부 통과하는데도** dev 화면만 죽기 때문에, 자동 검증만으로는
 이 회귀가 보이지 않는다(2026-08-06 에 실제로 그렇게 놓칠 뻔했다).
-
-### Testing & Quality
-```bash
-npm run lint                # Run ESLint
-npm test                    # Run Jest tests
-npm test:watch              # Run Jest in watch mode
-npm test -- path/to/test.ts # Run single test file
-npm test -- --coverage      # Run tests with coverage report
-npm test -- --testPathPattern=production  # Run tests matching pattern
-npm run clean               # Clean cache directories
-```
-
-## Architecture
-
-### Tech Stack
-- **Runtime**: Node.js 24.18 LTS
-- **Framework**: Next.js 16 (App Router) with React 19
-- **Language**: TypeScript 5
-- **UI Library**: Ant Design 5.27+
-- **Database**: Supabase (PostgreSQL + Realtime)
-- **Charts**: Chart.js 4.5 + react-chartjs-2, Recharts
-- **Authentication**: Supabase Auth with Row Level Security (RLS)
-- **State Management**: React Context API
-- **i18n**: react-i18next (Korean, Vietnamese)
-
-### Key Dependencies
-- **@supabase/supabase-js** ^2.53.0 - Supabase client library
-- **antd** ^5.27.1 - UI component library
-- **date-fns** ^4.1.0 - Date/time utilities
-- **zod** ^4.0.15 - Schema validation for forms and data
-- **xlsx** ^0.18.5 - Excel file parsing and generation
-- **jspdf** ^3.0.1 + **jspdf-autotable** ^5.0.2 - PDF report generation
-- **html2canvas** ^1.4.1 - Chart to image conversion for reports
-- **i18next** ^25.3.2 + **react-i18next** ^15.6.1 - Internationalization
-
-### Directory Structure
-
-```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── dashboard/          # Main dashboard (role-based views)
-│   ├── machines/           # Machine management
-│   ├── reports/            # Reports & analytics
-│   ├── settings/           # System settings
-│   ├── admin/              # Admin-only pages
-│   ├── login/              # Authentication page
-│   └── api/                # API routes
-├── components/             # React components (organized by feature)
-├── contexts/              # React Context providers
-│   ├── AuthContext.tsx     # Authentication state & user management
-│   ├── LanguageContext.tsx # i18n language switching
-│   ├── NotificationContext.tsx # Real-time notification system
-│   └── SystemSettingsContext.tsx # Global system settings
-├── hooks/                 # Custom React hooks
-│   ├── useRealtimeData.ts  # Supabase Realtime subscriptions
-│   ├── useMachines.ts      # Machine data management
-│   └── useSystemSettings.ts # System settings management
-├── lib/                   # Core libraries
-│   ├── supabase.ts         # Supabase client (browser)
-│   └── supabase-admin.ts   # Supabase admin client (server-side)
-├── types/                 # TypeScript type definitions
-├── utils/                 # Utility functions
-│   ├── oeeCalculator.ts    # OEE calculation engine
-│   ├── dateTimeUtils.ts    # Date/time helpers
-│   └── notificationDetector.ts # Notification logic
-└── proxy.ts               # Next.js proxy (cache control)
-```
 
 ## Key Architectural Patterns
 
@@ -252,26 +173,10 @@ before writing queries against it.
 
 ### API Routes Structure (src/app/api/)
 Routes are organized by feature and follow RESTful conventions:
-- **auth/**: Login, logout, profile retrieval (regular + admin with RLS bypass)
-- **admin/**:
-  - `machines/` - Machine CRUD, bulk upload, Excel template generation
-  - `users/` - User management
-  - `setup-real-user/` - Initial admin user creation
-- **machines/**: Machine queries and machine-specific data
-  - `[machineId]/oee/` - OEE metrics for specific machine
-  - `[machineId]/production/` - Production records for specific machine
-- **production-records/**: Production data CRUD
-  - `daily/` - Daily production summaries
 - **oee-data/**: OEE metrics queries
   - Returns raw `production_records` rows, so it is **paginated**: `limit` (default 1000, max 5000) + `offset`, with a `pagination` block (`total`, `returned`, `has_more`) in the response.
   - `statistics` is computed in SQL over the **entire** filtered set (`analytics_oee_records_summary` RPC), not over the returned page. Never average the returned rows — a yearly query matches far more rows than one page holds, and you will only ever hold a page of them.
   - `aggregated/` - Aggregated OEE data (rolled up server-side; use this when you want trends, not rows)
-- **system-settings/**: Settings CRUD by category
-  - `[category]/` - Category-specific settings
-  - `service-role/` - Service role key verification
-- **upload/image/**: Image upload handling
-- **alerts/**: Alert/notification management
-- **quality-analysis/**, **productivity-analysis/**, **downtime-analysis/**: Analytics endpoints
 
 API Route Patterns:
 - **Client-side**: Use `supabase` client from `src/lib/supabase.ts`
@@ -282,19 +187,34 @@ API Route Patterns:
 #### ⚠️ PostgREST silently truncates large queries
 PostgREST enforces a `max-rows` cap (**100,000** on this project). A `select()` without `.limit()` that matches more rows returns exactly 100,000 of them **with a 200 status and no warning** — the response looks complete.
 
-**Current headroom (measured 2026-08-04):** `production_records` holds **32,736 rows** and grows
-**~1,423 rows/day** (800 machines × 2 shifts, 2026-07-11 onward). That is roughly **47 days** of
-headroom before an unbounded query over the whole table starts truncating silently.
+**Current headroom (measured 2026-08-28):** `production_records` holds **61,894 rows** (30 MB)
+and grows **~1,450 rows/day** — that is the mean of the last 14 days; the all-time mean is
+1,289/day and the busiest single day was 1,595. Data starts 2026-07-11 (48 days, 800 machines ×
+2 shifts). That leaves roughly **26 days**, i.e. **around 2026-09-22**, before an unbounded query
+over the whole table starts truncating silently.
+
+**The `factory_id` filter buys no headroom today.** Every API query scopes by factory, but ALV is
+still empty — ALT's 61,894 rows *are* the whole table. Multi-factory does not push that date out
+until ALV actually carries data.
 
 Do not read that as "we have time". Read it as: the cap is a date, not a hypothetical, and the
 failure when it arrives is invisible. Also, *filtered* queries hit it far earlier than the table
 total suggests — any query whose predicate matches more than 100,000 rows truncates, and a
 multi-year range over this table will.
 
-> Earlier revisions of this file claimed ~325k rows. That was wrong by 10× and it caused a real
-> misjudgement: the 2026-08-04 audit rated a pagination defect HIGH on the premise that deep pages
-> already return empty, which they do not at the current row count. **Re-measure before citing a
-> row count as a reason.**
+> **Re-measure before citing a row count as a reason.** This line has been wrong twice now, in
+> opposite directions.
+>
+> An early revision claimed ~325k rows — wrong by 10×, and it caused a real misjudgement: the
+> 2026-08-04 audit rated a pagination defect HIGH on the premise that deep pages already returned
+> empty, which they did not.
+>
+> The replacement figure (32,736) was *correct when written* and still went stale fast: the table
+> had grown **89% past it 24 days later**. A number that moves ~1,450/day is unusable once it is
+> more than about a week old. Count it, don't quote it.
+>
+> The **100,000** cap itself was not re-verified on 2026-08-28. It is PostgREST-side config and is
+> not readable over SQL — `pg_roles.rolconfig` carries only the statement/lock timeouts.
 
 Two rules follow:
 1. **Never aggregate in Node over an unbounded query.** To average the table you must first
@@ -315,45 +235,10 @@ Two rules follow:
   - `LogCategories.UI` - UI events
   - Example: `log('User logged in', LogCategories.AUTH)`
 
-### TypeScript Types (src/types/)
-Type definitions organized by domain:
-- **index.ts**: Core types (User, Machine, MachineLog, ProductionRecord, OEEMetrics)
-- **database.types.ts**: Auto-generated Supabase database types
-- **database.ts**: Extended database types with custom properties
-- **dataInput.ts**: Production input form types
-- **reports.ts**: Report configuration and data types
-- **notifications.ts**: Notification and alert types
-- **systemSettings.ts**: System settings with categories (General, Display, OEE, Shift, Notification)
-- **modelInfo.ts**: Product model and process types
-- Use strict TypeScript typing throughout the codebase
-
 ## Development Guidelines
 
 ### Key Custom Hooks (src/hooks/)
-Critical hooks for feature development:
-- **useRealtimeData**: Subscribes to machines, machine_logs, production_records tables with auto-reconnection
-- **useMachines**: Machine CRUD operations with real-time updates
-- **useProductionRecords**: Production record management with shift-based queries
-- **useRealtimeMachines**: Real-time machine status updates
-- **useRealtimeNotifications**: Live notification system
-- **useSystemSettings**: Access global settings (shift times, OEE thresholds, break durations)
-- (Shift/time helpers live in `src/utils/shiftUtils.ts`, not a hook — there is no `useShiftTime`)
-- **useShiftNotification**: Shift end notification triggers (15 min before shift end)
-- **useOEEThresholds**: OEE status color coding (good/warning/poor)
-- **useTranslation**: i18n translation function with language context
-- **useAutoRefresh**: Configurable auto-refresh for data polling
-- **useClientOnly**: SSR-safe client-only rendering
-
-### Key Utilities (src/utils/)
-Core utility functions:
-- **oeeCalculator.ts**: `OEECalculator` class with methods for availability, performance, quality, and OEE calculations
-- **oeeAggregation.ts**: `OEEAggregationService` for triggering manual/batch aggregations and monitoring logs
-- **shiftUtils.ts**: Shift time calculations (`getCurrentShiftInfo`, `shouldShowShiftEndNotification`, `calculateActualRuntime`)
-- **reportUtils.ts**: Report generation helpers (chart to image, CSV export, number formatting)
-- **reportAggregator.ts**: Data aggregation for reports
-- **dateTimeUtils.ts**: Date/time formatting and timezone handling
-- **notificationDetector.ts**: Logic for detecting notification-worthy events
-- **localStorage.ts**: Type-safe localStorage wrapper
+- Shift/time helpers live in `src/utils/shiftUtils.ts`, **not** a hook — there is no `useShiftTime`.
 
 ### Working with Supabase
 - Always use `safeSupabaseOperation()` wrapper for database queries to handle connection failures gracefully
@@ -397,181 +282,41 @@ andon·정정 RPC 는 advisory 만 써서 — 넷 다 "잠금이 있는" 것처�
 각 함수의 **최종 정의**를 모아 이 규약을 강제한다. 새 함수가 상태를 쓰기 시작하면 그 테스트를
 고치지 않아도 자동으로 검사 대상이 된다.
 
-### Adding New Features
-1. **Define Types**: Add TypeScript interfaces in `src/types/`
-2. **Create API Route**: If server-side logic needed, add in `src/app/api/`
-3. **Build Components**: Create feature components in `src/components/[feature]/`
-4. **Add Page**: Create route in `src/app/[route]/page.tsx`
-5. **Update RLS**: Modify Supabase RLS policies if new tables/permissions needed
-6. **Test Roles**: Verify admin, engineer, and operator access patterns
-
 ### Real-time Subscriptions
 - Subscribe in `useEffect` with proper cleanup using `channelsRef.current`
 - Use `channelsRef` to track channels and unsubscribe on unmount
 - Handle `INSERT`, `UPDATE`, `DELETE` events separately
 - Throttle UI updates to avoid excessive re-renders (batch state updates)
-- Example pattern from `useRealtimeData.ts`:
-  ```typescript
-  const channelsRef = useRef<RealtimeChannel[]>([]);
-
-  useEffect(() => {
-    const channel = supabase.channel('table-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'machines' }, handleChange)
-      .subscribe();
-
-    channelsRef.current.push(channel);
-
-    return () => {
-      channelsRef.current.forEach(ch => ch.unsubscribe());
-      channelsRef.current = [];
-    };
-  }, []);
-  ```
-
-### Component Organization
-Components are organized by feature domain in `src/components/`:
-- **admin/**: User management, machine management, OEE aggregation manager
-- **auth/**: Login forms, role guards, protected routes
-- **dashboard/**: Role-based dashboards (Admin, Engineer, Operator)
-- **data-input/**: Shift data input forms
-- **layout/**: App layout, sidebar, theme/language toggles
-- **machines/**: Machine list/cards, detail modals, status input, bulk upload
-- **notifications/**: Notification panel, badges, toast notifications
-- **oee/**: OEE gauges, charts (trend, comparison, downtime)
-- **production/**: Production record input, shift notifications
-- **quality/**: Defect analysis charts
-- **reports/**: Report generators, export modals, templates
-- **settings/**: System settings tabs (General, Display, OEE, Shift, Notifications)
-
-Each feature directory includes an `index.ts` for clean exports
-
-### Testing
-- Jest config: `jest.config.js`
-- Setup file: `jest.setup.js`
-- Run single test: `npm test -- path/to/test.ts`
-- Test coverage: `npm test -- --coverage`
 
 ### Internationalization
 - Translation files: JSON files in `public/locales/{ko,vi}/` directories organized by feature
-  - `common.json`: Common UI strings
-  - `auth.json`: Authentication messages
-  - `machines.json`: Machine-related translations
-  - `dashboard.json`: Dashboard strings
-  - `production.json`: Production input translations
-  - `reports.json`: Report generation strings
 - Use `useTranslation()` hook from `src/hooks/useTranslation.ts`
 - Supported languages: Korean (ko), Vietnamese (vi)
 - Add new translations by creating/updating JSON files in `public/locales/`
 
-### Styling
-- **Ant Design Theme**: Customized in `src/app/globals.css` and `src/components/providers/AntdConfigProvider.tsx`
-- **CSS Modules**: Use for component-specific styles
-- **Tailwind CSS 4**: Configured via `tailwindcss` package (see `postcss.config.mjs`)
-- **Responsive Design**: Mobile-first approach, test on all breakpoints
-
 ## Environment Variables
 
-Required in `.env.local`:
-```bash
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # Server-side only, never expose to client
-```
+Required in `.env.local` (see `.env.example`): `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — the service role key is
+**server-side only, never expose it to the client**.
 
 Environment validation is performed using Zod schemas in `src/lib/env-validation.ts`
 
 ## Deployment
 
-### Vercel (Recommended)
-```bash
-vercel --prod
-```
-- Set environment variables in Vercel dashboard
-- Ensure Supabase URL uses HTTPS
-- Enable Realtime in Supabase dashboard before deployment
-
-### Post-Deployment Checklist
-- Verify RLS policies are active in production
-- Test real-time subscriptions work
-- Confirm authentication flow (login/logout)
-- Check all user roles have appropriate access
-- Monitor Supabase usage and API rate limits
+Vercel. Deploy steps and the post-deployment checklist live in `docs/DEPLOYMENT.md`.
 
 ## Critical System Features
 
 ### OEE 정합성 보정 Edge Function (⚠ 예약 실행되지 않는다)
 
-**2026-07-29 실측으로 이 절을 전면 정정했다.** 이전 서술은 거의 전부 사실이 아니었고,
-같은 문서 안의 다른 서술(위 "there is no `oee_aggregation_log` table")과도 충돌했다.
-
-| 이전 서술 | 실제 |
-|---|---|
-| pg_cron 으로 매일 08:30 / 20:30 자동 실행 | **pg_cron 미설치**(`installed_version=null`), `cron` 스키마 없음 → **예약 실행 없음** |
-| `OEEAggregationService.triggerDailyAggregation` 으로 수동 실행 | 그 모듈을 **import 하는 곳이 없다** (죽은 코드) |
-| `OEEAggregationManager.tsx` 가 관리 UI 제공 | 어느 페이지에도 **마운트되지 않았다** (죽은 코드) |
-| `oee_aggregation_log` 가 실행 이력 기록 | **그런 테이블은 없다** |
-| "Performs OEE calculations" | 재계산을 **하지 않는다** — 아래 참조 |
-
-**현재 상태**: 함수는 배포되어 있고(`verify_jwt: true`, ACTIVE) 유효한 관리자 JWT 로 HTTP
-호출하면 동작한다. 그러나 **앱 안에 살아있는 호출자가 하나도 없다.**
-
-**함수가 실제로 하는 일**: 산술적으로 반박 불가능한 명제 하나만 적용한다 —
-`output_qty = 0` 이면 `ideal_runtime / performance / quality / oee` 도 0이다.
-작업자 입력값(`planned_runtime`, `actual_runtime`, `output_qty`, `defect_qty`,
-`downtime_minutes`, `availability`)은 **건드리지 않고**, 행을 **INSERT 하지도 않는다**.
-지표를 저장된 입력값으로 재유도하면 이 DB 에서는 곧 역사 덮어쓰기가 되기 때문이다
-(근거는 함수 파일 상단 주석에 있다). `dry_run: true` 로 영향 범위만 확인할 수 있다.
-
-**인가**(2026-07-29 추가): `service_role` 토큰은 통과, 그 외에는 `admin` + `is_active` 를
-요구한다. 토큰 없음·서명 불일치는 플랫폼의 `verify_jwt` 가 401 로 막는다(실측 확인).
-
-- Edge Function: `supabase/functions/daily-oee-aggregation/index.ts`
-- 회귀 검사: `supabase/functions/__tests__/dailyOeeAggregationAuthz.test.ts`
-- 상세: `docs/OEE_AGGREGATION_SYSTEM.md` (2026-08-06 전면 재작성 — 존재하지 않는 시스템의
-  설치 절차를 지우고 실측만 남겼다. 원래 설계와 그 행방은 그 문서 부록에 있다.)
+`supabase/functions/daily-oee-aggregation` 은 **예약 실행도, 앱 안의 살아있는 호출자도
+없다.** 재계산도 하지 않는다. 건드리기 전에 `oee-aggregation` 스킬과
+`docs/OEE_AGGREGATION_SYSTEM.md` 를 먼저 읽을 것 — 이전 문서의 서술은 거의 전부
+사실이 아니었다.
 
 ### Production Record Input System
-Shift-based production data entry with automatic notifications:
-- **Components**:
-  - `ProductionRecordInput`: Modal for entering production quantities
-  - `ShiftEndNotification`: Auto-notification 15 minutes before shift end
-  - `ProductionManager`: Integrated production management interface
-- **Validation**: Zod schema ensures defect_qty ≤ output_qty
-- **Estimation**: Calculates estimated output based on tact time and actual runtime
-- **Shift Times**: A shift (08:00-20:00), B shift (20:00-08:00 next day)
 - See `src/components/production/README.md` for details
 
 ### Report Generation System
-Multi-format report export with customizable templates:
-- **Formats**: PDF (jsPDF) and Excel (xlsx)
-- **Components**:
-  - `ReportGenerator`: Quick export with default settings
-  - `ReportExportModal`: Custom report configuration
-  - `ReportTemplates`: Static generation methods
-  - `ReportDashboard`: Comprehensive report management
-- **Report Types**: Summary, Detailed, Trend Analysis, Downtime Analysis
-- **Chart Integration**: Supports embedding Chart.js visualizations in PDFs using `html2canvas`
 - See `src/components/reports/README.md` for API reference
-
-### Machine Bulk Upload System
-Excel-based bulk machine import functionality:
-- **Template Generation**: `/api/admin/machines/template` generates Excel template with proper headers
-- **Upload Component**: `MachinesBulkUpload` (`src/components/machines/MachinesBulkUpload.tsx`)
-- **Template Creator**: `src/lib/excel/machineTemplate.ts` defines Excel structure
-- **Validation**: Validates required fields (name, model, location) before import
-- **Usage**: Admin page at `/machines/bulk-upload`
-- **Libraries**: Uses `xlsx` package for Excel parsing
-
-## Important Technical Notes
-
-### Memory Management & Performance
-- **Context Cleanup**: All contexts use `isMountedRef` to prevent state updates after unmount
-- **AbortController**: Used in AuthContext to cancel pending API requests on unmount
-- **Timeout Handling**: Auth initialization has 30-second timeout with user-friendly error messages
-- **Realtime Reconnection**: Auto-reconnects every 5 seconds on connection failure with heartbeat checks every 30 seconds
-- **OEE Caching**: OEE calculations are cached for 5 minutes; clear cache with `OEECache.clear()`
-
-### Configuration
-- **Shift System**: 12-hour shifts (A: 08:00-20:00, B: 20:00-08:00) with 60-minute break
-- **System Settings**: Configurable via `system_settings` table and `SystemSettingsContext`
-- **OEE Thresholds**: Configurable per settings (defaults: Good ≥80%, Warning 60-79%, Poor <60%)
