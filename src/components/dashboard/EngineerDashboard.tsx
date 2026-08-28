@@ -26,6 +26,7 @@ import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { useOEEGrading } from '@/hooks/useOEEThresholds';
 import { OEE_GRADE_LADDER, type OEEGrade } from '@/lib/oeeGrading';
 import { formatMachineLocation } from '@/utils/machineLocation';
+import { compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
 
 // Removed deprecated TabPane import
 const { RangePicker } = DatePicker;
@@ -67,12 +68,6 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
   // 필터 값(excellent/good/warning/critical)이 곧 등급 이름이다. 등급을 매길 수 없는
   // 값은 필터에 걸리지 않는다 — `grade === null` 은 어떤 선택에도 포함되지 않는다.
   // 판정은 `gradeOf` 하나로만 한다 (useOEEGrading 이 설정이 바뀔 때만 새로 만든다).
-
-  const compareNullable = (left: number | null, right: number | null): number => {
-    if (left === null) return right === null ? 0 : 1;
-    if (right === null) return -1;
-    return left - right;
-  };
 
   // 라벨은 기존 번역 키를 그대로 재사용한다 (새 문구를 만들지 않는다).
   // 등급 이름이 fair/poor → warning/critical 로 바뀌었을 뿐, 가리키는 칸은 세 번째·네 번째로 같다.
@@ -614,7 +609,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       key: 'machine',
       width: 100,
       fixed: 'left' as const,
-      sorter: (a: { machine: string }, b: { machine: string }) => a.machine.localeCompare(b.machine),
+      sorter: (a: { machine: string }, b: { machine: string }, order?: SortOrder) =>
+        compareText(a.machine, b.machine, order),
     },
     {
       title: t('dashboard:table.location'),
@@ -622,7 +618,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       key: 'location',
       width: 120,
       // 정렬은 DB 원본 값 기준으로 두고, 표시만 번역한다.
-      sorter: (a: { location: string }, b: { location: string }) => a.location.localeCompare(b.location),
+      sorter: (a: { location: string }, b: { location: string }, order?: SortOrder) =>
+        compareText(a.location, b.location, order),
       render: (location: string) => formatMachineLocation(location, t),
     },
     {
@@ -640,8 +637,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
         ) : (
           <span style={{ color: colorOf(null) }}>—</span>
         ),
-      sorter: (a: { avgOEE: number | null }, b: { avgOEE: number | null }) =>
-        compareNullable(a.avgOEE, b.avgOEE),
+      sorter: (a: { avgOEE: number | null }, b: { avgOEE: number | null }, order?: SortOrder) =>
+        compareNullableNumber(a.avgOEE, b.avgOEE, order),
     },
     {
       title: t('dashboard:table.availability'),
@@ -650,8 +647,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       width: 100,
       render: (value: number | null, record: { hasData: boolean }) =>
         record.hasData ? `${((value ?? 0) * 100).toFixed(1)}%` : '—',
-      sorter: (a: { availability: number | null }, b: { availability: number | null }) =>
-        compareNullable(a.availability, b.availability),
+      sorter: (a: { availability: number | null }, b: { availability: number | null }, order?: SortOrder) =>
+        compareNullableNumber(a.availability, b.availability, order),
     },
     {
       title: t('dashboard:table.performance'),
@@ -660,8 +657,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       width: 100,
       render: (value: number | null, record: { hasData: boolean }) =>
         record.hasData ? `${((value ?? 0) * 100).toFixed(1)}%` : '—',
-      sorter: (a: { performance: number | null }, b: { performance: number | null }) =>
-        compareNullable(a.performance, b.performance),
+      sorter: (a: { performance: number | null }, b: { performance: number | null }, order?: SortOrder) =>
+        compareNullableNumber(a.performance, b.performance, order),
     },
     {
       title: t('dashboard:table.quality'),
@@ -670,8 +667,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       width: 100,
       render: (value: number | null, record: { hasData: boolean }) =>
         record.hasData ? `${((value ?? 0) * 100).toFixed(1)}%` : '—',
-      sorter: (a: { quality: number | null }, b: { quality: number | null }) =>
-        compareNullable(a.quality, b.quality),
+      sorter: (a: { quality: number | null }, b: { quality: number | null }, order?: SortOrder) =>
+        compareNullableNumber(a.quality, b.quality, order),
     },
     {
       title: t('dashboard:table.downtimeHours'),
@@ -679,7 +676,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       key: 'downtimeHours',
       width: 120,
       render: (value: number) => `${value}h`,
-      sorter: (a: { downtimeHours: number }, b: { downtimeHours: number }) => a.downtimeHours - b.downtimeHours,
+      sorter: (a: { downtimeHours: number }, b: { downtimeHours: number }, order?: SortOrder) =>
+        compareNullableNumber(a.downtimeHours, b.downtimeHours, order),
     },
     {
       title: t('dashboard:table.defectRate'),
@@ -688,7 +686,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
       width: 100,
       render: (value: number, record: { hasProductionData: boolean }) =>
         record.hasProductionData ? `${(value * 100).toFixed(2)}%` : '—',
-      sorter: (a: { defectRate: number }, b: { defectRate: number }) => a.defectRate - b.defectRate,
+      sorter: (a: { defectRate: number }, b: { defectRate: number }, order?: SortOrder) =>
+        compareNullableNumber(a.defectRate, b.defectRate, order),
     },
     {
       title: t('dashboard:table.trend'),
@@ -701,7 +700,8 @@ export const EngineerDashboard: React.FC<EngineerDashboardProps> = ({ onError })
           {record.trendValue.toFixed(1)}%
         </span>
       ),
-      sorter: (a: { trendValue: number }, b: { trendValue: number }) => a.trendValue - b.trendValue,
+      sorter: (a: { trendValue: number }, b: { trendValue: number }, order?: SortOrder) =>
+        compareNullableNumber(a.trendValue, b.trendValue, order),
     },
   ];
 

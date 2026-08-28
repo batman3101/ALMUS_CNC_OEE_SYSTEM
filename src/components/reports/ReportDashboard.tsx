@@ -31,6 +31,7 @@ import { OEEMetrics } from '@/types/reports';
 import { ReportUtils } from '@/utils/reportUtils';
 import { getReportTemplateRange } from '@/utils/reportRange';
 import { calculateWeightedOEE } from '@/utils/weightedOee';
+import { compareDate, compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
 
 type ReportOEEMetrics = OEEMetrics & { record_id: string };
 
@@ -165,6 +166,13 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
   const [loading, setLoading] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+
+  /**
+   * 설비 id → 화면에 보이는 이름. 정렬과 표시가 **같은 값**을 쓰게 하려고 뽑았다.
+   * 목록에 없는 id 는 표시와 마찬가지로 id 자체를 쓴다.
+   */
+  const machineNameOf = (id: string): string =>
+    machines.find(m => m.id === id)?.name || id;
   const [previewType, setPreviewType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   const assertRangeAvailable = (range: [string, string]) => {
@@ -603,28 +611,35 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                       {
                         title: t('preview.columns.date'),
                         dataIndex: 'date',
-                        key: 'date'
+                        key: 'date',
+                        sorter: (a: ProductionRecord, b: ProductionRecord, order?: SortOrder) =>
+                          compareDate(a.date, b.date, order)
                       },
                       {
                         title: t('preview.columns.machine'),
                         dataIndex: 'machine_id',
                         key: 'machine_id',
-                        render: (id: string) => {
-                          const machine = machines.find(m => m.id === id);
-                          return machine?.name || id;
-                        }
+                        // id 가 아니라 화면에 보이는 설비명으로 정렬한다.
+                        sorter: (a: ProductionRecord, b: ProductionRecord, order?: SortOrder) =>
+                          compareText(machineNameOf(a.machine_id), machineNameOf(b.machine_id), order),
+                        render: (id: string) => machineNameOf(id)
                       },
                       {
                         title: t('preview.columns.output'),
                         dataIndex: 'output_qty',
                         key: 'output_qty',
-                        align: 'right'
+                        align: 'right',
+                        sorter: (a: ProductionRecord, b: ProductionRecord, order?: SortOrder) =>
+                          compareNullableNumber(a.output_qty, b.output_qty, order)
                       },
                       {
                         title: t('preview.columns.defects'),
                         dataIndex: 'defect_qty',
                         key: 'defect_qty',
-                        align: 'right'
+                        align: 'right',
+                        // 미검사(null)는 0 이 아니다 — 방향과 무관하게 맨 뒤로 간다.
+                        sorter: (a: ProductionRecord, b: ProductionRecord, order?: SortOrder) =>
+                          compareNullableNumber(a.defect_qty, b.defect_qty, order)
                       }
                     ]}
                     pagination={{ pageSize: 100, showSizeChanger: true }}
@@ -639,17 +654,24 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                       {
                         title: t('preview.columns.machineName'),
                         dataIndex: 'name',
-                        key: 'name'
+                        key: 'name',
+                        sorter: (a: Machine, b: Machine, order?: SortOrder) =>
+                          compareText(a.name, b.name, order)
                       },
                       {
                         title: t('preview.columns.location'),
                         dataIndex: 'location',
-                        key: 'location'
+                        key: 'location',
+                        sorter: (a: Machine, b: Machine, order?: SortOrder) =>
+                          compareText(a.location, b.location, order)
                       },
                       {
                         title: t('preview.columns.status'),
                         dataIndex: 'is_active',
                         key: 'is_active',
+                        // 정지(0) → 가동(1). 오름차순 첫 화면이 "멈춘 설비" 다.
+                        sorter: (a: Machine, b: Machine, order?: SortOrder) =>
+                          compareNullableNumber(a.is_active ? 1 : 0, b.is_active ? 1 : 0, order),
                         render: (active: boolean) => active ? t('common.running') : t('common.stopped')
                       }
                     ]}

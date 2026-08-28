@@ -3,6 +3,11 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { apiAuthErrorResponse, assertMachineAccess } from '@/lib/apiAuth';
 import { requireFactoryUser } from '@/lib/factoryAuth';
 import { chunkIdsForInFilter } from '@/lib/idFilter';
+import {
+  InvalidQueueSortError,
+  buildQueueComparator,
+  parseQueueSort,
+} from './queueSort';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,8 +29,6 @@ const MAX_WINDOW_DAYS = 90;
  * 정확성 버그이고, 보이는 절단은 그냥 페이지다(PostgREST 무음 절단에서 얻은 교훈).
  */
 const SCAN_CAP = 20_000;
-
-const shiftRank = (s: string) => (s === 'A' ? 0 : 1);
 
 /**
  * GET /api/production-records/close-queue — 전사 교대 마감 대기 큐.
@@ -51,6 +54,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'machine_id must be a UUID' }, { status: 400 });
     }
     if (machineId) assertMachineAccess(user, machineId);
+
+    /**
+     * 정렬. 대기 목록 **전체**에 적용된다(아래에서 정렬한 뒤 페이지를 자른다).
+     * 허용 목록과 비교 규칙은 `./queueSort` 한 곳에만 있다.
+     */
+    let sortSpec;
+    try {
+      sortSpec = parseQueueSort(searchParams.get('sort'), searchParams.get('order'));
+    } catch (sortError) {
+      if (sortError instanceof InvalidQueueSortError) {
+        return NextResponse.json({ error: sortError.message }, { status: 400 });
+      }
+      throw sortError;
+    }
 
     const endParam = searchParams.get('endDate');
     const startParam = searchParams.get('startDate');
@@ -171,12 +188,9 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 오래된 교대 먼저. 안정 전순서라야 폴링·페이지 이동 중에 행이 튀지 않는다
-    // ((machine_id, date, shift) 가 안정 키다).
-    items.sort((a, b) =>
-      a.date !== b.date ? a.date.localeCompare(b.date)
-        : a.shift !== b.shift ? shiftRank(a.shift) - shiftRank(b.shift)
-          : a.machine_name.localeCompare(b.machine_name));
+    // 기본은 오래된 교대 먼저. 어떤 정렬을 고르든 마지막 기준은 (date, shift, machine_id)
+    // 라 안정 전순서다 — 그래야 폴링·페이지 이동 중에 행이 튀지 않는다.
+    items.sort(buildQueueComparator(sortSpec.field, sortSpec.direction));
 
     const total = items.length;
     const start = (page - 1) * limit;

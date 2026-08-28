@@ -27,6 +27,8 @@ import { fetchMachines } from '@/lib/machinesCache';
 import { formatMachineLocation } from '@/utils/machineLocation';
 import { authFetch } from '@/lib/authFetch';
 import { useFailureReport } from '@/hooks/useFailureReport';
+import { compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
+import { compareMachineState } from '@/utils/machineStateOrder';
 
 // 대시보드가 지원하는 최대 기간(최근 30일 프리셋)을 커버하는 행수 상한.
 // 설비 800대 × 2교대 × 30일 ≈ 48,000행이므로 50,000행이면 프리셋 전 구간이 잘리지 않는다.
@@ -617,12 +619,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
   };
 
   // 테이블 컬럼 정의
+  // 정렬 비교는 `@/utils/tableSorters` 하나만 쓴다 — 특히 OEE 의 null 은 0% 가 아니라
+  // "계산 불가" 라서, 어느 방향으로 정렬하든 맨 뒤에 있어야 한다.
+  type MachineRow = Machine & { oee: number | null; status: string };
   const machineColumns = [
     {
       title: t('table.machineName'),
       dataIndex: 'name',
       key: 'name',
       width: 120,
+      sorter: (a: MachineRow, b: MachineRow, order?: SortOrder) =>
+        compareText(a.name, b.name, order),
     },
     {
       title: t('table.location'),
@@ -630,6 +637,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       key: 'location',
       width: 120,
       // DB 에는 'A동'/'B동' 처럼 한국어로 저장돼 있으므로 표시할 때만 번역한다.
+      // 정렬도 번역된 라벨로 한다 — 화면 글자와 순서가 어긋나면 안 된다.
+      sorter: (a: MachineRow, b: MachineRow, order?: SortOrder) =>
+        compareText(formatMachineLocation(a.location, t), formatMachineLocation(b.location, t), order),
       render: (location: string) => formatMachineLocation(location, t),
     },
     {
@@ -637,6 +647,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       dataIndex: 'status',
       key: 'status',
       width: 100,
+      /**
+       * 번역된 라벨이 아니라 **의미 순위**로 정렬한다(`@/utils/machineStateOrder`).
+       * 라벨순이면 한국어와 베트남어의 정렬 결과가 서로 다르고, 어느 쪽도
+       * "무엇을 먼저 봐야 하는가" 를 말해주지 않는다.
+       */
+      sorter: (a: MachineRow, b: MachineRow, order?: SortOrder) =>
+        compareMachineState(a.current_state, b.current_state, order),
       render: (status: string, record: { current_state?: string }) => {
         const translatedStatus = getStatusText(record.current_state);
         const color = record.current_state === 'NORMAL_OPERATION' ? 'success' : 
@@ -649,6 +666,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onError }) => {
       dataIndex: 'oee',
       key: 'oee',
       width: 120,
+      sorter: (a: MachineRow, b: MachineRow, order?: SortOrder) =>
+        compareNullableNumber(a.oee, b.oee, order),
       render: (oee: number | null) => oee === null
         ? <span style={{ color: '#8c8c8c' }}>—</span>
         : (

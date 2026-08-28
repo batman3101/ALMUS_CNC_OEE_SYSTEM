@@ -46,6 +46,7 @@ import {
   totalMinutes,
 } from '@/utils/downtimeIntervals';
 import { useFailureReport } from '@/hooks/useFailureReport';
+import { compareDate, compareNullableNumber, compareText, type SortOrder } from '@/utils/tableSorters';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -1234,18 +1235,36 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       title: t('dataEntry.startTime'),
       dataIndex: 'start_time',
       key: 'start_time',
+      sorter: (a: DowntimeEntry, b: DowntimeEntry, order?: SortOrder) =>
+        compareDate(a.start_time, b.start_time, order),
+      defaultSortOrder: 'ascend' as const,
       render: (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm')
     },
     {
       title: t('dataEntry.endTime'),
       dataIndex: 'end_time',
       key: 'end_time',
+      // 진행 중인 비가동은 종료 시각이 없다. 1970년으로 떨어지지 않고 맨 뒤로 간다.
+      sorter: (a: DowntimeEntry, b: DowntimeEntry, order?: SortOrder) =>
+        compareDate(a.end_time, b.end_time, order),
       render: (time: string) => time ? dayjs(time).format('YYYY-MM-DD HH:mm') : t('dataEntry.ongoing')
     },
     {
       title: t('dataEntry.downtime'),
       dataIndex: 'duration_minutes',
       key: 'duration_minutes',
+      /**
+       * 저장된 `duration_minutes` 가 아니라 **화면에 찍히는 값**으로 정렬한다.
+       * 진행 중인 항목은 저장값이 비어 있고 화면에는 "진행중" 이 뜨므로, 저장값으로
+       * 정렬하면 화면에서 가장 긴 항목이 엉뚱한 자리에 놓인다.
+       * 진행 중(종료 시각 없음)은 아직 확정되지 않은 값이라 맨 뒤로 보낸다.
+       */
+      sorter: (a: DowntimeEntry, b: DowntimeEntry, order?: SortOrder) =>
+        compareNullableNumber(
+          a.end_time ? downtimeMinutesAt(a) : null,
+          b.end_time ? downtimeMinutesAt(b) : null,
+          order
+        ),
       render: (_minutes: number | null, record: DowntimeEntry) => (
         <Space>
           <Text>
@@ -1263,6 +1282,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       title: t('dataEntry.reason'),
       dataIndex: 'reason',
       key: 'reason',
+      // 원본 키가 아니라 번역된 라벨로 정렬한다 — 사용자가 읽는 글자 순서와 같아야 한다.
+      sorter: (a: DowntimeEntry, b: DowntimeEntry, order?: SortOrder) =>
+        compareText(translateReason(a.reason), translateReason(b.reason), order),
       render: (reason: string) => translateReason(reason)
     },
     {
