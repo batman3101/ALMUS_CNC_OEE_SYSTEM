@@ -12,7 +12,7 @@
   "capacityContract": "CAPA ca = làm tròn xuống(max(0, phút vận hành − phút nghỉ) × 60 ÷ T/T mỗi sản phẩm). CAPA ngày là tổng CAPA từng ca.",
   "capacityNote": "Sử dụng thời gian OEE theo nhà máy. Không nhân hiệu suất thời gian hoặc cavity lần nữa. Cần ánh xạ model/công đoạn và lịch làm việc trước khi tính số máy.",
   "reviewRequired": "Cần xác nhận dữ liệu gốc và ánh xạ model/công đoạn",
-  "reviewDescription": "Chỉ đọc kết quả công thức đã lưu. Không cập nhật liên kết ngoài hoặc đổi ô trống/lỗi thành 0. CNC1~CNC2 có cùng lượng cho mỗi công đoạn. CNC3~5 cần ánh xạ riêng.",
+  "reviewDescription": "Chỉ đọc kết quả công thức đã lưu. Không cập nhật liên kết ngoài hoặc đổi ô trống/lỗi thành 0. CNC1~CNC2 có cùng lượng cho mỗi công đoạn; model có CNC #0 (như H8) cũng áp dụng cùng lượng cho CNC #0. CNC3~5 cần ánh xạ riêng.",
   "from": "Từ ngày",
   "to": "Đến ngày",
   "issuesOnly": "Chỉ mục cần kiểm tra",
@@ -117,7 +117,7 @@
     "noMoves": "Không có máy để chuyển.",
     "unresolved": "Còn thiếu sau khi hết máy dư: {{list}}",
     "unmappedTitle": "{{count}} model chưa khớp (tạm dừng tính)",
-    "excludedMachines": "{{count}} máy ngoài phạm vi (công đoạn khác như CNC #0)",
+    "excludedMachines": "{{count}} máy ngoài phạm vi (công đoạn khác như CNC #2-1)",
     "unassignedMachines": "{{count}} máy chưa gán model"
   }
 }

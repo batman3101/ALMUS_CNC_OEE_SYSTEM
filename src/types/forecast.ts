@@ -64,7 +64,8 @@ export type ForecastCapacityPolicy = { status: 'unavailable' } | {
   separateEfficiencyMultiplier: false;
 };
 
-export type ForecastProcess = 'CNC1' | 'CNC2';
+/** CNC0 exists only on some models (e.g. H8); it takes the same quantity as CNC1/CNC2 when present. */
+export type ForecastProcess = 'CNC0' | 'CNC1' | 'CNC2';
 
 export interface ForecastSnapshotModel {
   id: string; name: string; isActive: boolean;

@@ -12,7 +12,7 @@
   "capacityContract": "교대 CAPA = 내림(max(0, 가동시간 − 휴식시간) × 60 ÷ 개당 T/T). 일 CAPA는 교대별 CAPA의 합입니다.",
   "capacityNote": "공장별 OEE 시간 설정을 기준으로 연결합니다. 시간 효율이나 cavity를 다시 곱하지 않습니다. 모델·공정 매핑과 날짜별 가동 조건이 확정되기 전에는 필요 설비를 제시하지 않습니다.",
   "reviewRequired": "원본 확인·모델/공정 매핑이 필요합니다",
-  "reviewDescription": "수식은 파일에 저장된 결과만 읽습니다. 외부 링크를 갱신하지 않으며 빈값·오류를 0으로 처리하지 않습니다. CNC1~CNC2는 각각 동일 수량이며 CNC3~5 등은 매핑 보류합니다.",
+  "reviewDescription": "수식은 파일에 저장된 결과만 읽습니다. 외부 링크를 갱신하지 않으며 빈값·오류를 0으로 처리하지 않습니다. CNC1~CNC2는 각각 동일 수량이며 CNC #0 공정이 있는 모델(H8 등)은 CNC #0에도 같은 수량을 적용합니다. CNC3~5 등은 매핑 보류합니다.",
   "from": "시작일",
   "to": "종료일",
   "issuesOnly": "검토 대상만",
@@ -117,7 +117,7 @@
     "noMoves": "옮길 설비가 없습니다.",
     "unresolved": "풀 부족으로 남은 수량: {{list}}",
     "unmappedTitle": "미매칭 모델 {{count}}개 (계산 보류)",
-    "excludedMachines": "계산 대상 밖 설비(CNC #0 등 다른 공정) {{count}}대",
+    "excludedMachines": "계산 대상 밖 설비(CNC #2-1 등 다른 공정) {{count}}대",
     "unassignedMachines": "모델 미배정 설비 {{count}}대"
   }
 }

@@ -9,10 +9,12 @@ export const normalizeModelName = (name: string): string => name.replace(/\s+/g,
  */
 export const FORECAST_MODEL_ALIASES: Readonly<Record<string, string>> = { H8MAIN: 'H8M', DIAMOND3: 'DM3' };
 
-/** Only CNC1/CNC2 are forecast processes; `CNC #0`, `CNC #2-1` stay out of scope. */
+const KNOWN_PROCESSES: readonly ForecastProcess[] = ['CNC0', 'CNC1', 'CNC2'];
+
+/** CNC0/CNC1/CNC2 are capacity processes (CNC0 included 2026-09-25); `CNC #2-1` stays out of scope. */
 export function normalizeProcessName(name: string): ForecastProcess | null {
   const compact = name.replace(/[\s#]/g, '').toUpperCase();
-  return compact === 'CNC1' ? 'CNC1' : compact === 'CNC2' ? 'CNC2' : null;
+  return KNOWN_PROCESSES.find(p => p === compact) ?? null;
 }
 
 export interface ProcessRef { id: string; tactTimeSeconds: number | null }
@@ -23,9 +25,9 @@ export interface ModelMatch {
   processes: Record<ForecastProcess, ProcessRef | null>;
 }
 
-/** CNC1/CNC2 process ids of a DB model; lowest process_order wins if a name repeats. */
+/** CNC0/CNC1/CNC2 process ids of a DB model; lowest process_order wins if a name repeats. */
 export function processRefs(model: ForecastSnapshotModel | null): Record<ForecastProcess, ProcessRef | null> {
-  const refs: Record<ForecastProcess, ProcessRef | null> = { CNC1: null, CNC2: null };
+  const refs: Record<ForecastProcess, ProcessRef | null> = { CNC0: null, CNC1: null, CNC2: null };
   if (!model) return refs;
   for (const process of [...model.processes].sort((a, b) => a.order - b.order)) {
     const key = normalizeProcessName(process.name);

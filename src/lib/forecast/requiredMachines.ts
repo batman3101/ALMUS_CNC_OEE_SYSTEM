@@ -30,7 +30,9 @@ export interface RequirementInput {
   breakMinutes: number;
 }
 
-const PROCESSES: ForecastProcess[] = ['CNC1', 'CNC2'];
+const PROCESSES: ForecastProcess[] = ['CNC0', 'CNC1', 'CNC2'];
+/** Only some models run a CNC #0 step; a model without it has no CNC0 row, not a `no_tact` one. */
+const OPTIONAL_PROCESSES = new Set<ForecastProcess>(['CNC0']);
 
 /** Same formula as the OEE input form: floor per 720-minute shift after one break deduction, then sum. No cavity factor. */
 export function dailyCapacityPerMachine(tactTimeSeconds: number | null, breakMinutes: number): number | null {
@@ -49,6 +51,7 @@ export function buildRequirements({ demands, matches, models, machines, breakMin
     const match = matches.get(demand.model);
     for (const process of PROCESSES) {
       const ref = match?.processes[process] ?? null;
+      if (OPTIONAL_PROCESSES.has(process) && !ref) continue;
       const dbModel = match?.dbModel ? { id: match.dbModel.id, name: match.dbModel.name } : null;
       const processId = ref?.id ?? null;
       const current = dbModel && processId ? countActiveMachines(machines, dbModel.id, processId) : 0;
