@@ -1,7 +1,7 @@
 {
   "result": "PASS",
-  "root": "http://127.0.0.1:3100",
-  "timestamp": "2026-09-25T07:39:56.064Z",
+  "root": "http://localhost:3000",
+  "timestamp": "2026-09-25T07:59:42.727Z",
   "checks": [
     "800 unique machines match the actual Excel cells; lower calculation table excluded",
     "A/B and all-building navigation",

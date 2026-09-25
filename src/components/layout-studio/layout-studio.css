@@ -296,6 +296,10 @@
 .layout-studio dialog{background:var(--ls-bg-elevated);color:var(--ls-text);border-color:var(--line)}
 .layout-studio dialog p{color:var(--ls-text-secondary)}
 
+/* Dragging the map pans it; without this a real mouse drag also selected the SVG machine labels and painted
+ * them blue (user report 2026-09-25). Scoped to the map only: panel text stays selectable/copyable. */
+.layout-studio #stage{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+
 /* The map stays light in every theme: pin its overlays so the themed button rules above do not reach in. */
 .layout-studio #stage .map-tools{background:#fff;border-color:#dce4ee}
 .layout-studio #stage .map-tools button{background:#fff;border:0;color:#35465e;min-height:0}

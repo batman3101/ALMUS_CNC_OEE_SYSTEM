@@ -111,6 +111,11 @@ const shellWrites = writes => writes.filter(w => !w.endsWith('/rest/v1/rpc/updat
         const box = await L('#stage').boundingBox(); before = await state();
         await page.mouse.move(box.x + 220, box.y + 200); await page.mouse.down(); await page.mouse.move(box.x + 300, box.y + 250, { steps: 8 }); await page.mouse.up();
         assert.ok(Math.abs((await state()).tx - before.tx) > 40);
+        // Dragging the map must pan it, not select the SVG machine labels (user report 2026-09-25).
+        // Synthetic drags (Playwright and CDP) do not reproduce the highlight a real mouse drag made, so
+        // guard the cause instead: text selection is off on the map, and nothing is selected after a drag.
+        assert.equal(await L('#stage').evaluate(e => getComputedStyle(e).userSelect), 'none');
+        assert.equal(await page.evaluate(() => window.getSelection().toString()), '');
         // Wheel zoom must zoom the map, not scroll the app page.
         const scrollBefore = await page.evaluate(() => [scrollY, document.querySelector('.layout-studio').closest('[class*="content"], main')?.scrollTop ?? 0]);
         before = await state(); await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.wheel(0, -300); await page.waitForTimeout(100);
