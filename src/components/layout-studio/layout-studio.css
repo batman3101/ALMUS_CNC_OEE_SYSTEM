@@ -221,3 +221,102 @@
 .layout-studio .machine[data-setup].selected .machine-body{stroke:#2357c6;stroke-width:5}
 .layout-studio #legend [data-state=in_progress]{color:#a1560d}
 .layout-studio #legend [data-state=completed]{color:#16774d}
+
+/* === App theme layer (stage 3, 2026-09-25) ===================================================
+ * Everything above is the preview as-is. This layer re-skins the chrome with the app's antd tokens
+ * (passed as --ls-* variables from LayoutStudio.tsx), so the studio follows the configured primary
+ * colour and dark mode like every other page.
+ * Rule: the map (#stage and everything drawn on it) stays light in both modes (user decision
+ * 2026-09-25) so the per-model colours keep their contrast. Only the chrome around it is themed. */
+.layout-studio{--blue:var(--ls-primary);--line:var(--ls-border-secondary);--muted:var(--ls-text-secondary);font-family:var(--ls-font);color:var(--ls-text);background:transparent}
+.layout-studio .ls-main{max-width:none;margin:0;padding:0}
+
+/* Page heading = antd Typography.Title level 2 + secondary Paragraph (same as /forecast). */
+.layout-studio .breadcrumb{display:none}
+.layout-studio h1{font-size:30px;font-weight:600;line-height:1.27;letter-spacing:normal;margin:0 0 .5em;color:var(--ls-text-heading)}
+.layout-studio .heading p{font-size:14px;color:var(--ls-text-secondary)}
+
+/* Controls = antd Button / Select look. */
+.layout-studio button{min-height:32px;padding:4px 15px;font-size:14px;font-weight:400;border:1px solid var(--ls-border);border-radius:var(--ls-radius);background:var(--ls-bg);color:var(--ls-text);transition:color .2s,border-color .2s,background .2s}
+.layout-studio button:hover:not(:disabled){background:var(--ls-bg);border-color:var(--ls-primary-hover);color:var(--ls-primary-hover)}
+.layout-studio button:disabled{opacity:1;background:var(--ls-bg-disabled);border-color:var(--ls-border);color:var(--ls-text-disabled)}
+.layout-studio button:focus-visible,.layout-studio input:focus-visible,.layout-studio select:focus-visible{outline:2px solid var(--ls-primary-border);outline-offset:1px}
+.layout-studio .primary{background:var(--ls-primary);border-color:var(--ls-primary);color:#fff}
+.layout-studio .primary:hover:not(:disabled){background:var(--ls-primary-hover);border-color:var(--ls-primary-hover);color:#fff}
+.layout-studio select{border:1px solid var(--ls-border);border-radius:var(--ls-radius);background:var(--ls-bg);color:var(--ls-text)}
+.layout-studio input{background:transparent;color:var(--ls-text)}
+
+/* Notice = antd Alert type=info. */
+.layout-studio .notice{background:var(--ls-info-bg);border:1px solid var(--ls-info-border);border-radius:var(--ls-radius-lg);padding:9px 12px;margin:16px 0;color:var(--ls-text)}
+.layout-studio .notice-dot{background:var(--ls-primary)}
+
+/* Workspace = antd Card. */
+.layout-studio .workspace{background:var(--ls-bg);border:1px solid var(--ls-border-secondary);border-radius:var(--ls-radius-lg);box-shadow:none}
+.layout-studio .setup-bar{background:var(--ls-fill-alter)}
+.layout-studio .setup-bar p,.layout-studio .setup-bar span{color:var(--ls-text-secondary)}
+.layout-studio .segmented button{border:0;background:transparent;color:var(--ls-text-secondary)}
+.layout-studio .segmented button:hover:not(:disabled){color:var(--ls-text);background:var(--ls-fill-secondary)}
+.layout-studio .segmented button.active,.layout-studio .segmented button.active:hover{color:var(--ls-primary);background:var(--ls-primary-bg)}
+.layout-studio .buildings button.active,.layout-studio .buildings button.active:hover{background:var(--ls-primary);color:#fff}
+.layout-studio .search{border-color:var(--ls-border);border-radius:var(--ls-radius);background:var(--ls-bg)}
+.layout-studio .search span,.layout-studio .search button{color:var(--ls-text-tertiary)}
+.layout-studio .search button,.layout-studio .search button:hover:not(:disabled){border:0;background:none;min-height:0}
+.layout-studio .map-summary strong{color:var(--ls-text-heading)}
+.layout-studio .map-filters label{color:var(--ls-text)}
+.layout-studio .map-filters select{background:var(--ls-bg);border-color:var(--ls-border);color:var(--ls-text)}
+.layout-studio .legend{color:var(--ls-text-secondary)}
+.layout-studio .map-footer{border-top-color:var(--line);color:var(--ls-text-tertiary)}
+.layout-studio .map-footer button,.layout-studio .workspace-bottom button{border:0;background:none;color:var(--ls-primary);min-height:0}
+.layout-studio .map-footer button:hover:not(:disabled),.layout-studio .workspace-bottom button:hover:not(:disabled){background:none;color:var(--ls-primary-hover)}
+.layout-studio .workspace-bottom{background:var(--ls-fill-alter);color:var(--ls-text-tertiary)}
+.layout-studio .page-footer{color:var(--ls-text-tertiary)}
+
+/* Inspector (right panel). */
+.layout-studio .inspector{background:var(--ls-bg)}
+.layout-studio .eyebrow{color:var(--ls-text-tertiary)}
+.layout-studio .machine-heading h2{color:var(--ls-text-heading)}
+.layout-studio .machine-heading p{color:var(--ls-text-secondary)}
+.layout-studio .machine-symbol{background:var(--ls-primary-bg);border-color:var(--ls-primary-border);color:var(--ls-primary)}
+.layout-studio .assignment{background:var(--ls-fill-alter);border-color:var(--line)}
+.layout-studio .assignment span{color:var(--ls-text-tertiary)}
+.layout-studio .selection-status{color:var(--ls-text-secondary)}
+.layout-studio .selection-status.changed{color:var(--ls-warning-text)}
+.layout-studio .field select{background:var(--ls-bg);border-color:var(--ls-border);color:var(--ls-text)}
+.layout-studio .lock-button{background:var(--ls-fill-alter);color:var(--ls-text-secondary)}
+.layout-studio .lock-button.is-locked{background:var(--ls-primary-bg);color:var(--ls-primary);border-color:var(--ls-primary-border)}
+.layout-studio .help,.layout-studio .empty,.layout-studio .review-box p{color:var(--ls-text-tertiary)}
+.layout-studio .section-title>span{background:var(--ls-primary-bg);color:var(--ls-primary)}
+.layout-studio .history-buttons button{border:0;background:none;color:var(--ls-text-secondary);min-height:0}
+.layout-studio .change-row{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;color:var(--ls-text)}
+.layout-studio .change-row:hover:not(:disabled){background:var(--ls-fill-alter);color:var(--ls-text);border-color:var(--line)}
+.layout-studio .change-row small{color:var(--ls-text-tertiary)}
+.layout-studio .change-row>span{color:var(--ls-warning-text)}
+.layout-studio .setup-state{background:var(--ls-fill-secondary);color:var(--ls-text-secondary)}
+.layout-studio #setupTimes{color:var(--ls-text-secondary)}
+.layout-studio dialog{background:var(--ls-bg-elevated);color:var(--ls-text);border-color:var(--line)}
+.layout-studio dialog p{color:var(--ls-text-secondary)}
+
+/* The map stays light in every theme: pin its overlays so the themed button rules above do not reach in. */
+.layout-studio #stage .map-tools{background:#fff;border-color:#dce4ee}
+.layout-studio #stage .map-tools button{background:#fff;border:0;color:#35465e;min-height:0}
+.layout-studio #stage .map-tools button:hover:not(:disabled){background:#f0f5fc;color:#2357c6}
+.layout-studio #stage .map-tools span{color:#35465e}
+.layout-studio .machine.selected .machine-body,.layout-studio .machine.selected.changed .machine-body,.layout-studio .machine[data-setup].selected .machine-body{stroke:var(--ls-primary)}
+
+/* Desktop: the right panel is taller than the preview's fixed 590px map, which left dead space under the
+ * legend. Let the map take that height instead (never less than the preview's). The engine re-reads the
+ * stage size through its ResizeObserver, so pan/zoom stay anchored. Phones keep the fixed heights. */
+@media(min-width:761px){
+.layout-studio .canvas-section{display:flex;flex-direction:column}
+.layout-studio #stage{flex:1 1 auto;height:auto;min-height:590px}
+}
+@media(min-width:1600px){.layout-studio #stage{min-height:660px}}
+
+/* Legibility: the preview used 9-11px text; the app's body text is 14px. Desktop only, so the phone
+ * layouts the 360/390px checks were written for keep their sizes. */
+@media(min-width:761px){
+.layout-studio .notice{font-size:14px}
+.layout-studio .map-summary span,.layout-studio .map-filters select,.layout-studio .map-filters label,.layout-studio .legend,.layout-studio .map-footer,.layout-studio .map-footer button,.layout-studio .workspace-bottom,.layout-studio .workspace-bottom button,.layout-studio .page-footer,.layout-studio .help,.layout-studio .selection-status,.layout-studio .review-box p,.layout-studio .assignment span,.layout-studio .change-row small,.layout-studio .change-row>span,.layout-studio .machine-heading p,.layout-studio .eyebrow{font-size:12px}
+.layout-studio .segmented button,.layout-studio .search input,.layout-studio .setup-bar p,.layout-studio .setup-bar span,.layout-studio .setup-bar button,.layout-studio .field select,.layout-studio .wide,.layout-studio .change-row strong,.layout-studio .section-title h3,.layout-studio .review-box strong,.layout-studio .assignment strong,.layout-studio .field>span,.layout-studio .empty{font-size:13px}
+.layout-studio .setup-bar strong{font-size:14px}
+}

@@ -1,7 +1,7 @@
 {
   "result": "PASS",
   "root": "http://127.0.0.1:3100",
-  "timestamp": "2026-09-25T04:21:36.177Z",
+  "timestamp": "2026-09-25T07:39:56.064Z",
   "checks": [
     "800 unique machines match the actual Excel cells; lower calculation table excluded",
     "A/B and all-building navigation",
@@ -13,6 +13,7 @@
     "Sample changes are labeled, six edits, and production apply is disabled",
     "JSON export preserves provenance and marks data as an unvalidated preview",
     "Korean and Vietnamese UI (follows the app header language switch live)",
+    "Chrome follows the app theme; dark mode darkens the chrome but the map stays light",
     "390px and 360px mobile: no overflow, selection remains visible, editor closes",
     "Two-pointer pinch changes zoom without changing assignments",
     "No JavaScript errors and no writes to any API or production service",

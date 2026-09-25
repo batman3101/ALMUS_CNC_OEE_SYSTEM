@@ -155,10 +155,31 @@ const shellWrites = writes => writes.filter(w => !w.endsWith('/rest/v1/rpc/updat
         assert.equal((await state()).lang, 'ko');
         await page.locator('header .anticon-global').first().click(); await page.getByText('Tiếng Việt').click();
         await page.waitForFunction(() => window.__layoutStudio.state().lang === 'vi');
-        assert.match(await L('h1').innerText(), /Giữ bố trí/); assert.match(await L('#applyEdit').innerText(), /Cập nhật/);
+        assert.match(await L('h1').innerText(), /Bố trí Layout/); assert.match(await L('#applyEdit').innerText(), /Cập nhật/);
         await page.locator('header .anticon-global').first().click(); await page.getByText('한국어').click();
         await page.waitForFunction(() => window.__layoutStudio.state().lang === 'ko');
-        assert.match(await L('h1').innerText(), /배치는 그대로/);
+        assert.match(await L('h1').innerText(), /Layout 배치/);
+      });
+      await check('Chrome follows the app theme; dark mode darkens the chrome but the map stays light', async () => {
+        const colours = () => page.evaluate(() => {
+          const q = s => getComputedStyle(document.querySelector('.layout-studio ' + s));
+          const root = getComputedStyle(document.querySelector('.layout-studio'));
+          return { primary: root.getPropertyValue('--ls-primary').trim(), save: q('#save').backgroundColor, workspace: q('.workspace').backgroundColor, stage: q('#stage').backgroundColor, tools: q('#stage .map-tools button').backgroundColor };
+        });
+        const rgb = hex => { const n = parseInt(hex.replace('#', '').slice(0, 6), 16); return `rgb(${n >> 16 & 255}, ${n >> 8 & 255}, ${n & 255})`; };
+        const light = await colours();
+        assert.equal(light.save, rgb(light.primary)); // primary button = configured app primary colour
+        assert.equal(light.stage, 'rgb(246, 248, 251)');
+        await page.locator('header .anticon-moon').first().click();
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('.layout-studio .workspace')).backgroundColor !== 'rgb(255, 255, 255)');
+        const dark = await colours();
+        const luminance = c => { const [r, g, b] = c.match(/\d+/g).map(Number); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; };
+        assert.ok(luminance(dark.workspace) < 0.25, `workspace should be dark, got ${dark.workspace}`);
+        assert.equal(dark.stage, 'rgb(246, 248, 251)'); // the map stays light (decision 2026-09-25)
+        assert.equal(dark.tools, 'rgb(255, 255, 255)');
+        await page.screenshot({ path: path.join(output, 'desktop-dark.png'), fullPage: true });
+        await page.locator('header .anticon-sun').first().click();
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('.layout-studio .workspace')).backgroundColor === 'rgb(255, 255, 255)');
       });
       await check('390px and 360px mobile: no overflow, selection remains visible, editor closes', async () => {
         await search(305); await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(300);
