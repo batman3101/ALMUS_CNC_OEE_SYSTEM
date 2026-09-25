@@ -16,6 +16,12 @@
 export const DEFAULT_BREAK_TIME_MINUTES = 60;
 
 /**
+ * 교대 가동시간(분) 기본값 — 12시간 교대. 서버(`plannedRuntime.ts`)와 Forecast 의 브라우저
+ * CAPA 계산(`forecast/requiredMachines.ts`)이 같은 값을 봐야 하므로 여기에 둔다.
+ */
+export const DEFAULT_OPERATING_MINUTES = 720;
+
+/**
  * 교대 전환 유예(분). 교대 종료 후 이 시간까지는 진척 보고를 받고, **그 뒤부터** 마감을
  * 받는다(두 창은 서로소여야 한다 — `shiftReportingWindow.ts` 참조).
  */
