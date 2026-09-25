@@ -119,5 +119,35 @@
     "unmappedTitle": "미매칭 모델 {{count}}개 (계산 보류)",
     "excludedMachines": "계산 대상 밖 설비(CNC #2-1 등 다른 공정) {{count}}대",
     "unassignedMachines": "모델 미배정 설비 {{count}}대"
+  },
+  "layoutPlan": {
+    "create": "이 주로 Layout 추천 만들기",
+    "mappings": "모델명 짝 확인",
+    "hint": "도면상 같은 모델·CNC#끼리 모이도록, 부족한 만큼만 설비를 옮기는 추천안을 만듭니다. 만든 뒤 Layout 화면에서 미세조정하고 확정합니다.",
+    "mappingsTitle": "Forecast 모델명 ↔ 앱 모델 짝 맞추기",
+    "mappingsHelp": "현장 약어가 Forecast 와 다를 수 있습니다. 각 Forecast 모델에 맞는 앱 모델을 고르세요. 저장한 짝은 이 공장의 다음 Forecast 에도 그대로 쓰입니다.",
+    "forecastModel": "Forecast 모델",
+    "peak": "최대 일수량",
+    "appModel": "앱 모델",
+    "source": "상태",
+    "pick": "앱 모델 선택",
+    "required": "지정 필요",
+    "sources": {
+      "saved": "저장됨",
+      "auto": "자동 추정",
+      "unmapped": "미지정"
+    },
+    "cancel": "취소",
+    "skipUnmapped": "미지정 모델 빼고 만들기",
+    "saveAndCreate": "저장하고 추천 만들기",
+    "errors": {
+      "plan_failed": "추천 Layout 을 만들지 못했습니다.",
+      "no_geometry": "이 공장은 아직 Layout 도면이 없습니다. 도면을 먼저 등록해야 합니다.",
+      "snapshot_unavailable": "설비·모델 정보를 읽지 못했습니다. 잠시 후 다시 시도하세요.",
+      "capacity_policy_unavailable": "교대·휴식 설정을 읽지 못해 CAPA 를 계산할 수 없습니다.",
+      "mapping_load_failed": "저장된 모델명 짝을 불러오지 못했습니다.",
+      "mapping_save_failed": "모델명 짝을 저장하지 못했습니다.",
+      "invalid_assignment": "선택한 앱 모델이 이 공장의 모델이 아닙니다."
+    }
   }
 }

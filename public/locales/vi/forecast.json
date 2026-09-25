@@ -119,5 +119,35 @@
     "unmappedTitle": "{{count}} model chưa khớp (tạm dừng tính)",
     "excludedMachines": "{{count}} máy ngoài phạm vi (công đoạn khác như CNC #2-1)",
     "unassignedMachines": "{{count}} máy chưa gán model"
+  },
+  "layoutPlan": {
+    "create": "Tạo đề xuất Layout cho tuần này",
+    "mappings": "Kiểm tra ghép tên model",
+    "hint": "Tạo đề xuất chỉ di chuyển số máy cần thiết, giữ các máy cùng model·CNC# ở gần nhau trên bản vẽ. Sau đó tinh chỉnh và xác nhận trên màn hình Layout.",
+    "mappingsTitle": "Ghép tên model Forecast ↔ model trong app",
+    "mappingsHelp": "Tên viết tắt tại xưởng có thể khác Forecast. Hãy chọn model app phù hợp cho từng model Forecast. Cặp đã lưu sẽ được dùng lại cho các Forecast sau của nhà máy này.",
+    "forecastModel": "Model Forecast",
+    "peak": "SL ngày cao nhất",
+    "appModel": "Model app",
+    "source": "Trạng thái",
+    "pick": "Chọn model app",
+    "required": "Cần chọn",
+    "sources": {
+      "saved": "Đã lưu",
+      "auto": "Tự động",
+      "unmapped": "Chưa ghép"
+    },
+    "cancel": "Hủy",
+    "skipUnmapped": "Tạo, bỏ qua model chưa ghép",
+    "saveAndCreate": "Lưu và tạo đề xuất",
+    "errors": {
+      "plan_failed": "Không tạo được đề xuất Layout.",
+      "no_geometry": "Nhà máy này chưa có bản vẽ Layout. Cần đăng ký bản vẽ trước.",
+      "snapshot_unavailable": "Không đọc được thông tin máy·model. Hãy thử lại sau.",
+      "capacity_policy_unavailable": "Không đọc được cài đặt ca·nghỉ nên không tính được CAPA.",
+      "mapping_load_failed": "Không tải được các cặp tên model đã lưu.",
+      "mapping_save_failed": "Không lưu được cặp tên model.",
+      "invalid_assignment": "Model app đã chọn không thuộc nhà máy này."
+    }
   }
 }

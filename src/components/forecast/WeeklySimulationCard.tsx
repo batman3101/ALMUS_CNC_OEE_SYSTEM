@@ -9,6 +9,7 @@ import { groupWeeks, weeklyModelDemand } from '@/lib/forecast/weeklyDemand';
 import { matchModels, normalizeProcessName } from '@/lib/forecast/modelAliases';
 import { buildRequirements, type ModelProcessRequirement } from '@/lib/forecast/requiredMachines';
 import { proposeReassignment, type ReassignmentMove } from '@/lib/forecast/reassignment';
+import LayoutPlanLauncher from './LayoutPlanLauncher';
 import styles from './ForecastWorkspace.module.css';
 
 /** Problems first, then things the reviewer may act on, then the quiet rows. */
@@ -49,7 +50,7 @@ export default function WeeklySimulationCard({ preview }: { preview: FactoryFore
     const active = snapshot.machines.filter(m => m.isActive);
     const unassigned = active.filter(m => !m.modelId || !m.processId).length;
     const excluded = active.filter(m => m.modelId && m.processId && !forecastProcessIds.has(m.processId)).length;
-    return { requirements, proposal, unmapped, unassigned, excluded };
+    return { requirements, proposal, unmapped, unassigned, excluded, demands, nextWeekDemands };
   }, [preview.rows, week, weeks, weekIndex, snapshot, policy]);
 
   const columns: ColumnsType<ModelProcessRequirement> = [
@@ -97,6 +98,7 @@ export default function WeeklySimulationCard({ preview }: { preview: FactoryFore
         {result.proposal.unresolved.length > 0 && <Alert type="error" showIcon message={t('simulation.unresolved', { list: result.proposal.unresolved.map(u => `${u.dbModel} ${u.process} ${u.remaining}`).join(', ') })} />}
         {result.unmapped.length > 0 && <div><Typography.Text strong>{t('simulation.unmappedTitle', { count: result.unmapped.length })}</Typography.Text><div className={styles.tagList}>{result.unmapped.map(m => <Tag key={m}>{m}</Tag>)}</div></div>}
         <Typography.Text type="secondary">{t('simulation.excludedMachines', { count: result.excluded })} · {t('simulation.unassignedMachines', { count: result.unassigned })}</Typography.Text>
+        {week && <LayoutPlanLauncher preview={preview} week={week} demands={result.demands} nextWeekDemands={result.nextWeekDemands} />}
       </>}
     </Space>
   </Card>;
