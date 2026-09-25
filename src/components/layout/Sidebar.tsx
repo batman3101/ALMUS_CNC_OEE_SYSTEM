@@ -74,6 +74,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   '/data-input': <EditOutlined />,
   '/production-records': <FileTextOutlined />,
   '/model-info': <AppstoreOutlined />,
+  '/forecast': <FileTextOutlined />,
   '/reports': <BarChartOutlined />,
   '/analytics': <LineChartOutlined />,
   '/operator-view': <DesktopOutlined />,

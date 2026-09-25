@@ -23,6 +23,7 @@
     "manualRefresh": "수동 새로고침"
   },
   "nav": {
+    "forecast": "Forecast 생산계획",
     "dashboard": "대시보드",
     "machines": "설비 현황",
     "myMachines": "내 설비 현황",

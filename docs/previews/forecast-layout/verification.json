@@ -1,0 +1,23 @@
+{
+  "result": "PASS",
+  "timestamp": "2026-09-22T09:50:57.982Z",
+  "checks": [
+    "800 unique machines match the actual Excel cells; lower calculation table excluded",
+    "A/B and all-building navigation",
+    "Search switches building and focuses the exact machine",
+    "Zoom, pan and keyboard navigation",
+    "Manual editing, lock, undo and redo",
+    "Original, draft, compare and model filter",
+    "Persistence and reset with recoverable history",
+    "Sample changes are labeled, six edits, and production apply is disabled",
+    "JSON export preserves provenance and marks data as an unvalidated preview",
+    "Korean and Vietnamese UI",
+    "390px and 360px mobile: no overflow, selection remains visible, editor closes",
+    "Two-pointer pinch changes zoom without changing assignments",
+    "No JavaScript errors and no external/production calls"
+  ],
+  "limitations": [
+    "Static UI prototype, no CAPA/AI/production DB integration",
+    "Synthetic two-pointer test; physical touch-device testing not performed"
+  ]
+}

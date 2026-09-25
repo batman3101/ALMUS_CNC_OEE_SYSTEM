@@ -23,6 +23,7 @@
     "manualRefresh": "Làm mới thủ công"
   },
   "nav": {
+    "forecast": "Kế hoạch Forecast",
     "dashboard": "Bảng điều khiển",
     "machines": "Tình trạng thiết bị",
     "myMachines": "Thiết bị của tôi",

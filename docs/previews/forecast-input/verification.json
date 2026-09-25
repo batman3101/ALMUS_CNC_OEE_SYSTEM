@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "at": "2026-09-22T10:37:30.739Z",
+  "checks": [
+    "admin/ko: upload, source parser, period filter, row details, 390px no overflow",
+    "engineer/vi: upload, source parser, period filter, row details, 390px no overflow",
+    "Operator cannot reach the Forecast upload screen"
+  ],
+  "limitations": [
+    "Authentication and DB/settings responses mocked; not production authorization/RLS evidence",
+    "CAPA calculation, persistence, optimization and setup publishing remain later phases"
+  ]
+}
