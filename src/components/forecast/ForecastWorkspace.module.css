@@ -1,0 +1,13 @@
+.workspace { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.fullWidth { width: 100%; }
+.fileLabel { display: flex; flex-direction: column; gap: 12px; font-weight: 600; }
+.fileLabel input { max-width: 100%; font-weight: 400; }
+.secondary { font-size: 12px; opacity: .65; margin-top: 4px; }
+.filters { display: flex; gap: 18px; flex-wrap: wrap; align-items: end; }
+.filters label:not(:global(.ant-checkbox-wrapper)) { display: flex; flex-direction: column; gap: 6px; }
+.filters input[type=date] { padding: 8px; border: 1px solid #8997aa; border-radius: 6px; color: inherit; background: transparent; }
+.statistics { margin: 20px 0; }
+.provenance { font-size: 12px; opacity: .65; overflow-wrap: anywhere; margin-top: 16px; }
+@media (max-width: 600px) { .workspace { gap: 12px; } .filters { gap: 12px; } }
+.weekSelect { min-width: 260px; }
+.tagList { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
