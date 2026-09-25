@@ -1,0 +1,34 @@
+{
+  "result": "PASS",
+  "root": "http://127.0.0.1:3100",
+  "timestamp": "2026-09-25T04:21:36.177Z",
+  "checks": [
+    "800 unique machines match the actual Excel cells; lower calculation table excluded",
+    "A/B and all-building navigation",
+    "Search switches building and focuses the exact machine",
+    "Zoom, pan and keyboard navigation",
+    "Manual editing, lock, undo and redo",
+    "Original, draft, compare and model filter",
+    "Persistence and reset with recoverable history",
+    "Sample changes are labeled, six edits, and production apply is disabled",
+    "JSON export preserves provenance and marks data as an unvalidated preview",
+    "Korean and Vietnamese UI (follows the app header language switch live)",
+    "390px and 360px mobile: no overflow, selection remains visible, editor closes",
+    "Two-pointer pinch changes zoom without changing assignments",
+    "No JavaScript errors and no writes to any API or production service",
+    "Publish requires changes; six targets apply immediately as pending",
+    "Start and complete are sequential; events and completed count retained",
+    "Setup filters and unaffected machines have no action buttons",
+    "Draft edit and undo cannot alter the applied target or setup history",
+    "Setup persists after reload; Korean/Vietnamese state labels",
+    "360px mobile can start/complete setup with no horizontal overflow",
+    "Storage failure does not optimistically mark setup started",
+    "No JavaScript errors or writes to any API or production service (setup)",
+    "Engineer can open Layout Studio",
+    "Operator cannot open Layout Studio"
+  ],
+  "limitations": [
+    "Auth and all API/Supabase traffic mocked; no production DB integration exists yet",
+    "Synthetic two-pointer test; physical touch-device testing not performed"
+  ]
+}

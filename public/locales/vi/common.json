@@ -24,6 +24,7 @@
   },
   "nav": {
     "forecast": "Kế hoạch Forecast",
+    "layoutStudio": "Bố trí Layout",
     "dashboard": "Bảng điều khiển",
     "machines": "Tình trạng thiết bị",
     "myMachines": "Thiết bị của tôi",

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "previewOnly": true,
+  "sourceFile": "Setting CNC.xlsx",
+  "sourceSheet": "W39",
+  "sourceHash": "1ed2777bea687f05ef4079429a260ebf54b56c1ec10d8db44156d9b7e9bfba83",
+  "capacityValidated": false,
+  "exportedAt": "2026-09-25T04:21:09.509Z",
+  "edits": [
+    {
+      "id": 305,
+      "building": "B",
+      "sourceCell": "U20",
+      "before": {
+        "model": "B6S6",
+        "process": "C1"
+      },
+      "after": {
+        "model": "ON1",
+        "process": "C1"
+      }
+    },
+    {
+      "id": 306,
+      "building": "B",
+      "sourceCell": "U22",
+      "before": {
+        "model": "B6S6",
+        "process": "C1"
+      },
+      "after": {
+        "model": "ON1",
+        "process": "C1"
+      }
+    },
+    {
+      "id": 315,
+      "building": "B",
+      "sourceCell": "V8",
+      "before": {
+        "model": "B6S6",
+        "process": "C2"
+      },
+      "after": {
+        "model": "ON1",
+        "process": "C2"
+      }
+    },
+    {
+      "id": 316,
+      "building": "B",
+      "sourceCell": "V10",
+      "before": {
+        "model": "B6S6",
+        "process": "C2"
+      },
+      "after": {
+        "model": "ON1",
+        "process": "C2"
+      }
+    },
+    {
+      "id": 653,
+      "building": "A",
+      "sourceCell": "Q47",
+      "before": {
+        "model": "H8S",
+        "process": "C2"
+      },
+      "after": {
+        "model": "M3",
+        "process": "C2"
+      }
+    },
+    {
+      "id": 654,
+      "building": "A",
+      "sourceCell": "Q49",
+      "before": {
+        "model": "H8S",
+        "process": "C2"
+      },
+      "after": {
+        "model": "M3",
+        "process": "C2"
+      }
+    }
+  ],
+  "lockedIds": []
+}

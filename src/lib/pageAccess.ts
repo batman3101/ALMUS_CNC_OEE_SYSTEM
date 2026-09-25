@@ -58,6 +58,7 @@ export const PAGE_ACCESS: readonly PageAccessEntry[] = [
   { path: '/production-records', roles: ALL_ROLES, labelKey: 'nav.productionRecords' },
   { path: '/model-info', roles: MANAGERS, labelKey: 'nav.modelInfo' },
   { path: '/forecast', roles: MANAGERS, labelKey: 'nav.forecast' },
+  { path: '/layout-studio', roles: MANAGERS, labelKey: 'nav.layoutStudio' },
   { path: '/reports', roles: MANAGERS, labelKey: 'nav.reports' },
   { path: '/analytics', roles: MANAGERS, labelKey: 'nav.analytics' },
   { path: '/operator-view', roles: ALL_ROLES, labelKey: 'nav.operatorView' },

@@ -13,7 +13,8 @@ import {
   AppstoreOutlined,
   FileTextOutlined,
   LineChartOutlined,
-  LockOutlined
+  LockOutlined,
+  BorderOuterOutlined
 } from '@ant-design/icons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -75,6 +76,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   '/production-records': <FileTextOutlined />,
   '/model-info': <AppstoreOutlined />,
   '/forecast': <FileTextOutlined />,
+  '/layout-studio': <BorderOuterOutlined />,
   '/reports': <BarChartOutlined />,
   '/analytics': <LineChartOutlined />,
   '/operator-view': <DesktopOutlined />,

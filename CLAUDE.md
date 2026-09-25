@@ -315,6 +315,20 @@ Vercel. Deploy steps and the post-deployment checklist live in `docs/DEPLOYMENT.
 `docs/OEE_AGGREGATION_SYSTEM.md` 를 먼저 읽을 것 — 이전 문서의 서술은 거의 전부
 사실이 아니었다.
 
+### Layout Studio (`/layout-studio`)
+
+`src/components/layout-studio/studioEngine.js` 는 `docs/previews/forecast-layout/` 프리뷰의
+app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파일 머리 주석에 적힌 것뿐이다.
+
+- **줌·이동·핀치를 React state 로 옮기지 말 것.** 움직이는 동안 바뀌는 것은 `<g id="world">` 의
+  transform 하나뿐이어야 한다. state 를 거치면 포인터 이동마다 설비 800대를 다시 그린다.
+  `LayoutStudio.tsx` 는 마운트/언마운트와 언어만 맡고, 스튜디오 DOM 은 React 가 재조정하지 않는다.
+- CSS 는 전부 `.layout-studio` 아래로 범위가 한정돼 있다. 요소 선택자(`button`, `h1`, `[hidden]`)를
+  범위 없이 추가하면 앱 전체 화면이 바뀐다.
+- **합격 기준은 `scripts/verify-layout-studio-browser.cjs` (23개 = 프리뷰 21 + 권한 2)** 다.
+  엔진·마크업·CSS 를 고치면 다시 돌린다. 개발 서버에 돌릴 때는 `127.0.0.1` 이 아니라
+  `http://localhost:3000` 을 쓴다(개발 서버가 127.0.0.1 요청의 화면 파일을 403 으로 막는다).
+
 ### Production Record Input System
 - See `src/components/production/README.md` for details
 
