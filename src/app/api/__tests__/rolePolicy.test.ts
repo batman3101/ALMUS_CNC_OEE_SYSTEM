@@ -49,6 +49,9 @@ const POLICY: Record<string, Record<string, string>> = {
   // POST 는 공장을 바꾼다. 역할 제한은 GET 과 같다 — 전환은 권한을 넓히지 않고, 목적지
   // 공장의 membership 이 없으면 `saveFactorySelection` 이 403 으로 막는다.
   'factory-context': { GET: AEO, POST: AEO },
+  // Forecast Excel 접수 미리보기(파일 파싱 + 공장 CAPA 스냅샷 읽기). 쓰기는 없다.
+  // Forecast 화면(`/forecast`)과 같은 등급 — 2026-09-25 사용자 확인.
+  'forecasts/preview': { POST: AE },
   'machine-status-descriptions': { GET: AEO },
   // POST/DELETE 는 2026-08-24 에 제거했다 — 화면이 안 쓰는데 공장을 묻지 않는 통로였다.
   // 설비 등록·비활성화는 `admin/machines` 계열이 맡는다. (route.ts 상단 주석 참조)
