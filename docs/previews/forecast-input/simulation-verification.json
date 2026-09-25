@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "at": "2026-09-25T01:47:19.933Z",
+  "snapshot": "read-only DB dump",
+  "checks": [
+    "admin/ko: 11 weeks (W37 default → W40 recompute), summary {\"required\":1000,\"current\":768,\"shortage\":266,\"changes\":39}, 20 moves, alias H8 MAIN→H8 M, unmapped list, no apply button, 390px no overflow",
+    "engineer/vi: 11 weeks (W37 default → W40 recompute), summary {\"required\":1000,\"current\":768,\"shortage\":266,\"changes\":39}, 20 moves, alias H8 MAIN→H8 M, unmapped list, no apply button, 390px no overflow"
+  ],
+  "limitations": [
+    "Authentication and settings responses mocked; not production authorization/RLS evidence",
+    "Compatibility, changeover time and JIG are not modeled; proposal is a review draft"
+  ]
+}

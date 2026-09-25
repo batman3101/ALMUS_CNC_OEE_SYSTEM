@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import type { ForecastSourceRow } from '@/types/forecast';
+import { parseForecastFile } from '../parseForecast';
 import { groupWeeks, isoWeek, weeklyModelDemand } from '../weeklyDemand';
 
 const row = (model: string, quantities: Array<[string, number | null, ForecastSourceRow['quantities'][number]['state']?]>, extra: Partial<ForecastSourceRow> = {}): ForecastSourceRow => ({
@@ -62,5 +64,21 @@ describe('weekly peak demand', () => {
   it('adds partial_week when the selected week is incomplete', () => {
     const partial = groupWeeks(days('2026-09-09', 2))[0];
     expect(weeklyModelDemand([row('M3', [['2026-09-09', 1]])], partial)[0].warnings).toContain('partial_week');
+  });
+});
+
+const samplePath = process.env.FORECAST_SAMPLE_PATH;
+(samplePath ? describe : describe.skip)('real forecast file', () => {
+  it('finds 11 full ISO weeks starting 2026-W37 and a peak for H8 MAIN in the first week', () => {
+    const preview = parseForecastFile(readFileSync(samplePath!));
+    const weeks = groupWeeks(preview.dates);
+    expect(weeks).toHaveLength(11);
+    expect(weeks[0]).toMatchObject({ key: '2026-W37', start: '2026-09-07', end: '2026-09-13', partial: false });
+    const demands = weeklyModelDemand(preview.rows, weeks[0]);
+    const h8 = demands.find(d => d.model === 'H8 MAIN')!;
+    // Independent check: the peak must equal the max over the week of the summed daily quantities.
+    const daily = weeks[0].dates.map(date => preview.rows.filter(r => r.model === 'H8 MAIN').reduce((sum, r) => sum + (r.quantities.find(q => q.date === date)?.quantity ?? 0), 0));
+    expect(h8.peakQuantity).toBe(Math.ceil(Math.max(...daily)));
+    expect(h8.peakQuantity).toBeGreaterThan(0);
   });
 });
