@@ -33,23 +33,48 @@ const messages = {
   setupNotPublished:'Chưa có lệnh setup.',setupScope:'Máy thay đổi toàn nhà máy 1',setupTarget:'Máy · Mục tiêu',setupAt:'Áp dụng',setupStarted:'Bắt đầu',setupFinished:'Hoàn tất',setupActor:'Người dùng mẫu',setupSaved:'Đã lưu tiến độ trên trình duyệt.',setupFailed:'Lưu thất bại. Trạng thái chưa thay đổi.'}
 };
 
+// DB mode (2026-09-25): texts that differ once the studio shows a real plan instead of the Excel sample.
+const dbMessages = {
+ ko:{breadcrumb:'생산 계획 / Layout',subtitle:'Forecast 수요와 앱에 등록된 T/T 로 계산한 추천 배치입니다. 설비별로 미세조정한 뒤 확정하세요.',notice:'추천 Layout · 확정하기 전까지 설비정보에는 반영되지 않습니다. 편집은 서버에 저장됩니다.',demo:'추천안으로 되돌리기',demoBadge:'추천 Layout · 앱 T/T 기준 CAPA',current:'현재 배치',before:'현재',after:'조정안',sourceBaseline:'계획 기준 배치',source:'앱 설비·모델 정보 + 등록 도면',unvalidated:'CAPA 는 앱에 등록된 T/T·교대·휴식으로 계산합니다(cavity 로 나누지 않음).',pending:'CAPA 알림',pendingText:'모델·공정별 필요 대수 대비 부족·여유입니다. 여유 설비를 더 배치할지는 판단해 주세요.',confirm:'Layout 확정 적용',footer:'도면 위치는 등록된 Layout 도면 기준입니다.',previewOnly:'확정 전 초안',saved:'서버에 저장했습니다.',autosaved:'서버 저장',saving:'저장 중…',saveFailed:'저장하지 못했습니다. 다시 시도하세요.',conflict:'다른 사용자가 먼저 저장했습니다. 새로 불러옵니다.',recommendedLoaded:'추천안으로 되돌렸습니다.',readOnly:'읽기 전용 Layout 입니다. 새 추천은 Forecast 화면에서 만드세요.',confirmTitle:'이 Layout 을 확정할까요?',confirmText:'바뀐 설비 {n}대의 모델·공정이 즉시 설비정보에 반영되고, 셋업 작업이 대기로 생성됩니다.',confirmShortage:'아직 {n}대가 부족한 채로 확정합니다.',confirmed:'확정했습니다. 셋업 현황에서 진행을 체크하세요.',confirmFailed:'확정하지 못했습니다.',stale:'계획을 만든 뒤 설비 배정이 바뀌었습니다. Forecast 화면에서 다시 추천하세요.',setupNotice:'확정하면 바뀐 설비가 셋업 대상이 됩니다. 현장에서 시작·완료를 체크하세요.',setupNotPublished:'아직 확정 전입니다.',setupScope:'확정 변경 대상',setupActor:'앱 사용자',setupSaved:'셋업 상태를 저장했습니다.',setupFailed:'저장에 실패했습니다. 상태를 변경하지 않았습니다.',alertShortage:'부족',alertSurplus:'여유',alertZero:'수요 0',alertUnassigned:'미배정',alertNotComputable:'계산 불가',alertNotInForecast:'Forecast 없음',alertsEmpty:'부족·여유가 없습니다.',groupLine:'{g} · 필요 {r} / 배정 {a}',alertMore:'외 {n}개',machinesUnit:'대',noticeReadOnly:'읽기 전용 Layout · 편집·확정할 수 없습니다. 새 추천은 Forecast 화면에서 만드세요.',subtitleReadOnly:'확정된 Layout 과 현장 셋업 진행을 확인합니다.'},
+ vi:{breadcrumb:'Kế hoạch sản xuất / Layout',subtitle:'Bố trí đề xuất tính từ nhu cầu Forecast và T/T đã đăng ký trong app. Tinh chỉnh từng máy rồi xác nhận.',notice:'Layout đề xuất · Chưa áp dụng vào thông tin máy cho đến khi xác nhận. Chỉnh sửa được lưu trên máy chủ.',demo:'Quay về đề xuất',demoBadge:'Layout đề xuất · CAPA theo T/T app',current:'Bố trí hiện tại',before:'Hiện tại',after:'Điều chỉnh',sourceBaseline:'Bố trí gốc của kế hoạch',source:'Thông tin máy·model trong app + bản vẽ',unvalidated:'CAPA tính theo T/T·ca·nghỉ đã đăng ký trong app (không chia cho cavity).',pending:'Cảnh báo CAPA',pendingText:'Thiếu·dư so với số máy cần theo model·công đoạn. Việc bố trí thêm máy dư do bạn quyết định.',confirm:'Xác nhận áp dụng Layout',footer:'Vị trí theo bản vẽ Layout đã đăng ký.',previewOnly:'Bản nháp chưa xác nhận',saved:'Đã lưu lên máy chủ.',autosaved:'Đã lưu máy chủ',saving:'Đang lưu…',saveFailed:'Không lưu được. Hãy thử lại.',conflict:'Người khác đã lưu trước. Đang tải lại.',recommendedLoaded:'Đã quay về đề xuất.',readOnly:'Layout chỉ đọc. Tạo đề xuất mới ở màn hình Forecast.',confirmTitle:'Xác nhận Layout này?',confirmText:'Model·công đoạn của {n} máy thay đổi sẽ áp dụng ngay vào thông tin máy và tạo việc setup ở trạng thái chờ.',confirmShortage:'Vẫn còn thiếu {n} máy khi xác nhận.',confirmed:'Đã xác nhận. Theo dõi tiến độ ở Tiến độ setup.',confirmFailed:'Không xác nhận được.',stale:'Phân bổ máy đã thay đổi sau khi tạo kế hoạch. Hãy tạo đề xuất lại ở màn hình Forecast.',setupNotice:'Sau khi xác nhận, các máy thay đổi sẽ cần setup. Đánh dấu bắt đầu·hoàn tất tại xưởng.',setupNotPublished:'Chưa xác nhận.',setupScope:'Máy thay đổi đã xác nhận',setupActor:'Người dùng app',setupSaved:'Đã lưu trạng thái setup.',setupFailed:'Lưu thất bại. Trạng thái chưa thay đổi.',alertShortage:'Thiếu',alertSurplus:'Dư',alertZero:'Nhu cầu 0',alertUnassigned:'Chưa gán',alertNotComputable:'Không tính được',alertNotInForecast:'Không có Forecast',alertsEmpty:'Không thiếu·dư.',groupLine:'{g} · cần {r} / đã gán {a}',alertMore:'và {n} nhóm khác',machinesUnit:'máy',noticeReadOnly:'Layout chỉ đọc · không thể chỉnh sửa·xác nhận. Tạo đề xuất mới ở màn hình Forecast.',subtitleReadOnly:'Xem Layout đã xác nhận và tiến độ setup tại xưởng.'}
+};
+
+/** Pastel fill + stripe for models the preview palette does not know (DB model names), stable per name. */
+function generatedColor(model){let h=0;for(const ch of model)h=(h*31+ch.charCodeAt(0))%360;return['hsl('+h+' 62% 92%)','hsl('+h+' 42% 48%)'];}
+const colorKey = model => String(model||'').replace(/\s+/g,'').toUpperCase();
+
 /**
  * Mounts the studio into `root` (which must already contain the studio markup).
  * @param {HTMLElement} root
- * @param {{ data: any, lang: 'ko' | 'vi' }} options
+ * `backend` (optional) switches the studio from the Excel sample to a real layout plan (DB mode). Without it the
+ * preview behaviour is unchanged. With it: the base is the plan's machine state, drafts save to the server, the
+ * "example" button restores the recommendation, confirm applies the plan, setup tasks come from the server and
+ * the CAPA alert panel is shown. Shape (see LayoutStudio.tsx):
+ *   { readOnly, initial:{draft,recommended,setup}, save(draft), confirm(draft), transition(no,to), summarize(draft), reload(), onConfirmed(result) }
+ * @param {{ data: any, lang: 'ko' | 'vi', backend?: any }} options
  * @returns {{ setLang: (lang: 'ko' | 'vi') => void, destroy: () => void }}
  */
-export function mountLayoutStudio(root, { data, lang: initialLang }) {
+export function mountLayoutStudio(root, { data, lang: initialLang, backend = null }) {
 const DATA = data;
+const M = backend ? {ko:{...messages.ko,...dbMessages.ko},vi:{...messages.vi,...dbMessages.vi}} : messages;
+const PROCESSES = DATA.processes || ['C0','C1','C2'];
+const readOnly = !!(backend && backend.readOnly);
+const colorOf = model => colors[model] || colors[colorKey(model)] || (model ? generatedColor(model) : ['#f2f4f7','#aab3c0']);
+const processLabel = code => 'CNC '+code.slice(1);
+const processesFor = model => (DATA.processesByModel && DATA.processesByModel[model]) || PROCESSES;
 const $ = id => root.querySelector('#' + id);
 const ns = 'http://www.w3.org/2000/svg';
 const copy = value => JSON.parse(JSON.stringify(value));
 const machines = new Map(DATA.machines.map(m => [m.id, m]));
-let lang=messages[initialLang]?initialLang:'ko', building='B', mode='draft', selected=305;
+let lang=messages[initialLang]?initialLang:'ko', building='B', mode='draft', selected=DATA.machines.some(m=>m.id===305)?305:DATA.machines[0].id;
+building=DATA.machines.find(m=>m.id===selected).building;
+if(backend&&backend.initialMode)mode=backend.initialMode;
 let draft={edits:{},locks:[],demo:false}, undoStack=[], redoStack=[];
 let scale=.56, tx=0, ty=0, saveTime=null, toastTimer;
 const storageKey='cnc-layout-preview-v1-'+DATA.sha256;
-const t = key => messages[lang][key] || key;
+const t = key => M[lang][key] || key;
+const tf = (key, vars) => Object.entries(vars).reduce((text,[k,v])=>text.replace('{'+k+'}',String(v)),t(key));
+let saveState=null, saving=null, savePending=false;
 const buildingName = b => lang==='ko' ? b+'동' : 'Xưởng '+b;
 const displayName = id => 'CNC-'+String(id).padStart(3,'0');
 const baseAssignment = m => ({model:m.model,process:m.process});
@@ -59,21 +84,29 @@ const changedIds = () => Object.keys(draft.edits).map(Number).sort((a,b)=>a-b);
 const visibleMachines = () => DATA.machines.filter(m=>building==='all'||m.building===building);
 const svgEl = (tag,attrs={}) => {const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e;};
 function toast(message){$('toast').textContent=message;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3200);}
-function persist(showToast=false){try{localStorage.setItem(storageKey,JSON.stringify({version:1,hash:DATA.sha256,draft,undoStack:undoStack.slice(-30),redoStack:redoStack.slice(-30),at:Date.now()}));saveTime=new Date();if(showToast)toast(t('saved'));}catch{toast(t('localError'));}renderSaveStatus();}
-function renderSaveStatus(){$('saveStatus').textContent=saveTime?t('autosaved')+' · '+saveTime.toLocaleTimeString(lang==='ko'?'ko-KR':'vi-VN',{hour:'2-digit',minute:'2-digit'}):t('previewOnly');}
-function validDraft(value){return value && value.edits && Array.isArray(value.locks) && value.locks.every(id=>machines.has(id)) && Object.entries(value.edits).every(([id,a])=>machines.has(Number(id))&&a&&[...DATA.models,''].includes(a.model)&&['C0','C1','C2'].includes(a.process));}
-try{const raw=JSON.parse(localStorage.getItem(storageKey)||'null');if(raw?.hash===DATA.sha256&&validDraft(raw.draft)){draft=raw.draft;undoStack=(raw.undoStack||[]).filter(validDraft).slice(-30);redoStack=(raw.redoStack||[]).filter(validDraft).slice(-30);saveTime=new Date(raw.at);}}catch{/* Invalid saved preview does not replace the source. */}
+function persist(showToast=false){if(backend){saveToServer(showToast);return;}try{localStorage.setItem(storageKey,JSON.stringify({version:1,hash:DATA.sha256,draft,undoStack:undoStack.slice(-30),redoStack:redoStack.slice(-30),at:Date.now()}));saveTime=new Date();if(showToast)toast(t('saved'));}catch{toast(t('localError'));}renderSaveStatus();}
+function saveToServer(showToast){
+ if(readOnly)return;
+ if(saving){savePending=true;return;}
+ saveState='saving';renderSaveStatus();
+ saving=backend.save(copy(draft)).then(()=>{saveTime=new Date();saveState=null;if(showToast)toast(t('saved'));})
+  .catch(error=>{saveState='failed';const code=error&&error.code;toast(code==='plan_revision_conflict'?t('conflict'):code==='layout_base_stale'?t('stale'):t('saveFailed'));if(code==='plan_revision_conflict'&&backend.reload)backend.reload();})
+  .finally(()=>{saving=null;renderSaveStatus();if(savePending){savePending=false;saveToServer(false);}});
+}
+function renderSaveStatus(){if(backend){$('saveStatus').textContent=readOnly?t('readOnly'):saveState==='saving'?t('saving'):saveState==='failed'?t('saveFailed'):saveTime?t('autosaved')+' · '+saveTime.toLocaleTimeString(lang==='ko'?'ko-KR':'vi-VN',{hour:'2-digit',minute:'2-digit'}):t('previewOnly');return;}$('saveStatus').textContent=saveTime?t('autosaved')+' · '+saveTime.toLocaleTimeString(lang==='ko'?'ko-KR':'vi-VN',{hour:'2-digit',minute:'2-digit'}):t('previewOnly');}
+function validDraft(value){return value && value.edits && Array.isArray(value.locks) && value.locks.every(id=>machines.has(id)) && Object.entries(value.edits).every(([id,a])=>machines.has(Number(id))&&a&&[...DATA.models,''].includes(a.model)&&(a.model===''||PROCESSES.includes(a.process)));}
+if(backend){draft=copy(backend.initial.draft);}else try{const raw=JSON.parse(localStorage.getItem(storageKey)||'null');if(raw?.hash===DATA.sha256&&validDraft(raw.draft)){draft=raw.draft;undoStack=(raw.undoStack||[]).filter(validDraft).slice(-30);redoStack=(raw.redoStack||[]).filter(validDraft).slice(-30);saveTime=new Date(raw.at);}}catch{/* Invalid saved preview does not replace the source. */}
 function commit(next){undoStack.push(copy(draft));undoStack=undoStack.slice(-30);redoStack=[];draft=next;persist();render();}
 function editAssignment(id,a){const next=copy(draft);if(a.model===machines.get(id).model && a.process===machines.get(id).process)delete next.edits[id];else next.edits[id]=a;commit(next);}
 function setOptions(select,values,current){select.replaceChildren(...values.map(([value,text])=>{const e=document.createElement('option');e.value=value;e.textContent=text;return e;}));select.value=current;}
-function translate(){root.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));$('search').placeholder=t('search');$('search').setAttribute('aria-label',t('search'));$('stage').setAttribute('aria-label',t('zoomLabel'));$('stageLabel').textContent=t('sourceBaseline');const filter=$('modelFilter').value;setOptions($('modelFilter'),[['',t('allModels')],...DATA.models.map(m=>[m,m])],filter);render();}
+function translate(){root.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));if(readOnly){root.querySelector('[data-i18n="notice"]').textContent=t('noticeReadOnly');root.querySelector('[data-i18n="subtitle"]').textContent=t('subtitleReadOnly');}for(const id of ['demo','save','reset'])$(id).hidden=readOnly;$('search').placeholder=t('search');$('search').setAttribute('aria-label',t('search'));$('stage').setAttribute('aria-label',t('zoomLabel'));$('stageLabel').textContent=t('sourceBaseline');const filter=$('modelFilter').value;setOptions($('modelFilter'),[['',t('allModels')],...DATA.models.map(m=>[m,m])],filter);render();}
 function render(){
  root.querySelectorAll('[data-building]').forEach(b=>b.classList.toggle('active',b.dataset.building===building));
  root.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
  $('buildingTitle').textContent=building==='all'?t('all'):buildingName(building);
  $('mapCount').textContent=visibleMachines().length+' '+t('count')+' · '+t('sourceBaseline');
  $('demoBadge').hidden=!draft.demo;
- renderMap();renderInspector();renderChanges();renderLegend();renderSaveStatus();renderSetup();
+ renderMap();renderInspector();renderChanges();renderLegend();renderSaveStatus();renderSetup();renderAlerts();
  $('undo').disabled=!undoStack.length;$('redo').disabled=!redoStack.length;
 }
 function renderMap(){
@@ -89,7 +122,7 @@ function renderMap(){
   const task=mode==='setup'?setupTask(m.id):null;
   const dim=(filter&&a.model!==filter)||(mode!=='setup'&&only&&!changed)||(mode==='setup'&&!setupMatches(m.id));
   const g=svgEl('g',{class:['machine',selected===m.id?'selected':'',changed&&mode!=='current'?'changed':'',locked?'locked':'',dim?'dim':''].join(' '),transform:`translate(${m.x} ${m.y})`,'data-id':m.id,tabindex:dim?-1:0,role:'button','aria-label':displayName(m.id)+' '+buildingName(m.building)+' '+label(a),'aria-pressed':selected===m.id});
-  const palette=colors[a.model]||['#f2f4f7','#aab3c0'];
+  const palette=colorOf(a.model);
   g.append(svgEl('rect',{width:104,height:62,fill:palette[0],class:'machine-body'}));
   g.append(svgEl('rect',{x:0,y:9,width:4,height:44,rx:2,fill:palette[1]}));
   const number=svgEl('text',{x:10,y:27,class:'machine-number'});number.textContent=String(m.id).padStart(3,'0');g.append(number);
@@ -102,23 +135,23 @@ function renderMap(){
  }
  transform();renderMinimap();
 }
-function renderMinimap(){const mini=$('minimap');mini.replaceChildren();for(const b of DATA.buildings){mini.append(svgEl('rect',{x:b.x,y:b.y,width:b.width,height:b.height,fill:'#f0f3f7',stroke:'#b8c6d7','stroke-width':15}));}for(const m of DATA.machines)mini.append(svgEl('rect',{x:m.x,y:m.y,width:104,height:62,fill:draft.edits[m.id]?'#cc7927':(colors[m.model]?.[1]||'#a0adbc')}));mini.append(svgEl('rect',{id:'viewport',fill:'#2357c616',stroke:'#2357c6','stroke-width':30}));updateViewport();}
+function renderMinimap(){const mini=$('minimap');mini.replaceChildren();for(const b of DATA.buildings){mini.append(svgEl('rect',{x:b.x,y:b.y,width:b.width,height:b.height,fill:'#f0f3f7',stroke:'#b8c6d7','stroke-width':15}));}for(const m of DATA.machines)mini.append(svgEl('rect',{x:m.x,y:m.y,width:104,height:62,fill:draft.edits[m.id]?'#cc7927':(m.model?colorOf(m.model)[1]:'#a0adbc')}));mini.append(svgEl('rect',{id:'viewport',fill:'#2357c616',stroke:'#2357c6','stroke-width':30}));updateViewport();}
 function transform(){$('world').setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`);$('zoomValue').textContent=Math.round(scale*100)+'%';updateViewport();}
 function updateViewport(){const rect=$('viewport');if(!rect)return;rect.setAttribute('x',-tx/scale);rect.setAttribute('y',-ty/scale);rect.setAttribute('width',$('stage').clientWidth/scale);rect.setAttribute('height',$('stage').clientHeight/scale);}
 function zoom(factor,x=$('stage').clientWidth/2,y=$('stage').clientHeight/2){const before=scale;scale=Math.max(.08,Math.min(2.5,scale*factor));tx=x-(x-tx)*scale/before;ty=y-(y-ty)*scale/before;transform();}
 function fit(){const bs=DATA.buildings.filter(b=>building==='all'||b.id===building);const left=Math.min(...bs.map(b=>b.x)),top=Math.min(...bs.map(b=>b.y)),right=Math.max(...bs.map(b=>b.x+b.width)),bottom=Math.max(...bs.map(b=>b.y+b.height));const stage=$('stage');scale=Math.min((stage.clientWidth-34)/(right-left),(stage.clientHeight-95)/(bottom-top));tx=(stage.clientWidth-(right-left)*scale)/2-left*scale;ty=58+(stage.clientHeight-95-(bottom-top)*scale)/2-top*scale;transform();}
 function focusMachine(id){const m=machines.get(id);if(!m)return;scale=window.innerWidth<760?.76:.58;tx=$('stage').clientWidth/2-(m.x+52)*scale;ty=$('stage').clientHeight/2-(m.y+31)*scale;transform();}
 function selectMachine(id,focus=false){selected=id;const m=machines.get(id);if(focus||(building!=='all'&&building!==m.building))building=m.building;$('editModel').value=assignment(m).model;render();if(focus)focusMachine(id);root.querySelector('.inspector').classList.add('mobile-open');}
-function renderInspector(){const m=machines.get(selected);const a=assignment(m);$('selectedName').textContent=displayName(m.id);$('selectedLocation').textContent=buildingName(m.building)+' · '+t('cell')+' '+m.cell;$('currentLabel').textContent=label(baseAssignment(m));$('draftLabel').textContent=label(a);const locked=draft.locks.includes(m.id);$('selectionStatus').textContent=locked?t('fixed'):(draft.edits[m.id]?t('modified'):t('unchanged'));$('selectionStatus').classList.toggle('changed',!!draft.edits[m.id]);setOptions($('editModel'),[...DATA.models.map(m=>[m,m]),['',t('free')]],a.model);$('editProcess').value=a.process;$('editModel').disabled=locked;$('editProcess').disabled=locked||!a.model;$('applyEdit').disabled=locked;$('lock').textContent=(locked?'▣ ':'□ ')+t(locked?'unlock':'lock');$('lock').classList.toggle('is-locked',locked);}
+function renderInspector(){const m=machines.get(selected);const a=assignment(m);$('selectedName').textContent=displayName(m.id);$('selectedLocation').textContent=buildingName(m.building)+' · '+t('cell')+' '+m.cell;$('currentLabel').textContent=label(baseAssignment(m));$('draftLabel').textContent=label(a);const locked=draft.locks.includes(m.id);$('selectionStatus').textContent=locked?t('fixed'):(draft.edits[m.id]?t('modified'):t('unchanged'));$('selectionStatus').classList.toggle('changed',!!draft.edits[m.id]);setOptions($('editModel'),[...DATA.models.map(m=>[m,m]),['',t('free')]],a.model);if(backend)setOptions($('editProcess'),processesFor(a.model).map(p=>[p,processLabel(p)]),a.process);$('editProcess').value=a.process;$('editModel').disabled=locked||readOnly;$('editProcess').disabled=locked||!a.model||readOnly;$('applyEdit').disabled=locked||readOnly;$('lock').disabled=readOnly;renderGroupAlert(a);$('lock').textContent=(locked?'▣ ':'□ ')+t(locked?'unlock':'lock');$('lock').classList.toggle('is-locked',locked);}
 function renderChanges(){const ids=changedIds();$('changeCount').textContent=ids.length;$('changes').replaceChildren();if(!ids.length){const empty=document.createElement('div');empty.className='empty';empty.style.whiteSpace='pre-line';empty.textContent=t('empty');$('changes').append(empty);return;}for(const id of ids){const m=machines.get(id),a=assignment(m);const b=document.createElement('button');b.className='change-row';b.dataset.changeId=id;const d=document.createElement('div'),name=document.createElement('strong'),small=document.createElement('small'),value=document.createElement('span');name.textContent=displayName(id)+' · '+buildingName(m.building);small.textContent=label(baseAssignment(m));value.textContent='→ '+label(a);d.append(name,small);b.append(d,value);b.onclick=()=>selectMachine(id,true);$('changes').append(b);}}
-function renderLegend(){$('legend').replaceChildren();for(const model of DATA.models){const span=document.createElement('span'),dot=document.createElement('i');dot.style.background=colors[model]?.[1]||'#aaa';span.append(dot,document.createTextNode(model));$('legend').append(span);}const changed=document.createElement('span');changed.textContent='↗ '+t('changed');changed.style.color='#ba741c';$('legend').append(changed);}
+function renderLegend(){$('legend').replaceChildren();for(const model of DATA.models){const span=document.createElement('span'),dot=document.createElement('i');dot.style.background=colorOf(model)[1];span.append(dot,document.createTextNode(model));$('legend').append(span);}const changed=document.createElement('span');changed.textContent='↗ '+t('changed');changed.style.color='#ba741c';$('legend').append(changed);}
 
 // ── Setup workflow (preview setup.js) ────────────────────────────────────────
 const setupKey='cnc-layout-setup-preview-v1-'+DATA.sha256;
 let setupBatch=null;
 const statusKey={pending:'setupWaiting',in_progress:'setupWorking',completed:'setupDone'};
-function validSetup(value){return value?.sourceHash===DATA.sha256 && typeof value.version==='string' && value.tasks && Object.entries(value.tasks).every(([id,task])=>machines.has(Number(id)) && statusKey[task.status] && task.target && [...DATA.models,''].includes(task.target.model) && ['C0','C1','C2'].includes(task.target.process) && Array.isArray(task.events));}
-try{const value=JSON.parse(localStorage.getItem(setupKey)||'null');if(validSetup(value))setupBatch=value;}catch{/* Ignore invalid local examples. */}
+function validSetup(value){return value?.sourceHash===DATA.sha256 && typeof value.version==='string' && value.tasks && Object.entries(value.tasks).every(([id,task])=>machines.has(Number(id)) && statusKey[task.status] && task.target && [...DATA.models,''].includes(task.target.model) && (task.target.model===''||PROCESSES.includes(task.target.process)) && Array.isArray(task.events));}
+if(backend)setupBatch=backend.initial.setup?copy(backend.initial.setup):null;else try{const value=JSON.parse(localStorage.getItem(setupKey)||'null');if(validSetup(value))setupBatch=value;}catch{/* Ignore invalid local examples. */}
 function saveSetup(next){try{localStorage.setItem(setupKey,JSON.stringify(next));setupBatch=next;return true;}catch{toast(t('setupFailed'));return false;}}
 function setupTask(id){return setupBatch?.tasks[id]||null;}
 function setupAssignment(m){return setupTask(m.id)?.target||baseAssignment(m);}
@@ -126,6 +159,7 @@ function setupMatches(id){const filter=$('setupFilter').value;return !filter||(s
 function setupBadge(g,task){if(!task)return;const badge=svgEl('text',{x:85,y:27,fill:{pending:'#697789',in_progress:'#bb6410',completed:'#16774d'}[task.status],'font-size':20,'font-weight':700});g.querySelector('.change-mark')?.remove();badge.textContent={pending:'○',in_progress:'◐',completed:'✓'}[task.status];g.append(badge);g.dataset.setup=task.status;g.setAttribute('aria-label',g.getAttribute('aria-label')+' '+t(statusKey[task.status]));}
 function renderSetup(){
  const active=mode==='setup',task=setupTask(selected),tasks=Object.values(setupBatch?.tasks||{});
+ $('setupPublish').hidden=!!backend;
  $('setupPublish').disabled=!!setupBatch||!changedIds().length;
  $('setupPublish').textContent=t(setupBatch?'setupFrozen':'setupPublish');
  $('setupCounts').textContent=setupBatch?t('setupScope')+' '+tasks.length+' · '+['pending','in_progress','completed'].map(s=>t(statusKey[s])+' '+tasks.filter(task=>task.status===s).length).join(' / '):t('setupNotPublished');
@@ -142,22 +176,54 @@ function renderSetup(){
  if(task)for(const event of task.events){const line=document.createElement('div');line.textContent=t({pending:'setupAt',in_progress:'setupStarted',completed:'setupFinished'}[event.status])+' · '+new Date(event.at).toLocaleString(lang==='ko'?'ko-KR':'vi-VN')+' · '+t('setupActor');$('setupTimes').append(line);}
  $('setupStart').hidden=!task||task.status!=='pending';$('setupComplete').hidden=!task||task.status!=='in_progress';
 }
-function transitionSetup(from,to){const task=setupTask(selected);if(!task||task.status!==from)return;const next=copy(setupBatch);next.tasks[selected].status=to;next.tasks[selected].events.push({status:to,at:new Date().toISOString(),actor:'preview-user'});if(saveSetup(next)){render();toast(t('setupSaved'));}}
+function transitionSetup(from,to){const task=setupTask(selected);if(!task||task.status!==from)return;if(backend){backend.transition(selected,to).then(next=>{setupBatch=next;render();toast(t('setupSaved'));}).catch(()=>toast(t('setupFailed')));return;}const next=copy(setupBatch);next.tasks[selected].status=to;next.tasks[selected].events.push({status:to,at:new Date().toISOString(),actor:'preview-user'});if(saveSetup(next)){render();toast(t('setupSaved'));}}
+
+// ── DB mode: CAPA alerts + confirm ───────────────────────────────────────────
+const ALERT_KEY={shortage:'alertShortage',surplus:'alertSurplus',zero_demand:'alertZero',not_computable:'alertNotComputable',not_in_forecast:'alertNotInForecast'};
+let summary=null;
+function renderAlerts(){
+ root.querySelector('.review-box').classList.toggle('db-mode',!!backend);
+ $('alertTotals').hidden=!backend;$('alertList').hidden=!backend;
+ if(!backend)return;
+ summary=backend.summarize(draft);
+ const totals=summary.totals;
+ $('alertTotals').replaceChildren(...[['shortage',totals.shortageMachines,'alertShortage'],['surplus',totals.spareMachines,'alertSurplus'],['unassigned',totals.unassignedMachines,'alertUnassigned'],['not_computable',totals.notComputableGroups,'alertNotComputable']].map(([state,count,key])=>{const s=document.createElement('span');s.dataset.state=state;s.textContent=t(key)+' '+count;return s;}));
+ const rows=summary.groups.filter(g=>ALERT_KEY[g.status]);
+ $('alertList').replaceChildren();
+ if(!rows.length){const e=document.createElement('div');e.className='empty';e.textContent=t('alertsEmpty');$('alertList').append(e);}
+ for(const g of rows.slice(0,8)){const b=document.createElement('button');b.className='alert-row';b.dataset.state=g.status;b.dataset.model=g.model;
+  const name=document.createElement('strong');name.textContent=g.code;const detail=document.createElement('small');
+  detail.textContent=t(ALERT_KEY[g.status])+(g.gap===null||g.gap===0?'':' '+Math.abs(g.gap)+t('machinesUnit'))+(g.required===null?'':' · '+g.assigned+'/'+g.required)+(g.utilization===null?'':' · '+Math.round(g.utilization*100)+'%');
+  b.append(name,detail);b.onclick=()=>{$('modelFilter').value=g.model;$('changedOnly').checked=false;if(mode==='setup')mode='draft';render();};$('alertList').append(b);}
+ if(rows.length>8){const more=document.createElement('div');more.className='empty';more.textContent=tf('alertMore',{n:rows.length-8});$('alertList').append(more);}
+ $('confirmLayout').disabled=readOnly||!backend.confirm;
+}
+function renderGroupAlert(a){
+ const line=$('groupAlert');line.hidden=!backend||!a.model;if(line.hidden)return;
+ const g=(summary||backend.summarize(draft)).groups.find(x=>x.model===a.model&&x.process===a.process);
+ line.dataset.state=g?g.status:'none';
+ line.textContent=g?tf('groupLine',{g:g.code,r:g.required===null?'—':g.required,a:g.assigned})+(ALERT_KEY[g.status]?' · '+t(ALERT_KEY[g.status])+(g.gap?' '+Math.abs(g.gap)+t('machinesUnit'):''):''):label(a);
+}
+$('confirmLayout').onclick=()=>{if(!backend||readOnly)return;$('confirmText').textContent=tf('confirmText',{n:changedIds().length});const short=summary?summary.totals.shortageMachines:0;$('confirmShortage').textContent=short?tf('confirmShortage',{n:short}):'';$('confirmShortage').hidden=!short;$('confirmDialog').showModal();};
+$('cancelConfirm').onclick=()=>$('confirmDialog').close();
+$('confirmLayoutGo').onclick=()=>{$('confirmDialog').close();$('confirmLayout').disabled=true;
+ Promise.resolve(saving).then(()=>backend.confirm(copy(draft))).then(result=>{setupBatch=result.setup;mode='setup';toast(t('confirmed'));if(backend.onConfirmed)backend.onConfirmed(result);else render();})
+  .catch(error=>{toast(error&&error.code==='layout_base_stale'?t('stale'):t('confirmFailed'));render();});};
 
 // ── Event wiring ─────────────────────────────────────────────────────────────
 root.querySelectorAll('[data-building]').forEach(b=>b.onclick=()=>{building=b.dataset.building;render();fit();});
 root.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;render();});
 $('modelFilter').onchange=()=>renderMap();$('changedOnly').onchange=()=>renderMap();
 $('searchForm').onsubmit=e=>{e.preventDefault();const value=$('search').value.trim().replace(/^CNC[- ]?/i,'');if(!/^\d{1,3}$/.test(value)||!machines.has(Number(value))){toast(t('missing'));return;}$('modelFilter').value='';$('changedOnly').checked=false;$('setupFilter').value='';selectMachine(Number(value),true);};
-$('editModel').onchange=()=>{$('editProcess').disabled=!$('editModel').value;};
+$('editModel').onchange=()=>{const model=$('editModel').value;if(backend&&model){const current=$('editProcess').value,procs=processesFor(model);setOptions($('editProcess'),procs.map(p=>[p,processLabel(p)]),procs.includes(current)?current:procs[0]);}$('editProcess').disabled=!model;};
 $('editForm').onsubmit=e=>{e.preventDefault();if(draft.locks.includes(selected)){toast(t('locked'));return;}const a={model:$('editModel').value,process:$('editProcess').value};if(JSON.stringify(a)===JSON.stringify(assignment(machines.get(selected)))){toast(t('same'));return;}mode='draft';editAssignment(selected,a);toast(t('updated'));};
 $('lock').onclick=()=>{const next=copy(draft);next.locks=next.locks.includes(selected)?next.locks.filter(id=>id!==selected):[...next.locks,selected];commit(next);};
 $('undo').onclick=()=>{if(!undoStack.length)return;redoStack.push(copy(draft));draft=undoStack.pop();persist();render();};
 $('redo').onclick=()=>{if(!redoStack.length)return;undoStack.push(copy(draft));draft=redoStack.pop();persist();render();};
 $('save').onclick=()=>persist(true);
-$('demo').onclick=()=>{if(changedIds().length||draft.locks.length){toast(t('demoDirty'));return;}const next=copy(draft);next.demo=true;for(const [id,model,process] of [[305,'ON1','C1'],[306,'ON1','C1'],[315,'ON1','C2'],[316,'ON1','C2'],[653,'M3','C2'],[654,'M3','C2']])next.edits[id]={model,process};mode='compare';commit(next);selectMachine(305,true);toast(t('demoLoaded'));};
+$('demo').onclick=()=>{if(backend){if(readOnly)return;const next=copy(backend.initial.recommended);next.demo=true;mode='compare';commit(next);toast(t('recommendedLoaded'));return;}if(changedIds().length||draft.locks.length){toast(t('demoDirty'));return;}const next=copy(draft);next.demo=true;for(const [id,model,process] of [[305,'ON1','C1'],[306,'ON1','C1'],[315,'ON1','C2'],[316,'ON1','C2'],[653,'M3','C2'],[654,'M3','C2']])next.edits[id]={model,process};mode='compare';commit(next);selectMachine(305,true);toast(t('demoLoaded'));};
 $('reset').onclick=()=>$('resetDialog').showModal();$('cancelReset').onclick=()=>$('resetDialog').close();$('confirmReset').onclick=()=>{commit({edits:{},locks:[],demo:false});$('resetDialog').close();toast(t('reverted'));};
-$('export').onclick=()=>{const out={schemaVersion:1,previewOnly:true,sourceFile:DATA.source,sourceSheet:DATA.sheet,sourceHash:DATA.sha256,capacityValidated:false,exportedAt:new Date().toISOString(),edits:changedIds().map(id=>({id,building:machines.get(id).building,sourceCell:machines.get(id).cell,before:baseAssignment(machines.get(id)),after:assignment(machines.get(id))})),lockedIds:draft.locks};const url=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='layout-w39-preview-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(t('draftExport'));};
+$('export').onclick=()=>{const out={schemaVersion:1,previewOnly:!backend,sourceFile:DATA.source,sourceSheet:DATA.sheet,sourceHash:DATA.sha256,capacityValidated:!!backend,exportedAt:new Date().toISOString(),edits:changedIds().map(id=>({id,building:machines.get(id).building,sourceCell:machines.get(id).cell,before:baseAssignment(machines.get(id)),after:assignment(machines.get(id))})),lockedIds:draft.locks};const url=URL.createObjectURL(new Blob([JSON.stringify(out,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='layout-w39-preview-draft.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(t('draftExport'));};
 $('closePanel').onclick=()=>root.querySelector('.inspector').classList.remove('mobile-open');
 $('zoomIn').onclick=()=>zoom(1.25);$('zoomOut').onclick=()=>zoom(.8);$('fit').onclick=fit;
 $('setupFilter').onchange=()=>renderMap();

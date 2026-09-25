@@ -149,5 +149,29 @@
       "mapping_save_failed": "모델명 짝을 저장하지 못했습니다.",
       "invalid_assignment": "선택한 앱 모델이 이 공장의 모델이 아닙니다."
     }
+  },
+  "layoutStudio": {
+    "confirmed": "Layout 을 확정했습니다. 바뀐 설비 {{count}}대가 설비정보에 반영되고 셋업이 시작되었습니다.",
+    "noGeometryTitle": "도면이 없습니다",
+    "noGeometry": "이 공장({{factory}})은 아직 Layout 도면이 등록되지 않았습니다. 도면을 추가하면 추천·확정을 사용할 수 있습니다.",
+    "retry": "다시 불러오기",
+    "noPlan": "계획 선택",
+    "noPlanHelp": "아직 추천 계획이 없습니다. 지금은 현재 설비 배치를 보여 줍니다. Forecast 화면에서 주를 골라 추천을 만드세요.",
+    "newPlan": "Forecast 에서 새 추천 만들기",
+    "discard": "이 초안 폐기",
+    "status": {
+      "draft": "초안",
+      "confirmed": "확정",
+      "superseded": "이전 확정",
+      "discarded": "폐기"
+    },
+    "errors": {
+      "load_failed": "Layout 정보를 불러오지 못했습니다.",
+      "plan_not_found": "계획을 찾을 수 없습니다.",
+      "plan_not_draft": "이미 확정·폐기된 계획입니다.",
+      "http_403": "이 화면을 볼 권한이 없습니다.",
+      "too_many_rows": "데이터가 너무 많아 불러오지 않았습니다."
+    },
+    "conflictReloaded": "다른 사용자가 먼저 저장해서 최신 계획을 다시 불러왔습니다. 방금 바꾼 내용은 저장되지 않았으니 다시 적용해 주세요."
   }
 }

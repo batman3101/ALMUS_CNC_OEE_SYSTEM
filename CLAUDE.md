@@ -325,9 +325,19 @@ app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파
   `LayoutStudio.tsx` 는 마운트/언마운트와 언어만 맡고, 스튜디오 DOM 은 React 가 재조정하지 않는다.
 - CSS 는 전부 `.layout-studio` 아래로 범위가 한정돼 있다. 요소 선택자(`button`, `h1`, `[hidden]`)를
   범위 없이 추가하면 앱 전체 화면이 바뀐다.
-- **합격 기준은 `scripts/verify-layout-studio-browser.cjs` (23개 = 프리뷰 21 + 권한 2)** 다.
-  엔진·마크업·CSS 를 고치면 다시 돌린다. 개발 서버에 돌릴 때는 `127.0.0.1` 이 아니라
-  `http://localhost:3000` 을 쓴다(개발 서버가 127.0.0.1 요청의 화면 파일을 403 으로 막는다).
+- **DB 모드(2026-09-25)**: `mountLayoutStudio(root, { data, lang, backend })`. `backend` 가 없으면 프리뷰
+  동작 그대로, 있으면 계획 데이터·서버 저장·확정·셋업·CAPA 알림. 서버(uuid) ⇄ 엔진(설비 번호, 'ON1'/'C1'
+  코드) 변환은 **`planAdapter.ts` 한 곳에서만** 한다 — 변환이 틀리면 엉뚱한 설비가 저장된다.
+  언어 변경으로 엔진을 다시 만들지 말 것(보던 화면이 초기화된다; `setLang` 으로 처리).
+- 계획 계산·API: `src/lib/layout-planning/`(추천=`recommendLayout`, 알림=`summarizeCapacity`, 입력=`planInput`,
+  DB=`server.ts`), 라우트 `/api/layout-planning/*`, DB 는 `supabase/migrations/20260925100000~120000`.
+- **검증 3종**:
+  1. `scripts/verify-layout-studio-browser.cjs` — 브라우저 합격 기준 25개(API 는 브라우저 안 가짜 서버).
+     개발 서버에 돌릴 때는 `127.0.0.1` 이 아니라 `http://localhost:3000` 을 쓴다(개발 서버가 127.0.0.1
+     요청의 화면 파일을 403 으로 막는다).
+  2. `scripts/verify-layout-planning-local.cjs` — 실제 서버 모듈 → 로컬 Supabase RPC 종단 8개
+     (`npx supabase start` 필요, 로컬 전용 픽스처 생성, localhost 가 아니면 실행 거부).
+  3. `supabase/tests/layout_planning_invariants.sql` — RPC 불변조건 L1–L10(롤백형).
 
 ### Production Record Input System
 - See `src/components/production/README.md` for details

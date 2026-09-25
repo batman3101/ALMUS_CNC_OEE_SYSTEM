@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "previewOnly": true,
+  "previewOnly": false,
   "sourceFile": "Setting CNC.xlsx",
   "sourceSheet": "W39",
   "sourceHash": "1ed2777bea687f05ef4079429a260ebf54b56c1ec10d8db44156d9b7e9bfba83",
-  "capacityValidated": false,
-  "exportedAt": "2026-09-25T07:58:51.983Z",
+  "capacityValidated": true,
+  "exportedAt": "2026-09-25T09:20:25.100Z",
   "edits": [
     {
       "id": 305,

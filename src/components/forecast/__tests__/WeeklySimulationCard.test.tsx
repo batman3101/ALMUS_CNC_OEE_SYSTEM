@@ -2,6 +2,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { FactoryForecastPreview } from '@/types/forecast';
 import WeeklySimulationCard from '../WeeklySimulationCard';
 
+// The card embeds LayoutPlanLauncher (network + navigation); its flow is covered by scripts/verify-layout-studio-browser.cjs.
+jest.mock('@/lib/authFetch', () => ({ authFetch: jest.fn() }));
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) }));
 jest.mock('@/hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string, opts?: Record<string, unknown>) => opts && 'count' in opts ? `${key}:${opts.count}` : key, language: 'ko' }) }));
 
 const days = (start: string, count: number) => Array.from({ length: count }, (_, i) => new Date(Date.parse(`${start}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10));

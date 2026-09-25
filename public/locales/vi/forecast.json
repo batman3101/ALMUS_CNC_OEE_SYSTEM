@@ -149,5 +149,29 @@
       "mapping_save_failed": "Không lưu được cặp tên model.",
       "invalid_assignment": "Model app đã chọn không thuộc nhà máy này."
     }
+  },
+  "layoutStudio": {
+    "confirmed": "Đã xác nhận Layout. {{count}} máy thay đổi đã cập nhật vào thông tin máy và bắt đầu setup.",
+    "noGeometryTitle": "Chưa có bản vẽ",
+    "noGeometry": "Nhà máy này ({{factory}}) chưa đăng ký bản vẽ Layout. Khi thêm bản vẽ sẽ dùng được đề xuất·xác nhận.",
+    "retry": "Tải lại",
+    "noPlan": "Chọn kế hoạch",
+    "noPlanHelp": "Chưa có kế hoạch đề xuất. Hiện đang hiển thị bố trí máy hiện tại. Hãy chọn tuần ở màn hình Forecast để tạo đề xuất.",
+    "newPlan": "Tạo đề xuất mới từ Forecast",
+    "discard": "Hủy bản nháp này",
+    "status": {
+      "draft": "Bản nháp",
+      "confirmed": "Đã xác nhận",
+      "superseded": "Xác nhận trước",
+      "discarded": "Đã hủy"
+    },
+    "errors": {
+      "load_failed": "Không tải được thông tin Layout.",
+      "plan_not_found": "Không tìm thấy kế hoạch.",
+      "plan_not_draft": "Kế hoạch đã xác nhận·hủy.",
+      "http_403": "Bạn không có quyền xem màn hình này.",
+      "too_many_rows": "Dữ liệu quá lớn nên không tải."
+    },
+    "conflictReloaded": "Người khác đã lưu trước nên kế hoạch mới nhất đã được tải lại. Thay đổi vừa rồi chưa được lưu, hãy áp dụng lại."
   }
 }
