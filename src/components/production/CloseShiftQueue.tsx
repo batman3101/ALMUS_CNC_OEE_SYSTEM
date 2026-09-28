@@ -37,6 +37,10 @@ const keyOf = (i: QueueItem) => `${i.machine_id}|${i.date}|${i.shift}`;
  *
  * **일괄 자동 마감은 제공하지 않는다.** 교대마다 최종 수량이 다르고 종이 카운터를 눈으로
  * 확인해야 하기 때문이다 — 마지막 진척값으로 일괄 확정하면 확인하지 않은 숫자가 역사로 남는다.
+ *
+ * 최종 불량도 같은 줄에서 넣는다(2026-09-28 사용자 요청 — 불량을 어디서 넣는지 현장이 헤맸다).
+ * 비워 두면 예전처럼 미검사로 마감되어 불량 대기로 간다. **0 을 미리 채우지 않는다** — 비운 칸(미검사)과
+ * 0(검사했고 불량 없음)은 다른 값이라, 채워 두면 확인하지 않은 0 이 확정 불량으로 남는다.
  */
 export const CloseShiftQueue: React.FC = () => {
   const { t } = useDataInputTranslation();
@@ -65,6 +69,7 @@ export const CloseShiftQueue: React.FC = () => {
 
   /** 행별 입력값·오류. 저장에 실패해도 입력한 숫자를 잃지 않게 키로 보관한다. */
   const [qtyByKey, setQtyByKey] = useState<Record<string, number | null>>({});
+  const [defectByKey, setDefectByKey] = useState<Record<string, number | null>>({});
   const [errorByKey, setErrorByKey] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
@@ -119,6 +124,11 @@ export const CloseShiftQueue: React.FC = () => {
     const key = keyOf(item);
     const qty = qtyByKey[key] ?? item.last_qty;
     if (qty === null || qty === undefined) return;
+    const defect = defectByKey[key] ?? null;
+    if (defect !== null && defect > qty) {
+      setErrorByKey(prev => ({ ...prev, [key]: t('closeQueue.errorDefectExceeds', { qty }) }));
+      return;
+    }
 
     setSavingKey(key);
     setErrorByKey(prev => { const next = { ...prev }; delete next[key]; return next; });
@@ -129,12 +139,14 @@ export const CloseShiftQueue: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           machine_id: item.machine_id, date: item.date, shift: item.shift, final_qty: qty,
+          // 비운 칸은 보내지 않는다 — 서버가 미검사(NULL)로 두고 불량 대기로 보낸다.
+          ...(defect !== null ? { defect_qty: defect } : {}),
         }),
       });
 
       if (!res.ok) {
         const body = await res.json().catch(() => null) as {
-          error?: string; last_progress_qty?: number; defect_qty?: number;
+          error?: string; last_progress_qty?: number; defect_qty?: number; output_qty?: number;
         } | null;
         /*
           실패 사유를 행에 **구체적으로** 남긴다. "저장 실패" 한 마디로 뭉개면 사용자는
@@ -147,6 +159,12 @@ export const CloseShiftQueue: React.FC = () => {
             ? t('closeQueue.errorBelowProgress', { qty: body.last_progress_qty ?? 0 })
             : body?.error === 'output_qty is less than confirmed defect_qty'
               ? t('closeQueue.errorBelowDefect', { qty: body.defect_qty ?? 0 })
+              : body?.error === 'already_closed'
+                // 표가 오래된 사이 다른 사람이 먼저 마감했다(감사 F-02). 행과 입력값은 지우지 않는다 —
+                // 사용자가 자기가 넣으려던 숫자를 보며 생산 기록 목록에서 확인·수정할 수 있어야 한다.
+                ? t('closeQueue.errorAlreadyClosed')
+              : body?.error === 'defect_exceeds_output'
+                ? t('closeQueue.errorDefectExceeds', { qty: body.output_qty ?? qty })
               : body?.error?.includes('still open')
                 ? t('closeQueue.errorTooEarly')
                 : t('closeQueue.errorGeneric');
@@ -158,7 +176,14 @@ export const CloseShiftQueue: React.FC = () => {
       setItems(prev => prev.filter(i => keyOf(i) !== key));
       setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
       setQtyByKey(prev => { const next = { ...prev }; delete next[key]; return next; });
-      messageApi.success(t('closeQueue.closeSuccess', { machine: item.machine_name }));
+      setDefectByKey(prev => { const next = { ...prev }; delete next[key]; return next; });
+      // 불량과 함께 마감하면 서버가 한 트랜잭션으로 저장한다 — 성공이면 둘 다, 실패면 둘 다 안 된 것이다.
+      const result = await res.json().catch(() => null) as { defect?: 'saved' | 'not_requested' } | null;
+      if (result?.defect === 'saved') {
+        messageApi.success(t('closeQueue.closeSuccessWithDefect', { machine: item.machine_name, defect }));
+      } else {
+        messageApi.success(t('closeQueue.closeSuccess', { machine: item.machine_name }));
+      }
     } catch (error) {
       setErrorByKey(prev => ({ ...prev, [key]: t('closeQueue.errorGeneric') }));
       reportFailure(t('closeQueue.errorGeneric'), error);
@@ -222,6 +247,25 @@ export const CloseShiftQueue: React.FC = () => {
             precision={0}
             style={{ width: '100%' }}
             placeholder={t('closeQueue.finalQty')}
+          />
+        );
+      },
+    },
+    {
+      title: t('closeQueue.finalDefect'),
+      key: 'final_defect',
+      width: 130,
+      render: (_: unknown, item: QueueItem) => {
+        const key = keyOf(item);
+        return (
+          <InputNumber
+            value={defectByKey[key] ?? null}
+            onChange={(v) => setDefectByKey(prev => ({ ...prev, [key]: v }))}
+            min={0}
+            precision={0}
+            style={{ width: '100%' }}
+            placeholder={t('closeQueue.defectPlaceholder')}
+            data-testid={`close-queue-defect-${key}`}
           />
         );
       },
@@ -357,7 +401,7 @@ export const CloseShiftQueue: React.FC = () => {
             onChange: (page, pageSize) =>
               setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 20 })),
           }}
-          scroll={{ x: 860 }}
+          scroll={{ x: 990 }}
           locale={{ emptyText: t('closeQueue.empty') }}
         />
       </Space>
