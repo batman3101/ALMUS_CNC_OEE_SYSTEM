@@ -14,7 +14,8 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * POST /api/production-records/close-shift — 교대 마감.
- * output = final_qty(있으면) 또는 그 교대 마지막 진척값. defect = NULL(미검사, 다음날 입력).
+ * output = final_qty(있으면) 또는 그 교대 마지막 진척값.
+ * defect = `defect_qty`(있으면 마감 직후 확정) 또는 NULL(미검사 → 불량 대기, 다음날 입력).
  * 늦게 불러도 귀속은 인자의 date/shift (입력 시각 무관). avail×perf 는 지금 확정, 품질/OEE 는 보류.
  */
 export async function POST(request: NextRequest) {
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     const user = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
     const body = await request.json() as {
       machine_id?: unknown; date?: unknown; shift?: unknown; final_qty?: unknown;
-      below_progress_reason?: unknown;
+      below_progress_reason?: unknown; defect_qty?: unknown;
     };
     const machineId = typeof body.machine_id === 'string' ? body.machine_id : '';
     const date = typeof body.date === 'string' ? body.date : '';
@@ -43,6 +44,13 @@ export async function POST(request: NextRequest) {
     if (shift === null) return NextResponse.json({ error: "shift must be 'A' or 'B'" }, { status: 400 });
     if (finalQty !== null && (!Number.isInteger(finalQty) || finalQty < 0))
       return NextResponse.json({ error: 'final_qty must be a non-negative integer' }, { status: 400 });
+    /**
+     * 마감과 함께 넣는 최종 불량(2026-09-28). 없으면(undefined/null) 예전처럼 미검사로 남아 불량 대기로 간다.
+     * 0 은 "검사했고 불량 없음"이라 미검사(NULL)와 다르다 — 비운 칸을 0 으로 바꾸지 않는다.
+     */
+    const defectQty = body.defect_qty === undefined || body.defect_qty === null ? null : body.defect_qty;
+    if (defectQty !== null && (typeof defectQty !== 'number' || !Number.isInteger(defectQty) || defectQty < 0))
+      return NextResponse.json({ error: 'defect_qty must be a non-negative integer' }, { status: 400 });
 
     assertMachineAccess(user, machineId);
 
@@ -58,6 +66,10 @@ export async function POST(request: NextRequest) {
       outputQty = last?.shift_output_qty ?? null;
     }
     if (outputQty === null) return NextResponse.json({ error: 'no quantity to close (진척·final_qty 없음)' }, { status: 400 });
+    // 불량 > 마감 수량은 확정 RPC 가 어차피 거부한다. 그걸 마감 **뒤에** 알게 되면 마감만 된 반쪽 저장이
+    // 남으므로, 명백한 경우는 아무것도 쓰기 전에 끊는다.
+    if (defectQty !== null && defectQty > outputQty)
+      return NextResponse.json({ error: 'defect_exceeds_output', output_qty: outputQty }, { status: 400 });
 
     // 비가동 = 확정 OEE 와 동일 계약. tact = 뷰.
     const reporting = await getShiftReportingWindow(date, shift, user.factoryId);
@@ -172,7 +184,33 @@ export async function POST(request: NextRequest) {
       console.error('교대 마감 저장 오류:', rpcError ?? rpcData);
       return NextResponse.json({ error: 'Failed to close shift' }, { status: 500 });
     }
-    return NextResponse.json({ success: true }, { status: 201 });
+
+    if (defectQty === null) return NextResponse.json({ success: true, defect: 'not_requested' }, { status: 201 });
+
+    /**
+     * 불량 확정은 기존 `confirm_shift_defect` RPC 를 그대로 쓴다 — 불량 대기 화면과 같은 쓰기 경로다.
+     * 마감과 한 트랜잭션은 아니다(묶으려면 새 RPC = 운영 마이그레이션). 둘 다 같은 advisory 키
+     * (machine·date·shift) 아래에서 차례로 돌고, 실패해도 마감은 유효하며 불량은 미검사로 남아 불량 대기에
+     * 다시 나타난다 — 되돌릴 수 있는 반쪽이다. 그래서 되돌리지 않고 `defect: 'failed'` 로 분명히 알린다.
+     */
+    const { data: closed } = await supabaseAdmin
+      .from('production_records')
+      .select('record_id')
+      .eq('factory_id', user.factoryId)
+      .eq('machine_id', machineId).eq('date', date).eq('shift', shift)
+      .maybeSingle();
+    if (!closed?.record_id) {
+      console.error('마감 직후 record 조회 실패 — 불량 미확정:', { machineId, date, shift });
+      return NextResponse.json({ success: true, defect: 'failed' }, { status: 201 });
+    }
+    const { data: defectData, error: defectError } = await supabaseAdmin
+      .rpc('confirm_shift_defect', { p_record_id: closed.record_id, p_defect: defectQty });
+    const defectResult = defectData as { ok?: boolean; reason?: string } | null;
+    if (defectError || !defectResult?.ok) {
+      console.error('마감 후 불량 확정 실패:', defectError ?? defectResult);
+      return NextResponse.json({ success: true, defect: 'failed' }, { status: 201 });
+    }
+    return NextResponse.json({ success: true, defect: 'saved' }, { status: 201 });
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;
