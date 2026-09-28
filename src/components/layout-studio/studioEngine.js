@@ -46,6 +46,8 @@ const dbMessages = {
 };
 // Puzzle tray texts (2026-09-28).
 Object.assign(dbMessages.ko,{trayTitle:'조각 트레이',trayHelp:'조각을 도면의 설비로 끌어 놓으세요. 원래 그 자리의 모델·공정은 트레이로 돌아옵니다. 설비를 끌어 다른 설비에 놓으면 옮겨지고, 아래 비우기에 놓으면 빈 자리가 됩니다. Shift+클릭으로 한 열의 여러 대를 묶습니다. 터치: 조각을 누른 뒤 설비를 누르세요.',trayNeed:'놓아야 할 조각',trayNeedEmpty:'모두 채웠습니다 ✓',traySpare:'여유 — 바꿔도 되는 설비',traySpareEmpty:'없음',trayDropOut:'여기에 설비를 끌어 놓으면 비우기(빈 자리)',ruleGood:'무리에 붙음',ruleWarn:'동선 공정 섞임',ruleBad:'섬·끼워넣기·3조각',violations:'규칙 위반',armed:'{g} 을(를) 놓을 설비를 누르세요 · 다시 누르거나 Esc 로 취소',noRoom:'그 열에는 이만큼 들어갈 자리가 없습니다.',placedBad:'⚠ 규칙 위반: {r} — 되돌리려면 ↶',placedWarn:'동선 안에 공정이 섞였습니다.',reasonIsland:'섬',reasonMiddle:'끼워넣기',reasonThree:'3조각',rangeHint:'한 열에서 {n}대 선택 — 끌어서 한 번에 옮기거나, 조각을 놓아 한 번에 채웁니다.',fromTile:'설비에서 옮기는 중',fromTray:'트레이에서'});
+Object.assign(dbMessages.ko,{verdictGood:'✓ 무리에 붙음',verdictWarn:'⚠ 동선 공정 섞임',verdictEmpty:'여기 놓으면 비우기(빈 자리)'});
+Object.assign(dbMessages.vi,{verdictGood:'✓ Liền nhóm',verdictWarn:'⚠ Lẫn công đoạn trong lối đi',verdictEmpty:'Thả vào đây để bỏ trống'});
 Object.assign(dbMessages.ko,{setupBoard:'셋업 작업판',setupProgress:'완료 {d} / {n}대',setupListHint:'진행 중 → 대기 → 완료 순입니다. 행을 누르면 도면에서 위치를 보여 줍니다. 완료는 한 대씩 누릅니다 — 누르는 순간 그 설비의 모델·공정이 설비정보에 반영됩니다.',setupDoneTitle:'셋업 완료',setupDoneText:'바뀐 설비 {n}대의 셋업을 모두 마쳤습니다. 설비정보(모델·공정)에 반영됐습니다.',setupDonePeriod:'기간 {a} ~ {b}',setupRowDone:'완료 {t}'});
 Object.assign(dbMessages.vi,{setupBoard:'Bảng setup',setupProgress:'Hoàn tất {d} / {n} máy',setupListHint:'Thứ tự: đang setup → chờ → hoàn tất. Chạm một dòng để xem vị trí trên bản vẽ. Hoàn tất từng máy một — khi nhấn, model·công đoạn của máy đó được cập nhật vào thông tin máy.',setupDoneTitle:'Setup hoàn tất',setupDoneText:'Đã hoàn tất setup cho cả {n} máy thay đổi. Thông tin máy (model·công đoạn) đã được cập nhật.',setupDonePeriod:'Thời gian {a} ~ {b}',setupRowDone:'Xong {t}'});
 Object.assign(dbMessages.vi,{trayTitle:'Khay mảnh ghép',trayHelp:'Kéo mảnh ghép vào máy trên bản vẽ. Model·công đoạn cũ của máy đó quay về khay. Kéo một máy sang máy khác để di chuyển, thả vào ô Bỏ trống bên dưới để để trống. Shift+nhấp để chọn nhiều máy trong một cột. Cảm ứng: chạm mảnh ghép rồi chạm máy.',trayNeed:'Mảnh cần đặt',trayNeedEmpty:'Đã đủ ✓',traySpare:'Dư — máy có thể đổi',traySpareEmpty:'Không có',trayDropOut:'Thả máy vào đây để bỏ trống',ruleGood:'Liền nhóm',ruleWarn:'Lẫn công đoạn trong lối đi',ruleBad:'Tách rời·chèn giữa·3 đoạn',violations:'Vi phạm quy tắc',armed:'Chạm máy để đặt {g} · chạm lại hoặc Esc để hủy',noRoom:'Cột này không đủ chỗ.',placedBad:'⚠ Vi phạm: {r} — nhấn ↶ để hoàn tác',placedWarn:'Lối đi đang lẫn công đoạn.',reasonIsland:'tách rời',reasonMiddle:'chèn giữa',reasonThree:'3 đoạn',rangeHint:'Đã chọn {n} máy trong một cột — kéo để di chuyển cùng lúc hoặc thả mảnh ghép để điền cùng lúc.',fromTile:'Đang di chuyển từ máy',fromTray:'Từ khay'});
@@ -136,6 +138,7 @@ function translate(){root.querySelectorAll('[data-i18n]').forEach(e=>e.textConte
 function render(){
  root.querySelectorAll('[data-building]').forEach(b=>b.classList.toggle('active',b.dataset.building===building));
  root.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+ root.classList.toggle('puzzle-mode',puzzleOn());
  $('buildingTitle').textContent=building==='all'?t('all'):buildingName(building);
  $('mapCount').textContent=visibleMachines().length+' '+t('count')+' · '+t('sourceBaseline');
  $('demoBadge').hidden=!draft.demo;
@@ -152,6 +155,7 @@ function renderMap(){
   const note=svgEl('text',{x:200,y:b.y+45,class:'building-note'});note.textContent=b.count+' '+t('count')+' / W39';world.append(note);
  }
  const filter=$('modelFilter').value,only=$('changedOnly').checked,puzzle=puzzleOn();
+ root.classList.toggle('puzzle-focus',puzzle&&!!armed);
  if(puzzle)puzzleViolations=board.violations(draftState(),baseState);
  for(const m of visibleMachines()){
   const a=mode==='setup'?setupAssignment(m):(mode==='current'?baseAssignment(m):assignment(m)),changed=mode==='setup'?!!setupTask(m.id):!!draft.edits[m.id],locked=mode!=='setup'&&draft.locks.includes(m.id);
@@ -194,7 +198,8 @@ if(backend)setupBatch=backend.initial.setup?copy(backend.initial.setup):null;els
 function saveSetup(next){try{localStorage.setItem(setupKey,JSON.stringify(next));setupBatch=next;return true;}catch{toast(t('setupFailed'));return false;}}
 function setupTask(id){return setupBatch?.tasks[id]||null;}
 function setupAssignment(m){return setupTask(m.id)?.target||baseAssignment(m);}
-function setupMatches(id){const filter=$('setupFilter').value;return !filter||(setupTask(id)?.status||'none')===filter;}
+// Setup view: with no filter only the machines that need a setup stay vivid (user 2026-09-28); 'none' shows the others.
+function setupMatches(id){const filter=$('setupFilter').value;if(!filter)return !setupBatch||!!setupTask(id);return (setupTask(id)?.status||'none')===filter;}
 function setupBadge(g,task){if(!task)return;const badge=svgEl('text',{x:85,y:27,fill:{pending:'#697789',in_progress:'#bb6410',completed:'#16774d'}[task.status],'font-size':20,'font-weight':700});g.querySelector('.change-mark')?.remove();badge.textContent={pending:'○',in_progress:'◐',completed:'✓'}[task.status];g.append(badge);g.dataset.setup=task.status;g.setAttribute('aria-label',g.getAttribute('aria-label')+' '+t(statusKey[task.status]));}
 function renderSetup(){
  const active=mode==='setup',task=setupTask(selected),tasks=Object.values(setupBatch?.tasks||{});
@@ -314,6 +319,10 @@ tray.innerHTML='<div class="puzzle-head"><strong data-i18n="trayTitle"></strong>
  +'<h4 class="spare"><span data-i18n="traySpare"></span><span class="n" id="spareCount"></span></h4><div id="spareCards" class="puzzle-cards"></div>'
  +'<div id="puzzleDropOut" class="puzzle-dropout" data-i18n="trayDropOut"></div>';
 root.querySelector('.inspector').prepend(tray);
+// While puzzling the panel is the tray (user 2026-09-28): the selected-machine card, lock, change list and CAPA alert
+// rows are hidden by CSS (.puzzle-mode). Undo/redo move up next to the tray title; the CAPA totals and the confirm
+// button stay at the bottom.
+{const history=document.createElement('span');history.className='puzzle-history';history.append($('undo'),$('redo'));tray.querySelector('.puzzle-head').append(history);}
 const ghost=document.createElement('div');ghost.className='puzzle-ghost';ghost.hidden=true;root.append(ghost);
 const groupCounts=()=>new Map((summary?summary.groups:[]).map(g=>[g.code,g.assigned]));
 const codeOf=a=>a.model+'-'+a.process;
@@ -369,19 +378,39 @@ function puzzleClick(id,e){
 const dropTargets=id=>drag.kind==='card'&&range.length>1&&range.includes(id)?range.slice():board.blockFrom(id,drag.kind==='tile'?drag.sources.length:1);
 function startDrag(kind,e,extra){drag={kind,x0:e.clientX,y0:e.clientY,active:false,...extra};}
 function activateDrag(){
- drag.active=true;root.classList.add('puzzle-dragging');
- const piece=drag.pieces[0],tn=tone(piece),small=document.createElement('small');
- ghost.textContent=label(piece)+(drag.pieces.length>1?' ×'+drag.pieces.length:'');small.textContent=t(drag.kind==='tile'?'fromTile':'fromTray');ghost.append(small);ghost.style.background=tn.solid;ghost.style.color=tn.ink;ghost.hidden=false;
- // Rule ring per machine: what placing this piece (or block) there would mean.
- const state=draftState();for(const id of drag.sources||[])state.set(id,null);
- const key=keyOf(piece);
- for(const g of $('world').querySelectorAll('g.machine')){const ring=g.querySelector('.puzzle-ring');if(!ring)continue;const targets=g.classList.contains('dim')||!key?null:dropTargets(Number(g.dataset.id));ring.setAttribute('class','puzzle-ring'+(targets?' '+board.evaluate(state,key,targets).level:''));}
+ drag.active=true;root.classList.add('puzzle-dragging','puzzle-focus');
+ const piece=drag.pieces[0],tn=tone(piece);
+ drag.key=keyOf(piece);drag.state=draftState();for(const id of drag.sources||[])drag.state.set(id,null);drag.hover=null;
+ const name=document.createElement('b'),from=document.createElement('small'),verdict=document.createElement('span');
+ name.textContent=label(piece)+(drag.pieces.length>1?' ×'+drag.pieces.length:'');from.textContent=t(drag.kind==='tile'?'fromTile':'fromTray');verdict.className='puzzle-verdict';
+ ghost.replaceChildren(name,from,verdict);ghost.style.background=tn.solid;ghost.style.color=tn.ink;ghost.dataset.level='';ghost.hidden=false;
+ // Only the piece's own group (and what is being carried) stays vivid; the rest of the floor dims (user 2026-09-28).
+ for(const g of $('world').querySelectorAll('g.machine')){const id=Number(g.dataset.id);g.classList.toggle('kin',(!!drag.key&&drag.state.get(id)===drag.key)||(drag.sources||[]).includes(id));}
+}
+/**
+ * The rule verdict is shown for the spot under the pointer only — its outline plus a line on the carried piece — not on
+ * every machine at once, which painted the whole floor red (user 2026-09-28).
+ */
+function showVerdict(el){
+ const tile=el&&el.closest('g.machine'),id=tile&&root.contains(tile)?Number(tile.dataset.id):null,onTray=!!(el&&el.closest('.puzzle-tray'));
+ const targets=id===null?null:dropTargets(id),hover=onTray?'tray':id===null?'':targets?targets.join(','):'none';
+ if(hover===drag.hover)return;drag.hover=hover;
+ for(const g of $('world').querySelectorAll('g.machine.puzzle-target')){g.classList.remove('puzzle-target');g.querySelector('.puzzle-ring')?.setAttribute('class','puzzle-ring');}
+ const verdict=ghost.querySelector('.puzzle-verdict');verdict.textContent='';ghost.dataset.level='';
+ if(onTray){if(drag.kind==='tile'){verdict.textContent=t('verdictEmpty');ghost.dataset.level='empty';}return;}
+ if(id===null)return;
+ if(!targets){verdict.textContent=t('noRoom');ghost.dataset.level='bad';return;}
+ const v=drag.key?board.evaluate(drag.state,drag.key,targets):{level:'good',reasons:[]};
+ for(const x of targets){const g=tileEl(x);if(!g)continue;g.classList.add('puzzle-target');g.querySelector('.puzzle-ring')?.setAttribute('class','puzzle-ring '+v.level);}
+ verdict.textContent=v.level==='good'?t('verdictGood'):v.level==='warn'?t('verdictWarn'):'✕ '+v.reasons.map(r=>t(REASON_KEY[r])).join(', ');ghost.dataset.level=v.level;
 }
 function endDrag(e){
- root.classList.remove('puzzle-dragging');ghost.hidden=true;$('puzzleDropOut').classList.remove('over');
  const el=document.elementFromPoint(e.clientX,e.clientY),tile=el&&el.closest('g.machine'),out=el&&el.closest('.puzzle-tray');
- if(tile&&root.contains(tile)){
-  const targets=dropTargets(Number(tile.dataset.id));
+ const dropId=tile&&root.contains(tile)?Number(tile.dataset.id):null;   // read before the redraw below replaces the tiles
+ // Clear the drag marks first; a drop that changes nothing must not leave the floor dimmed or a target outlined.
+ root.classList.remove('puzzle-dragging');ghost.hidden=true;$('puzzleDropOut').classList.remove('over');renderMap();
+ if(dropId!==null){
+  const targets=dropTargets(dropId);
   if(!targets){toast(t('noRoom'));return;}
   if(drag.kind==='tile'&&targets.every((x,k)=>x===drag.sources[k]))return;
   range=[];
@@ -390,7 +419,7 @@ function endDrag(e){
 }
 tray.addEventListener('pointerdown',e=>{const c=e.target.closest('.puzzle-card');if(!c||e.button!==0)return;e.preventDefault();startDrag('card',e,{pieces:[{model:c.dataset.model,process:c.dataset.process}],sources:null});});
 tray.addEventListener('click',e=>{const c=e.target.closest('.puzzle-card');if(!c||wasDrag)return;const piece={model:c.dataset.model,process:c.dataset.process};armed=armed&&keyOf(armed)===keyOf(piece)?null:piece;render();});
-const onDragMove=e=>{if(!drag)return;if(!drag.active){if(Math.hypot(e.clientX-drag.x0,e.clientY-drag.y0)<=5)return;activateDrag();}ghost.style.left=(e.clientX+14)+'px';ghost.style.top=(e.clientY+10)+'px';const el=document.elementFromPoint(e.clientX,e.clientY);$('puzzleDropOut').classList.toggle('over',!!(el&&el.closest('.puzzle-tray')&&drag.kind==='tile'));};
+const onDragMove=e=>{if(!drag)return;if(!drag.active){if(Math.hypot(e.clientX-drag.x0,e.clientY-drag.y0)<=5)return;activateDrag();}ghost.style.left=(e.clientX+14)+'px';ghost.style.top=(e.clientY+10)+'px';const el=document.elementFromPoint(e.clientX,e.clientY);$('puzzleDropOut').classList.toggle('over',!!(el&&el.closest('.puzzle-tray')&&drag.kind==='tile'));showVerdict(el);};
 const onDragEnd=e=>{if(!drag)return;if(drag.active){endDrag(e);wasDrag=true;setTimeout(()=>{wasDrag=false;},0);}drag=null;};
 const onDragCancel=()=>{if(!drag)return;root.classList.remove('puzzle-dragging');ghost.hidden=true;drag=null;renderMap();};
 const onPuzzleKey=e=>{if(!puzzleOn()||e.target.closest?.('input,select,textarea'))return;if(e.key==='Escape'&&(armed||range.length)){armed=null;range=[];render();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();$('undo').click();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();$('redo').click();}};

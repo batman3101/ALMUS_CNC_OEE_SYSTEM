@@ -2,7 +2,7 @@
   "result": "PASS",
   "mode": "db",
   "root": "http://localhost:3000",
-  "timestamp": "2026-09-28T09:03:08.058Z",
+  "timestamp": "2026-09-28T09:16:29.399Z",
   "checks": [
     "800 machines from the app sit on their Excel cells with their CNC numbers",
     "The recommended layout opens first: 6 recommended moves, labelled, compare shows them",
@@ -10,7 +10,7 @@
     "Search switches building and focuses the exact machine",
     "Zoom, pan, wheel and keyboard; dragging never selects machine labels",
     "CAPA alerts: shortage / surplus / not-computable totals and rows, and the selected machine's group",
-    "Fine-tune saves to the server with the machine's uuid; lock, undo and redo too; alerts recompute",
+    "Fine-tune saves to the server with the machine's uuid; undo and redo (in the tray) too; alerts recompute",
     "The dropdown editor is gone (user decision 2026-09-28): the tray is the only way to change a machine",
     "Original, draft, compare and model filter",
     "Reload restores the server draft; reset and \"back to recommendation\" are saved too",

@@ -429,3 +429,30 @@
 .layout-studio .machine[data-setup=pending] .machine-body{stroke:#7d8a9a;stroke-width:4}
 .layout-studio .machine[data-setup=in_progress] .machine-body{stroke:#e07b12;stroke-width:7}
 .layout-studio .machine[data-setup=completed] .machine-body{stroke:#12a05c;stroke-width:7}
+
+/* === Focus while placing (2026-09-28, user: rings on every machine were unreadable) =============== */
+/* Picking or carrying a piece dims every machine except its own group, the spot under the pointer and the selection. */
+.layout-studio.puzzle-focus .machine:not(.kin):not(.puzzle-target):not(.selected){opacity:.22}
+.layout-studio .puzzle-ghost b{display:block}
+.layout-studio .puzzle-ghost .puzzle-verdict{display:block;margin-top:5px;padding:3px 7px;border-radius:5px;background:#fff;color:#344054;font-size:12px;font-weight:700;border:2px solid #d0d5dd}
+.layout-studio .puzzle-ghost .puzzle-verdict:empty{display:none}
+.layout-studio .puzzle-ghost[data-level=good] .puzzle-verdict{color:#067647;border-color:#12b76a}
+.layout-studio .puzzle-ghost[data-level=warn] .puzzle-verdict{color:#b54708;border-color:#f79009}
+.layout-studio .puzzle-ghost[data-level=bad] .puzzle-verdict{color:#d92d20;border-color:#f04438;border-style:dashed}
+.layout-studio .puzzle-ghost[data-level=empty] .puzzle-verdict{color:#1570ef;border-color:#1570ef}
+
+/* === Puzzle mode panel = the tray (2026-09-28, user: the rest is noise while placing) ============== */
+.layout-studio.puzzle-mode .inspector-top .eyebrow,
+.layout-studio.puzzle-mode .machine-heading,
+.layout-studio.puzzle-mode .assignment,
+.layout-studio.puzzle-mode #selectionStatus,
+.layout-studio.puzzle-mode #groupAlert,
+.layout-studio.puzzle-mode #lock,
+.layout-studio.puzzle-mode .inspector > .help,
+.layout-studio.puzzle-mode .changes-section,
+.layout-studio.puzzle-mode .review-box > div:first-child,
+.layout-studio.puzzle-mode .review-box > p,
+.layout-studio.puzzle-mode #alertList{display:none!important}
+.layout-studio.puzzle-mode .review-box{margin-top:0;padding-top:0}
+.layout-studio .puzzle-history{display:flex;gap:4px;margin-left:auto}
+.layout-studio .puzzle-history button{min-height:0;padding:2px 9px;font-size:14px}

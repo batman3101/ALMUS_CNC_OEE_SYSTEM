@@ -226,7 +226,7 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
       });
       await check('Search switches building and focuses the exact machine', async () => {
         await search('CNC-449'); assert.equal((await state(page)).building, 'A'); assert.equal((await state(page)).selected, 449);
-        assert.match(await L('#selectedLocation').innerText(), /B43/);
+        assert.equal(await L('.machine[data-id="449"]').evaluate(e => e.classList.contains('selected')), true);
         await search(305); assert.equal((await state(page)).building, 'B');
         await search(999); assert.equal((await state(page)).selected, 305);
       });
@@ -250,6 +250,11 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await search(305);
       });
       await check('CAPA alerts: shortage / surplus / not-computable totals and rows, and the selected machine\'s group', async () => {
+        // While placing (draft/compare) the panel is the tray: no machine card, lock, change list or alert rows — just
+        // the totals line and the confirm button under it (user 2026-09-28). The rows remain in the current-layout view.
+        for (const sel of ['.machine-heading', '#lock', '.changes-section', '#alertList', '#groupAlert']) assert.equal(await L(sel).isVisible(), false, sel);
+        for (const sel of ['#puzzleTray', '#alertTotals', '#confirmLayout', '#puzzleTray #undo']) assert.equal(await L(sel).isVisible(), true, sel);
+        await L('[data-mode="current"]').click();
         assert.match(await L('#alertTotals').innerText(), /부족 2/);
         assert.match(await L('#alertTotals').innerText(), /여유 3/);
         assert.match(await L('#alertTotals').innerText(), /계산 불가 1/);
@@ -263,8 +268,9 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await L('.alert-row[data-model="M3"]').click();
         assert.equal(await page.locator(S('#modelFilter')).inputValue(), 'M3');
         await page.selectOption(S('#modelFilter'), '');
+        await L('[data-mode="draft"]').click();
       });
-      await check('Fine-tune saves to the server with the machine\'s uuid; lock, undo and redo too; alerts recompute', async () => {
+      await check('Fine-tune saves to the server with the machine\'s uuid; undo and redo (in the tray) too; alerts recompute', async () => {
         await search(305);
         await tapPlace('M3-C2', 305);
         await settled();
@@ -273,21 +279,14 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.match(await L('#alertTotals').innerText(), /부족 3/);        // ON1-C1 lost the machine
         // The selected machine's group line must reflect THIS edit, not the previous state (2026-09-28: it lagged one
         // step because the inspector drew before the summary was recomputed). Re-selecting gives the fresh value.
-        const fresh = async () => { await search(1); await search(305); return L('#groupAlert').innerText(); };
-        const afterApply = await L('#groupAlert').innerText();
-        assert.equal(afterApply, await fresh());
-        assert.match(await L('#selectionStatus').innerText(), /사용자가 조정한 배치/);
-        assert.doesNotMatch(await L('#selectionStatus').innerText(), /검증 전/);
-        await L('#lock').click(); await settled(); await page.waitForTimeout(200);
-        assert.equal(assignmentOf(305).is_locked, true);
-        await tapPlace('ON1-C1', 305); await page.waitForTimeout(200);                     // a locked machine takes no piece
-        assert.match(await L('#toast').innerText(), /고정한 설비/);
-        assert.equal(assignmentOf(305).final_model_id, server.model('M3').id);
-        await L('#undo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).is_locked, false);
+        // The group line (shown outside the tray) must reflect THIS edit, not the previous state (2026-09-28: it lagged
+        // one step because the inspector drew before the summary was recomputed). Re-selecting gives the fresh value.
+        const groupLine = async () => { await L('[data-mode="current"]').click(); const text = await L('#groupAlert').innerText(); await L('[data-mode="draft"]').click(); return text; };
+        const fresh = async () => { await search(1); await search(305); return groupLine(); };
+        assert.equal(await groupLine(), await fresh());
+        assert.match(await groupLine(), /M3-C2/);
         await L('#undo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).final_model_id, server.model('ON1').id);
-        const afterUndo = await L('#groupAlert').innerText();
-        assert.equal(afterUndo, await fresh());
-        assert.doesNotMatch(await L('#selectionStatus').innerText(), /사용자가 조정한 배치/);
+        assert.equal(await groupLine(), await fresh());
         await L('#redo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).final_model_id, server.model('M3').id);
       });
       await check('The dropdown editor is gone (user decision 2026-09-28): the tray is the only way to change a machine', async () => {
@@ -327,32 +326,47 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.match(await fillOf(byProcess[2]), /hsl\(\d+ 62% 40%\)/);
         assert.match(await fillOf(byProcess[0]), /^url\(#ls-hatch-/);
         assert.equal(await tile(byProcess[2]).locator('.machine-number').evaluate(e => getComputedStyle(e).fill), 'rgb(255, 255, 255)');
-        // Rule rings while dragging. In B, next to the ON1-C1 group, some spots are fine and most are not; dropping the
-        // piece back on the tray cancels without a save.
-        const ringsWhileDragging = async (hover, drop) => {
+        // While dragging, the rule verdict is shown on the spot under the pointer only (its outline + a line on the carried
+        // piece) and every machine outside the piece's group dims (user 2026-09-28: rings on all 800 were unreadable).
+        const dragOver = async (hover, drop) => {
           const card = await L('#needCards .puzzle-card[data-code="ON1-C1"]').boundingBox();
           await page.mouse.move(card.x + 20, card.y + 12); await page.mouse.down();
           await page.mouse.move(card.x - 60, card.y + 40, { steps: 5 });
           await page.mouse.move(hover.x, hover.y, { steps: 10 });
           assert.equal(await page.locator('.layout-studio.puzzle-dragging').count(), 1);
           assert.equal(await L('.puzzle-ghost').isVisible(), true);
-          const rings = await L('.puzzle-ring').evaluateAll(els => els.map(e => e.getAttribute('class').split(' ')[1] || 'none'));
+          const seen = await page.evaluate(() => {
+            const q = s => [...document.querySelectorAll('.layout-studio ' + s)];
+            const op = e => Number(getComputedStyle(e).opacity);
+            return {
+              rings: q('.puzzle-ring').map(e => e.getAttribute('class').split(' ')[1]).filter(Boolean),
+              verdict: document.querySelector('.layout-studio .puzzle-verdict').textContent,
+              kinOpacity: q('.machine.kin').map(op), otherOpacity: q('.machine:not(.kin):not(.puzzle-target):not(.selected)').map(op),
+            };
+          });
           if (drop) await page.mouse.move(drop.x, drop.y, { steps: 5 });
           await page.mouse.up();
-          return rings;
+          return seen;
         };
         await search(306);
         const writesBefore = server.state.writes.length;
         const onTray = await L('#puzzleTray .puzzle-head').boundingBox();
-        const inB = await ringsWhileDragging({ x: onTray.x - 300, y: onTray.y + 200 }, { x: onTray.x + 20, y: onTray.y + 10 });
-        assert.ok(inB.includes('good') && inB.includes('bad'), JSON.stringify([...new Set(inB)]));
+        const t306 = await tile(306).boundingBox();
+        const inB = await dragOver({ x: t306.x + t306.width / 2, y: t306.y + t306.height / 2 }, { x: onTray.x + 20, y: onTray.y + 10 });
+        assert.equal(inB.rings.length, 1, JSON.stringify(inB.rings));                      // one outline: the spot itself
+        assert.notEqual(inB.rings[0], 'bad');
+        assert.match(inB.verdict, /무리에 붙음|동선 공정 섞임/);
+        assert.ok(inB.kinOpacity.length >= 2 && inB.kinOpacity.every(o => o === 1));      // ON1-C1 group stays vivid
+        assert.ok(inB.otherOpacity.length > 100 && inB.otherOpacity.every(o => o < 0.5));  // the rest of the floor dims
         await page.waitForTimeout(300);
-        assert.equal(server.state.writes.length, writesBefore);
-        // A has no ON1-C1 at all: every spot there would be an island. Drop on 653 (a spare M3-C2) anyway — shown, not blocked.
+        assert.equal(server.state.writes.length, writesBefore);                             // back on the tray = cancelled
+        assert.equal(await page.locator('.layout-studio.puzzle-focus').count(), 0);         // and the floor is lit again
+        // A has no ON1-C1 at all: 653 would be an island. Drop there anyway — shown, not blocked.
         await search(653);
         const target = await tile(653).boundingBox();
-        const inA = await ringsWhileDragging({ x: target.x + target.width / 2, y: target.y + target.height / 2 });
-        assert.deepEqual([...new Set(inA)], ['bad']);
+        const inA = await dragOver({ x: target.x + target.width / 2, y: target.y + target.height / 2 });
+        assert.deepEqual(inA.rings, ['bad']);
+        assert.match(inA.verdict, /✕.*섬/);
         await settled(); await page.waitForTimeout(200);
         assert.equal(assignmentOf(653).final_model_id, server.model('ON1').id);
         assert.equal(assignmentOf(653).final_process_id, server.proc('ON1', 'C1'));
@@ -489,6 +503,9 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         // Setup board: one list of every task — waiting first here, the finished one last — with progress.
         assert.equal(await L('#setupBoard').isVisible(), true);
         assert.equal(await L('#setupProgressText').innerText(), '완료 1 / 6대');
+        // Setup view: only machines that need a setup stay vivid (user 2026-09-28).
+        assert.equal(await L('.machine:not(.dim)').count(), await L('.machine[data-setup]').count());
+        assert.ok(await L('.machine.dim').count() > 400);
         const rowStates = await L('.setup-row').evaluateAll(els => els.map(e => e.dataset.state));
         assert.deepEqual(rowStates, ['pending', 'pending', 'pending', 'pending', 'pending', 'completed']);
         assert.equal(await L('#setupDone').isVisible(), false);
