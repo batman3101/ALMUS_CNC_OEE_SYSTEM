@@ -456,3 +456,5 @@
 .layout-studio.puzzle-mode .review-box{margin-top:0;padding-top:0}
 .layout-studio .puzzle-history{display:flex;gap:4px;margin-left:auto}
 .layout-studio .puzzle-history button{min-height:0;padding:2px 9px;font-size:14px}
+/* Section dividers in the tray (user 2026-09-28): rules | pieces to place | spare. */
+.layout-studio .puzzle-tray h4.need,.layout-studio .puzzle-tray h4.spare{border-top:1px solid var(--ls-border,#d0d5dd);padding-top:12px;margin-top:14px}
