@@ -399,7 +399,9 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await page.selectOption(S('#setupFilter'), 'completed');
         assert.equal(await L('.machine:not(.dim)[data-setup="completed"]').count(), 1);
         await page.reload(); await ready(page);
-        await L('[data-mode="setup"]').click(); await search(305);
+        // 확정 계획은 다시 열면 바로 목표 배치·진행(셋업 현황)으로 열린다 — 탭을 누르지 않는다.
+        assert.equal((await state(page)).mode, 'setup');
+        await search(305);
         assert.match(await L('#setupState').innerText(), /완료/);
         await page.waitForTimeout(3400); await page.screenshot({ path: path.join(output, 'setup-desktop.png'), fullPage: true });
       });

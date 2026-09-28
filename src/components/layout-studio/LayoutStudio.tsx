@@ -104,7 +104,9 @@ export default function LayoutStudio() {
     return {
       readOnly: view.readOnly,
       readOnlyReason: view.readOnlyReason,
-      initialMode,
+      // A confirmed plan is the reference for the floor: open on the target layout with setup progress
+      // (user decision 2026-09-28 — machines change one by one as setups complete, so the target lives here).
+      initialMode: ready.plan?.plan.status === 'confirmed' ? 'setup' as const : initialMode,
       initial: view.initial,
       summarize: (draft: StudioDraft) => view.summarize(draft),
       save,
