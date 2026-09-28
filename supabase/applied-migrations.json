@@ -91,7 +91,8 @@
     "20260928100000_layout_plan_half_assignment": "7fd264dc95a7bf27",
     "20260928110000_layout_planning_audit_fixes": "8546576173500734",
     "20260928120000_close_shift_with_defect": "2608aad80f38276b",
-    "20260928130000_layout_walkways": "d5317e811ef37d6b"
+    "20260928130000_layout_walkways": "d5317e811ef37d6b",
+    "20260928140000_layout_setup_completion_applies": "aa04c631dfba012a"
   },
   "applied": [
     {
@@ -577,6 +578,10 @@
     {
       "version": "20260928055250",
       "name": "layout_walkways"
+    },
+    {
+      "version": "20260928071500",
+      "name": "layout_setup_completion_applies"
     }
   ],
   "file_matches": {
