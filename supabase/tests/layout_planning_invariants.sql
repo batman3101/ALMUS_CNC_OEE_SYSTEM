@@ -15,6 +15,7 @@
 --   L8  셋업 전이: 순서 강제, 이벤트 기록, 이벤트 수정 불가
 --   L9  권한: RPC 는 anon/authenticated 실행 불가, 내부 함수는 service_role 도 불가
 --   L10 도면: ALT 활성 도면 1개, 800대, 셀 중복 없음
+--   L11 모델만 있고 공정이 빈 설비(운영 실측 5대): 계획 생성 가능, 손대지 않으면 그대로, 새 반쪽 상태는 거부, 확정해도 불변
 
 do $$
 declare
@@ -31,6 +32,7 @@ declare
   v_rev integer;
   v_active integer;
   v_ok boolean;
+  v_half uuid;
 begin
   select id into v_alt from public.factories where code = 'ALT';
   select id into v_alv from public.factories where code = 'ALV';
@@ -54,6 +56,10 @@ begin
    order by name limit 1;
   select id into v_alv_machine from public.machines where factory_id = v_alv limit 1;
   select count(*) into v_active from public.machines where factory_id = v_alt and is_active;
+  -- [L11 준비] 운영처럼 모델만 있고 공정이 빈 설비 하나.
+  select id into v_half from public.machines where factory_id = v_alt and is_active and id not in (v_m1, v_m2, v_m3)
+   order by name desc limit 1;
+  update public.machines set production_model_id = v_model_b, current_process_id = null where id = v_half;
 
   -- [L10] 도면
   select count(*) into n from public.layout_geometries where factory_id = v_alt and is_active;
@@ -81,6 +87,10 @@ begin
   select count(*) into n from public.layout_plan_assignments where plan_id = v_plan and machine_id = v_m3
      and recommendation_reason = 'keep' and final_model_id is not distinct from base_model_id;
   if n <> 1 then raise exception 'L1 FAIL: machine outside recommendation not kept'; end if;
+  -- [L11] 반쪽 설비는 기준·최종 모두 그대로 복사된다.
+  select count(*) into n from public.layout_plan_assignments where plan_id = v_plan and machine_id = v_half
+     and base_model_id = v_model_b and base_process_id is null and final_model_id = v_model_b and final_process_id is null;
+  if n <> 1 then raise exception 'L11 FAIL: half-assigned machine not kept as is'; end if;
 
   -- [L2] 다른 공장 설비는 거부
   v_ok := false;
@@ -125,6 +135,15 @@ begin
   end;
   if not v_ok then raise exception 'L4 FAIL: mismatched model/process accepted'; end if;
 
+  -- [L11] 계획이 새 반쪽 상태를 만드는 것은 거부(모델만 바꾸고 공정 없음).
+  v_ok := false;
+  begin
+    perform public.save_layout_plan_draft(v_alt, v_plan, v_rev, null,
+      jsonb_build_array(jsonb_build_object('machine_id', v_half, 'final_model_id', v_model_a, 'final_process_id', null)));
+  exception when check_violation then v_ok := true;
+  end;
+  if not v_ok then raise exception 'L11 FAIL: new half assignment accepted'; end if;
+
   -- [L5] 확정
   r := public.confirm_layout_plan(v_alt, v_plan, v_rev, null);
   if (r->>'changed_machines')::int <> 3 then raise exception 'L5 FAIL: changed %', r->>'changed_machines'; end if;
@@ -138,6 +157,8 @@ begin
   if n <> 3 then raise exception 'L5 FAIL: audit rows %', n; end if;
   select count(*) into n from public.layout_plans where id = v_plan and status = 'confirmed' and confirmed_at is not null;
   if n <> 1 then raise exception 'L5 FAIL: plan not confirmed'; end if;
+  select count(*) into n from public.machines where id = v_half and production_model_id = v_model_b and current_process_id is null;
+  if n <> 1 then raise exception 'L11 FAIL: confirm touched the half-assigned machine'; end if;
 
   -- [L6] 두 번째 계획: m1 을 다시 B 로 → 이전 확정 superseded, m1 의 대기 셋업은 cancelled
   r := public.create_layout_plan(v_alt, null,
@@ -199,6 +220,6 @@ begin
     raise exception 'L9 FAIL: service_role cannot confirm';
   end if;
 
-  raise exception 'ALL_INVARIANTS_PASSED (L1-L10)';
+  raise exception 'ALL_INVARIANTS_PASSED (L1-L11)';
 end;
 $$;

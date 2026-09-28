@@ -70,8 +70,11 @@ export function buildStudioView(workspace: WorkspacePayload, plan: PlanPayload |
     }
     if (m.isActive) processesByModel[m.name] = [...new Set(sorted.map(p => processCode(p.name)))];
   }
+  /** Process code for "model set, process missing" — real on ALT (5 machines, 2026-09-28). Shown, never guessed. */
+  const MISSING_PROCESS = '?';
   const codeOf = (modelId: string | null, processId: string | null): Code =>
-    modelId && processId ? { model: modelName.get(modelId) ?? modelId, process: codeOfProcess.get(processId) ?? '' } : { model: '', process: '' };
+    !modelId ? { model: '', process: '' }
+      : { model: modelName.get(modelId) ?? modelId, process: processId ? codeOfProcess.get(processId) ?? MISSING_PROCESS : MISSING_PROCESS };
   const idsOf = (code: Code): { modelId: string | null; processId: string | null } => {
     if (!code.model) return { modelId: null, processId: null };
     const model = models.find(m => m.name === code.model);

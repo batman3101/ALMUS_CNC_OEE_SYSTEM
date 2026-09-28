@@ -95,6 +95,18 @@ describe('studio view from a plan', () => {
     expect(confirmed.taskRef(305)).toEqual({ id: 't1', revision: 2 });
   });
 
+  it('a machine with a model but no process (5 on ALT) shows as "model-?" and is never changed unless edited', () => {
+    const half = buildStudioView(
+      { ...workspace, snapshot: { ...workspace.snapshot, machines: workspace.snapshot.status === 'available' ? workspace.snapshot.machines.map(m => m.id === 'm-449' ? { ...m, modelId: 'on1', processId: null } : m) : [] } as WorkspacePayload['snapshot'] },
+      { ...plan, assignments: plan.assignments.map(a => a.machine_id === 'm-449' ? assignment('m-449', ['on1', null], ['on1', null], ['on1', null]) : a) },
+    );
+    expect(half.data.machines.find(m => m.id === 449)).toMatchObject({ model: 'ON1', process: '?' });
+    expect(half.initial.draft.edits[449]).toBeUndefined();
+    expect(half.changesFor(half.initial.draft).find(c => c.machineId === 'm-449')).toBeUndefined();
+    // Counted as not assigned to any process (it produces nothing plannable), not as a fake ON1 group member.
+    expect(half.summarize(half.initial.draft).totals.unassignedMachines).toBe(1);
+  });
+
   it('without a plan shows the current machines read-only with no recommendation', () => {
     const current = buildStudioView(workspace, null);
     expect(current.readOnly).toBe(true);
