@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "timestamp": "2026-09-22T09:50:56.687Z",
+  "checks": [
+    "Publish requires changes; six targets apply immediately as pending",
+    "Start and complete are sequential; events and completed count retained",
+    "Setup filters and unaffected machines have no action buttons",
+    "Draft edit and undo cannot alter the applied target or setup history",
+    "Setup persists after reload; Korean/Vietnamese state labels",
+    "360px mobile can start/complete setup with no horizontal overflow",
+    "Storage failure does not optimistically mark setup started",
+    "No JavaScript errors or external/production requests"
+  ],
+  "limitations": [
+    "Browser-only example: no backend, real authorization, concurrent clients or production/OEE integration tested"
+  ]
+}

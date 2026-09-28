@@ -21,9 +21,13 @@ import viReports from '../../public/locales/vi/reports.json';
 import koDataInput from '../../public/locales/ko/dataInput.json';
 import viDataInput from '../../public/locales/vi/dataInput.json';
 
+import koForecast from '../../public/locales/ko/forecast.json';
+import viForecast from '../../public/locales/vi/forecast.json';
+
 const resources = {
   ko: {
     common: koCommon,
+    forecast: koForecast,
     machines: koMachines,
     dashboard: koDashboard,
     auth: koAuth,
@@ -35,6 +39,7 @@ const resources = {
   },
   vi: {
     common: viCommon,
+    forecast: viForecast,
     machines: viMachines,
     dashboard: viDashboard,
     auth: viAuth,
@@ -55,7 +60,7 @@ i18n
     
     // 네임스페이스 설정
     defaultNS: 'common',
-    ns: ['common', 'machines', 'dashboard', 'auth', 'admin', 'production', 'modelInfo', 'reports', 'dataInput'],
+    ns: ['common', 'machines', 'dashboard', 'auth', 'admin', 'production', 'modelInfo', 'reports', 'dataInput', 'forecast'],
     
     interpolation: {
       escapeValue: false, // React는 기본적으로 XSS 보호

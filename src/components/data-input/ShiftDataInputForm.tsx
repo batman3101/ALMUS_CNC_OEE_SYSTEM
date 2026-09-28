@@ -38,6 +38,7 @@ import type { ShiftProductionData, DowntimeEntry, DailyProductionData } from '@/
 import { DOWNTIME_REASON_KEYS } from '@/types/dataInput';
 import { formatMachineLocation } from '@/utils/machineLocation';
 import { authFetch } from '@/lib/authFetch';
+import { calculateCapacity } from '@/utils/productionCapacity';
 import {
   buildShiftWindows,
   clipInterval,
@@ -574,17 +575,6 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
   // tact_time_seconds 는 개당(1 piece) 가공시간이다. JIG 의 cavity 수는 이미 개당
   // t/t 에 반영되어 있으므로 여기서 다시 곱하지 않는다 (이중 반영 방지).
   // 서버(src/app/api/production-records/oeeRules.ts)의 minutesPerUnit 과 동일한 정의.
-  const calculateCapacity = (
-    tactTimeSeconds: number,
-    operatingMinutes: number,
-    breakMinutes: number = 0
-  ) => {
-    if (!tactTimeSeconds || !operatingMinutes) return 0;
-    // 실제 작업 가능 시간 = 가동시간 - 휴식시간
-    const actualOperatingMinutes = Math.max(0, operatingMinutes - breakMinutes);
-    return Math.floor((actualOperatingMinutes * 60) / tactTimeSeconds);
-  };
-
   // 설비 선택 핸들러
   const handleMachineSelect = async (machineId: string) => {
     setSelectedMachineId(machineId);

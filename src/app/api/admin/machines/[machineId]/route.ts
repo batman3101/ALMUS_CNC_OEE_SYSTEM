@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { ApiAuthError } from '@/lib/apiAuth';
 import { requireFactoryUser } from '@/lib/factoryAuth';
 import {
@@ -78,29 +77,24 @@ export async function DELETE(
     const { machineId } = await params;
     const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer']);
 
+    // 남의 공장 설비는 이 공장에서 **없는 것**이다. factory_id 는 바뀌지 않는 값이라
+    // 사전 확인과 쓰기 사이에 틈이 생기지 않는다 (assertMachineInFactory 주석 참고).
+    await assertMachineInFactory(machineId, authenticatedUser.factoryId);
+
     // 생산·비가동·상태 이력 보존을 위해 물리 삭제하지 않는다.
-    const { data: deleted, error } = await supabaseAdmin
-      .from('machines')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      // 공장 조건이 UPDATE 의 WHERE 에 함께 들어가야 한다. 사전 조회로 대신하면 조회와
-      // 쓰기가 갈라지고, 그 틈이 곧 다른 공장 설비를 끄는 경로다.
-      .eq('factory_id', authenticatedUser.factoryId)
-      .eq('id', machineId)
-      .select('id')
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-
-    if (!deleted) {
-      return NextResponse.json({ success: false, error: 'Machine not found' }, { status: 404 });
-    }
+    // 비활성화도 설비 쓰기이므로 PUT 과 같은 apply_machine_update 를 거친다 — 그래야 설비 잠금
+    // (advisory → FOR UPDATE)을 잡는다. 이전의 직접 UPDATE 는 잠금 없이 쓰여, Layout 확정·
+    // andon·정정 RPC 가 잠금 아래에서 판단한 직후 설비가 꺼질 수 있었다 (2026-09-28 감사 후속).
+    // is_active 만 바꾸는 호출은 상태가 안 바뀌므로 이미 비활성인 설비를 다시 눌러도 성공한다.
+    await applyMachineUpdate(machineId, { is_active: false }, 'deactivated', authenticatedUser.userId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
     const authMapped = authErrorResponse(error);
     if (authMapped) return authMapped;
+
+    const mapped = machineUpdateErrorResponse(error);
+    if (mapped) return mapped;
 
     console.error('Error deleting machine:', error);
     return NextResponse.json({ success: false, error: 'Failed to delete machine' }, { status: 500 });

@@ -14,7 +14,8 @@ import { DEFAULT_BREAK_TIME_MINUTES } from '@/lib/shiftDefaults';
  */
 
 // 교대 1회 기본 가동시간 (12시간 = 720분)
-export const DEFAULT_OPERATING_MINUTES = 720;
+import { DEFAULT_OPERATING_MINUTES } from '@/lib/shiftDefaults';
+export { DEFAULT_OPERATING_MINUTES };
 
 // system_settings 에 break_time_minutes 가 없거나 조회 실패한 경우에만 사용하는 기본값
 export { DEFAULT_BREAK_TIME_MINUTES } from '@/lib/shiftDefaults';

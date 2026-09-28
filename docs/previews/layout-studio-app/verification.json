@@ -1,0 +1,43 @@
+{
+  "result": "PASS",
+  "mode": "db",
+  "root": "http://localhost:3000",
+  "timestamp": "2026-09-28T10:00:39.471Z",
+  "checks": [
+    "800 machines from the app sit on their Excel cells with their CNC numbers",
+    "The recommended layout opens first: 6 recommended moves, labelled, compare shows them",
+    "A/B and all-building navigation",
+    "Search switches building and focuses the exact machine",
+    "Zoom, pan, wheel and keyboard; dragging never selects machine labels",
+    "CAPA alerts: shortage / surplus / not-computable totals and rows, and the selected machine's group",
+    "Fine-tune saves to the server with the machine's uuid; undo and redo (in the tray) too; alerts recompute",
+    "The dropdown editor is gone (user decision 2026-09-28): the tray is the only way to change a machine",
+    "Original, draft, compare and model filter",
+    "Reload restores the server draft; reset and \"back to recommendation\" are saved too",
+    "Puzzle tray: colours by model·process, pieces to place / spare, rule rings while dragging",
+    "Puzzle tray: drag a machine to \"empty\", Ctrl+Z undoes it; Shift+click range + tap-to-place fills a block",
+    "A concurrent save is detected (409): the user is told and the plan reloads from the server",
+    "JSON export marks the plan as capacity-validated",
+    "Korean and Vietnamese UI (follows the app header language switch live, without remounting)",
+    "Chrome follows the app theme; dark mode darkens the chrome but the map stays light",
+    "390px and 360px mobile: no overflow, selection remains visible, editor closes",
+    "Two-pointer pinch changes zoom without changing assignments",
+    "Confirm: dialog states the changes and the remaining shortage; plan becomes confirmed and read-only in setup view",
+    "Setup: start then complete one machine through the server; order is enforced; state survives reload",
+    "Setup completion is refused when the machine was changed elsewhere meanwhile, and the user is told why",
+    "No JavaScript errors; the only writes are layout-planning calls (and the shell preference save)",
+    "Setup board: each row starts and completes its own machine; all done → \"setup complete\" summary, every machine at its target",
+    "A failed setup save does not mark the machine started (360px)",
+    "A factory without a drawing (ALV for now) shows the no-drawing state, not a broken map",
+    "Without a plan the current layout is shown read-only with a way to the Forecast screen",
+    "Discarding the draft leaves the no-plan view, not the discarded plan (2026-09-28: a stale reload won)",
+    "A one-building drawing shows just that building (buttons come from the drawing, not the markup)",
+    "Engineer can open Layout Studio and edit the draft",
+    "Operator cannot open Layout Studio",
+    "Forecast → \"create layout plan\" → unmapped models open the pairing dialog → saved → plan opens in the studio"
+  ],
+  "limitations": [
+    "Auth, Supabase and /api/layout-planning/* are mocked in-browser; the server module and RPCs are covered by scripts/verify-layout-planning-local.cjs against local Supabase",
+    "Synthetic two-pointer test; physical touch-device testing not performed"
+  ]
+}

@@ -157,6 +157,8 @@ describe('사이드바 메뉴', () => {
       '/data-input',
       '/production-records',
       '/model-info',
+      '/forecast',
+      '/layout-studio',
       '/reports',
       '/analytics',
       '/operator-view',

@@ -11,11 +11,6 @@ jest.mock('@/lib/apiAuth', () => ({
   ApiAuthError: class ApiAuthError extends Error {},
 }));
 
-/**
- * 이 라우트는 공장 인지 계약으로 전환됐다. 세션은 공장까지 확정해서 돌려준다 —
- * `factoryId` 가 없으면 아래 UPDATE 의 `.eq('factory_id', ...)` 가 undefined 로 걸려
- * 아무 행도 갱신하지 않고, 라우트는 그것을 404 로 읽는다.
- */
 jest.mock('@/lib/factoryAuth', () => ({
   requireFactoryUser: jest.fn(async () => ({
     userId: 'admin-1',
@@ -27,59 +22,53 @@ jest.mock('@/lib/factoryAuth', () => ({
   })),
 }));
 
-const update = jest.fn();
-const eqCalls: Array<[string, unknown]> = [];
-
-function updateQuery() {
-  const query = {
-    eq: (column: string, value: unknown) => {
-      eqCalls.push([column, value]);
-      return query;
-    },
-    select: () => query,
-    maybeSingle: async () => ({ data: { id: 'machine-1' }, error: null }),
-  };
-  return query;
-}
-
+// A direct table write is exactly what this route must no longer do (see the test below).
+const directUpdate = jest.fn();
 jest.mock('@/lib/supabase-admin', () => ({
-  supabaseAdmin: {
-    from: jest.fn(() => ({
-      update: (values: unknown) => {
-        update(values);
-        return updateQuery();
-      },
-    })),
-  },
+  supabaseAdmin: { from: jest.fn(() => ({ update: directUpdate })) },
 }));
 
+class MachineNotFoundError extends Error {}
+const applyMachineUpdate = jest.fn();
+const assertMachineInFactory = jest.fn();
 jest.mock('@/lib/machineUpdate', () => ({
-  applyMachineUpdate: jest.fn(),
-  // 소유 공장 확인은 DB 를 친다. 이 테스트가 보는 것은 "물리 삭제가 아니라 비활성화인가"
-  // 이므로 통과시킨다 — 공장 경계 자체는 라우트 원장과 SQL 격리 테스트가 지킨다.
-  assertMachineInFactory: jest.fn(async () => undefined),
-  machineUpdateErrorResponse: jest.fn(() => null),
+  applyMachineUpdate: (...args: unknown[]) => applyMachineUpdate(...args),
+  assertMachineInFactory: (...args: unknown[]) => assertMachineInFactory(...args),
+  machineUpdateErrorResponse: (error: unknown) =>
+    error instanceof MachineNotFoundError ? { status: 404, json: async () => ({ success: false, error: 'Machine not found' }) } : null,
   pickMachineUpdates: jest.fn(),
 }));
 
 import { DELETE } from '../route';
 
+const call = (machineId = 'machine-1') => DELETE({} as never, { params: Promise.resolve({ machineId }) });
+
 describe('DELETE /api/admin/machines/[machineId]', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    eqCalls.length = 0;
+    assertMachineInFactory.mockResolvedValue(undefined);
+    applyMachineUpdate.mockResolvedValue({ machine: { id: 'machine-1', is_active: false } });
   });
 
-  it('soft-deactivates the machine so historical records remain intact', async () => {
-    const response = await DELETE(
-      {} as never,
-      { params: Promise.resolve({ machineId: 'machine-1' }) }
-    );
-
+  it('soft-deactivates through the locked machine RPC, never a direct table UPDATE (audit follow-up 2026-09-28)', async () => {
+    const response = await call();
     expect(response.status).toBe(200);
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ is_active: false }));
-    // 공장 조건이 UPDATE 의 WHERE 에 함께 있어야 한다. 사전 조회로 대신하면 조회와 쓰기가
-    // 갈라지고, 그 틈이 다른 공장 설비를 끄는 경로가 된다.
-    expect(eqCalls).toContainEqual(['factory_id', 'factory-1']);
+    // apply_machine_update takes the machine lock (advisory → FOR UPDATE) and runs the deactivation triggers
+    // under it; the old direct UPDATE skipped the lock and could race any other machine write.
+    expect(applyMachineUpdate).toHaveBeenCalledWith('machine-1', { is_active: false }, expect.any(String), 'admin-1');
+    expect(directUpdate).not.toHaveBeenCalled();
+  });
+
+  it('checks the machine belongs to this factory before writing, and answers 404 otherwise', async () => {
+    assertMachineInFactory.mockRejectedValueOnce(new MachineNotFoundError('Machine not found'));
+    const response = await call('other-factory-machine');
+    expect(response.status).toBe(404);
+    expect(assertMachineInFactory).toHaveBeenCalledWith('other-factory-machine', 'factory-1');
+    expect(applyMachineUpdate).not.toHaveBeenCalled();
+  });
+
+  it('a machine that disappears between the check and the lock is still 404, not 500', async () => {
+    applyMachineUpdate.mockRejectedValueOnce(new MachineNotFoundError('MACHINE_NOT_FOUND'));
+    expect((await call()).status).toBe(404);
   });
 });
