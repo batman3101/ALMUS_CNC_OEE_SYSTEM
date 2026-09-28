@@ -47,6 +47,8 @@ const dbMessages = {
 // Puzzle tray texts (2026-09-28).
 Object.assign(dbMessages.ko,{trayTitle:'조각 트레이',trayHelp:'조각을 도면의 설비로 끌어 놓으세요. 원래 그 자리의 모델·공정은 트레이로 돌아옵니다. 설비를 끌어 다른 설비에 놓으면 옮겨지고, 아래 비우기에 놓으면 빈 자리가 됩니다. Shift+클릭으로 한 열의 여러 대를 묶습니다. 터치: 조각을 누른 뒤 설비를 누르세요.',trayNeed:'놓아야 할 조각',trayNeedEmpty:'모두 채웠습니다 ✓',traySpare:'여유 — 바꿔도 되는 설비',traySpareEmpty:'없음',trayDropOut:'여기에 설비를 끌어 놓으면 비우기(빈 자리)',ruleGood:'무리에 붙음',ruleWarn:'동선 공정 섞임',ruleBad:'섬·끼워넣기·3조각',violations:'규칙 위반',armed:'{g} 을(를) 놓을 설비를 누르세요 · 다시 누르거나 Esc 로 취소',noRoom:'그 열에는 이만큼 들어갈 자리가 없습니다.',placedBad:'⚠ 규칙 위반: {r} — 되돌리려면 ↶',placedWarn:'동선 안에 공정이 섞였습니다.',reasonIsland:'섬',reasonMiddle:'끼워넣기',reasonThree:'3조각',rangeHint:'한 열에서 {n}대 선택 — 끌어서 한 번에 옮기거나, 조각을 놓아 한 번에 채웁니다.',fromTile:'설비에서 옮기는 중',fromTray:'트레이에서'});
 Object.assign(messages.ko,{emptySlot:'빈 자리'});Object.assign(messages.vi,{emptySlot:'Trống'});
+Object.assign(dbMessages.ko,{trayViewTitle:'현재 배정 현황',trayViewNote:'편집할 수 없는 화면입니다. 모델·공정별 배정 대수와 색을 확인하세요.',trayViewNoDemand:'수요(Forecast)가 없어 필요·차이는 비워 둡니다.'});
+Object.assign(dbMessages.vi,{trayViewTitle:'Phân bổ hiện tại',trayViewNote:'Màn hình chỉ xem. Kiểm tra số máy và màu theo model·công đoạn.',trayViewNoDemand:'Chưa có Forecast nên để trống Cần·Chênh.'});
 Object.assign(dbMessages.ko,{trayCapa:'CAPA',capaCount:'{n}개',capaRequired:'필요',capaAssigned:'배정',capaGap:'차이',trayLegend:'색 범례'});
 Object.assign(dbMessages.vi,{trayCapa:'CAPA',capaCount:'{n} nhóm',capaRequired:'Cần',capaAssigned:'Đã gán',capaGap:'Chênh',trayLegend:'Chú thích màu'});
 Object.assign(dbMessages.ko,{verdictGood:'✓ 무리에 붙음',verdictWarn:'⚠ 동선 공정 섞임',verdictEmpty:'여기 놓으면 비우기(빈 자리)'});
@@ -317,8 +319,8 @@ const draftState=()=>new Map(DATA.machines.map(m=>[m.id,keyOf(assignment(m))]));
 let range=[],armed=null,drag=null,puzzleViolations={count:0,machines:new Set()};
 function puzzleOn(){return !!backend&&!readOnly&&(mode==='draft'||mode==='compare');}
 const tray=document.createElement('section');tray.className='puzzle-tray';tray.id='puzzleTray';tray.hidden=true;
-tray.innerHTML='<div class="puzzle-head"><strong data-i18n="trayTitle"></strong><span id="puzzleViolations" class="puzzle-viol"></span></div>'
- +'<p class="puzzle-help" data-i18n="trayHelp"></p>'
+tray.innerHTML='<div class="puzzle-head"><strong id="trayTitle" data-i18n="trayTitle"></strong><span id="puzzleViolations" class="puzzle-viol"></span></div>'
+ +'<p class="puzzle-help" data-i18n="trayHelp"></p><p id="trayViewNote" class="puzzle-view-note" hidden></p>'
  +'<div class="puzzle-rules"><span data-level="good" data-i18n="ruleGood"></span><span data-level="warn" data-i18n="ruleWarn"></span><span data-level="bad" data-i18n="ruleBad"></span></div>'
  +'<p id="puzzleArmed" class="puzzle-note" hidden></p><p id="puzzleRange" class="puzzle-note" hidden></p>'
  +'<h4 class="need"><span data-i18n="trayNeed"></span><span class="n" id="needCount"></span></h4><div id="needCards" class="puzzle-cards"></div>'
@@ -337,10 +339,18 @@ const groupCounts=()=>new Map((summary?summary.groups:[]).map(g=>[g.code,g.assig
 const codeOf=a=>a.model+'-'+a.process;
 const cardFor=code=>[...tray.querySelectorAll('.puzzle-card')].find(c=>c.dataset.code===code)||null;
 const tileEl=id=>$('world').querySelector('g.machine[data-id="'+id+'"]');
+/** Read-only screens (no plan, confirmed, closed) show the same panel as a view: assignments + colours, no editing. */
+function trayViewOn(){return !!backend&&readOnly&&mode!=='setup';}
 function renderTray(){
- const on=puzzleOn();tray.hidden=!on;if(!on){armed=null;range=[];return;}
+ const on=puzzleOn(),view=!on&&trayViewOn();tray.hidden=!on&&!view;tray.classList.toggle('view-only',view);
+ if(!on){armed=null;range=[];}
+ if(!on&&!view)return;
+ $('trayTitle').textContent=t(view?'trayViewTitle':'trayTitle');
  // Only groups a machine can actually be set to: a process missing from the app has no id to save.
  const groups=summary.groups.filter(g=>g.model&&g.process&&g.process!=='?'&&g.status!=='process_missing');
+ const noDemand=!groups.some(g=>g.required!==null);
+ $('trayViewNote').hidden=!view;if(view)$('trayViewNote').textContent=t('trayViewNote')+(noDemand?' '+t('trayViewNoDemand'):'');
+ if(view){renderCapa(groups,noDemand);return;}
  const need=groups.filter(g=>g.status==='shortage').map(g=>[g,-g.gap]).sort((a,b)=>b[1]-a[1]||a[0].code.localeCompare(b[0].code));
  const spare=groups.filter(g=>(g.status==='surplus'||g.status==='zero_demand')&&g.gap>0).map(g=>[g,g.gap]).sort((a,b)=>b[1]-a[1]||a[0].code.localeCompare(b[0].code));
  const card=([g,n],kind)=>{const b=document.createElement('button');b.type='button';b.className='puzzle-card '+kind+(armed&&keyOf(armed)===keyOf(g)?' armed':'');b.dataset.model=g.model;b.dataset.process=g.process;b.dataset.code=g.code;
@@ -352,14 +362,19 @@ function renderTray(){
  tray.querySelector('.puzzle-rules').hidden=!board.hasWalkways;
  $('puzzleArmed').hidden=!armed;if(armed)$('puzzleArmed').textContent=tf('armed',{g:label(armed)});
  $('puzzleRange').hidden=range.length<2;if(range.length>1)$('puzzleRange').textContent=tf('rangeHint',{n:range.length});
- // CAPA: every group with a known requirement, most short first (gap ascending), then by name.
- const capa=groups.filter(g=>g.required!==null&&(g.required>0||g.assigned>0)).sort((a,b)=>a.gap-b.gap||a.code.localeCompare(b.code));
+ renderCapa(groups,false);
+}
+function renderCapa(groups,noDemand){
+ // CAPA: every group with a known requirement, most short first (gap ascending), then by name. Without any demand
+ // (no plan yet — 2공장 2026-09-28) every assigned group, by name, with need/gap left blank.
+ const capa=noDemand?groups.filter(g=>g.assigned>0).sort((a,b)=>a.code.localeCompare(b.code))
+  :groups.filter(g=>g.required!==null&&(g.required>0||g.assigned>0)).sort((a,b)=>a.gap-b.gap||a.code.localeCompare(b.code));
  $('capaCount').textContent=tf('capaCount',{n:capa.length});
  const cell=(text,cls)=>{const td=document.createElement('td');if(cls)td.className=cls;td.textContent=text;return td;};
  const head=document.createElement('tr');head.append(cell(''),cell(t('capaRequired'),'num'),cell(t('capaAssigned'),'num'),cell(t('capaGap'),'num'));
- $('capaTable').replaceChildren(head,...capa.map(g=>{const tr=document.createElement('tr');tr.dataset.code=g.code;tr.className=g.gap<0?'short':g.gap>0?'over':'';
+ $('capaTable').replaceChildren(head,...capa.map(g=>{const tr=document.createElement('tr');tr.dataset.code=g.code;tr.className=g.gap===null?'':g.gap<0?'short':g.gap>0?'over':'';
   const name=cell('');const sw=document.createElement('i');sw.className='sw-inline';sw.style.background=tone(g).solid;name.append(sw,document.createTextNode(g.model+' '+g.process));
-  tr.append(name,cell(String(g.required),'num'),cell(String(g.assigned),'num'),cell((g.gap>0?'+':'')+g.gap,'num d'));return tr;}));
+  tr.append(name,cell(g.required===null?'—':String(g.required),'num'),cell(String(g.assigned),'num'),cell(g.gap===null?'—':(g.gap>0?'+':'')+g.gap,'num d'));return tr;}));
  $('trayLegend').replaceChildren(...DATA.models.map(model=>{const row=document.createElement('div');for(const process of processesFor(model)){const sw=document.createElement('i');sw.className='sw-inline';sw.title=process;sw.style.background=tone({model,process}).solid;row.append(sw);}row.append(document.createTextNode(model));return row;}));
 }
 /** Put `pieces[k]` on `targets[k]`; `sources` (a machine dragged off the map) become empty unless also a target. */

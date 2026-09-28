@@ -477,3 +477,9 @@
 .layout-studio .machine.changed .machine-body{stroke:rgba(16,24,40,.18);stroke-width:1}
 .layout-studio .machine .change-mark{fill:#101828;pointer-events:none}
 .layout-studio .machine.empty .machine-body{stroke:#667085;stroke-width:1.5;stroke-dasharray:6 4}
+/* Read-only screens: the tray becomes "current assignments" — CAPA table + colour legend only (user 2026-09-28: 1공장과 2공장이 같아야 한다). */
+.layout-studio .puzzle-tray.view-only .puzzle-help,.layout-studio .puzzle-tray.view-only .puzzle-rules,.layout-studio .puzzle-tray.view-only .puzzle-note,
+.layout-studio .puzzle-tray.view-only h4.need,.layout-studio .puzzle-tray.view-only #needCards,.layout-studio .puzzle-tray.view-only h4.spare,
+.layout-studio .puzzle-tray.view-only #spareCards,.layout-studio .puzzle-tray.view-only #puzzleDropOut,.layout-studio .puzzle-tray.view-only .puzzle-history,
+.layout-studio .puzzle-tray.view-only #puzzleViolations{display:none!important}
+.layout-studio .puzzle-view-note{font-size:12px;line-height:1.6;color:var(--ls-text-secondary);margin:6px 0 0}

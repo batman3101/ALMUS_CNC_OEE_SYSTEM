@@ -625,7 +625,15 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         // No plan is not "no permission": the notice says there is no recommendation yet, and edit inputs are hidden.
         const notice = await page.locator(S('.notice')).innerText();
         assert.match(notice, /추천 계획이 없습니다/); assert.doesNotMatch(notice, /읽기 전용/);
-        for (const id of ['#lock', '#puzzleTray']) assert.equal(await page.locator(S(id)).isVisible(), false);
+        assert.equal(await page.locator(S('#lock')).isVisible(), false);
+        // Same panel as a planned factory, read-only: current assignments per model·process + colours, need/gap blank.
+        assert.equal(await page.locator(S('#puzzleTray.view-only')).isVisible(), true);
+        assert.match(await page.locator(S('#trayTitle')).innerText(), /현재 배정 현황/);
+        for (const id of ['#needCards', '#spareCards', '#puzzleDropOut', '#undo']) assert.equal(await page.locator(S(id)).isVisible(), false, id);
+        const rows = await page.locator(S('.puzzle-capa tr[data-code]')).evaluateAll(els => els.map(e => [...e.children].map(td => td.textContent)));
+        assert.ok(rows.length >= 8 && rows.every(r => r[1] === '—' && r[3] === '—' && Number(r[2]) > 0), JSON.stringify(rows.slice(0, 3)));
+        assert.equal(rows.reduce((n, r) => n + Number(r[2]), 0), 800);
+        assert.ok(await page.locator(S('#trayLegend > div')).count() >= 8);
         assert.ok(await page.locator(S('#confirmLayout')).isDisabled());
         assert.ok(await page.getByRole('button', { name: /Forecast 에서 새 추천 만들기/ }).isVisible());
       });
@@ -663,6 +671,10 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         const buttons = await page.locator(S('.segmented.buildings button')).allInnerTexts();
         assert.deepEqual(buttons.map(t => t.replace(/\s+/g, '')), ['B동448']);
         assert.equal(await page.locator(S('.machine')).count(), 448);
+        // 1공장과 같은 조건: the same read-only assignments panel (2공장 has no Forecast yet).
+        assert.equal(await page.locator(S('#puzzleTray.view-only')).isVisible(), true);
+        const assigned = await page.locator(S('.puzzle-capa tr[data-code] td:nth-child(3)')).allTextContents();
+        assert.equal(assigned.reduce((n, v) => n + Number(v), 0), 448);
       });
       await context.close();
     }
