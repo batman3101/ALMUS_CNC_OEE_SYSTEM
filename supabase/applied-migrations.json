@@ -84,7 +84,8 @@
     "20260824210000_multi_factory_derive_on_insert": "cc03165a110c867f",
     "20260824220000_multi_factory_audit_log_factory": "2851989d9621816a",
     "20260824230000_multi_factory_user_provisioning": "1da0c03cfcb83e9f",
-    "20260825010000_status_descriptions_factory_key": "876406f615d78e3a"
+    "20260825010000_status_descriptions_factory_key": "876406f615d78e3a",
+    "20260928120000_close_shift_with_defect": "2608aad80f38276b"
   },
   "applied": [
     {
@@ -542,6 +543,10 @@
     {
       "version": "20260825010000",
       "name": "status_descriptions_factory_key"
+    },
+    {
+      "version": "20260928023445",
+      "name": "close_shift_with_defect"
     }
   ],
   "file_matches": {
