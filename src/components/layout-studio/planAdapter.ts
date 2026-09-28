@@ -1,4 +1,4 @@
-import { summarizeCapacity, type CapacitySummary, type GroupCapacity, type PlanRequirement } from '@/lib/layout-planning/summarizeCapacity';
+import { summarizeCapacity, type CapacitySummary, type GroupCapacity, type MissingProcessInput, type PlanRequirement } from '@/lib/layout-planning/summarizeCapacity';
 import type { ForecastCapacitySnapshot } from '@/types/forecast';
 
 /**
@@ -22,12 +22,15 @@ export interface PlanAssignmentRow {
   is_locked: boolean;
 }
 export interface SetupTaskRow {
-  id: string; machine_id: string; status: 'pending' | 'in_progress' | 'completed' | 'cancelled'; revision: number;
+  id: string; plan_id?: string; machine_id: string; status: 'pending' | 'in_progress' | 'completed' | 'cancelled'; revision: number;
   before_model_id: string | null; before_process_id: string | null; target_model_id: string | null; target_process_id: string | null;
   created_at: string; started_at: string | null; completed_at: string | null;
 }
 export interface PlanPayload {
-  plan: { id: string; status: 'draft' | 'confirmed' | 'superseded' | 'discarded'; revision: number; title: string };
+  plan: {
+    id: string; status: 'draft' | 'confirmed' | 'superseded' | 'discarded'; revision: number; title: string;
+    capacity_policy?: { missingProcesses?: MissingProcessInput[] } | null;
+  };
   requirements: PlanRequirement[];
   assignments: PlanAssignmentRow[];
   setupTasks: SetupTaskRow[];
@@ -37,7 +40,7 @@ type Code = { model: string; process: string };
 export interface StudioDraft { edits: Record<number, Code>; locks: number[]; demo: boolean }
 export interface StudioSetup {
   previewOnly: false; sourceHash: string; version: string; at: string;
-  tasks: Record<number, { before: Code; target: Code; status: 'pending' | 'in_progress' | 'completed'; events: Array<{ status: string; at: string; actor: string }> }>;
+  tasks: Record<number, { before: Code; target: Code; status: 'pending' | 'in_progress' | 'completed'; events: Array<{ status: string; at: string; actor: string }>; previousPlan?: boolean }>;
 }
 export interface StudioGroup extends GroupCapacity { code: string; model: string; process: string }
 
@@ -126,7 +129,8 @@ export function buildStudioView(workspace: WorkspacePayload, plan: PlanPayload |
   const setupRefs = new Map<number, { id: string; revision: number }>();
   const setup: StudioSetup | null = plan && plan.setupTasks.length ? {
     previewOnly: false, sourceHash: workspace.geometry.sourceHash, version: plan.plan.title, at: plan.setupTasks[0].created_at,
-    tasks: Object.fromEntries(plan.setupTasks.flatMap(task => {
+    // Open work wins over finished work when a machine has both (this plan's completed + an earlier plan's pending).
+    tasks: Object.fromEntries([...plan.setupTasks].sort((a, b) => Number(a.status === 'pending' || a.status === 'in_progress') - Number(b.status === 'pending' || b.status === 'in_progress')).flatMap(task => {
       const no = numberOf.get(task.machine_id);
       if (no === undefined || task.status === 'cancelled') return [];
       setupRefs.set(no, { id: task.id, revision: task.revision });
@@ -135,7 +139,8 @@ export function buildStudioView(workspace: WorkspacePayload, plan: PlanPayload |
         ...(task.started_at ? [{ status: 'in_progress', at: task.started_at, actor: '' }] : []),
         ...(task.completed_at ? [{ status: 'completed', at: task.completed_at, actor: '' }] : []),
       ];
-      return [[no, { before: codeOf(task.before_model_id, task.before_process_id), target: codeOf(task.target_model_id, task.target_process_id), status: task.status, events }]];
+      const previousPlan = !!task.plan_id && task.plan_id !== plan.plan.id;
+      return [[no, { before: codeOf(task.before_model_id, task.before_process_id), target: codeOf(task.target_model_id, task.target_process_id), status: task.status, events, previousPlan }]];
     })),
   } : null;
 
@@ -147,6 +152,7 @@ export function buildStudioView(workspace: WorkspacePayload, plan: PlanPayload |
 
   let saved = new Map(finalOf(draft).map(f => [f.machineId, f]));
   const requirements = plan?.requirements ?? [];
+  const missingProcesses = plan?.plan.capacity_policy?.missingProcesses ?? [];
 
   return {
     readOnly: !plan || plan.plan.status !== 'draft',
@@ -168,11 +174,14 @@ export function buildStudioView(workspace: WorkspacePayload, plan: PlanPayload |
     },
     markSaved(d: StudioDraft) { saved = new Map(finalOf(d).map(f => [f.machineId, f])); },
     summarize(d: StudioDraft): { groups: StudioGroup[]; totals: CapacitySummary['totals'] } {
-      const summary = summarizeCapacity(requirements, finalOf(d).map(f => ({ machineId: f.machineId, modelId: f.modelId, processId: f.processId })));
+      const summary = summarizeCapacity(requirements, finalOf(d).map(f => ({ machineId: f.machineId, modelId: f.modelId, processId: f.processId })), missingProcesses);
       return {
         totals: summary.totals,
         groups: summary.groups.map(g => {
-          const code = codeOf(g.modelId, g.processId);
+          // A missing process has no id — its code comes from the forecast process name ('CNC2' → 'C2').
+          const code = g.status === 'process_missing'
+            ? { model: modelName.get(g.modelId) ?? g.modelName ?? g.modelId, process: processCode(g.processName ?? '') }
+            : codeOf(g.modelId, g.processId);
           return { ...g, model: code.model, process: code.process, code: `${code.model}-${code.process}` };
         }),
       };

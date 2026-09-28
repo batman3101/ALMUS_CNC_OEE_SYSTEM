@@ -94,7 +94,8 @@
       "zero_demand": "Không có nhu cầu",
       "unmapped": "Chưa khớp model",
       "no_tact": "Không có T/T",
-      "not_in_forecast": "Không có trong Forecast"
+      "not_in_forecast": "Không có trong Forecast",
+      "demand_unknown": "Nhu cầu không rõ"
     },
     "warnings": {
       "error_cells": "Có ô lỗi",
@@ -148,7 +149,10 @@
       "mapping_load_failed": "Không tải được các cặp tên model đã lưu.",
       "mapping_save_failed": "Không lưu được cặp tên model.",
       "invalid_assignment": "Model app đã chọn không thuộc nhà máy này."
-    }
+    },
+    "missingTitle": "Công đoạn bắt buộc chưa có",
+    "missingHelp": "Các model dưới đây chưa đăng ký công đoạn (CNC1·CNC2) trong app nên không tính được số máy cần. Nếu vẫn tạo, công đoạn này sẽ hiển thị \"Chưa đăng ký công đoạn\" trong cảnh báo CAPA. Nên đăng ký công đoạn trong thông tin model trước.",
+    "createAnyway": "Vẫn tạo"
   },
   "layoutStudio": {
     "confirmed": "Đã xác nhận Layout. {{count}} máy thay đổi đã cập nhật vào thông tin máy và bắt đầu setup.",

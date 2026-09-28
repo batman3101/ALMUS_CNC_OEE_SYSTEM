@@ -9,8 +9,10 @@ import { authFetch } from '@/lib/authFetch';
 import { matchModels, normalizeModelName } from '@/lib/forecast/modelAliases';
 import type { ForecastWeek, WeeklyModelDemand } from '@/lib/forecast/weeklyDemand';
 import type { FactoryForecastPreview, ForecastSnapshotModel } from '@/types/forecast';
+import { mappingItemsToSave } from './layoutPlanMappings';
 
-interface MappingRow { forecastModel: string; peak: number; source: 'saved' | 'auto' | 'unmapped'; productModelId: string | null; blocking: boolean }
+interface MappingRow { forecastModel: string; peak: number; source: 'saved' | 'auto' | 'unmapped'; productModelId: string | null; savedModelId: string | null; blocking: boolean }
+interface MissingProcess { forecastModel: string; modelName: string; process: string }
 interface SavedMapping { forecastModelKey: string; productModelId: string }
 
 /**
@@ -27,6 +29,8 @@ export default function LayoutPlanLauncher({ preview, week, demands, nextWeekDem
   const [error, setError] = useState('');
   const [rows, setRows] = useState<MappingRow[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [missing, setMissing] = useState<MissingProcess[] | null>(null);
+  const [ackUnmapped, setAckUnmapped] = useState(false);
   const models = useMemo<ForecastSnapshotModel[]>(
     () => preview.capacitySnapshot.status === 'available' ? preview.capacitySnapshot.models.filter(m => m.isActive) : [],
     [preview.capacitySnapshot],
@@ -46,7 +50,7 @@ export default function LayoutPlanLauncher({ preview, week, demands, nextWeekDem
       return {
         forecastModel: d.model, peak: d.peakQuantity,
         source: savedId ? 'saved' : autoId ? 'auto' : 'unmapped',
-        productModelId: savedId ?? autoId, blocking: blocking.includes(d.model),
+        productModelId: savedId ?? autoId, savedModelId: savedId ?? null, blocking: blocking.includes(d.model),
       };
     }).sort((a, b) => Number(b.blocking) - Number(a.blocking) || Number(a.source !== 'unmapped') - Number(b.source !== 'unmapped') || a.forecastModel.localeCompare(b.forecastModel)));
   }
@@ -55,27 +59,29 @@ export default function LayoutPlanLauncher({ preview, week, demands, nextWeekDem
     if (!rows) return;
     setSaving(true);
     try {
-      const items = rows.filter(r => r.productModelId).map(r => ({ forecastModel: r.forecastModel, productModelId: r.productModelId }));
+      const items = mappingItemsToSave(rows);
       const response = await authFetch('/api/layout-planning/model-mappings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
       const body = await response.json();
       if (!response.ok || !body.success) { setError(body.code ?? 'mapping_save_failed'); return; }
       setRows(null);
-      await createPlan(false);
+      await createPlan({ acknowledgeUnmapped: false });
     } finally { setSaving(false); }
   }
 
-  async function createPlan(acknowledgeUnmapped: boolean) {
-    setBusy(true); setError('');
+  async function createPlan({ acknowledgeUnmapped, acknowledgeMissingProcesses = false }: { acknowledgeUnmapped: boolean; acknowledgeMissingProcesses?: boolean }) {
+    setBusy(true); setError(''); setAckUnmapped(acknowledgeUnmapped);
     try {
       const response = await authFetch('/api/layout-planning/plans', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: `${week.label} · ${preview.fileName}`, forecastFileName: preview.fileName, forecastFileHash: preview.sourceHash,
-          week: { key: week.key, start: week.start, end: week.end }, demands, nextWeekDemands, acknowledgeUnmapped,
+          week: { key: week.key, start: week.start, end: week.end }, demands, nextWeekDemands, acknowledgeUnmapped, acknowledgeMissingProcesses,
         }),
       });
       const body = await response.json();
       if (response.status === 422 && body.code === 'unmapped_models') { await openMappings(body.detail?.models ?? []); return; }
+      // Required processes the app models lack: show them, plan only if the user accepts (audit BUG-03).
+      if (response.status === 422 && body.code === 'missing_processes') { setMissing(body.detail?.items ?? []); return; }
       if (!response.ok || !body.success) { setError(body.code ?? 'plan_failed'); return; }
       router.push(`/layout-studio?plan=${body.planId}`);
     } catch { setError('plan_failed'); } finally { setBusy(false); }
@@ -95,7 +101,7 @@ export default function LayoutPlanLauncher({ preview, week, demands, nextWeekDem
 
   return <Space direction="vertical" style={{ width: '100%' }}>
     <Space wrap>
-      <Button type="primary" loading={busy} disabled={!withDemand.length || !models.length} onClick={() => createPlan(false)} data-testid="create-layout-plan">
+      <Button type="primary" loading={busy} disabled={!withDemand.length || !models.length} onClick={() => createPlan({ acknowledgeUnmapped: false })} data-testid="create-layout-plan">
         {t('layoutPlan.create')}
       </Button>
       <Button onClick={() => openMappings()} disabled={!withDemand.length || !models.length} data-testid="open-model-mappings">{t('layoutPlan.mappings')}</Button>
@@ -105,12 +111,22 @@ export default function LayoutPlanLauncher({ preview, week, demands, nextWeekDem
     <Modal open={!!rows} width={760} title={t('layoutPlan.mappingsTitle')} onCancel={() => setRows(null)} destroyOnHidden
       footer={[
         <Button key="cancel" onClick={() => setRows(null)}>{t('layoutPlan.cancel')}</Button>,
-        <Button key="skip" danger disabled={!rows?.some(r => r.blocking)} onClick={() => { setRows(null); createPlan(true); }}>{t('layoutPlan.skipUnmapped')}</Button>,
+        <Button key="skip" danger disabled={!rows?.some(r => r.blocking)} onClick={() => { setRows(null); createPlan({ acknowledgeUnmapped: true }); }}>{t('layoutPlan.skipUnmapped')}</Button>,
         <Button key="save" type="primary" loading={saving} disabled={blockingLeft} onClick={saveMappings} data-testid="save-model-mappings">{t('layoutPlan.saveAndCreate')}</Button>,
       ]}>
       <Space direction="vertical" style={{ width: '100%' }}>
         <Alert type="info" showIcon message={t('layoutPlan.mappingsHelp')} />
         <Table<MappingRow> size="small" rowKey="forecastModel" columns={columns} dataSource={rows ?? []} pagination={{ pageSize: 10 }} />
+      </Space>
+    </Modal>
+    <Modal open={!!missing} title={t('layoutPlan.missingTitle')} onCancel={() => setMissing(null)} destroyOnHidden
+      footer={[
+        <Button key="cancel" onClick={() => setMissing(null)}>{t('layoutPlan.cancel')}</Button>,
+        <Button key="go" type="primary" data-testid="accept-missing-processes" onClick={() => { setMissing(null); createPlan({ acknowledgeUnmapped: ackUnmapped, acknowledgeMissingProcesses: true }); }}>{t('layoutPlan.createAnyway')}</Button>,
+      ]}>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Alert type="warning" showIcon message={t('layoutPlan.missingHelp')} />
+        <ul data-testid="missing-processes">{(missing ?? []).map(m => <li key={`${m.forecastModel}:${m.process}`}>{m.forecastModel} → {m.modelName} · {m.process}</li>)}</ul>
       </Space>
     </Modal>
   </Space>;

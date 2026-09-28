@@ -107,6 +107,26 @@ describe('studio view from a plan', () => {
     expect(half.summarize(half.initial.draft).totals.unassignedMachines).toBe(1);
   });
 
+  it('shows unfinished setup tasks of earlier plans too, marked as such (audit BUG-04)', () => {
+    const view = buildStudioView(workspace, {
+      ...plan,
+      setupTasks: [{ id: 't-old', plan_id: 'older-plan', machine_id: 'm-500', status: 'pending', revision: 1, before_model_id: 'on1', before_process_id: 'on1-1', target_model_id: 'h8', target_process_id: 'h8-0', created_at: '2026-09-20T01:00:00Z', started_at: null, completed_at: null }],
+    });
+    expect(view.initial.setup?.tasks[500]).toMatchObject({ status: 'pending', previousPlan: true });
+    expect(view.taskRef(500)).toEqual({ id: 't-old', revision: 1 });
+  });
+
+  it('shows required processes missing from the app as alert rows, and unreadable demand as unknown (audit BUG-03/01)', () => {
+    const view = buildStudioView(workspace, {
+      ...plan,
+      plan: { ...plan.plan, capacity_policy: { missingProcesses: [{ forecastModel: 'ON 1', modelId: 'on1', modelName: 'ON1', process: 'CNC2' }] } },
+      requirements: [{ ...plan.requirements[1], requiredMachines: null, warnings: ['error_cells', 'no_numeric'] }],
+    });
+    const groups = view.summarize(view.initial.draft).groups;
+    expect(groups.find(g => g.status === 'process_missing')).toMatchObject({ code: 'ON1-C2', model: 'ON1', process: 'C2' });
+    expect(groups.find(g => g.code === 'ON1-C1')).toMatchObject({ status: 'demand_unknown' });
+  });
+
   it('without a plan shows the current machines read-only with no recommendation', () => {
     const current = buildStudioView(workspace, null);
     expect(current.readOnly).toBe(true);

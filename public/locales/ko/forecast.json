@@ -94,7 +94,8 @@
       "zero_demand": "수요 없음",
       "unmapped": "모델 미매칭",
       "no_tact": "T/T 없음",
-      "not_in_forecast": "Forecast 없음"
+      "not_in_forecast": "Forecast 없음",
+      "demand_unknown": "수요 불명"
     },
     "warnings": {
       "error_cells": "오류 셀 포함",
@@ -148,7 +149,10 @@
       "mapping_load_failed": "저장된 모델명 짝을 불러오지 못했습니다.",
       "mapping_save_failed": "모델명 짝을 저장하지 못했습니다.",
       "invalid_assignment": "선택한 앱 모델이 이 공장의 모델이 아닙니다."
-    }
+    },
+    "missingTitle": "Layout 에 없는 필수 공정",
+    "missingHelp": "아래 모델은 앱에 해당 공정(CNC1·CNC2)이 등록되어 있지 않아 필요 대수를 계산할 수 없습니다. 그대로 만들면 이 공정은 계획의 CAPA 알림에 \"공정 미등록\"으로 남습니다. 모델 정보에서 공정을 먼저 등록하는 것을 권합니다.",
+    "createAnyway": "그대로 만들기"
   },
   "layoutStudio": {
     "confirmed": "Layout 을 확정했습니다. 바뀐 설비 {{count}}대가 설비정보에 반영되고 셋업이 시작되었습니다.",

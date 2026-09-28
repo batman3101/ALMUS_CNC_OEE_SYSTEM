@@ -4,7 +4,15 @@ import type { ForecastProcess, ForecastSnapshotMachine, ForecastSnapshotModel } 
 import { processRefs, type ModelMatch } from './modelAliases';
 import type { DemandWarning, WeeklyModelDemand } from './weeklyDemand';
 
-export type RequirementStatus = 'ok' | 'shortage' | 'surplus' | 'zero_demand' | 'unmapped' | 'no_tact' | 'not_in_forecast';
+export type RequirementStatus = 'ok' | 'shortage' | 'surplus' | 'zero_demand' | 'unmapped' | 'no_tact' | 'demand_unknown' | 'not_in_forecast';
+
+/**
+ * Demand that could not be read at all this week (error cells, no numeric day) is *unknown*, not zero
+ * (audit BUG-01, 2026-09-28): treating it as zero released the model's machines to other models.
+ */
+export const isDemandUnknown = (warnings: readonly string[]) => warnings.includes('error_cells') && warnings.includes('no_numeric');
+/** Any unreadable cell makes the peak a lower bound: such a model is never a source of machines to release. */
+export const hasUnreadableDemand = (warnings: readonly string[]) => warnings.includes('error_cells');
 export interface ModelProcessRequirement {
   key: string;
   forecastModel: string | null;
@@ -38,7 +46,9 @@ const OPTIONAL_PROCESSES = new Set<ForecastProcess>(['CNC0']);
 export function dailyCapacityPerMachine(tactTimeSeconds: number | null, breakMinutes: number): number | null {
   if (tactTimeSeconds === null || !Number.isFinite(tactTimeSeconds) || tactTimeSeconds <= 0) return null;
   const shift = { operatingMinutes: DEFAULT_OPERATING_MINUTES, breakMinutes };
-  return calculateDailyCapacity(tactTimeSeconds, [shift, shift]);
+  const capacity = calculateDailyCapacity(tactTimeSeconds, [shift, shift]);
+  // A break that eats the shift leaves 0 pieces a day: "not computable", never a divisor (audit BUG-06).
+  return Number.isFinite(capacity) && capacity > 0 ? capacity : null;
 }
 
 export function countActiveMachines(machines: ForecastSnapshotMachine[], modelId: string, processId: string): number {
@@ -59,6 +69,7 @@ export function buildRequirements({ demands, matches, models, machines, breakMin
       if (!dbModel) { rows.push({ ...base, dailyCapacity: null, required: null, gap: null, status: 'unmapped' }); continue; }
       const dailyCapacity = dailyCapacityPerMachine(ref?.tactTimeSeconds ?? null, breakMinutes);
       if (!processId || dailyCapacity === null) { rows.push({ ...base, dailyCapacity: null, required: null, gap: null, status: 'no_tact' }); continue; }
+      if (isDemandUnknown(demand.warnings)) { rows.push({ ...base, dailyCapacity, required: null, gap: null, status: 'demand_unknown' }); continue; }
       const required = demand.peakQuantity > 0 ? Math.ceil(demand.peakQuantity / dailyCapacity) : 0;
       const gap = required - current;
       const status: RequirementStatus = required === 0 ? 'zero_demand' : gap > 0 ? 'shortage' : gap < 0 ? 'surplus' : 'ok';

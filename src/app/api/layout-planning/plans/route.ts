@@ -23,6 +23,9 @@ function demand(item: unknown): WeeklyModelDemand {
 }
 
 /**
+ * 422 `missing_processes` lists CNC1/CNC2 steps the app models lack (audit BUG-03) — resend with
+ * `acknowledgeMissingProcesses` only after the user has seen them; they then stay on the plan as alerts.
+ *
  * Simulate and store a recommended layout (draft) from one week of Forecast demand.
  * Demand arrives already parsed by /api/forecasts/preview on the Forecast screen; T/T, machines, drawing and the
  * capacity policy are read here from the database, never from the client.
@@ -44,6 +47,7 @@ export async function POST(request: NextRequest) {
       nextWeekDemands: body.nextWeekDemands === undefined ? [] : array(body.nextWeekDemands, 'invalid_demands', 500, demand),
       lockedMachineIds: body.lockedMachineIds === undefined ? [] : array(body.lockedMachineIds, 'invalid_locks', 2000, v => uuid(v, 'invalid_locks')),
       acknowledgeUnmapped: body.acknowledgeUnmapped === true,
+      acknowledgeMissingProcesses: body.acknowledgeMissingProcesses === true,
     });
     return NextResponse.json({ success: true, ...result }, { status: 201 });
   } catch (error) {

@@ -62,6 +62,16 @@ describe('layout-planning routes', () => {
     expect(await r.json()).toMatchObject({ code: 'unmapped_models', detail: { models: ['Hubble Y2'] } });
   });
 
+  it('create: missing required processes come back as 422 with the list; the acknowledgement is passed through (audit BUG-03)', async () => {
+    mockCreate.mockRejectedValueOnce(new LayoutPlanningError(422, 'missing_processes', { items: [{ forecastModel: 'B', modelId: 'B', modelName: 'B', process: 'CNC2' }] }));
+    const r = await createPlanRoute(req(validPlan));
+    expect(r.status).toBe(422);
+    expect(await r.json()).toMatchObject({ code: 'missing_processes', detail: { items: [{ process: 'CNC2' }] } });
+    mockCreate.mockResolvedValueOnce({ planId: PLAN, unresolved: [], unmapped: [] });
+    await createPlanRoute(req({ ...validPlan, acknowledgeMissingProcesses: true }));
+    expect(mockCreate).toHaveBeenLastCalledWith('f1', 'u1', expect.objectContaining({ acknowledgeMissingProcesses: true }));
+  });
+
   it('create: an operator is refused before any work', async () => {
     mockAuth.mockRejectedValue(new ApiAuthError('Forbidden', 403));
     expect((await createPlanRoute(req(validPlan))).status).toBe(403);

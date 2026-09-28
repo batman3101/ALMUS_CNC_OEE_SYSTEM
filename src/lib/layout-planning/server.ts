@@ -139,6 +139,8 @@ export interface CreatePlanInput {
   lockedMachineIds: string[];
   /** The user saw the unmapped list and chose to plan without those models. */
   acknowledgeUnmapped: boolean;
+  /** The user saw the required processes (CNC1/CNC2) that are not registered and chose to plan anyway. */
+  acknowledgeMissingProcesses: boolean;
 }
 
 export async function createPlan(factoryId: string, userId: string, input: CreatePlanInput) {
@@ -157,6 +159,10 @@ export async function createPlan(factoryId: string, userId: string, input: Creat
   if (draft.unmapped.length && !input.acknowledgeUnmapped) {
     throw new LayoutPlanningError(422, 'unmapped_models', { models: draft.unmapped });
   }
+  // A required process the app model does not have cannot be sized; ask first, then keep it on the plan (audit BUG-03).
+  if (draft.missingProcesses.length && !input.acknowledgeMissingProcesses) {
+    throw new LayoutPlanningError(422, 'missing_processes', { items: draft.missingProcesses });
+  }
 
   const { data, error } = await supabaseAdmin.rpc('create_layout_plan', {
     p_factory_id: factoryId,
@@ -164,7 +170,7 @@ export async function createPlan(factoryId: string, userId: string, input: Creat
     p_plan: {
       title: input.title, forecast_file_name: input.forecastFileName, forecast_file_hash: input.forecastFileHash,
       target_week: input.week.key, period_start: input.week.start, period_end: input.week.end,
-      capacity_policy: { source: policy.source, breakMinutes: policy.breakMinutes, shiftAStart: policy.shiftAStart, shiftBStart: policy.shiftBStart, timezone: policy.timezone, unmappedIgnored: draft.unmapped },
+      capacity_policy: { source: policy.source, breakMinutes: policy.breakMinutes, shiftAStart: policy.shiftAStart, shiftBStart: policy.shiftBStart, timezone: policy.timezone, unmappedIgnored: draft.unmapped, missingProcesses: draft.missingProcesses },
     },
     p_requirements: draft.requirements,
     p_assignments: draft.assignments,
@@ -181,7 +187,10 @@ export async function loadPlan(factoryId: string, planId: string) {
   const [reqs, assigns, tasks, processes, models] = await Promise.all([
     supabaseAdmin.from('layout_plan_requirements').select('*').eq('factory_id', factoryId).eq('plan_id', planId).limit(ROW_LIMIT),
     supabaseAdmin.from('layout_plan_assignments').select('*').eq('factory_id', factoryId).eq('plan_id', planId).limit(ROW_LIMIT),
-    supabaseAdmin.from('machine_setup_tasks').select('*').eq('factory_id', factoryId).eq('plan_id', planId).limit(ROW_LIMIT),
+    // This plan's tasks plus every still-open task of the factory: a machine this plan keeps may carry unfinished
+    // setup from an earlier plan, and it must stay reachable from the current screen (audit BUG-04).
+    supabaseAdmin.from('machine_setup_tasks').select('*').eq('factory_id', factoryId)
+      .or(`plan_id.eq.${planId},status.in.(pending,in_progress)`).limit(ROW_LIMIT),
     supabaseAdmin.from('model_processes').select('id, process_name, model_id').eq('factory_id', factoryId).limit(ROW_LIMIT),
     supabaseAdmin.from('product_models').select('id, model_name').eq('factory_id', factoryId).limit(ROW_LIMIT),
   ]);
@@ -191,10 +200,11 @@ export async function loadPlan(factoryId: string, planId: string) {
   const requirements: PlanRequirement[] = bounded(reqs.data).map(r => ({
     modelId: r.product_model_id, modelName: names.get(r.process_id)?.model ?? r.product_model_id, processId: r.process_id,
     processName: names.get(r.process_id)?.process ?? r.process_id, forecastModel: r.forecast_model_label, peakQuantity: r.peak_quantity,
-    dailyCapacityPerMachine: r.daily_capacity_per_machine, requiredMachines: r.required_machines,
+    dailyCapacityPerMachine: r.daily_capacity_per_machine, requiredMachines: r.required_machines, warnings: r.warnings ?? [],
   }));
   const assignments = bounded(assigns.data);
-  const summary = summarizeCapacity(requirements, assignments.map(a => ({ machineId: a.machine_id, modelId: a.final_model_id, processId: a.final_process_id })));
+  const missingProcesses = Array.isArray(plan.capacity_policy?.missingProcesses) ? plan.capacity_policy.missingProcesses : [];
+  const summary = summarizeCapacity(requirements, assignments.map(a => ({ machineId: a.machine_id, modelId: a.final_model_id, processId: a.final_process_id })), missingProcesses);
   return { plan, requirements, assignments, setupTasks: bounded(tasks.data), summary };
 }
 

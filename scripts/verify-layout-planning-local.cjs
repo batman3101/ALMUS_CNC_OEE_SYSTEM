@@ -39,7 +39,7 @@ async function seed(factoryId) {
   await db.from('machines').update({ production_model_id: null, current_process_id: null }).eq('factory_id', factoryId);
   await db.from('product_models').delete().eq('factory_id', factoryId).like('model_name', 'ZZ_LOCAL_%');
   const models = {};
-  for (const [name, procs] of [['ZZ_LOCAL_A', [['CNC #1', 560], ['CNC #2', 558]]], ['ZZ_LOCAL_B', [['CNC #1', 600], ['CNC #2', 600]]], ['ZZ_LOCAL_H', [['CNC #0', 63], ['CNC #1', 593], ['CNC #2', 453]]]]) {
+  for (const [name, procs] of [['ZZ_LOCAL_A', [['CNC #1', 560], ['CNC #2', 558]]], ['ZZ_LOCAL_B', [['CNC #1', 600], ['CNC #2', 600]]], ['ZZ_LOCAL_H', [['CNC #0', 63], ['CNC #1', 593], ['CNC #2', 453]]], ['ZZ_LOCAL_M', [['CNC #1', 600]]]]) {
     const { data: m, error } = await db.from('product_models').insert({ factory_id: factoryId, model_name: name, is_active: true }).select('id').single();
     if (error) throw error;
     models[name] = { id: m.id, processes: {} };
@@ -89,7 +89,7 @@ const demand = (model, peak) => ({ model, week: '2099-W01', peakQuantity: peak, 
   await check('saved mapping is used; plan is created with CAPA requirements and spatial moves', async () => {
     await server.saveMappings(factoryId, null, [{ forecastModel: 'Mystery', productModelId: models.ZZ_LOCAL_H.id }]);
     // A: 1300/day ÷ 130 per machine = 10 needed on each process (10 present) → ok. H: needs CNC0/1/2 from the B pool + idle.
-    const created = await server.createPlan(factoryId, null, { ...base, demands: [demand('zz_local_a', 1300), demand('Mystery', 1000), demand('ZZ_LOCAL_B', 0)], acknowledgeUnmapped: false });
+    const created = await server.createPlan(factoryId, null, { ...base, demands: [demand('zz_local_a', 1300), demand('Mystery', 1000), demand('ZZ_LOCAL_B', 0)], acknowledgeUnmapped: false, acknowledgeMissingProcesses: false });
     planId = created.planId;
     const plan = await server.loadPlan(factoryId, planId);
     assert.equal(plan.plan.status, 'draft');
@@ -137,12 +137,45 @@ const demand = (model, peak) => ({ model, week: '2099-W01', peakQuantity: peak, 
   });
 
   await check('a plan made before someone changed a machine cannot be confirmed (409 layout_base_stale)', async () => {
-    const { planId: p2 } = await server.createPlan(factoryId, null, { ...base, demands: [demand('zz_local_a', 1300)], acknowledgeUnmapped: true });
+    const { planId: p2 } = await server.createPlan(factoryId, null, { ...base, demands: [demand('zz_local_a', 1300)], acknowledgeUnmapped: true, acknowledgeMissingProcesses: false });
     await db.from('machines').update({ production_model_id: null, current_process_id: null }).eq('id', byNo(2));
     const plan = await server.loadPlan(factoryId, p2);
     await expectCode(server.confirmPlan(factoryId, null, p2, plan.plan.revision), 'layout_base_stale');
     await server.discardPlan(factoryId, null, p2);
     await expectCode(server.discardPlan(factoryId, null, p2), 'plan_not_draft');
+  });
+
+  // ── Codex audit 2026-09-28 regressions on the real server module + DB ──
+  await check('audit BUG-01: unreadable demand keeps its machines and the plan stores the warnings', async () => {
+    const unknown = { ...demand('ZZ_LOCAL_B', 0), warnings: ['error_cells', 'no_numeric'] };
+    const { planId: p } = await server.createPlan(factoryId, null, { ...base, demands: [unknown, demand('zz_local_a', 2600)], acknowledgeUnmapped: true, acknowledgeMissingProcesses: false });
+    const plan = await server.loadPlan(factoryId, p);
+    const bMoved = plan.assignments.filter(a => a.base_model_id === models.ZZ_LOCAL_B.id && a.final_model_id !== a.base_model_id);
+    assert.equal(bMoved.length, 0, 'B machines (demand unknown) must not be released');
+    const bReq = plan.requirements.filter(r => r.modelId === models.ZZ_LOCAL_B.id);
+    assert.ok(bReq.length === 2 && bReq.every(r => r.requiredMachines === null && r.warnings.includes('error_cells')));
+    assert.ok(plan.summary.groups.some(g => g.modelId === models.ZZ_LOCAL_B.id && g.status === 'demand_unknown'));
+    await server.discardPlan(factoryId, null, p);
+  });
+
+  await check('audit BUG-03: a model without CNC #2 stops the plan (422) and, once accepted, stays on it as an alert', async () => {
+    const e = await expectCode(server.createPlan(factoryId, null, { ...base, demands: [demand('ZZ_LOCAL_M', 600)], acknowledgeUnmapped: true, acknowledgeMissingProcesses: false }), 'missing_processes');
+    assert.deepEqual(e.detail.items.map(i => i.process), ['CNC2']);
+    const { planId: p } = await server.createPlan(factoryId, null, { ...base, demands: [demand('ZZ_LOCAL_M', 600)], acknowledgeUnmapped: true, acknowledgeMissingProcesses: true });
+    const plan = await server.loadPlan(factoryId, p);
+    assert.ok(plan.summary.groups.some(g => g.modelId === models.ZZ_LOCAL_M.id && g.status === 'process_missing' && g.processName === 'CNC2'));
+    await server.discardPlan(factoryId, null, p);
+  });
+
+  await check('audit BUG-04: open setup from an earlier plan is part of the next plan it is not changed by', async () => {
+    // planId was confirmed above and left pending tasks; plan it again with nothing to change for those machines.
+    const earlier = await server.loadPlan(factoryId, planId);
+    const openTask = earlier.setupTasks.find(t => t.plan_id === planId && t.status === 'pending');
+    assert.ok(openTask, 'fixture: an open task of the confirmed plan');
+    const { planId: p } = await server.createPlan(factoryId, null, { ...base, demands: [], acknowledgeUnmapped: true, acknowledgeMissingProcesses: true });
+    const next = await server.loadPlan(factoryId, p);
+    assert.ok(next.setupTasks.some(t => t.id === openTask.id), 'earlier open task must be visible from the new plan');
+    await server.discardPlan(factoryId, null, p);
   });
 
   await check('another factory cannot read or confirm this plan (404)', async () => {

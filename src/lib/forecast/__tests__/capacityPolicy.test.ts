@@ -16,6 +16,9 @@ describe('Forecast reuses OEE settings', () => {
   it('does not disguise settings failures as 60 minutes', async () => {
     mockBreaks.mockRejectedValue(new Error('DB unavailable')); expect(await loadForecastCapacityPolicy('factory-1')).toEqual({ status: 'unavailable' });
   });
+  it.each([720, 900])('refuses a %i-minute break that leaves no operating time (audit BUG-06)', async minutes => {
+    mockBreaks.mockResolvedValue(minutes); expect(await loadForecastCapacityPolicy('factory-1')).toEqual({ status: 'unavailable' });
+  });
   it.each(['30:00', '08:00'])('blocks invalid/identical shift boundaries %s', async shiftBStart => {
     mockConfig.mockResolvedValue({ timezone: 'Asia/Ho_Chi_Minh', shiftAStart: '08:00', shiftBStart });
     expect(await loadForecastCapacityPolicy('factory-1')).toEqual({ status: 'unavailable' });

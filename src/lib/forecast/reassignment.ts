@@ -1,5 +1,5 @@
 import type { ForecastProcess, ForecastSnapshotMachine } from '@/types/forecast';
-import type { ModelProcessRequirement } from './requiredMachines';
+import { hasUnreadableDemand, type ModelProcessRequirement } from './requiredMachines';
 import type { WeeklyModelDemand } from './weeklyDemand';
 
 export type MoveReason = 'surplus' | 'unassigned' | 'zero_demand';
@@ -32,6 +32,7 @@ export function proposeReassignment({ requirements, machines, nextWeekDemands }:
   for (const row of requirements) {
     if (!row.dbModel || !row.processId || row.gap === null || row.gap >= 0) continue;
     if (row.status !== 'surplus' && row.status !== 'zero_demand') continue;
+    if (hasUnreadableDemand(row.warnings)) continue; // lower-bound demand: its "surplus" is not proven (audit BUG-01)
     const { id: modelId, name: modelName } = row.dbModel;
     const candidates = machines.filter(m => m.isActive && m.modelId === modelId && m.processId === row.processId).sort(byNameDesc).slice(0, -row.gap);
     for (const machine of candidates) pool.push({ machine, from: { model: modelName, process: row.process }, reason: row.status, nextWeekDemand: row.forecastModel !== null && nextWeek.has(row.forecastModel) });

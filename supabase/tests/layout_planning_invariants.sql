@@ -15,6 +15,7 @@
 --   L8  셋업 전이: 순서 강제, 이벤트 기록, 이벤트 수정 불가
 --   L9  권한: RPC 는 anon/authenticated 실행 불가, 내부 함수는 service_role 도 불가
 --   L10 도면: ALT 활성 도면 1개, 800대, 셀 중복 없음
+--   L12 계획이 Forecast 수요 경고(warnings)를 저장한다(감사 BUG-01, 20260928110000)
 --   L11 모델만 있고 공정이 빈 설비(운영 실측 5대): 계획 생성 가능, 손대지 않으면 그대로, 새 반쪽 상태는 거부, 확정해도 불변
 
 do $$
@@ -74,7 +75,7 @@ begin
                        'period_start', '2099-01-01', 'period_end', '2099-01-07', 'capacity_policy', '{"breakMinutes":110}'),
     jsonb_build_array(jsonb_build_object('product_model_id', v_model_a, 'process_id', v_proc_a1, 'forecast_model_label', 'A',
                                          'peak_quantity', 1000, 'tact_time_seconds', 500, 'daily_capacity_per_machine', 146,
-                                         'required_machines', 7)),
+                                         'required_machines', 7, 'warnings', jsonb_build_array('error_cells', 'partial_week'))),
     jsonb_build_array(
       jsonb_build_object('machine_id', v_m1, 'recommended_model_id', v_model_a, 'recommended_process_id', v_proc_a1, 'recommendation_reason', 'shortage_fill'),
       jsonb_build_object('machine_id', v_m2, 'recommended_model_id', v_model_a, 'recommended_process_id', v_proc_a2, 'recommendation_reason', 'shortage_fill')));
@@ -87,6 +88,9 @@ begin
   select count(*) into n from public.layout_plan_assignments where plan_id = v_plan and machine_id = v_m3
      and recommendation_reason = 'keep' and final_model_id is not distinct from base_model_id;
   if n <> 1 then raise exception 'L1 FAIL: machine outside recommendation not kept'; end if;
+  -- [L12] 경고 보존
+  select count(*) into n from public.layout_plan_requirements where plan_id = v_plan and warnings = array['error_cells', 'partial_week'];
+  if n <> 1 then raise exception 'L12 FAIL: requirement warnings not stored'; end if;
   -- [L11] 반쪽 설비는 기준·최종 모두 그대로 복사된다.
   select count(*) into n from public.layout_plan_assignments where plan_id = v_plan and machine_id = v_half
      and base_model_id = v_model_b and base_process_id is null and final_model_id = v_model_b and final_process_id is null;
@@ -220,6 +224,6 @@ begin
     raise exception 'L9 FAIL: service_role cannot confirm';
   end if;
 
-  raise exception 'ALL_INVARIANTS_PASSED (L1-L11)';
+  raise exception 'ALL_INVARIANTS_PASSED (L1-L12)';
 end;
 $$;

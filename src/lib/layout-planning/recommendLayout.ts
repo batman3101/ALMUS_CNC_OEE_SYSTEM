@@ -1,5 +1,5 @@
 import type { ForecastSnapshotMachine } from '@/types/forecast';
-import type { ModelProcessRequirement } from '@/lib/forecast/requiredMachines';
+import { hasUnreadableDemand, type ModelProcessRequirement } from '@/lib/forecast/requiredMachines';
 import type { WeeklyModelDemand } from '@/lib/forecast/weeklyDemand';
 
 /** Drawing position of one machine (layout geometry). Cell grid, not physical distance. */
@@ -89,6 +89,7 @@ export function recommendLayout({ requirements, machines, positions, locked, nex
   for (const row of requirements) {
     if (!row.dbModel || !row.processId || row.gap === null || row.gap >= 0) continue;
     if (row.status !== 'surplus' && row.status !== 'zero_demand') continue;
+    if (hasUnreadableDemand(row.warnings)) continue; // lower-bound demand: its "surplus" is not proven (audit BUG-01)
     const key = groupKey(row.dbModel.id, row.processId);
     quota.set(key, -row.gap);
     const reason: MoveReason = row.status === 'surplus' ? 'surplus_release' : 'zero_demand_release';

@@ -13,8 +13,8 @@ import LayoutPlanLauncher from './LayoutPlanLauncher';
 import styles from './ForecastWorkspace.module.css';
 
 /** Problems first, then things the reviewer may act on, then the quiet rows. */
-const STATUS_RANK: Record<ModelProcessRequirement['status'], number> = { shortage: 0, unmapped: 1, no_tact: 2, surplus: 3, zero_demand: 4, not_in_forecast: 5, ok: 6 };
-const STATUS_COLOR: Record<ModelProcessRequirement['status'], string> = { shortage: 'red', unmapped: 'orange', no_tact: 'orange', surplus: 'blue', zero_demand: 'default', not_in_forecast: 'default', ok: 'green' };
+const STATUS_RANK: Record<ModelProcessRequirement['status'], number> = { shortage: 0, unmapped: 1, no_tact: 2, demand_unknown: 3, surplus: 4, zero_demand: 5, not_in_forecast: 6, ok: 7 };
+const STATUS_COLOR: Record<ModelProcessRequirement['status'], string> = { shortage: 'red', unmapped: 'orange', no_tact: 'orange', demand_unknown: 'orange', surplus: 'blue', zero_demand: 'default', not_in_forecast: 'default', ok: 'green' };
 
 /** NULL ("not computable") sorts last in both directions — it is not a small number. */
 const nullable = (pick: (r: ModelProcessRequirement) => number | null) => (a: ModelProcessRequirement, b: ModelProcessRequirement, order?: 'ascend' | 'descend' | null) => {

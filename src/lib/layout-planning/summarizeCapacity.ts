@@ -6,10 +6,13 @@ export interface PlanRequirement {
   dailyCapacityPerMachine: number | null;
   /** NULL = not computable. Never 0 in disguise. */
   requiredMachines: number | null;
+  /** Demand-quality warnings stored with the plan (error_cells, no_numeric, …). */
+  warnings?: string[];
 }
+export interface MissingProcessInput { forecastModel: string; modelId: string; modelName: string; process: string }
 export interface FinalAssignment { machineId: string; modelId: string | null; processId: string | null }
 
-export type CapacityStatus = 'shortage' | 'not_computable' | 'surplus' | 'zero_demand' | 'not_in_forecast' | 'ok';
+export type CapacityStatus = 'shortage' | 'process_missing' | 'demand_unknown' | 'not_computable' | 'surplus' | 'zero_demand' | 'not_in_forecast' | 'ok';
 export interface GroupCapacity {
   modelId: string; modelName: string | null; processId: string; processName: string | null; forecastModel: string | null;
   peakQuantity: number | null;
@@ -31,7 +34,7 @@ export interface CapacitySummary {
 }
 
 /** Problems first (user requirement 5: the alert must be where the eye lands). */
-const RANK: Record<CapacityStatus, number> = { shortage: 0, not_computable: 1, surplus: 2, zero_demand: 3, not_in_forecast: 4, ok: 5 };
+const RANK: Record<CapacityStatus, number> = { shortage: 0, process_missing: 1, demand_unknown: 2, not_computable: 3, surplus: 4, zero_demand: 5, not_in_forecast: 6, ok: 7 };
 const key = (modelId: string, processId: string) => `${modelId}\u0000${processId}`;
 
 /**
@@ -39,7 +42,7 @@ const key = (modelId: string, processId: string) => `${modelId}\u0000${processId
  * sees at once whether moving a machine opened a shortage or freed spare capacity. The decision to act on
  * a surplus stays with the user (requirement 5); nothing here moves machines.
  */
-export function summarizeCapacity(requirements: PlanRequirement[], assignments: FinalAssignment[]): CapacitySummary {
+export function summarizeCapacity(requirements: PlanRequirement[], assignments: FinalAssignment[], missingProcesses: MissingProcessInput[] = []): CapacitySummary {
   const counts = new Map<string, number>();
   let unassignedMachines = 0;
   for (const a of assignments) {
@@ -52,7 +55,8 @@ export function summarizeCapacity(requirements: PlanRequirement[], assignments: 
     const assigned = counts.get(key(r.modelId, r.processId)) ?? 0;
     const base = { modelId: r.modelId, modelName: r.modelName, processId: r.processId, processName: r.processName, forecastModel: r.forecastModel, peakQuantity: r.peakQuantity, assigned };
     if (r.requiredMachines === null || r.dailyCapacityPerMachine === null) {
-      return { ...base, required: null, gap: null, spare: null, capacity: null, utilization: null, status: 'not_computable' as const };
+      const unknown = (r.warnings ?? []).includes('error_cells') && (r.warnings ?? []).includes('no_numeric');
+      return { ...base, required: null, gap: null, spare: null, capacity: null, utilization: null, status: unknown ? 'demand_unknown' as const : 'not_computable' as const };
     }
     const capacity = assigned * r.dailyCapacityPerMachine;
     const gap = assigned - r.requiredMachines;
@@ -69,6 +73,10 @@ export function summarizeCapacity(requirements: PlanRequirement[], assignments: 
     groups.push({ modelId, modelName: null, processId, processName: null, forecastModel: null, peakQuantity: null, required: null, assigned, gap: null, spare: null, capacity: null, utilization: null, status: 'not_in_forecast' });
   }
 
+  for (const m of missingProcesses) {
+    groups.push({ modelId: m.modelId, modelName: m.modelName, processId: '', processName: m.process, forecastModel: m.forecastModel, peakQuantity: null, required: null, assigned: 0, gap: null, spare: null, capacity: null, utilization: null, status: 'process_missing' });
+  }
+
   groups.sort((a, b) => RANK[a.status] - RANK[b.status] || (a.gap ?? 0) - (b.gap ?? 0) || (a.modelName ?? a.modelId).localeCompare(b.modelName ?? b.modelId));
 
   return {
@@ -77,7 +85,8 @@ export function summarizeCapacity(requirements: PlanRequirement[], assignments: 
       shortageMachines: groups.reduce((sum, g) => sum + (g.status === 'shortage' ? -(g.gap ?? 0) : 0), 0),
       spareMachines: groups.reduce((sum, g) => sum + (g.status === 'surplus' || g.status === 'zero_demand' ? g.spare ?? 0 : 0), 0),
       unassignedMachines,
-      notComputableGroups: groups.filter(g => g.status === 'not_computable').length,
+      // Groups the plan cannot size: no T/T, unreadable demand, or a required process not registered.
+      notComputableGroups: groups.filter(g => g.status === 'not_computable' || g.status === 'demand_unknown' || g.status === 'process_missing').length,
     },
   };
 }
