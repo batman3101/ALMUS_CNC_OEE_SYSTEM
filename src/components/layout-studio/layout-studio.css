@@ -471,3 +471,9 @@
 .layout-studio .sw-inline{display:inline-block;width:14px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:1px solid rgba(0,0,0,.2)}
 .layout-studio .puzzle-legend{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:11px}
 .layout-studio .puzzle-legend div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Tiles drawn like the prototype (user 2026-09-28): thin dark outline, changed = black dot top-right, rule break = red
+ * triangle bottom-right, empty = white with a dashed outline and "빈 자리". */
+.layout-studio .machine-body{stroke:rgba(16,24,40,.18);stroke-width:1;rx:5}
+.layout-studio .machine.changed .machine-body{stroke:rgba(16,24,40,.18);stroke-width:1}
+.layout-studio .machine .change-mark{fill:#101828;pointer-events:none}
+.layout-studio .machine.empty .machine-body{stroke:#667085;stroke-width:1.5;stroke-dasharray:6 4}

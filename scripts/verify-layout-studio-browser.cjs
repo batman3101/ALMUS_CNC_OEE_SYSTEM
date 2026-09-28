@@ -322,6 +322,9 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.deepEqual(await capaRows(), [['ON1-C1', '-2'], ['PA1-C2', '0'], ['M3-C2', '+3']]);
         assert.equal(await L('#capaCount').innerText(), '3개');
         assert.equal(await L('#trayLegend > div').count(), (await page.evaluate(() => window.__layoutStudio.data.models.length)));
+        // Hues go to the models the layout uses first (as the prototype), unused registered models after.
+        const hues = await page.evaluate(() => window.__layoutStudio.hues());
+        assert.deepEqual(hues, ['B6S6', 'H8M', 'H8S', 'M1', 'M3', 'ON1', 'ON3', 'PA1']);
         // Model = hue, process = lightness: C1 light, C2 dark with white text, C0 hatched.
         const tile = n => L(`.machine[data-id="${n}"]`);
         const fillOf = n => tile(n).locator('.machine-body').getAttribute('fill');
@@ -378,6 +381,9 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal(await page.locator('.layout-studio.puzzle-dragging').count(), 0);
         assert.equal(await L('.puzzle-flyer').count(), 1);                              // M3-C2 flies back to the tray
         assert.match(await L('#toast').innerText(), /규칙 위반: .*섬/);
+        // Marks as in the prototype: changed = black dot top-right, rule break = red triangle bottom-right.
+        assert.equal(await tile(653).locator('circle.change-mark').count(), 1);
+        assert.equal(await tile(653).locator('.puzzle-viol-mark').count(), 1);
         assert.equal(await L('#needCards .puzzle-card[data-code="ON1-C1"] .cnt').innerText(), '1');
         assert.equal(await L('#spareCards .puzzle-card[data-code="M3-C2"] .cnt').innerText(), '2');
         assert.deepEqual(await capaRows(), [['ON1-C1', '-1'], ['PA1-C2', '0'], ['M3-C2', '+2']]);
@@ -394,6 +400,8 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await page.mouse.up(); await settled(); await page.waitForTimeout(200);
         assert.equal(assignmentOf(654).final_model_id, null);
         assert.deepEqual((await state(page)).draft.edits['654'], { model: '', process: '' });
+        assert.equal(await tile(654).locator('.machine-model').textContent(), '빈 자리');     // empty slot, as in the prototype
+        assert.equal(await tile(654).evaluate(e => e.classList.contains('empty')), true);
         await page.keyboard.press('Control+z'); await settled(); await page.waitForTimeout(200);
         assert.equal(assignmentOf(654).final_model_id, server.model('M3').id);
         // Shift+click selects a contiguous block in one column; an armed piece then fills the whole block with one click.

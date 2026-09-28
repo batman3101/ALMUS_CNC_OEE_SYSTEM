@@ -46,6 +46,7 @@ const dbMessages = {
 };
 // Puzzle tray texts (2026-09-28).
 Object.assign(dbMessages.ko,{trayTitle:'조각 트레이',trayHelp:'조각을 도면의 설비로 끌어 놓으세요. 원래 그 자리의 모델·공정은 트레이로 돌아옵니다. 설비를 끌어 다른 설비에 놓으면 옮겨지고, 아래 비우기에 놓으면 빈 자리가 됩니다. Shift+클릭으로 한 열의 여러 대를 묶습니다. 터치: 조각을 누른 뒤 설비를 누르세요.',trayNeed:'놓아야 할 조각',trayNeedEmpty:'모두 채웠습니다 ✓',traySpare:'여유 — 바꿔도 되는 설비',traySpareEmpty:'없음',trayDropOut:'여기에 설비를 끌어 놓으면 비우기(빈 자리)',ruleGood:'무리에 붙음',ruleWarn:'동선 공정 섞임',ruleBad:'섬·끼워넣기·3조각',violations:'규칙 위반',armed:'{g} 을(를) 놓을 설비를 누르세요 · 다시 누르거나 Esc 로 취소',noRoom:'그 열에는 이만큼 들어갈 자리가 없습니다.',placedBad:'⚠ 규칙 위반: {r} — 되돌리려면 ↶',placedWarn:'동선 안에 공정이 섞였습니다.',reasonIsland:'섬',reasonMiddle:'끼워넣기',reasonThree:'3조각',rangeHint:'한 열에서 {n}대 선택 — 끌어서 한 번에 옮기거나, 조각을 놓아 한 번에 채웁니다.',fromTile:'설비에서 옮기는 중',fromTray:'트레이에서'});
+Object.assign(messages.ko,{emptySlot:'빈 자리'});Object.assign(messages.vi,{emptySlot:'Trống'});
 Object.assign(dbMessages.ko,{trayCapa:'CAPA',capaCount:'{n}개',capaRequired:'필요',capaAssigned:'배정',capaGap:'차이',trayLegend:'색 범례'});
 Object.assign(dbMessages.vi,{trayCapa:'CAPA',capaCount:'{n} nhóm',capaRequired:'Cần',capaAssigned:'Đã gán',capaGap:'Chênh',trayLegend:'Chú thích màu'});
 Object.assign(dbMessages.ko,{verdictGood:'✓ 무리에 붙음',verdictWarn:'⚠ 동선 공정 섞임',verdictEmpty:'여기 놓으면 비우기(빈 자리)'});
@@ -81,11 +82,15 @@ const PROCESSES = DATA.processes || ['C0','C1','C2'];
 const readOnly = !!(backend && backend.readOnly);
 // Why it is read-only decides what the notice says (no plan ≠ no permission). Absent → treated as a confirmed plan.
 const readOnlyReason = readOnly ? (backend.readOnlyReason || 'confirmed') : null;
-const hueIndex = new Map(DATA.models.map((m,i)=>[m,i]));
+// Hues go to the models this layout actually uses first — machines, plan edits and demand, as the prototype did (26 on
+// W40). Spreading them over every registered model (31, five unused) shifted the colours away from the prototype.
+const usedModels=[...new Set([...DATA.machines.map(m=>m.model),...(backend?Object.values(backend.initial.draft.edits).map(a=>a.model):[]),...(backend?backend.summarize(backend.initial.draft).groups.map(g=>g.model):[])].filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+const hueOrder=[...usedModels,...DATA.models.filter(m=>!usedModels.includes(m)).sort((a,b)=>a.localeCompare(b))];
+const hueIndex = new Map(hueOrder.map((m,i)=>[m,i]));
 const hueOf = model => hueIndex.has(model) ? PALETTE[hueIndex.get(model)%PALETTE.length] : nameHue(model);
 /** {fill, solid, ink, stripe} for an assignment. `fill` may be a hatch pattern (C0); `solid` is for HTML swatches. */
 function tone(a){
- if(!a||!a.model)return{fill:'#ffffff',solid:'#f2f4f7',ink:'#8794a4',stripe:'#aab3c0'};
+ if(!a||!a.model)return{fill:'#ffffff',solid:'#ffffff',ink:'#101828',stripe:'#aab3c0'};
  const h=hueOf(a.model);
  if(a.process==='C2')return{fill:`hsl(${h} 62% 40%)`,solid:`hsl(${h} 62% 40%)`,ink:'#ffffff',stripe:`hsl(${h} 70% 22%)`};
  if(a.process==='C0')return{fill:`url(#${hatchId(a.model)})`,solid:`hsl(${h} 72% 66%)`,ink:'#101828',stripe:`hsl(${h} 62% 40%)`};
@@ -167,12 +172,11 @@ function renderMap(){
   const tn=tone(a);
   if(puzzle)g.append(svgEl('rect',{x:-6,y:-6,width:116,height:74,class:'puzzle-ring'}));
   g.append(svgEl('rect',{width:104,height:62,fill:tn.fill,class:'machine-body'}));
-  g.append(svgEl('rect',{x:0,y:9,width:4,height:44,rx:2,fill:tn.stripe}));
   // Inline style, not the fill attribute: the CSS class colour would win over an attribute and hide text on dark (C2) tiles.
   const number=svgEl('text',{x:10,y:27,class:'machine-number'});number.textContent=String(m.id).padStart(3,'0');number.style.fill=tn.ink;g.append(number);
-  if(mode==='compare'&&changed){const old=svgEl('text',{x:10,y:42,'font-size':12,opacity:.75});old.style.fill=tn.ink;old.textContent=label(baseAssignment(m));g.append(old);const newText=svgEl('text',{x:10,y:56,'font-size':13,'font-weight':700});newText.style.fill=tn.ink;newText.textContent='→ '+(a.model?label(a):'—');g.append(newText);}else{const code=svgEl('text',{x:10,y:49,class:'machine-model'});code.style.fill=tn.ink;code.textContent=a.model?label(a):'—';g.append(code);}
-  if(puzzle&&puzzleViolations.machines.has(m.id))g.append(svgEl('path',{d:'M80 60 l11 -19 l11 19 z',class:'puzzle-viol-mark'}));
-  if(changed&&mode!=='current'){const mark=svgEl('text',{x:84,y:27,class:'change-mark'});mark.textContent='↗';g.append(mark);}else if(locked){const mark=svgEl('text',{x:86,y:25,fill:'#647790','font-size':21});mark.textContent='▣';g.append(mark);}
+  if(mode==='compare'&&changed){const old=svgEl('text',{x:10,y:42,'font-size':12,opacity:.75});old.style.fill=tn.ink;old.textContent=label(baseAssignment(m));g.append(old);const newText=svgEl('text',{x:10,y:56,'font-size':13,'font-weight':700});newText.style.fill=tn.ink;newText.textContent='→ '+(a.model?label(a):t('emptySlot'));g.append(newText);}else{const code=svgEl('text',{x:10,y:49,class:'machine-model'});code.style.fill=tn.ink;code.textContent=a.model?label(a):t('emptySlot');g.append(code);}
+  if(puzzle&&puzzleViolations.machines.has(m.id))g.append(svgEl('path',{d:'M82 60 l10 -18 l10 18 z',class:'puzzle-viol-mark'}));
+  if(changed&&mode!=='current'){g.append(svgEl('circle',{cx:95,cy:9,r:5,class:'change-mark'}));}else if(locked){const mark=svgEl('text',{x:86,y:25,fill:'#647790','font-size':21});mark.textContent='▣';g.append(mark);}
   g.addEventListener('click',e=>{if(wasDrag)return;if(puzzleOn()&&puzzleClick(m.id,e))return;selectMachine(m.id);});
   g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectMachine(m.id);}});
   if(mode==='setup')setupBadge(g,task);
@@ -189,7 +193,7 @@ function focusMachine(id){const m=machines.get(id);if(!m)return;scale=window.inn
 function selectMachine(id,focus=false){selected=id;const m=machines.get(id);if(focus||(building!=='all'&&building!==m.building))building=m.building;render();if(focus)focusMachine(id);root.querySelector('.inspector').classList.add('mobile-open');}
 function renderInspector(){const m=machines.get(selected);const a=assignment(m);$('selectedName').textContent=displayName(m.id);$('selectedLocation').textContent=buildingName(m.building)+' · '+t('cell')+' '+m.cell;$('currentLabel').textContent=label(baseAssignment(m));$('draftLabel').textContent=label(a);const locked=draft.locks.includes(m.id);$('selectionStatus').textContent=locked?t('fixed'):backend?t(selectionKey(m.id)):(draft.edits[m.id]?t('modified'):t('unchanged'));$('selectionStatus').classList.toggle('changed',!!draft.edits[m.id]);$('lock').disabled=readOnly;renderGroupAlert(a);$('lock').textContent=(locked?'▣ ':'□ ')+t(locked?'unlock':'lock');$('lock').classList.toggle('is-locked',locked);}
 function renderChanges(){const ids=changedIds();$('changeCount').textContent=ids.length;$('changes').replaceChildren();if(!ids.length){const empty=document.createElement('div');empty.className='empty';empty.style.whiteSpace='pre-line';empty.textContent=t('empty');$('changes').append(empty);return;}for(const id of ids){const m=machines.get(id),a=assignment(m);const b=document.createElement('button');b.className='change-row';b.dataset.changeId=id;const d=document.createElement('div'),name=document.createElement('strong'),small=document.createElement('small'),value=document.createElement('span');name.textContent=displayName(id)+' · '+buildingName(m.building);small.textContent=label(baseAssignment(m));value.textContent='→ '+label(a);d.append(name,small);b.append(d,value);b.onclick=()=>selectMachine(id,true);$('changes').append(b);}}
-function renderLegend(){$('legend').replaceChildren();for(const model of DATA.models){const span=document.createElement('span');span.className='legend-model';for(const process of processesFor(model)){const dot=document.createElement('i');dot.style.background=tone({model,process}).solid;dot.title=process;span.append(dot);}span.append(document.createTextNode(model));$('legend').append(span);}const changed=document.createElement('span');changed.textContent='↗ '+t('changed');changed.style.color='#ba741c';$('legend').append(changed);}
+function renderLegend(){$('legend').replaceChildren();for(const model of DATA.models){const span=document.createElement('span');span.className='legend-model';for(const process of processesFor(model)){const dot=document.createElement('i');dot.style.background=tone({model,process}).solid;dot.title=process;span.append(dot);}span.append(document.createTextNode(model));$('legend').append(span);}const changed=document.createElement('span');changed.textContent='● '+t('changed');changed.style.color='#101828';$('legend').append(changed);}
 
 // ── Setup workflow (preview setup.js) ────────────────────────────────────────
 const setupKey='cnc-layout-setup-preview-v1-'+DATA.sha256;
@@ -481,7 +485,7 @@ resizeObserver.observe(stage);
 translate();const focusFrame=requestAnimationFrame(()=>focusMachine(selected));
 
 // Read-only hook for the browser verification suite (scripts/verify-layout-studio-browser.cjs).
-const hook={data:DATA,state:()=>({building,mode,selected,scale,tx,ty,lang,draft:copy(draft),machineCount:DATA.machines.length,setup:copy(setupBatch),range:[...range],armed:armed&&copy(armed),puzzle:puzzleOn(),violations:puzzleViolations.count})};
+const hook={data:DATA,hues:()=>[...hueOrder],state:()=>({building,mode,selected,scale,tx,ty,lang,draft:copy(draft),machineCount:DATA.machines.length,setup:copy(setupBatch),range:[...range],armed:armed&&copy(armed),puzzle:puzzleOn(),violations:puzzleViolations.count})};
 window.__layoutStudio=hook;
 
 return {
