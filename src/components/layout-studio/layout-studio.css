@@ -401,3 +401,31 @@
 .layout-studio .inspector{overflow-y:auto;min-height:0}
 }
 @media(min-width:1200px){.layout-studio .work-body{grid-template-columns:minmax(0,1fr) 340px}}
+
+/* === Setup board (2026-09-28): the confirmed plan's tasks as one work list ===================== */
+.layout-studio .setup-board{border:1px solid var(--ls-border-secondary,#e3e8ef);border-radius:var(--ls-radius-lg,10px);padding:12px;margin:0 0 16px;background:var(--ls-bg,#fff);color:var(--ls-text)}
+.layout-studio .setup-progress-text{font-size:13px;font-weight:600;color:#16774d}
+.layout-studio .setup-progress{height:10px;border-radius:5px;background:var(--ls-fill-secondary,#eef1f5);overflow:hidden;margin:10px 0 4px}
+.layout-studio .setup-progress span{display:block;height:100%;background:#12b76a;transition:width .4s}
+.layout-studio .setup-done{margin:10px 0 0;padding:10px 12px;border-radius:8px;background:#ecfdf3;border:1px solid #abefc6;color:#05603a}
+.layout-studio .setup-done strong{font-size:15px}
+.layout-studio .setup-done p{margin:4px 0;font-size:13px}
+.layout-studio .setup-done small{font-size:12px;color:#067647}
+.layout-studio .setup-list{display:flex;flex-direction:column;max-height:48vh;overflow-y:auto;border-top:1px solid var(--line)}
+.layout-studio .setup-row{display:flex;align-items:center;gap:6px;padding:5px 2px;border-bottom:1px solid var(--line)}
+.layout-studio .setup-row.selected{background:var(--ls-primary-bg,#eff8ff)}
+.layout-studio button.setup-row-main{flex:1;display:flex;align-items:center;gap:6px;min-width:0;min-height:0;padding:2px 4px;border:0;background:transparent;text-align:left;font-size:12px}
+.layout-studio button.setup-row-main:hover:not(:disabled){background:var(--ls-fill-alter);border-color:transparent}
+.layout-studio .setup-row-main small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ls-text-secondary)}
+.layout-studio .setup-icon{width:14px;text-align:center;font-weight:700}
+.layout-studio .setup-row[data-state=pending] .setup-icon{color:#697789}
+.layout-studio .setup-row[data-state=in_progress] .setup-icon{color:#bb6410}
+.layout-studio .setup-row[data-state=completed] .setup-icon{color:#16774d}
+.layout-studio .setup-swatch{flex:none;width:12px;height:12px;border-radius:3px;border:1px solid rgba(0,0,0,.2)}
+.layout-studio button.setup-row-action{flex:none;min-height:0;padding:3px 10px;font-size:12px}
+.layout-studio button.setup-row-action.primary{background:var(--ls-primary);border-color:var(--ls-primary);color:#fff}
+.layout-studio .setup-row-time{flex:none;font-size:11px;color:#16774d}
+/* Map outlines read from a distance on the floor: thicker than the preview's. */
+.layout-studio .machine[data-setup=pending] .machine-body{stroke:#7d8a9a;stroke-width:4}
+.layout-studio .machine[data-setup=in_progress] .machine-body{stroke:#e07b12;stroke-width:7}
+.layout-studio .machine[data-setup=completed] .machine-body{stroke:#12a05c;stroke-width:7}

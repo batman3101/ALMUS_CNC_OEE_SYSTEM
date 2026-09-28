@@ -46,6 +46,8 @@ const dbMessages = {
 };
 // Puzzle tray texts (2026-09-28).
 Object.assign(dbMessages.ko,{trayTitle:'조각 트레이',trayHelp:'조각을 도면의 설비로 끌어 놓으세요. 원래 그 자리의 모델·공정은 트레이로 돌아옵니다. 설비를 끌어 다른 설비에 놓으면 옮겨지고, 아래 비우기에 놓으면 빈 자리가 됩니다. Shift+클릭으로 한 열의 여러 대를 묶습니다. 터치: 조각을 누른 뒤 설비를 누르세요.',trayNeed:'놓아야 할 조각',trayNeedEmpty:'모두 채웠습니다 ✓',traySpare:'여유 — 바꿔도 되는 설비',traySpareEmpty:'없음',trayDropOut:'여기에 설비를 끌어 놓으면 비우기(빈 자리)',ruleGood:'무리에 붙음',ruleWarn:'동선 공정 섞임',ruleBad:'섬·끼워넣기·3조각',violations:'규칙 위반',armed:'{g} 을(를) 놓을 설비를 누르세요 · 다시 누르거나 Esc 로 취소',noRoom:'그 열에는 이만큼 들어갈 자리가 없습니다.',placedBad:'⚠ 규칙 위반: {r} — 되돌리려면 ↶',placedWarn:'동선 안에 공정이 섞였습니다.',reasonIsland:'섬',reasonMiddle:'끼워넣기',reasonThree:'3조각',rangeHint:'한 열에서 {n}대 선택 — 끌어서 한 번에 옮기거나, 조각을 놓아 한 번에 채웁니다.',fromTile:'설비에서 옮기는 중',fromTray:'트레이에서'});
+Object.assign(dbMessages.ko,{setupBoard:'셋업 작업판',setupProgress:'완료 {d} / {n}대',setupListHint:'진행 중 → 대기 → 완료 순입니다. 행을 누르면 도면에서 위치를 보여 줍니다. 완료는 한 대씩 누릅니다 — 누르는 순간 그 설비의 모델·공정이 설비정보에 반영됩니다.',setupDoneTitle:'셋업 완료',setupDoneText:'바뀐 설비 {n}대의 셋업을 모두 마쳤습니다. 설비정보(모델·공정)에 반영됐습니다.',setupDonePeriod:'기간 {a} ~ {b}',setupRowDone:'완료 {t}'});
+Object.assign(dbMessages.vi,{setupBoard:'Bảng setup',setupProgress:'Hoàn tất {d} / {n} máy',setupListHint:'Thứ tự: đang setup → chờ → hoàn tất. Chạm một dòng để xem vị trí trên bản vẽ. Hoàn tất từng máy một — khi nhấn, model·công đoạn của máy đó được cập nhật vào thông tin máy.',setupDoneTitle:'Setup hoàn tất',setupDoneText:'Đã hoàn tất setup cho cả {n} máy thay đổi. Thông tin máy (model·công đoạn) đã được cập nhật.',setupDonePeriod:'Thời gian {a} ~ {b}',setupRowDone:'Xong {t}'});
 Object.assign(dbMessages.vi,{trayTitle:'Khay mảnh ghép',trayHelp:'Kéo mảnh ghép vào máy trên bản vẽ. Model·công đoạn cũ của máy đó quay về khay. Kéo một máy sang máy khác để di chuyển, thả vào ô Bỏ trống bên dưới để để trống. Shift+nhấp để chọn nhiều máy trong một cột. Cảm ứng: chạm mảnh ghép rồi chạm máy.',trayNeed:'Mảnh cần đặt',trayNeedEmpty:'Đã đủ ✓',traySpare:'Dư — máy có thể đổi',traySpareEmpty:'Không có',trayDropOut:'Thả máy vào đây để bỏ trống',ruleGood:'Liền nhóm',ruleWarn:'Lẫn công đoạn trong lối đi',ruleBad:'Tách rời·chèn giữa·3 đoạn',violations:'Vi phạm quy tắc',armed:'Chạm máy để đặt {g} · chạm lại hoặc Esc để hủy',noRoom:'Cột này không đủ chỗ.',placedBad:'⚠ Vi phạm: {r} — nhấn ↶ để hoàn tác',placedWarn:'Lối đi đang lẫn công đoạn.',reasonIsland:'tách rời',reasonMiddle:'chèn giữa',reasonThree:'3 đoạn',rangeHint:'Đã chọn {n} máy trong một cột — kéo để di chuyển cùng lúc hoặc thả mảnh ghép để điền cùng lúc.',fromTile:'Đang di chuyển từ máy',fromTray:'Từ khay'});
 
 /**
@@ -139,7 +141,7 @@ function render(){
  $('demoBadge').hidden=!draft.demo;
  // Alerts first: they recompute `summary`, which the inspector's group line reads. Drawing the inspector first
  // showed the previous draft's numbers after every edit/undo (2026-09-28).
- renderMap();renderAlerts();renderTray();renderInspector();renderChanges();renderLegend();renderSaveStatus();renderSetup();
+ renderMap();renderAlerts();renderTray();renderInspector();renderChanges();renderLegend();renderSaveStatus();renderSetup();renderSetupBoard();
  $('undo').disabled=!undoStack.length;$('redo').disabled=!redoStack.length;
 }
 function renderMap(){
@@ -211,9 +213,52 @@ function renderSetup(){
  $('setupTarget').textContent=t('setupTarget')+': '+label(setupAssignment(machines.get(selected)))+(task?' ('+label(task.before)+' → '+label(task.target)+')':'')+(task&&task.previousPlan?' · '+t('setupPreviousPlan'):'');
  $('setupTimes').replaceChildren();
  if(task)for(const event of task.events){const line=document.createElement('div');line.textContent=t({pending:'setupAt',in_progress:'setupStarted',completed:'setupFinished'}[event.status])+' · '+new Date(event.at).toLocaleString(lang==='ko'?'ko-KR':'vi-VN')+' · '+t('setupActor');$('setupTimes').append(line);}
- $('setupStart').hidden=!task||task.status!=='pending';$('setupComplete').hidden=!task||task.status!=='in_progress';
+ $('setupStart').hidden=!task||task.status!=='pending';$('setupComplete').hidden=!task||task.status!=='in_progress';$('setupStart').disabled=$('setupComplete').disabled=setupBusy.has(selected);
 }
-function transitionSetup(from,to){const task=setupTask(selected);if(!task||task.status!==from)return;if(backend){backend.transition(selected,to).then(next=>{setupBatch=next;render();toast(t('setupSaved'));}).catch(error=>{const code=error&&error.code;toast(code==='setup_machine_changed'?t('setupMachineChanged'):code==='machine_inactive'?t('setupMachineInactive'):t('setupFailed'));});return;}const next=copy(setupBatch);next.tasks[selected].status=to;next.tasks[selected].events.push({status:to,at:new Date().toISOString(),actor:'preview-user'});if(saveSetup(next)){render();toast(t('setupSaved'));}}
+// One machine per call (user decision 2026-09-28: no bulk complete — completing writes that machine to the DB). A machine
+// with a request in flight is busy, so a double click cannot send the same transition twice.
+let setupBusy=new Set();
+function transitionSetup(from,to,id=selected){const task=setupTask(id);if(!task||task.status!==from||setupBusy.has(id))return;if(backend){setupBusy.add(id);render();backend.transition(id,to).then(next=>{setupBatch=next;toast(t('setupSaved'));}).catch(error=>{const code=error&&error.code;toast(code==='setup_machine_changed'?t('setupMachineChanged'):code==='machine_inactive'?t('setupMachineInactive'):t('setupFailed'));}).finally(()=>{setupBusy.delete(id);render();});return;}const next=copy(setupBatch);next.tasks[id].status=to;next.tasks[id].events.push({status:to,at:new Date().toISOString(),actor:'preview-user'});if(saveSetup(next)){render();toast(t('setupSaved'));}}
+
+// ── Setup board (user decision 2026-09-28) ───────────────────────────────────
+// Every task of the confirmed plan in one list — in progress, then waiting, then done, by walkway and number — with the
+// next action on each row, a progress bar, and a "setup complete" summary once every machine is done.
+const setupBoard=document.createElement('section');setupBoard.className='setup-board';setupBoard.id='setupBoard';setupBoard.hidden=true;
+setupBoard.innerHTML='<div class="puzzle-head"><strong data-i18n="setupBoard"></strong><span id="setupProgressText" class="setup-progress-text"></span></div>'
+ +'<div class="setup-progress" role="progressbar" aria-valuemin="0"><span id="setupProgressBar"></span></div>'
+ +'<div id="setupDone" class="setup-done" hidden></div>'
+ +'<p class="puzzle-help" data-i18n="setupListHint"></p><div id="setupList" class="setup-list"></div>';
+root.querySelector('.inspector').prepend(setupBoard);
+const when=at=>new Date(at).toLocaleString(lang==='ko'?'ko-KR':'vi-VN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+function renderSetupBoard(){
+ const on=mode==='setup'&&!!setupBatch;setupBoard.hidden=!on;if(!on)return;
+ const rank={in_progress:0,pending:1,completed:2};
+ const rows=Object.entries(setupBatch.tasks).map(([id,task])=>({id:Number(id),task,m:machines.get(Number(id))})).filter(r=>r.m)
+  .sort((a,b)=>rank[a.task.status]-rank[b.task.status]||String(a.m.walkway||'').localeCompare(String(b.m.walkway||''))||a.id-b.id);
+ const done=rows.filter(r=>r.task.status==='completed').length,total=rows.length;
+ $('setupProgressText').textContent=tf('setupProgress',{d:done,n:total});
+ const bar=$('setupProgressBar');bar.style.width=(total?done/total*100:0)+'%';bar.parentElement.setAttribute('aria-valuenow',done);bar.parentElement.setAttribute('aria-valuemax',total);
+ const allDone=total>0&&done===total;$('setupDone').hidden=!allDone;
+ if(allDone){
+  const times=rows.map(r=>(r.task.events.find(e=>e.status==='completed')||{}).at).filter(Boolean).sort();
+  const title=document.createElement('strong');title.textContent='✓ '+t('setupDoneTitle');
+  const text=document.createElement('p');text.textContent=tf('setupDoneText',{n:total});
+  const period=document.createElement('small');period.textContent=times.length?tf('setupDonePeriod',{a:when(times[0]),b:when(times[times.length-1])}):'';
+  $('setupDone').replaceChildren(title,text,period);
+ }
+ $('setupList').replaceChildren(...rows.map(({id,task})=>{
+  const row=document.createElement('div');row.className='setup-row'+(id===selected?' selected':'');row.dataset.id=id;row.dataset.state=task.status;
+  const main=document.createElement('button');main.type='button';main.className='setup-row-main';
+  const icon=document.createElement('span');icon.className='setup-icon';icon.textContent={pending:'○',in_progress:'◐',completed:'✓'}[task.status];
+  const name=document.createElement('strong');name.textContent=String(id).padStart(3,'0');
+  const sw=document.createElement('i');sw.className='setup-swatch';sw.style.background=tone(task.target).solid;
+  const change=document.createElement('small');change.textContent=label(task.before)+' → '+label(task.target)+(task.previousPlan?' · '+t('setupPreviousPlan'):'');
+  main.append(icon,name,sw,change);main.onclick=()=>selectMachine(id,true);row.append(main);
+  if(task.status==='completed'){const at=(task.events.find(e=>e.status==='completed')||{}).at;const s=document.createElement('span');s.className='setup-row-time';s.textContent=at?tf('setupRowDone',{t:when(at)}):t('setupDone');row.append(s);}
+  else{const action=document.createElement('button');action.type='button';action.className='setup-row-action'+(task.status==='in_progress'?' primary':'');action.textContent=t(task.status==='pending'?'setupStart':'setupComplete');action.disabled=setupBusy.has(id);action.onclick=()=>{selected=id;transitionSetup(task.status,task.status==='pending'?'in_progress':'completed',id);};row.append(action);}
+  return row;
+ }));
+}
 
 // ── DB mode: CAPA alerts + confirm ───────────────────────────────────────────
 const ALERT_KEY={shortage:'alertShortage',process_missing:'alertProcessMissing',demand_unknown:'alertDemandUnknown',surplus:'alertSurplus',zero_demand:'alertZero',not_computable:'alertNotComputable',not_in_forecast:'alertNotInForecast'};

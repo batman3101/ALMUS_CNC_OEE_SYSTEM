@@ -486,6 +486,12 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         const others = server.state.tasks.filter(t => t !== task305);
         assert.ok(others.every(t => server.machines.find(m => m.id === t.machine_id).modelId === t.before_model_id));
         assert.match(await L('#setupCounts').innerText(), /완료 1/);
+        // Setup board: one list of every task — waiting first here, the finished one last — with progress.
+        assert.equal(await L('#setupBoard').isVisible(), true);
+        assert.equal(await L('#setupProgressText').innerText(), '완료 1 / 6대');
+        const rowStates = await L('.setup-row').evaluateAll(els => els.map(e => e.dataset.state));
+        assert.deepEqual(rowStates, ['pending', 'pending', 'pending', 'pending', 'pending', 'completed']);
+        assert.equal(await L('#setupDone').isVisible(), false);
         await page.selectOption(S('#setupFilter'), 'completed');
         assert.equal(await L('.machine:not(.dim)[data-setup="completed"]').count(), 1);
         await page.reload(); await ready(page);
@@ -511,6 +517,38 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.deepEqual(errors, []);
         assert.deepEqual(studioWrites(writes), []);
         assert.ok(server.state.writes.every(w => /^(PATCH|POST) \/api\/layout-planning\//.test(w)));
+      });
+      await context.close();
+    }
+
+    // ── Setup board: every machine through the list, one at a time, to "setup complete" ──────────────
+    {
+      const { context, page, errors, server } = await openApp(browser);
+      await page.goto(root + '/layout-studio'); await ready(page);
+      const L = sel => page.locator(S(sel));
+      await check('Setup board: each row starts and completes its own machine; all done → "setup complete" summary, every machine at its target', async () => {
+        await L('#confirmLayout').click(); await L('#confirmLayoutGo').click();
+        await page.waitForSelector('[data-testid="studio-notice"]'); await ready(page);
+        await page.waitForFunction(() => document.querySelectorAll('.layout-studio .setup-row').length === 6);
+        for (let i = 0; i < 6; i++) {
+          const id = Number(await L('.setup-row[data-state="pending"]').first().getAttribute('data-id'));
+          await L(`.setup-row[data-id="${id}"] .setup-row-action`).click();
+          await page.waitForFunction(n => window.__layoutStudio.state().setup.tasks[String(n)].status === 'in_progress', id);
+          // The machine being set up moves to the top, its button now says "complete"; the map outline turns orange.
+          assert.equal(await L('.setup-row').first().getAttribute('data-id'), String(id));
+          assert.match(await L(`.setup-row[data-id="${id}"] .setup-row-action`).innerText(), /셋업 완료/);
+          if (i === 2) await page.screenshot({ path: path.join(output, 'setup-board.png'), fullPage: true });
+          await L(`.setup-row[data-id="${id}"] .setup-row-action`).click();
+          await page.waitForFunction(n => window.__layoutStudio.state().setup.tasks[String(n)].status === 'completed', id);
+          assert.equal(await L('#setupProgressText').innerText(), `완료 ${i + 1} / 6대`);
+          assert.equal(await L('#setupDone').isVisible(), i === 5);
+        }
+        assert.match(await L('#setupDone').innerText(), /셋업 완료[\s\S]*6대[\s\S]*기간/);
+        assert.ok(server.state.tasks.every(t => t.status === 'completed'));
+        assert.ok(server.state.tasks.every(t => { const m = server.machines.find(x => x.id === t.machine_id); return m.modelId === t.target_model_id && m.processId === t.target_process_id; }));
+        assert.ok(await L('.setup-row-action').count() === 0);
+        await page.screenshot({ path: path.join(output, 'setup-board-done.png'), fullPage: true });
+        assert.deepEqual(errors, []);
       });
       await context.close();
     }

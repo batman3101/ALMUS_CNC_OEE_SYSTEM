@@ -2,7 +2,7 @@
   "result": "PASS",
   "mode": "db",
   "root": "http://localhost:3000",
-  "timestamp": "2026-09-28T08:57:51.732Z",
+  "timestamp": "2026-09-28T09:03:08.058Z",
   "checks": [
     "800 machines from the app sit on their Excel cells with their CNC numbers",
     "The recommended layout opens first: 6 recommended moves, labelled, compare shows them",
@@ -26,6 +26,7 @@
     "Setup: start then complete one machine through the server; order is enforced; state survives reload",
     "Setup completion is refused when the machine was changed elsewhere meanwhile, and the user is told why",
     "No JavaScript errors; the only writes are layout-planning calls (and the shell preference save)",
+    "Setup board: each row starts and completes its own machine; all done → \"setup complete\" summary, every machine at its target",
     "A failed setup save does not mark the machine started (360px)",
     "A factory without a drawing (ALV for now) shows the no-drawing state, not a broken map",
     "Without a plan the current layout is shown read-only with a way to the Forecast screen",
