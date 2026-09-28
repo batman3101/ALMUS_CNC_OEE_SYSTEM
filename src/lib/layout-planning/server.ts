@@ -83,11 +83,13 @@ export async function loadGeometry(factoryId: string) {
   if (error) raise(error);
   if (!geometry) return null;
   const { data, error: posError } = await supabaseAdmin.from('machine_layout_positions')
-    .select('machine_id, building, cell, x, y, width, height')
+    .select('machine_id, building, cell, x, y, width, height, walkway, walkway_side')
     .eq('factory_id', factoryId).eq('geometry_id', geometry.id).limit(ROW_LIMIT);
   if (posError) raise(posError);
   const positions: WorkspacePosition[] = bounded(data).map(p => ({
     machineId: p.machine_id, building: p.building, cell: p.cell, x: Number(p.x), y: Number(p.y), width: Number(p.width), height: Number(p.height),
+    // Operator walkway (20260928130000). NULL on drawings whose walkways are not known — recommendation then uses distance.
+    walkway: (p.walkway as string | null) ?? null, side: (p.walkway_side as 'L' | 'R' | null) ?? null,
   }));
   return { id: geometry.id as string, sourceFile: geometry.source_file as string, sourceSheet: geometry.source_sheet as string | null, sourceHash: geometry.source_hash as string, note: geometry.note as string | null, positions };
 }

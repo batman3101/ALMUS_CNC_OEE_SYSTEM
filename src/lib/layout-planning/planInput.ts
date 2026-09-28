@@ -1,6 +1,6 @@
 import type { ForecastSnapshotMachine, ForecastSnapshotModel } from '@/types/forecast';
 import type { WeeklyModelDemand } from '@/lib/forecast/weeklyDemand';
-import { matchModels, normalizeModelName, processRefs, type ModelMatch } from '@/lib/forecast/modelAliases';
+import { matchModels, normalizeModelName, normalizeProcessName, processRefs, type ModelMatch } from '@/lib/forecast/modelAliases';
 import { buildRequirements } from '@/lib/forecast/requiredMachines';
 import { recommendLayout, type LayoutRecommendation, type MachinePosition } from './recommendLayout';
 
@@ -101,8 +101,10 @@ export function buildPlanDraft(input: PlanDraftInput) {
     return label ? [{ ...d, model: label }] : [];
   });
 
+  // "One process per walkway" compares process names (CNC1/CNC2), not ids — every model has its own process ids.
+  const processNames = new Map(input.snapshotModels.flatMap(m => m.processes.map(p => [p.id, normalizeProcessName(p.name) ?? p.name] as const)));
   const recommendation: LayoutRecommendation = recommendLayout({
-    requirements: requirementRows, machines: input.machines, positions: input.positions, locked: input.locked, nextWeekDemands,
+    requirements: requirementRows, machines: input.machines, positions: input.positions, locked: input.locked, nextWeekDemands, processNames,
   });
 
   const requirements: RequirementPayload[] = requirementRows
