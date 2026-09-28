@@ -159,6 +159,10 @@ export const CloseShiftQueue: React.FC = () => {
             ? t('closeQueue.errorBelowProgress', { qty: body.last_progress_qty ?? 0 })
             : body?.error === 'output_qty is less than confirmed defect_qty'
               ? t('closeQueue.errorBelowDefect', { qty: body.defect_qty ?? 0 })
+              : body?.error === 'already_closed'
+                // 표가 오래된 사이 다른 사람이 먼저 마감했다(감사 F-02). 행과 입력값은 지우지 않는다 —
+                // 사용자가 자기가 넣으려던 숫자를 보며 생산 기록 목록에서 확인·수정할 수 있어야 한다.
+                ? t('closeQueue.errorAlreadyClosed')
               : body?.error === 'defect_exceeds_output'
                 ? t('closeQueue.errorDefectExceeds', { qty: body.output_qty ?? qty })
               : body?.error?.includes('still open')
@@ -173,11 +177,9 @@ export const CloseShiftQueue: React.FC = () => {
       setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
       setQtyByKey(prev => { const next = { ...prev }; delete next[key]; return next; });
       setDefectByKey(prev => { const next = { ...prev }; delete next[key]; return next; });
-      const result = await res.json().catch(() => null) as { defect?: 'saved' | 'failed' | 'not_requested' } | null;
-      if (result?.defect === 'failed') {
-        // 마감은 됐고 행도 목록에서 빠졌다. 불량만 못 들어갔으니 어디서 다시 넣는지 분명히 알린다.
-        messageApi.warning(t('closeQueue.defectSaveFailed', { machine: item.machine_name }), 8);
-      } else if (result?.defect === 'saved') {
+      // 불량과 함께 마감하면 서버가 한 트랜잭션으로 저장한다 — 성공이면 둘 다, 실패면 둘 다 안 된 것이다.
+      const result = await res.json().catch(() => null) as { defect?: 'saved' | 'not_requested' } | null;
+      if (result?.defect === 'saved') {
         messageApi.success(t('closeQueue.closeSuccessWithDefect', { machine: item.machine_name, defect }));
       } else {
         messageApi.success(t('closeQueue.closeSuccess', { machine: item.machine_name }));

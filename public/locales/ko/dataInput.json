@@ -157,8 +157,8 @@
     "finalDefect": "최종 불량",
     "defectPlaceholder": "비우면 나중에",
     "closeSuccessWithDefect": "{{machine}} 교대를 불량 {{defect}}개로 마감했습니다",
-    "defectSaveFailed": "{{machine}} 교대는 마감됐지만 불량은 저장되지 않았습니다. 생산 기록의 불량 대기에서 다시 입력하세요",
-    "errorDefectExceeds": "불량이 최종수량({{qty}}개)보다 많습니다"
+    "errorDefectExceeds": "불량이 최종수량({{qty}}개)보다 많습니다",
+    "errorAlreadyClosed": "이미 다른 사람이 마감했습니다. 생산 기록 목록에서 확인·수정하세요"
   },
   "recordList": {
     "title": "생산 기록 관리",

@@ -15,7 +15,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * POST /api/production-records/close-shift — 교대 마감.
  * output = final_qty(있으면) 또는 그 교대 마지막 진척값.
- * defect = `defect_qty`(있으면 마감 직후 확정) 또는 NULL(미검사 → 불량 대기, 다음날 입력).
+ * defect = `defect_qty`(있으면 마감과 한 트랜잭션으로 확정) 또는 NULL(미검사 → 불량 대기, 다음날 입력).
  * 늦게 불러도 귀속은 인자의 date/shift (입력 시각 무관). avail×perf 는 지금 확정, 품질/OEE 는 보류.
  */
 export async function POST(request: NextRequest) {
@@ -66,8 +66,7 @@ export async function POST(request: NextRequest) {
       outputQty = last?.shift_output_qty ?? null;
     }
     if (outputQty === null) return NextResponse.json({ error: 'no quantity to close (진척·final_qty 없음)' }, { status: 400 });
-    // 불량 > 마감 수량은 확정 RPC 가 어차피 거부한다. 그걸 마감 **뒤에** 알게 되면 마감만 된 반쪽 저장이
-    // 남으므로, 명백한 경우는 아무것도 쓰기 전에 끊는다.
+    // 불량 > 마감 수량은 RPC 도 거부하지만, 인자만 보면 알 수 있는 오류라 지문·비가동 조회 전에 끊는다.
     if (defectQty !== null && defectQty > outputQty)
       return NextResponse.json({ error: 'defect_exceeds_output', output_qty: outputQty }, { status: 400 });
 
@@ -129,7 +128,7 @@ export async function POST(request: NextRequest) {
       operatingMinutes, breakMinutes, downtimeMinutes, outputQty, defectQty: null, tactSeconds,
     });
 
-    const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('close_shift_upsert_v3', {
+    const closeParams = {
       p_machine_id: machineId, p_date: date, p_shift: shift, p_output_qty: outputQty,
       // 정수 컬럼(runtime)·소수 4자리(비율)로 반올림해 저장한다(daily 라우트와 동일 규율).
       p_planned_runtime: Math.round(snap.plannedRuntime),
@@ -146,7 +145,18 @@ export async function POST(request: NextRequest) {
       // 하향 마감 사유와 그 기록의 주체. 서비스 롤로 부르므로 auth.uid() 를 쓸 수 없다.
       p_below_progress_reason: belowProgressReason,
       p_actor_id: user.userId,
-    });
+    };
+
+    /**
+     * 불량을 함께 확정하면 마감과 불량을 **한 트랜잭션**으로 저장하는 `close_shift_with_defect` 를 부른다
+     * (감사 2026-09-28 F-01·F-02, 20260928120000). 예전처럼 두 RPC 를 따로 부르면 그 사이에 다른 마감이
+     * 끼어들어 남의 생산량과 내 불량이 한 기록에 섞였고, 불량 단계만 실패한 반쪽이 남았다.
+     * 이 RPC 는 아직 마감되지 않은 교대에만 쓴다 — 이미 마감됐으면 `already_closed`(사용자 확정 2026-09-28).
+     * 불량이 없으면 예전 그대로 v3(미검사 → 불량 대기, 재마감 허용).
+     */
+    const { data: rpcData, error: rpcError } = defectQty === null
+      ? await supabaseAdmin.rpc('close_shift_upsert_v3', closeParams)
+      : await supabaseAdmin.rpc('close_shift_with_defect', { ...closeParams, p_defect: defectQty });
 
     const rpcResult = rpcData as {
       ok?: boolean; reason?: string; defect_qty?: number; last_progress_qty?: number;
@@ -181,36 +191,20 @@ export async function POST(request: NextRequest) {
           { error: 'downtime source changed during close', retryable: true },
           { status: 409 },
         );
+      // 오래된 대기 표에서 누른 사이 다른 사람이 먼저 마감했다. 그 사람이 확정한 불량을 덮어쓰지 않는다.
+      if (rpcResult?.reason === 'already_closed')
+        return NextResponse.json({ error: 'already_closed' }, { status: 409 });
+      // 라우트가 앞에서 걸렀지만, 판정의 최종 권한은 RPC 에 있다.
+      if (rpcResult?.reason === 'defect_exceeds_output')
+        return NextResponse.json({ error: 'defect_exceeds_output', output_qty: outputQty }, { status: 400 });
       console.error('교대 마감 저장 오류:', rpcError ?? rpcData);
       return NextResponse.json({ error: 'Failed to close shift' }, { status: 500 });
     }
 
-    if (defectQty === null) return NextResponse.json({ success: true, defect: 'not_requested' }, { status: 201 });
-
-    /**
-     * 불량 확정은 기존 `confirm_shift_defect` RPC 를 그대로 쓴다 — 불량 대기 화면과 같은 쓰기 경로다.
-     * 마감과 한 트랜잭션은 아니다(묶으려면 새 RPC = 운영 마이그레이션). 둘 다 같은 advisory 키
-     * (machine·date·shift) 아래에서 차례로 돌고, 실패해도 마감은 유효하며 불량은 미검사로 남아 불량 대기에
-     * 다시 나타난다 — 되돌릴 수 있는 반쪽이다. 그래서 되돌리지 않고 `defect: 'failed'` 로 분명히 알린다.
-     */
-    const { data: closed } = await supabaseAdmin
-      .from('production_records')
-      .select('record_id')
-      .eq('factory_id', user.factoryId)
-      .eq('machine_id', machineId).eq('date', date).eq('shift', shift)
-      .maybeSingle();
-    if (!closed?.record_id) {
-      console.error('마감 직후 record 조회 실패 — 불량 미확정:', { machineId, date, shift });
-      return NextResponse.json({ success: true, defect: 'failed' }, { status: 201 });
-    }
-    const { data: defectData, error: defectError } = await supabaseAdmin
-      .rpc('confirm_shift_defect', { p_record_id: closed.record_id, p_defect: defectQty });
-    const defectResult = defectData as { ok?: boolean; reason?: string } | null;
-    if (defectError || !defectResult?.ok) {
-      console.error('마감 후 불량 확정 실패:', defectError ?? defectResult);
-      return NextResponse.json({ success: true, defect: 'failed' }, { status: 201 });
-    }
-    return NextResponse.json({ success: true, defect: 'saved' }, { status: 201 });
+    return NextResponse.json(
+      { success: true, defect: defectQty === null ? 'not_requested' : 'saved' },
+      { status: 201 },
+    );
   } catch (error) {
     const authResponse = apiAuthErrorResponse(error);
     if (authResponse) return authResponse;

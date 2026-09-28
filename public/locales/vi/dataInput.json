@@ -157,8 +157,8 @@
     "finalDefect": "Lỗi cuối",
     "defectPlaceholder": "Để trống = nhập sau",
     "closeSuccessWithDefect": "Đã chốt ca cho {{machine}} với {{defect}} lỗi",
-    "defectSaveFailed": "Ca của {{machine}} đã được chốt nhưng số lỗi chưa được lưu. Hãy nhập lại ở mục chờ nhập lỗi trong hồ sơ sản xuất",
-    "errorDefectExceeds": "Số lỗi lớn hơn sản lượng cuối ({{qty}} cái)"
+    "errorDefectExceeds": "Số lỗi lớn hơn sản lượng cuối ({{qty}} cái)",
+    "errorAlreadyClosed": "Ca này đã được người khác chốt. Hãy kiểm tra và sửa trong danh sách hồ sơ sản xuất"
   },
   "recordList": {
     "title": "Quản lý bản ghi sản xuất",

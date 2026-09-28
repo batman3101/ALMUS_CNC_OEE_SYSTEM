@@ -71,11 +71,10 @@ const wireDb = (
   {
     lastQty = 112, tact = 300, digest = DIGEST as string | null,
     upsert = { ok: true, preserved_defect: null } as Record<string, unknown>,
-    record = { record_id: 'rec-1' } as Record<string, unknown> | null,
-    defect = { data: { ok: true }, error: null } as { data: unknown; error: unknown },
+    withDefect = { data: { ok: true, record_id: 'rec-1' }, error: null } as { data: unknown; error: unknown },
   }: {
     lastQty?: number | null; tact?: number | null; digest?: string | null; upsert?: Record<string, unknown>;
-    record?: Record<string, unknown> | null; defect?: { data: unknown; error: unknown };
+    withDefect?: { data: unknown; error: unknown };
   } = {}
 ) => {
   mockFrom.mockImplementation((t: string) => {
@@ -84,10 +83,6 @@ const wireDb = (
     }
     if (t === 'machines_with_production_info') {
       return chain({ data: { current_tact_time: tact }, error: null });
-    }
-    // 마감 직후 불량 확정용으로 방금 만든 record 를 찾는다.
-    if (t === 'production_records') {
-      return chain({ data: record, error: null });
     }
     throw new Error(`unexpected ${t}`);
   });
@@ -99,7 +94,7 @@ const wireDb = (
         : { data: digest, error: null };
     }
     if (name === 'close_shift_upsert_v3') return { data: upsert, error: null };
-    if (name === 'confirm_shift_defect') return defect;
+    if (name === 'close_shift_with_defect') return withDefect;
     throw new Error(`unexpected rpc ${name}`);
   });
 };
@@ -302,37 +297,52 @@ describe('POST /api/production-records/close-shift', () => {
    * 필요한 마감이 사유 없이 통과할 수 있다.
    */
   /**
-   * 마감과 함께 최종 불량 입력 (2026-09-28 사용자 요청).
+   * 마감과 함께 최종 불량 입력 (2026-09-28 사용자 요청) — 감사 F-01·F-02 반영.
    *
-   * 예전에는 마감 → (다음날) 불량 대기 → 불량 확정의 두 단계였고, 마감 대기 표에는 불량
-   * 칸이 없어 현장이 불량을 어디서 넣는지 헤맸다. 이제 마감 요청에 `defect_qty` 를 실으면
-   * 마감 뒤 같은 요청에서 기존 불량 확정 RPC 를 부른다. 비워 두면 예전 그대로 불량 대기.
+   * 불량을 주면 마감과 불량을 **한 트랜잭션**으로 저장하는 `close_shift_with_defect` 하나만 부른다.
+   * 예전에는 v3 → confirm_shift_defect 를 따로 불러 그 사이에 다른 마감이 끼어들면 생산·불량이 섞였고
+   * (F-01), 불량만 실패한 반쪽이 남았다(F-02). 실제 경합은 supabase/tests/close_shift_with_defect_concurrency.sh.
    */
   describe('마감과 함께 불량 확정', () => {
     const rpcNames = () => mockRpc.mock.calls.map(c => c[0]);
+    const withDefectPayload = () => mockRpc.mock.calls.find(c => c[0] === 'close_shift_with_defect')![1] as Record<string, unknown>;
 
-    it('defect_qty 를 주면 마감 **뒤에** 방금 만든 record 로 불량을 확정한다', async () => {
+    it('defect_qty 를 주면 원자 RPC 하나로 저장하고, 따로 부르는 두 단계는 쓰지 않는다', async () => {
       wireDb();
       const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100, defect_qty: 3 }));
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(expect.objectContaining({ success: true, defect: 'saved' }));
-      // 순서가 뒤집히면 불량을 붙일 record 가 아직 없다.
-      expect(rpcNames().indexOf('close_shift_upsert_v3')).toBeLessThan(rpcNames().indexOf('confirm_shift_defect'));
-      const call = mockRpc.mock.calls.find(c => c[0] === 'confirm_shift_defect')!;
-      expect(call[1]).toEqual({ p_record_id: 'rec-1', p_defect: 3 });
+      expect(rpcNames()).toContain('close_shift_with_defect');
+      // 두 번 나눠 부르면 그 사이가 곧 F-01 의 경합 창이다.
+      expect(rpcNames()).not.toContain('close_shift_upsert_v3');
+      expect(rpcNames()).not.toContain('confirm_shift_defect');
+      expect(withDefectPayload()).toEqual(expect.objectContaining({ p_output_qty: 100, p_defect: 3 }));
+    });
+
+    it('마감 인자(지문·시간창·사유·주체)를 v3 와 똑같이 넘긴다', async () => {
+      wireDb();
+      await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100, defect_qty: 3, below_progress_reason: 'r' }));
+      expect(withDefectPayload()).toEqual(expect.objectContaining({
+        p_machine_id: MACHINE, p_date: '2026-07-17', p_shift: 'A',
+        p_expected_digest: DIGEST,
+        p_window_start: new Date(WINDOW.start).toISOString(),
+        p_window_end: new Date(WINDOW.end).toISOString(),
+        p_below_progress_reason: 'r', p_actor_id: 'op-1',
+      }));
     });
 
     it('불량 0 도 "확정 0" 이다 — 비운 것(미검사)과 다르다', async () => {
       wireDb();
       await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100, defect_qty: 0 }));
-      expect(mockRpc.mock.calls.find(c => c[0] === 'confirm_shift_defect')?.[1]).toEqual({ p_record_id: 'rec-1', p_defect: 0 });
+      expect(withDefectPayload().p_defect).toBe(0);
     });
 
-    it('defect_qty 가 없으면 예전처럼 불량은 미검사(NULL)로 남긴다', async () => {
+    it('defect_qty 가 없으면 예전처럼 v3 로 마감하고 불량은 미검사(NULL)로 남긴다', async () => {
       wireDb();
       const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100 }));
       expect(await res.json()).toEqual(expect.objectContaining({ success: true, defect: 'not_requested' }));
-      expect(rpcNames()).not.toContain('confirm_shift_defect');
+      expect(rpcNames()).toContain('close_shift_upsert_v3');
+      expect(rpcNames()).not.toContain('close_shift_with_defect');
     });
 
     it.each([[-1], [1.5], ['3']])('잘못된 defect_qty(%p)는 아무것도 쓰기 전에 400', async (bad) => {
@@ -342,8 +352,7 @@ describe('POST /api/production-records/close-shift', () => {
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it('불량이 마감 수량보다 크면 마감도 하지 않고 400', async () => {
-      // 마감만 되고 불량이 거부되면 사용자는 반쪽 저장을 떠안는다 — 명백한 오류는 앞에서 끊는다.
+    it('불량이 마감 수량보다 크면 아무것도 부르기 전에 400', async () => {
       wireDb();
       const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10, defect_qty: 11 }));
       expect(res.status).toBe(400);
@@ -358,33 +367,25 @@ describe('POST /api/production-records/close-shift', () => {
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it('마감이 거부되면 불량 확정은 시도하지 않는다', async () => {
-      wireDb({ upsert: { ok: false, reason: 'below_progress_needs_reason', last_progress_qty: 112 } });
+    it('이미 다른 사람이 마감한 교대면 409 already_closed (덮어쓰지 않는다, 사용자 확정 2026-09-28)', async () => {
+      wireDb({ withDefect: { data: { ok: false, reason: 'already_closed' }, error: null } });
+      const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100, defect_qty: 3 }));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual(expect.objectContaining({ error: 'already_closed' }));
+    });
+
+    it('마감 단계의 거부(사유 필요)도 그대로 전한다', async () => {
+      wireDb({ withDefect: { data: { ok: false, reason: 'below_progress_needs_reason', last_progress_qty: 112 }, error: null } });
       const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 10, defect_qty: 1 }));
       expect(res.status).toBe(409);
-      expect(rpcNames()).not.toContain('confirm_shift_defect');
+      expect(await res.json()).toEqual(expect.objectContaining({ error: 'below_progress_needs_reason', last_progress_qty: 112 }));
     });
 
-    it('마감은 됐는데 불량 저장이 실패하면 숨기지 않고 defect: failed 로 알린다', async () => {
-      // 마감은 이미 확정됐으므로 되돌리지 않는다. 대신 화면이 "불량 대기에서 다시 입력"을 안내할 수 있게
-      // 실패를 분명히 싣는다 — 201 만 보내면 불량이 저장된 줄 안다.
-      wireDb({ defect: { data: null, error: { message: 'boom' } } });
+    it('RPC 오류면 500 — "마감은 됐는데 불량만 실패" 같은 반쪽 응답은 더 이상 없다', async () => {
+      // 원자 RPC 가 실패하면 마감도 저장되지 않았다. 성공(201)으로 포장하면 안 된다.
+      wireDb({ withDefect: { data: null, error: { message: 'boom' } } });
       const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100, defect_qty: 3 }));
-      expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(expect.objectContaining({ success: true, defect: 'failed' }));
-    });
-
-    it('RPC 가 불량을 거부해도(ok=false) defect: failed', async () => {
-      wireDb({ defect: { data: { ok: false, reason: 'exceeds_output' }, error: null } });
-      const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100, defect_qty: 3 }));
-      expect(await res.json()).toEqual(expect.objectContaining({ defect: 'failed' }));
-    });
-
-    it('방금 만든 record 를 찾지 못해도 defect: failed', async () => {
-      wireDb({ record: null });
-      const res = await POST(req({ machine_id: MACHINE, date: '2026-07-17', shift: 'A', final_qty: 100, defect_qty: 3 }));
-      expect(await res.json()).toEqual(expect.objectContaining({ defect: 'failed' }));
-      expect(rpcNames()).not.toContain('confirm_shift_defect');
+      expect(res.status).toBe(500);
     });
   });
 
