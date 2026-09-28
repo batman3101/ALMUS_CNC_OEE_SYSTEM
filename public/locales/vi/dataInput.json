@@ -140,7 +140,7 @@
   },
   "closeQueue": {
     "title": "Ca chờ chốt",
-    "description": "Các ca đã có báo cáo tiến độ nhưng chưa được chốt. Hãy kiểm tra sản lượng cuối của từng dòng và chốt riêng lẻ. Không hỗ trợ chốt hàng loạt tự động.",
+    "description": "Các ca đã có báo cáo tiến độ nhưng chưa được chốt. Hãy kiểm tra sản lượng cuối và số lỗi cuối của từng dòng rồi chốt riêng lẻ. Nếu để trống số lỗi, ca sẽ chuyển sang chờ nhập lỗi sau khi chốt. Không hỗ trợ chốt hàng loạt tự động.",
     "lastProgress": "Tiến độ cuối",
     "finalQty": "Sản lượng cuối",
     "status": "Trạng thái",
@@ -153,7 +153,12 @@
     "errorGeneric": "Chốt ca thất bại",
     "errorTooEarly": "Ca này chưa kết thúc",
     "errorBelowProgress": "Nhỏ hơn tiến độ ({{qty}} cái). Hãy chốt kèm lý do tại bảng điều khiển hiện trường",
-    "errorBelowDefect": "Nhỏ hơn số lượng lỗi đã xác nhận ({{qty}} cái)"
+    "errorBelowDefect": "Nhỏ hơn số lượng lỗi đã xác nhận ({{qty}} cái)",
+    "finalDefect": "Lỗi cuối",
+    "defectPlaceholder": "Để trống = nhập sau",
+    "closeSuccessWithDefect": "Đã chốt ca cho {{machine}} với {{defect}} lỗi",
+    "errorDefectExceeds": "Số lỗi lớn hơn sản lượng cuối ({{qty}} cái)",
+    "errorAlreadyClosed": "Ca này đã được người khác chốt. Hãy kiểm tra và sửa trong danh sách hồ sơ sản xuất"
   },
   "recordList": {
     "title": "Quản lý bản ghi sản xuất",
