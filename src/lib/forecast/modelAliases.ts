@@ -6,6 +6,7 @@ export const normalizeModelName = (name: string): string => name.replace(/\s+/g,
  * Forecast spelling → DB spelling, both normalized. Verified against the live DB on 2026-09-25:
  * these are the only machine-bearing models whose names differ beyond spacing/case.
  * Adding an entry here is a mapping decision; confirm with the factory before extending.
+ * Used only when no active app model carries the Forecast name itself (see matchModels).
  */
 export const FORECAST_MODEL_ALIASES: Readonly<Record<string, string>> = { H8MAIN: 'H8M', DIAMOND3: 'DM3' };
 
@@ -46,8 +47,12 @@ export function matchModels(forecastModels: string[], snapshotModels: ForecastSn
   const result = new Map<string, ModelMatch>();
   for (const forecastModel of forecastModels) {
     const normalized = normalizeModelName(forecastModel);
-    const alias = FORECAST_MODEL_ALIASES[normalized];
-    const candidates = index.get(alias ?? normalized) ?? [];
+    // An app model named like the Forecast wins; the alias is only a fallback. Otherwise renaming the app model
+    // to the Forecast name (as the factory did on 2026-09-28: 'H8 M' → 'H8 MAIN') gets redirected by the alias
+    // to the old, now-inactive spelling and the model reads as unmapped.
+    const direct = index.get(normalized) ?? [];
+    const alias = direct.length ? undefined : FORECAST_MODEL_ALIASES[normalized];
+    const candidates = direct.length ? direct : index.get(alias ?? normalized) ?? [];
     const dbModel = candidates.length === 1 ? candidates[0] : null;
     const reason: ModelMatch['reason'] = candidates.length > 1 ? 'ambiguous' : !dbModel ? 'unmapped' : alias ? 'alias' : 'matched';
     result.set(forecastModel, { forecastModel, dbModel, reason, processes: processRefs(dbModel) });

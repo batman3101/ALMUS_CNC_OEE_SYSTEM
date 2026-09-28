@@ -32,6 +32,20 @@ describe('model and process name matching', () => {
     expect(matches.get('Diamond3')).toMatchObject({ reason: 'alias', dbModel: { id: 'dm3' } });
     expect(matches.get('Hubble Y2')).toMatchObject({ reason: 'unmapped', dbModel: null });
   });
+  it('an exact name match wins over the alias — renaming the app model to the Forecast name must just work', () => {
+    // 2026-09-28: the factory renamed app 'H8 M' to 'H8 MAIN' (old 'H8M' is inactive). The fixed alias
+    // H8MAIN → H8M then redirected the lookup to the inactive model and left H8 MAIN unmatched.
+    const renamed = [
+      model('h8main', 'H8 MAIN', [['CNC #1', 1, 593]]),
+      model('h8m-old', 'H8M', [['CNC #1', 1, 593]], false),
+      model('dm3', 'DM 3', [['CNC # 1', 1, 630]]),
+    ];
+    const m = matchModels(['H8 MAIN', 'Diamond3'], renamed);
+    expect(m.get('H8 MAIN')).toMatchObject({ reason: 'matched', dbModel: { id: 'h8main' } });
+    // No app model is named Diamond3, so the alias still applies.
+    expect(m.get('Diamond3')).toMatchObject({ reason: 'alias', dbModel: { id: 'dm3' } });
+  });
+
   it('resolves CNC0/CNC1/CNC2 process ids and tact time per model', () => {
     const h8 = matchModels(['H8 MAIN'], db).get('H8 MAIN')!;
     // Short CNC #0 tact is real for H8 (confirmed by the factory 2026-09-25), not a data error.
