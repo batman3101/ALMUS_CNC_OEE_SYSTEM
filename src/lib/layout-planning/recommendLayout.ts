@@ -284,12 +284,33 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
   const moves: LayoutMove[] = [];
   const unresolved: LayoutRecommendation['unresolved'] = [];
 
-  /** Walkway key '<building>-<nn>-<U|D>': neighbouring numbers on the same side of the same aisle are 1 apart. */
-  const walkwayDistance = (a: string, b: string) => {
-    const [ba, na, ua] = a.split('-'), [bb, nb, ub] = b.split('-');
-    if (ba !== bb) return 1e6;
-    return Math.abs(Number(na) - Number(nb)) + (ua === ub ? 0 : 50);
+  /**
+   * Columns a block may attach to (user decision 2026-09-28 — no islands): the column facing it across the walkway,
+   * and the column whose back touches it (walkway n's R side and walkway n+1's L side, same building and aisle side).
+   * Walkway key: '<building>-<nn>-<U|D>'.
+   */
+  const neighbourColumns = (column: string): string[] => {
+    const walkway = walkwayOf(column), side = column.slice(column.lastIndexOf('|') + 1);
+    const [b, n, ud] = walkway.split('-');
+    const next = Number(n) + (side === 'R' ? 1 : -1);
+    const back = `${b}-${String(next).padStart(n.length, '0')}-${ud}|${side === 'R' ? 'L' : 'R'}`;
+    return [`${walkway}|${side === 'L' ? 'R' : 'L'}`, back].filter(c => columns.has(c));
   };
+  const roomAround = (column: string, available: (id: string) => boolean) => {
+    const bySource = new Map<string | null, number>();
+    for (const c of [column, ...neighbourColumns(column)]) {
+      for (const id of columns.get(c)!) {
+        if (!available(id)) continue;
+        const g = pool.get(id)!.group;
+        bySource.set(g, (bySource.get(g) ?? 0) + 1);
+      }
+    }
+    return [...bySource].reduce((sum, [g, n]) => sum + (g === null ? n : Math.min(n, quota.get(g) ?? 0)), 0);
+  };
+  const runsOf = (groups: Array<string | null | undefined>) => groups.filter((g, i) => i === 0 || g !== groups[i - 1]).length;
+  const rowSpan = (ids: string[]) => ({ top: positions.get(ids[0])!.y, bottom: positions.get(ids[ids.length - 1])!.y });
+  /** Two machines are side by side when their rows overlap — one row pitch of tolerance (72 on a 62-high box). */
+  const tolerance = Math.max(...active.map(m => positions.get(m.id)!.height)) * 1.3;
 
   for (const shortage of shortages) {
     const target = groupKey(shortage.modelId, shortage.processId);
@@ -303,11 +324,15 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
 
     while (shortage.remaining > 0) {
       const need = shortage.remaining;
-      const targetWalkways = [...walkways.keys()].filter(w => walkways.get(w)!.some(c => columns.get(c)!.some(id => current.get(id) === target)));
+      const hasMembers = active.some(m => current.get(m.id) === target);
+      /** Target machines already in `column` whose rows touch [top, bottom]. */
+      const touches = (column: string, top: number, bottom: number) => columns.get(column)!
+        .some(id => current.get(id) === target && positions.get(id)!.y >= top - tolerance && positions.get(id)!.y <= bottom + tolerance);
       const blocks: Block[] = [];
 
       for (const [column, ids] of columns) {
         const walkway = walkwayOf(column);
+        const runsBefore = runsOf(ids.map(id => current.get(id)));
         for (let i = 0; i < ids.length; i++) {
           const taken = new Map<string, number>();
           for (let j = i; j < ids.length && available(ids[j]); j++) {
@@ -326,20 +351,33 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
             // Rule 3: exceed the need only to finish a whole column, and by less than half of it.
             const excess = range.size - need;
             if (excess > 0 && !(allowExcess && wholeColumn && excess * 2 < ids.length)) continue;
+            // A column holds at most two pieces (top block + bottom block); one already in more is not split further.
+            if (runsOf(after) > Math.max(2, runsBefore)) continue;
+            // No islands (user decision 2026-09-28): once the model·process has machines, a block must continue its own
+            // column or sit beside them in the facing / back-to-back column. Nowhere to attach → left as a shortage
+            // alert for the user to fine-tune. A model with no machines yet starts one group here and grows from it.
+            const span = rowSpan(ids.slice(i, j + 1));
+            const attached = !hasMembers || ids.some(id => current.get(id) === target)
+              || neighbourColumns(column).some(c => touches(c, span.top, span.bottom));
+            if (!attached) continue;
+            // Where a new group starts, it needs room to grow: what it could still take here and next door, each source
+            // counted only up to what that source can still give (a surplus of 2 is 2, however many machines it has).
+            const room = hasMembers ? need : roomAround(column, available);
 
             const walkwayGroups = walkways.get(walkway)!.flatMap(c => columns.get(c)!.map(id => (range.has(id) ? target : current.get(id))));
             const otherProcess = walkwayGroups.filter(x => x && processOf(x) !== targetProcess).length;
             const otherModel = walkwayGroups.filter(x => x && modelOf(x) !== shortage.modelId).length;
             const picked = [...range].map(id => pool.get(id)!);
-            const distance = targetWalkways.length ? Math.min(...targetWalkways.map(w => walkwayDistance(walkway, w))) : 0;
             blocks.push({
               ids: [...range], firstName: byId.get(ids[i])!.name,
               key: [
                 Math.max(...picked.map(c => Number(c.nextWeekDemand))),   // next-week demand last (PRD 6.3)
+                // A new group's start decides whether it can grow as one group at all (no islands), so room comes
+                // before the source order — starting on 2 surplus machines with nowhere to grow strands the rest.
+                Math.max(0, need - room),
                 Math.max(...picked.map(c => TIER[c.reason])),             // proven source order
                 Number(otherProcess > 0),                                 // rule 1: the walkway stays one process
                 Number(!wholeColumn),                                     // rule 2: a whole side before an end block
-                distance,                                                 // rule 4: next to the model's walkways
                 otherProcess,                                             // less process mixing
                 otherModel,                                               // then less model mixing
                 Math.max(0, excess),                                      // least excess
