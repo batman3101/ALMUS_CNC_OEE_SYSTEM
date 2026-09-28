@@ -442,6 +442,30 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
       });
       await context.close();
     }
+    {
+      // Reproduces the production case: the page was opened with ?plan=<id>, and the discarded plan's detail
+      // answers late. The reload that still carries the old ?plan must not overwrite the newer no-plan view.
+      const server = makeServer({});
+      const planId = server.state.plans[0].id;
+      const extraRoutes = async (url, request) => {
+        if (request.method() === 'GET' && url.pathname === `/api/layout-planning/plans/${planId}` && server.state.plans[0].status === 'discarded') {
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        return undefined;
+      };
+      const { context, page } = await openApp(browser, { server, extraRoutes });
+      await page.goto(root + `/layout-studio?plan=${planId}`); await ready(page);
+      await check('Discarding the draft leaves the no-plan view, not the discarded plan (2026-09-28: a stale reload won)', async () => {
+        await page.locator('[data-testid="discard-plan"]').click();
+        await page.waitForFunction(() => /추천 계획이 없습니다/.test(document.querySelector('.layout-studio .notice')?.textContent || ''), null, { timeout: 30000 });
+        await page.waitForTimeout(3000);   // let the late response land — it must not bring the discarded plan back
+        const notice = await page.locator(S('.notice')).innerText();
+        assert.match(notice, /추천 계획이 없습니다/);
+        assert.doesNotMatch(notice, /폐기된 계획/);
+        assert.equal(await page.locator('[data-testid="discard-plan"]').count(), 0);
+      });
+      await context.close();
+    }
     for (const role of ['engineer', 'operator']) {
       const { context, page } = await openApp(browser, { role });
       await page.goto(root + '/layout-studio');

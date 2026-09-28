@@ -59,18 +59,29 @@ export default function LayoutStudio() {
   const revisionRef = useRef(0);
   const viewRef = useRef<StudioView | null>(null);
 
+  /**
+   * Only the newest load may write the state. Discarding a draft reloads twice in a row — once still carrying the
+   * old `?plan=` and once without it — and when the old plan's answer arrived last it put the discarded plan back
+   * on screen (production, 2026-09-28).
+   */
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    const current = () => seq === loadSeq.current;
     setState({ status: 'loading' });
     try {
       const ws = await api<WorkspacePayload & { plans: PlanListItem[]; factory: { code: string } }>('/api/layout-planning/workspace');
+      if (!current()) return;
       if (!ws.geometry) { setState({ status: 'no_geometry', factoryCode: ws.factory.code }); return; }
       const planId = planParam ?? ws.plans.find(p => p.status === 'draft')?.id ?? ws.plans.find(p => p.status === 'confirmed')?.id ?? null;
       const plan = planId ? await api<PlanPayload>(`/api/layout-planning/plans/${planId}`) : null;
+      if (!current()) return;
       const view = buildStudioView(ws, plan);
       revisionRef.current = plan?.plan.revision ?? 0;
       viewRef.current = view;
       setState({ status: 'ready', plans: ws.plans, plan, view });
     } catch (error) {
+      if (!current()) return;
       setState({ status: 'error', code: error instanceof ApiError ? error.code : 'load_failed' });
     }
   }, [planParam]);
