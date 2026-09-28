@@ -70,6 +70,10 @@ const copy = value => JSON.parse(JSON.stringify(value));
 const machines = new Map(DATA.machines.map(m => [m.id, m]));
 let lang=messages[initialLang]?initialLang:'ko', building='B', mode='draft', selected=DATA.machines.some(m=>m.id===305)?305:DATA.machines[0].id;
 building=DATA.machines.find(m=>m.id===selected).building;
+// Building buttons come from the drawing, not the markup: 1공장 has B/A (448/352), 2공장 one building (B, 350).
+// "All" only when there is more than one building to switch between.
+{const wrap=root.querySelector('.segmented.buildings');const btn=(id,html,i18n)=>{const e=document.createElement('button');e.dataset.building=id;if(i18n)e.dataset.i18n=i18n;else e.innerHTML=html;return e;};
+ wrap.replaceChildren(...DATA.buildings.map(b=>btn(b.id,`${b.id}<span data-i18n="buildingSuffix"></span><small>${DATA.machines.filter(m=>m.building===b.id).length}</small>`)),...(DATA.buildings.length>1?[btn('all','','all')]:[]));}
 if(backend&&backend.initialMode)mode=backend.initialMode;
 let draft={edits:{},locks:[],demo:false}, undoStack=[], redoStack=[];
 let scale=.56, tx=0, ty=0, saveTime=null, toastTimer;

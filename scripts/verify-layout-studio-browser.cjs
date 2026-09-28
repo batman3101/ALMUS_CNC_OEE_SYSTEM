@@ -42,16 +42,17 @@ const uid = (prefix, n) => `${prefix}-0000-4000-8000-${String(n).padStart(12, '0
 const MODEL_DEFS = { ON1: [['CNC #1', 560], ['CNC #2', 558]], ON3: [['CNC #1', 948], ['CNC #2', 646]], H8M: [['CNC #0', 63], ['CNC #1', 593], ['CNC #2', 453]], H8S: [['CNC #0', 68], ['CNC #1', 807], ['CNC #2', 860]], M1: [['CNC #1', 602], ['CNC #2', 638]], M3: [['CNC #1', 851], ['CNC #2', 965]], PA1: [['CNC #1', 531], ['CNC #2', 664]], B6S6: [['CNC #1', 379], ['CNC #2', 298]] };
 const RECOMMENDED = [[305, 'ON1', 'C1'], [306, 'ON1', 'C1'], [315, 'ON1', 'C2'], [316, 'ON1', 'C2'], [653, 'M3', 'C2'], [654, 'M3', 'C2']];
 
-function makeServer({ withPlan = true } = {}) {
+function makeServer({ withPlan = true, onlyBuilding = null } = {}) {
+  const sourceMachines = onlyBuilding ? layout.machines.filter(m => m.building === onlyBuilding) : layout.machines;
   const models = Object.entries(MODEL_DEFS).map(([name, procs], i) => ({
     id: uid('10000000', i + 1), name, isActive: true,
     processes: procs.map(([p, tact], j) => ({ id: uid('20000000', (i + 1) * 10 + j), name: p, order: j + 1, tactTimeSeconds: tact })),
   }));
   const model = name => models.find(m => m.name === name);
   const proc = (name, code) => model(name).processes.find(p => p.name.replace(/\D/g, '') === code.slice(1)).id;
-  const machines = layout.machines.map(m => ({ id: uid('30000000', m.id), name: `CNC-${String(m.id).padStart(3, '0')}`, location: m.building, isActive: true, modelId: model(m.model).id, processId: proc(m.model, m.process) }));
-  const byNo = n => machines[layout.machines.findIndex(m => m.id === n)];
-  const positions = layout.machines.map(m => ({ machineId: uid('30000000', m.id), building: m.building, cell: m.cell, x: m.x, y: m.y, width: m.width, height: m.height }));
+  const machines = sourceMachines.map(m => ({ id: uid('30000000', m.id), name: `CNC-${String(m.id).padStart(3, '0')}`, location: m.building, isActive: true, modelId: model(m.model).id, processId: proc(m.model, m.process) }));
+  const byNo = n => machines[sourceMachines.findIndex(m => m.id === n)];
+  const positions = sourceMachines.map(m => ({ machineId: uid('30000000', m.id), building: m.building, cell: m.cell, x: m.x, y: m.y, width: m.width, height: m.height }));
   const state = { plans: [], assignments: new Map(), requirements: new Map(), tasks: [], conflictNext: false, writes: [] };
   function newPlan(id, title) {
     state.plans.push({ id, status: 'draft', revision: 1, title, target_week: '2026-W39', created_at: new Date().toISOString() });
@@ -492,6 +493,17 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.match(notice, /추천 계획이 없습니다/);
         assert.doesNotMatch(notice, /폐기된 계획/);
         assert.equal(await page.locator('[data-testid="discard-plan"]').count(), 0);
+      });
+      await context.close();
+    }
+    {
+      // 2공장처럼 동이 하나인 도면: 동 버튼은 도면 데이터에서 만들고, 전환할 게 없으니 '전체'는 두지 않는다.
+      const { context, page } = await openApp(browser, { server: makeServer({ withPlan: false, onlyBuilding: 'B' }) });
+      await page.goto(root + '/layout-studio'); await ready(page);
+      await check('A one-building drawing shows just that building (buttons come from the drawing, not the markup)', async () => {
+        const buttons = await page.locator(S('.segmented.buildings button')).allInnerTexts();
+        assert.deepEqual(buttons.map(t => t.replace(/\s+/g, '')), ['B동448']);
+        assert.equal(await page.locator(S('.machine')).count(), 448);
       });
       await context.close();
     }

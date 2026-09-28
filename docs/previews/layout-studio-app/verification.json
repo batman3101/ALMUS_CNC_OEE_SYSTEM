@@ -2,7 +2,7 @@
   "result": "PASS",
   "mode": "db",
   "root": "http://localhost:3000",
-  "timestamp": "2026-09-28T07:11:25.718Z",
+  "timestamp": "2026-09-28T07:55:11.683Z",
   "checks": [
     "800 machines from the app sit on their Excel cells with their CNC numbers",
     "The recommended layout opens first: 6 recommended moves, labelled, compare shows them",
@@ -28,6 +28,7 @@
     "A factory without a drawing (ALV for now) shows the no-drawing state, not a broken map",
     "Without a plan the current layout is shown read-only with a way to the Forecast screen",
     "Discarding the draft leaves the no-plan view, not the discarded plan (2026-09-28: a stale reload won)",
+    "A one-building drawing shows just that building (buttons come from the drawing, not the markup)",
     "Engineer can open Layout Studio and edit the draft",
     "Operator cannot open Layout Studio",
     "Forecast → \"create layout plan\" → unmapped models open the pairing dialog → saved → plan opens in the studio"
