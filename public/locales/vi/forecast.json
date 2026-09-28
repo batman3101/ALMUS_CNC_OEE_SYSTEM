@@ -155,7 +155,7 @@
     "createAnyway": "Vẫn tạo"
   },
   "layoutStudio": {
-    "confirmed": "Đã xác nhận Layout. {{count}} máy thay đổi đã cập nhật vào thông tin máy và bắt đầu setup.",
+    "confirmed": "Đã xác nhận Layout. {{count}} máy thay đổi đã vào danh sách chờ setup. Thông tin máy chỉ đổi khi từng máy hoàn tất setup tại xưởng.",
     "noGeometryTitle": "Chưa có bản vẽ",
     "noGeometry": "Nhà máy này ({{factory}}) chưa đăng ký bản vẽ Layout. Khi thêm bản vẽ sẽ dùng được đề xuất·xác nhận.",
     "retry": "Tải lại",

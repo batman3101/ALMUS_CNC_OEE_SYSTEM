@@ -9,10 +9,12 @@
 --   L2  다른 공장·비활성 설비는 추천안에 넣을 수 없다(UNKNOWN_MACHINE)
 --   L3  미세조정: revision 증가, 오래된 revision 거부, 잠긴 설비 변경 거부, 잠금 해제+변경은 허용
 --   L4  (모델, 공정) 짝이 안 맞는 배정은 FK 로 거부
---   L5  확정: 바뀐 설비만 machines 반영 + 셋업 작업·이벤트·감사 기록, 계획 confirmed
+--   L5  확정: machines 는 그대로(20260928140000 — 교체는 하루 약 30대씩 생산과 병행), 바뀐 설비만 셋업 작업·이벤트, 계획 confirmed
 --   L6  두 번째 확정: 이전 확정은 superseded, 미완료 셋업은 cancelled 로 대체
 --   L7  기준이 바뀐 계획은 확정 거부(LAYOUT_BASE_STALE), machines 는 그대로
---   L8  셋업 전이: 순서 강제, 이벤트 기록, 이벤트 수정 불가
+--   L8  셋업 전이: 순서 강제, 이벤트 기록, 이벤트 수정 불가, **완료하면 그 설비만** machines 에 목표 반영 + 감사 기록
+--   L13 완료 시 설비가 그사이 다른 모델로 바뀌어 있으면 거부(SETUP_MACHINE_CHANGED), 셋업·설비 모두 그대로
+--   L14 완료 시 설비가 이미 목표와 같으면 쓰기 없이 완료
 --   L9  권한: RPC 는 anon/authenticated 실행 불가, 내부 함수는 service_role 도 불가
 --   L10 도면: ALT 활성 도면 1개, 800대, 셀 중복 없음
 --   L12 계획이 Forecast 수요 경고(warnings)를 저장한다(감사 BUG-01, 20260928110000)
@@ -34,6 +36,8 @@ declare
   v_active integer;
   v_ok boolean;
   v_half uuid;
+  v_m1_model uuid; v_m1_proc uuid; v_m2_model uuid; v_m2_proc uuid; v_m3_model uuid; v_m3_proc uuid;
+  v_task3 uuid;
 begin
   select id into v_alt from public.factories where code = 'ALT';
   select id into v_alv from public.factories where code = 'ALV';
@@ -57,6 +61,9 @@ begin
    order by name limit 1;
   select id into v_alv_machine from public.machines where factory_id = v_alv limit 1;
   select count(*) into v_active from public.machines where factory_id = v_alt and is_active;
+  select production_model_id, current_process_id into v_m1_model, v_m1_proc from public.machines where id = v_m1;
+  select production_model_id, current_process_id into v_m2_model, v_m2_proc from public.machines where id = v_m2;
+  select production_model_id, current_process_id into v_m3_model, v_m3_proc from public.machines where id = v_m3;
   -- [L11 준비] 운영처럼 모델만 있고 공정이 빈 설비 하나.
   select id into v_half from public.machines where factory_id = v_alt and is_active and id not in (v_m1, v_m2, v_m3)
    order by name desc limit 1;
@@ -151,14 +158,15 @@ begin
   -- [L5] 확정
   r := public.confirm_layout_plan(v_alt, v_plan, v_rev, null);
   if (r->>'changed_machines')::int <> 3 then raise exception 'L5 FAIL: changed %', r->>'changed_machines'; end if;
-  select count(*) into n from public.machines where id = v_m1 and production_model_id = v_model_a and current_process_id = v_proc_a1;
-  if n <> 1 then raise exception 'L5 FAIL: m1 not applied'; end if;
-  select count(*) into n from public.machines where id = v_m3 and production_model_id = v_model_b and current_process_id = v_proc_b1;
-  if n <> 1 then raise exception 'L5 FAIL: m3 fine-tune not applied'; end if;
+  -- 확정은 설비를 바꾸지 않는다: 교체는 현장이 설비별로 '완료'할 때 반영된다.
+  select count(*) into n from public.machines where id = v_m1 and production_model_id is not distinct from v_m1_model and current_process_id is not distinct from v_m1_proc;
+  if n <> 1 then raise exception 'L5 FAIL: confirm wrote m1'; end if;
+  select count(*) into n from public.machines where id = v_m3 and production_model_id is not distinct from v_m3_model and current_process_id is not distinct from v_m3_proc;
+  if n <> 1 then raise exception 'L5 FAIL: confirm wrote m3'; end if;
   select count(*) into n from public.machine_setup_tasks where plan_id = v_plan and status = 'pending';
   if n <> 3 then raise exception 'L5 FAIL: setup tasks %', n; end if;
   select count(*) into n from public.audit_log where factory_id = v_alt and action = 'LAYOUT_APPLY' and new_values->>'layout_plan_id' = v_plan::text;
-  if n <> 3 then raise exception 'L5 FAIL: audit rows %', n; end if;
+  if n <> 0 then raise exception 'L5 FAIL: confirm wrote % machine audit rows', n; end if;
   select count(*) into n from public.layout_plans where id = v_plan and status = 'confirmed' and confirmed_at is not null;
   if n <> 1 then raise exception 'L5 FAIL: plan not confirmed'; end if;
   select count(*) into n from public.machines where id = v_half and production_model_id = v_model_b and current_process_id is null;
@@ -189,7 +197,7 @@ begin
   exception when others then v_ok := sqlerrm like 'LAYOUT_BASE_STALE%';
   end;
   if not v_ok then raise exception 'L7 FAIL: stale plan confirmed'; end if;
-  select count(*) into n from public.machines where id = v_m2 and production_model_id = v_model_a and current_process_id = v_proc_a2;
+  select count(*) into n from public.machines where id = v_m2 and production_model_id is not distinct from v_m2_model and current_process_id is not distinct from v_m2_proc;
   if n <> 1 then raise exception 'L7 FAIL: machine changed by rejected confirm'; end if;
 
   -- [L8] 셋업 전이
@@ -201,15 +209,44 @@ begin
   end;
   if not v_ok then raise exception 'L8 FAIL: pending -> completed allowed'; end if;
   r := public.transition_machine_setup_task(v_alt, v_task, 1, 'in_progress', null);
+  -- 진행 중에는 설비가 그대로다(옆에서 생산이 계속된다).
+  select count(*) into n from public.machines where id = v_m2 and production_model_id is not distinct from v_m2_model;
+  if n <> 1 then raise exception 'L8 FAIL: in_progress wrote the machine'; end if;
   r := public.transition_machine_setup_task(v_alt, v_task, 2, 'completed', null);
   select count(*) into n from public.machine_setup_events where task_id = v_task;
   if n <> 3 then raise exception 'L8 FAIL: events %', n; end if;
+  select count(*) into n from public.machines where id = v_m2 and production_model_id = v_model_a and current_process_id = v_proc_a2;
+  if n <> 1 then raise exception 'L8 FAIL: completion did not apply the target to the machine'; end if;
+  select count(*) into n from public.audit_log where factory_id = v_alt and action = 'LAYOUT_APPLY' and record_id = v_m2 and new_values->>'setup_task_id' = v_task::text;
+  if n <> 1 then raise exception 'L8 FAIL: completion audit rows %', n; end if;
   v_ok := false;
   begin
     update public.machine_setup_events set reason = 'x' where task_id = v_task;
   exception when others then v_ok := sqlerrm like '%append-only%';
   end;
   if not v_ok then raise exception 'L8 FAIL: event history editable'; end if;
+
+  -- [L13] m3 는 L7 에서 목표(B/b1)도 기준도 아닌 A/a1 로 바뀌었다 → 완료 거부, 셋업·설비 모두 그대로
+  select id into v_task3 from public.machine_setup_tasks where plan_id = v_plan and machine_id = v_m3 and status = 'pending';
+  r := public.transition_machine_setup_task(v_alt, v_task3, 1, 'in_progress', null);
+  v_ok := false;
+  begin
+    perform public.transition_machine_setup_task(v_alt, v_task3, 2, 'completed', null);
+  exception when others then v_ok := sqlerrm like 'SETUP_MACHINE_CHANGED%';
+  end;
+  if not v_ok then raise exception 'L13 FAIL: completion over a machine changed elsewhere'; end if;
+  select count(*) into n from public.machine_setup_tasks where id = v_task3 and status = 'in_progress';
+  if n <> 1 then raise exception 'L13 FAIL: rejected completion changed the task'; end if;
+  select count(*) into n from public.machines where id = v_m3 and production_model_id = v_model_a and current_process_id = v_proc_a1;
+  if n <> 1 then raise exception 'L13 FAIL: rejected completion changed the machine'; end if;
+
+  -- [L14] 누군가 이미 목표(B/b1)로 바꿔 두었으면 쓰기 없이 완료
+  update public.machines set production_model_id = v_model_b, current_process_id = v_proc_b1 where id = v_m3;
+  r := public.transition_machine_setup_task(v_alt, v_task3, 2, 'completed', null);
+  select count(*) into n from public.machine_setup_tasks where id = v_task3 and status = 'completed';
+  if n <> 1 then raise exception 'L14 FAIL: task not completed'; end if;
+  select count(*) into n from public.audit_log where factory_id = v_alt and action = 'LAYOUT_APPLY' and record_id = v_m3;
+  if n <> 0 then raise exception 'L14 FAIL: wrote a machine that was already at the target'; end if;
 
   -- [L9] 권한
   if has_function_privilege('anon', 'public.confirm_layout_plan(uuid, uuid, integer, uuid)', 'execute')
@@ -224,6 +261,6 @@ begin
     raise exception 'L9 FAIL: service_role cannot confirm';
   end if;
 
-  raise exception 'ALL_INVARIANTS_PASSED (L1-L12)';
+  raise exception 'ALL_INVARIANTS_PASSED (L1-L14)';
 end;
 $$;

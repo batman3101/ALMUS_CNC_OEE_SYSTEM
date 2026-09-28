@@ -75,7 +75,7 @@ function makeServer({ withPlan = true } = {}) {
   const plan = id => state.plans.find(p => p.id === id);
   const planBody = id => ({ success: true, plan: plan(id), requirements: state.requirements.get(id), assignments: state.assignments.get(id), setupTasks: state.tasks.filter(t => t.plan_id === id), summary: { groups: [], totals: {} } });
   return {
-    state, byNo, model, proc, newPlan,
+    state, byNo, model, proc, newPlan, machines,
     handle(method, pathname, body) {
       if (pathname === '/api/layout-planning/workspace') return [200, { success: true, factory: { id: factory, code: 'ALT' }, geometry: { id: 'g1', sourceFile: 'Setting CNC.xlsx', sourceSheet: 'W39', sourceHash: layout.sha256, note: null, positions }, snapshot: { status: 'available', takenAt: 'now', models, machines }, policy: { status: 'available', breakMinutes: 110 }, plans: state.plans.filter(p => p.status === 'draft' || p.status === 'confirmed'), mappings: [] }];
       const m = pathname.match(/^\/api\/layout-planning\/plans\/([^/]+)(?:\/(confirm|discard))?$/);
@@ -96,7 +96,6 @@ function makeServer({ withPlan = true } = {}) {
           const at = new Date().toISOString();
           for (const a of changed) {
             state.tasks.push({ id: uid('50000000', state.tasks.length + 1), plan_id: p.id, machine_id: a.machine_id, status: 'pending', revision: 1, before_model_id: a.base_model_id, before_process_id: a.base_process_id, target_model_id: a.final_model_id, target_process_id: a.final_process_id, created_at: at, started_at: null, completed_at: null });
-            const mc = machines.find(x => x.id === a.machine_id); mc.modelId = a.final_model_id; mc.processId = a.final_process_id;
           }
           state.plans.filter(x => x.status === 'confirmed').forEach(x => { x.status = 'superseded'; });
           p.status = 'confirmed'; p.revision++;
@@ -110,6 +109,13 @@ function makeServer({ withPlan = true } = {}) {
         if (!task || task.revision !== body.expectedRevision) return [409, { success: false, code: 'plan_revision_conflict' }];
         const ok = (task.status === 'pending' && body.toStatus === 'in_progress') || (task.status === 'in_progress' && body.toStatus === 'completed');
         if (!ok) return [409, { success: false, code: 'invalid_setup_transition' }];
+        if (body.toStatus === 'completed') {
+          const mc = machines.find(x => x.id === task.machine_id);
+          const atTarget = mc.modelId === task.target_model_id && mc.processId === task.target_process_id;
+          const atBefore = mc.modelId === task.before_model_id && mc.processId === task.before_process_id;
+          if (!atTarget && !atBefore) return [409, { success: false, code: 'setup_machine_changed' }];
+          mc.modelId = task.target_model_id; mc.processId = task.target_process_id;
+        }
         task.status = body.toStatus; task.revision++;
         if (body.toStatus === 'in_progress') task.started_at = new Date().toISOString(); else task.completed_at = new Date().toISOString();
         return [200, { success: true, task_id: task.id, status: task.status, revision: task.revision }];
@@ -359,8 +365,10 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         const after = await state(page); assert.ok(after.scale > before.scale); assert.deepEqual(after.draft, before.draft);
       });
       await check('Confirm: dialog states the changes and the remaining shortage; plan becomes confirmed and read-only in setup view', async () => {
+        const before305 = server.byNo(305).modelId;
         await L('#confirmLayout').click();
         assert.match(await L('#confirmText').innerText(), /6대/);
+        assert.match(await L('#confirmText').innerText(), /셋업 대기/);
         assert.match(await L('#confirmShortage').innerText(), /2대가 부족/);
         await L('#confirmLayoutGo').click();
         await page.waitForSelector('[data-testid="studio-notice"]');
@@ -369,6 +377,8 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal((await state(page)).mode, 'setup');
         assert.equal(server.state.plans[0].status, 'confirmed');
         assert.equal(server.state.tasks.length, 6);
+        // 확정은 설비 정보를 바꾸지 않는다 — 교체는 하루 약 30대씩, 생산과 병행한다(사용자 결정 2026-09-28).
+        assert.equal(server.byNo(305).modelId, before305);
         assert.ok(await L('#confirmLayout').isDisabled());
         // Read-only: no editing actions offered (edit form and lock are hidden, not just greyed out), and the notice says why.
         for (const id of ['#demo', '#save', '#reset', '#editForm', '#lock']) assert.equal(await L(id).isVisible(), false);
@@ -378,8 +388,13 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await search(305);
         assert.equal(await L('#setupComplete').isVisible(), false);
         await L('#setupStart').click(); await page.waitForFunction(() => window.__layoutStudio.state().setup.tasks['305'].status === 'in_progress');
+        const task305 = server.state.tasks.find(t => t.machine_id === server.byNo(305).id);
+        assert.equal(server.byNo(305).modelId, task305.before_model_id);          // 진행 중에는 아직 그대로
         await L('#setupComplete').click(); await page.waitForFunction(() => window.__layoutStudio.state().setup.tasks['305'].status === 'completed');
-        assert.equal(server.state.tasks.find(t => t.machine_id === server.byNo(305).id).status, 'completed');
+        assert.equal(task305.status, 'completed');
+        assert.equal(server.byNo(305).modelId, task305.target_model_id);          // 완료한 설비만 목표로
+        const others = server.state.tasks.filter(t => t !== task305);
+        assert.ok(others.every(t => server.machines.find(m => m.id === t.machine_id).modelId === t.before_model_id));
         assert.match(await L('#setupCounts').innerText(), /완료 1/);
         await page.selectOption(S('#setupFilter'), 'completed');
         assert.equal(await L('.machine:not(.dim)[data-setup="completed"]').count(), 1);
@@ -387,6 +402,18 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await L('[data-mode="setup"]').click(); await search(305);
         assert.match(await L('#setupState').innerText(), /완료/);
         await page.waitForTimeout(3400); await page.screenshot({ path: path.join(output, 'setup-desktop.png'), fullPage: true });
+      });
+      await check('Setup completion is refused when the machine was changed elsewhere meanwhile, and the user is told why', async () => {
+        const other = server.state.tasks.find(t => t.status === 'pending');
+        const machine = server.machines.find(m => m.id === other.machine_id);
+        const no = Number(machine.name.slice(4));
+        await search(no);
+        await L('#setupStart').click(); await page.waitForFunction(n => window.__layoutStudio.state().setup.tasks[String(n)].status === 'in_progress', no);
+        machine.modelId = server.model('ON1').id === other.target_model_id ? server.model('PA1').id : server.model('ON1').id;   // 누군가 설비 현황에서 다른 모델로 바꿈
+        await L('#setupComplete').click();
+        await page.waitForFunction(() => /다른 모델로 바뀌어/.test(document.querySelector('.layout-studio #toast')?.textContent || ''), null, { timeout: 10000 });
+        assert.equal(other.status, 'in_progress');
+        assert.equal((await state(page)).setup.tasks[String(no)].status, 'in_progress');
       });
       await check('No JavaScript errors; the only writes are layout-planning calls (and the shell preference save)', async () => {
         assert.deepEqual(errors, []);

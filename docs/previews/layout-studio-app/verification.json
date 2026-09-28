@@ -2,7 +2,7 @@
   "result": "PASS",
   "mode": "db",
   "root": "http://localhost:3000",
-  "timestamp": "2026-09-28T05:46:26.252Z",
+  "timestamp": "2026-09-28T07:07:08.705Z",
   "checks": [
     "800 machines from the app sit on their Excel cells with their CNC numbers",
     "The recommended layout opens first: 6 recommended moves, labelled, compare shows them",
@@ -22,10 +22,12 @@
     "Two-pointer pinch changes zoom without changing assignments",
     "Confirm: dialog states the changes and the remaining shortage; plan becomes confirmed and read-only in setup view",
     "Setup: start then complete one machine through the server; order is enforced; state survives reload",
+    "Setup completion is refused when the machine was changed elsewhere meanwhile, and the user is told why",
     "No JavaScript errors; the only writes are layout-planning calls (and the shell preference save)",
     "A failed setup save does not mark the machine started (360px)",
     "A factory without a drawing (ALV for now) shows the no-drawing state, not a broken map",
     "Without a plan the current layout is shown read-only with a way to the Forecast screen",
+    "Discarding the draft leaves the no-plan view, not the discarded plan (2026-09-28: a stale reload won)",
     "Engineer can open Layout Studio and edit the draft",
     "Operator cannot open Layout Studio",
     "Forecast → \"create layout plan\" → unmapped models open the pairing dialog → saved → plan opens in the studio"

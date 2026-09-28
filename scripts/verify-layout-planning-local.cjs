@@ -119,21 +119,40 @@ const demand = (model, peak) => ({ model, week: '2099-W01', peakQuantity: peak, 
     await expectCode(server.savePlanDraft(factoryId, null, planId, revision, [{ machineId: byNo(1), finalModelId: models.ZZ_LOCAL_A.id, finalProcessId: models.ZZ_LOCAL_B.processes['CNC #1'] }]), 'invalid_assignment');
   });
 
-  await check('confirm writes machines, opens setup tasks, and a setup task walks pending → in progress → completed', async () => {
+  await check('confirm leaves machines as they are and opens setup tasks; completing a task applies that machine only (20260928140000)', async () => {
     const plan = await server.loadPlan(factoryId, planId);
     const changed = plan.assignments.filter(x => x.final_model_id !== x.base_model_id || x.final_process_id !== x.base_process_id);
     const result = await server.confirmPlan(factoryId, null, planId, plan.plan.revision);
     assert.equal(result.changed_machines, changed.length);
-    const sample = changed[0];
-    const { data: m } = await db.from('machines').select('production_model_id, current_process_id').eq('id', sample.machine_id).single();
-    assert.deepEqual([m.production_model_id, m.current_process_id], [sample.final_model_id, sample.final_process_id]);
+    const machineOf = async id => {
+      const { data: m } = await db.from('machines').select('production_model_id, current_process_id').eq('id', id).single();
+      return [m.production_model_id, m.current_process_id];
+    };
+    // 확정은 설비를 바꾸지 않는다 — 교체는 하루 약 30대씩, 생산과 병행한다(사용자 결정 2026-09-28).
+    for (const a of changed) assert.deepEqual(await machineOf(a.machine_id), [a.base_model_id, a.base_process_id]);
     const confirmed = await server.loadPlan(factoryId, planId);
     assert.equal(confirmed.plan.status, 'confirmed');
     assert.equal(confirmed.setupTasks.length, changed.length);
-    const task = confirmed.setupTasks[0];
+    const [task, other] = confirmed.setupTasks;
     const t1 = await server.transitionSetupTask(factoryId, null, task.id, task.revision, 'in_progress', null);
     await expectCode(server.transitionSetupTask(factoryId, null, task.id, t1.revision, 'in_progress', null), 'invalid_setup_transition');
     await server.transitionSetupTask(factoryId, null, task.id, t1.revision, 'completed', null);
+    assert.deepEqual(await machineOf(task.machine_id), [task.target_model_id, task.target_process_id]);
+    // 완료하지 않은 설비는 그대로
+    assert.deepEqual(await machineOf(other.machine_id), [other.before_model_id, other.before_process_id]);
+  });
+
+  await check('completing a setup whose machine was changed elsewhere meanwhile is refused (409 setup_machine_changed)', async () => {
+    const confirmed = await server.loadPlan(factoryId, planId);
+    const task = confirmed.setupTasks.find(t => t.status === 'pending');
+    const t1 = await server.transitionSetupTask(factoryId, null, task.id, task.revision, 'in_progress', null);
+    // 누군가 설비 현황에서 목표도, 셋업 시작 때 모델도 아닌 (모델, 공정)으로 바꿈
+    const { data: pairs } = await db.from('model_processes').select('id, model_id').eq('factory_id', factoryId).limit(200);
+    const third = pairs.find(p => p.model_id !== task.before_model_id && p.model_id !== task.target_model_id);
+    await db.from('machines').update({ production_model_id: third.model_id, current_process_id: third.id }).eq('id', task.machine_id);
+    await expectCode(server.transitionSetupTask(factoryId, null, task.id, t1.revision, 'completed', null), 'setup_machine_changed');
+    const { data: m } = await db.from('machines').select('production_model_id').eq('id', task.machine_id).single();
+    assert.equal(m.production_model_id, third.model_id);
   });
 
   await check('a plan made before someone changed a machine cannot be confirmed (409 layout_base_stale)', async () => {

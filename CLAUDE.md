@@ -331,13 +331,21 @@ app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파
   언어 변경으로 엔진을 다시 만들지 말 것(보던 화면이 초기화된다; `setLang` 으로 처리).
 - 계획 계산·API: `src/lib/layout-planning/`(추천=`recommendLayout`, 알림=`summarizeCapacity`, 입력=`planInput`,
   DB=`server.ts`), 라우트 `/api/layout-planning/*`, DB 는 `supabase/migrations/20260925100000~120000`.
+- **확정은 설비 정보를 바꾸지 않는다(20260928140000).** 확정 = 계획 고정 + 셋업 작업 생성. 현장에서 설비별로
+  셋업 '완료'를 누를 때 그 설비만 machines 에 반영한다(설비 잠금 규약, `LAYOUT_APPLY` 감사). 교체는 하루 약 30대씩
+  생산과 병행하므로, 확정 순간 전부 바꾸면 교체 전 설비의 생산 실적이 새 모델 T/T 로 계산돼 OEE 가 오염된다.
+  완료 시 설비가 셋업 시작 때도 목표도 아니면 `SETUP_MACHINE_CHANGED` 로 거부한다.
+- **추천은 작업자 동선 단위다.** 빨간 선(동선) + 마주본 두 열, 가로 통로에서 끊김 — `machine_layout_positions.walkway/
+  walkway_side`(20260928130000, Excel 빨간 테두리에서 `scripts/extract-layout-walkways.py` 로 추출). 규칙(사용자 확정):
+  한 동선 한 공정 최우선, 좌우 한쪽 열 → 위·아래 끝 블록, 중간 끼워넣기·섬 금지, 열 최대 2조각, 연쇄 이동 없음.
+  붙일 자리가 없는 부족은 알림으로 남긴다. 동선 정보가 없는 도면은 예전 거리 방식.
 - **검증 3종**:
-  1. `scripts/verify-layout-studio-browser.cjs` — 브라우저 합격 기준 25개(API 는 브라우저 안 가짜 서버).
+  1. `scripts/verify-layout-studio-browser.cjs` — 브라우저 합격 기준 27개(API 는 브라우저 안 가짜 서버).
      개발 서버에 돌릴 때는 `127.0.0.1` 이 아니라 `http://localhost:3000` 을 쓴다(개발 서버가 127.0.0.1
      요청의 화면 파일을 403 으로 막는다).
-  2. `scripts/verify-layout-planning-local.cjs` — 실제 서버 모듈 → 로컬 Supabase RPC 종단 8개
+  2. `scripts/verify-layout-planning-local.cjs` — 실제 서버 모듈 → 로컬 Supabase RPC 종단 12개
      (`npx supabase start` 필요, 로컬 전용 픽스처 생성, localhost 가 아니면 실행 거부).
-  3. `supabase/tests/layout_planning_invariants.sql` — RPC 불변조건 L1–L10(롤백형).
+  3. `supabase/tests/layout_planning_invariants.sql` — RPC 불변조건 L1–L14(롤백형).
 
 ### Production Record Input System
 - See `src/components/production/README.md` for details

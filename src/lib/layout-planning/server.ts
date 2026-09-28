@@ -32,6 +32,8 @@ const RPC_ERRORS: Array<[prefix: string, status: number, code: string]> = [
   ['MACHINE_INACTIVE', 409, 'machine_inactive'],
   ['NO_ACTIVE_GEOMETRY', 409, 'no_geometry'],
   ['INVALID_SETUP_TRANSITION', 409, 'invalid_setup_transition'],
+  // Setup completion found the machine changed elsewhere (neither the setup's start state nor its target) — 20260928140000.
+  ['SETUP_MACHINE_CHANGED', 409, 'setup_machine_changed'],
   ['UNKNOWN_MACHINE', 400, 'unknown_machine'],
   ['PLAN_NOT_FOUND', 404, 'plan_not_found'],
   ['TASK_NOT_FOUND', 404, 'task_not_found'],
