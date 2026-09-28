@@ -90,7 +90,8 @@
     "20260925120000_layout_geometry_alt_w39": "a085b8bf3568998e",
     "20260928100000_layout_plan_half_assignment": "7fd264dc95a7bf27",
     "20260928110000_layout_planning_audit_fixes": "8546576173500734",
-    "20260928120000_close_shift_with_defect": "2608aad80f38276b"
+    "20260928120000_close_shift_with_defect": "2608aad80f38276b",
+    "20260928130000_layout_walkways": "d5317e811ef37d6b"
   },
   "applied": [
     {
@@ -572,6 +573,10 @@
     {
       "version": "20260928023445",
       "name": "close_shift_with_defect"
+    },
+    {
+      "version": "20260928055250",
+      "name": "layout_walkways"
     }
   ],
   "file_matches": {
