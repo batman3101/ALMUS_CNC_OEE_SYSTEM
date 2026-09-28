@@ -37,6 +37,12 @@ export interface PlanPayload {
 }
 
 type Code = { model: string; process: string };
+/**
+ * 왜 편집할 수 없는가. 이유마다 화면 안내가 달라야 한다 — 계획이 없을 뿐인데 "읽기 전용"이라고 하면
+ * 권한이 없는 것으로 읽힌다(2026-09-28 사용자 지적).
+ */
+export type ReadOnlyReason = 'no_plan' | 'confirmed' | 'closed';
+
 export interface StudioDraft { edits: Record<number, Code>; locks: number[]; demo: boolean }
 export interface StudioSetup {
   previewOnly: false; sourceHash: string; version: string; at: string;
@@ -156,6 +162,7 @@ export function buildStudioView(workspace: WorkspacePayload, plan: PlanPayload |
 
   return {
     readOnly: !plan || plan.plan.status !== 'draft',
+    readOnlyReason: (!plan ? 'no_plan' : plan.plan.status === 'draft' ? null : plan.plan.status === 'confirmed' ? 'confirmed' : 'closed') as ReadOnlyReason | null,
     data: {
       source: workspace.geometry.sourceFile, sheet: workspace.geometry.sourceSheet ?? '', sha256: workspace.geometry.sourceHash,
       machines: studioMachines, buildings,

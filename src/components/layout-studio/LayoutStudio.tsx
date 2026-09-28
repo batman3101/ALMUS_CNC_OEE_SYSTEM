@@ -92,6 +92,7 @@ export default function LayoutStudio() {
     };
     return {
       readOnly: view.readOnly,
+      readOnlyReason: view.readOnlyReason,
       initialMode,
       initial: view.initial,
       summarize: (draft: StudioDraft) => view.summarize(draft),

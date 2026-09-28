@@ -46,6 +46,15 @@ const plan: PlanPayload = {
 };
 
 describe('process codes', () => {
+  it('a draft is editable and has no read-only reason; superseded/discarded plans are closed', () => {
+    const draft = buildStudioView(workspace, plan);
+    expect(draft.readOnly).toBe(false);
+    expect(draft.readOnlyReason).toBeNull();
+    for (const status of ['superseded', 'discarded'] as const) {
+      expect(buildStudioView(workspace, { ...plan, plan: { ...plan.plan, status } }).readOnlyReason).toBe('closed');
+    }
+  });
+
   it('maps DB process names to the studio codes, keeping sub-processes distinct', () => {
     expect(['CNC #0', 'CNC #1', 'CNC # 2', 'CNC #2-1'].map(processCode)).toEqual(['C0', 'C1', 'C2', 'C2-1']);
   });
@@ -90,6 +99,7 @@ describe('studio view from a plan', () => {
       setupTasks: [{ id: 't1', machine_id: 'm-305', status: 'in_progress', revision: 2, before_model_id: 'on1', before_process_id: 'on1-1', target_model_id: 'h8', target_process_id: 'h8-1', created_at: '2026-09-25T01:00:00Z', started_at: '2026-09-25T02:00:00Z', completed_at: null }],
     });
     expect(confirmed.readOnly).toBe(true);
+    expect(confirmed.readOnlyReason).toBe('confirmed');
     expect(confirmed.initial.setup?.tasks[305]).toMatchObject({ status: 'in_progress', before: { model: 'ON1', process: 'C1' }, target: { model: 'H8 M', process: 'C1' } });
     expect(confirmed.initial.setup?.tasks[305].events.map(e => e.status)).toEqual(['pending', 'in_progress']);
     expect(confirmed.taskRef(305)).toEqual({ id: 't1', revision: 2 });
@@ -130,6 +140,8 @@ describe('studio view from a plan', () => {
   it('without a plan shows the current machines read-only with no recommendation', () => {
     const current = buildStudioView(workspace, null);
     expect(current.readOnly).toBe(true);
+    // 권한이 없어서가 아니라 계획이 없어서다 — 화면이 그 이유대로 안내해야 한다(2026-09-28 사용자 확인).
+    expect(current.readOnlyReason).toBe('no_plan');
     expect(current.initial.draft.edits).toEqual({});
     expect(current.summarize(current.initial.draft).groups.every(g => g.status === 'not_in_forecast')).toBe(true);
   });

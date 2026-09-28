@@ -359,10 +359,10 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal((await state(page)).mode, 'setup');
         assert.equal(server.state.plans[0].status, 'confirmed');
         assert.equal(server.state.tasks.length, 6);
-        assert.ok(await L('#applyEdit').isDisabled()); assert.ok(await L('#confirmLayout').isDisabled());
-        // Read-only: no editing actions offered, and the notice says so.
-        for (const id of ['#demo', '#save', '#reset']) assert.equal(await L(id).isVisible(), false);
-        assert.match(await L('.notice').innerText(), /읽기 전용/);
+        assert.ok(await L('#confirmLayout').isDisabled());
+        // Read-only: no editing actions offered (edit form and lock are hidden, not just greyed out), and the notice says why.
+        for (const id of ['#demo', '#save', '#reset', '#editForm', '#lock']) assert.equal(await L(id).isVisible(), false);
+        assert.match(await L('.notice').innerText(), /확정된 Layout/);
       });
       await check('Setup: start then complete one machine through the server; order is enforced; state survives reload', async () => {
         await search(305);
@@ -423,7 +423,10 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
       await page.goto(root + '/layout-studio'); await ready(page);
       await check('Without a plan the current layout is shown read-only with a way to the Forecast screen', async () => {
         assert.deepEqual((await state(page)).draft.edits, {});
-        assert.ok(await page.locator(S('#applyEdit')).isDisabled());
+        // No plan is not "no permission": the notice says there is no recommendation yet, and edit inputs are hidden.
+        const notice = await page.locator(S('.notice')).innerText();
+        assert.match(notice, /추천 계획이 없습니다/); assert.doesNotMatch(notice, /읽기 전용/);
+        for (const id of ['#editForm', '#lock']) assert.equal(await page.locator(S(id)).isVisible(), false);
         assert.ok(await page.locator(S('#confirmLayout')).isDisabled());
         assert.ok(await page.getByRole('button', { name: /Forecast 에서 새 추천 만들기/ }).isVisible());
       });
