@@ -256,10 +256,20 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal(assignmentOf(305).final_model_id, server.model('PA1').id);
         assert.equal(assignmentOf(305).final_process_id, server.proc('PA1', 'C2'));
         assert.match(await L('#alertTotals').innerText(), /부족 3/);        // ON1-C1 lost the machine
+        // The selected machine's group line must reflect THIS edit, not the previous state (2026-09-28: it lagged one
+        // step because the inspector drew before the summary was recomputed). Re-selecting gives the fresh value.
+        const fresh = async () => { await search(1); await search(305); return L('#groupAlert').innerText(); };
+        const afterApply = await L('#groupAlert').innerText();
+        assert.equal(afterApply, await fresh());
+        assert.match(await L('#selectionStatus').innerText(), /사용자가 조정한 배치/);
+        assert.doesNotMatch(await L('#selectionStatus').innerText(), /검증 전/);
         await L('#lock').click(); await settled(); await page.waitForTimeout(200);
         assert.equal(assignmentOf(305).is_locked, true); assert.ok(await L('#applyEdit').isDisabled());
         await L('#undo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).is_locked, false);
         await L('#undo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).final_model_id, server.model('ON1').id);
+        const afterUndo = await L('#groupAlert').innerText();
+        assert.equal(afterUndo, await fresh());
+        assert.doesNotMatch(await L('#selectionStatus').innerText(), /사용자가 조정한 배치/);
         await L('#redo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).final_model_id, server.model('PA1').id);
       });
       await check('Model-specific process choices: H8M offers CNC 0/1/2, ON1 only CNC 1/2', async () => {
