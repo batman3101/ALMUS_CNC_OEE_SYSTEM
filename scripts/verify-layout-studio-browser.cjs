@@ -193,6 +193,8 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
       const planId = server.state.plans[0].id;
       const assignmentOf = n => server.state.assignments.get(planId).find(a => a.machine_id === server.byNo(n).id);
       const settled = () => page.waitForFunction(() => !/저장 중|Đang lưu/.test(document.querySelector('.layout-studio #saveStatus').textContent));
+      // The tray is the only editor (dropdown removed 2026-09-28): pick a piece, then tap the machine.
+      const tapPlace = async (code, no) => { await L(`.puzzle-card[data-code="${code}"]`).click(); await L(`.machine[data-id="${no}"]`).click(); await page.keyboard.press('Escape'); };
 
       await check('800 machines from the app sit on their Excel cells with their CNC numbers', async () => {
         const data = await page.evaluate(() => window.__layoutStudio.data);
@@ -264,10 +266,10 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
       });
       await check('Fine-tune saves to the server with the machine\'s uuid; lock, undo and redo too; alerts recompute', async () => {
         await search(305);
-        await page.selectOption(S('#editModel'), 'PA1'); await page.selectOption(S('#editProcess'), 'C2'); await L('#applyEdit').click();
+        await tapPlace('M3-C2', 305);
         await settled();
-        assert.equal(assignmentOf(305).final_model_id, server.model('PA1').id);
-        assert.equal(assignmentOf(305).final_process_id, server.proc('PA1', 'C2'));
+        assert.equal(assignmentOf(305).final_model_id, server.model('M3').id);
+        assert.equal(assignmentOf(305).final_process_id, server.proc('M3', 'C2'));
         assert.match(await L('#alertTotals').innerText(), /부족 3/);        // ON1-C1 lost the machine
         // The selected machine's group line must reflect THIS edit, not the previous state (2026-09-28: it lagged one
         // step because the inspector drew before the summary was recomputed). Re-selecting gives the fresh value.
@@ -277,31 +279,31 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.match(await L('#selectionStatus').innerText(), /사용자가 조정한 배치/);
         assert.doesNotMatch(await L('#selectionStatus').innerText(), /검증 전/);
         await L('#lock').click(); await settled(); await page.waitForTimeout(200);
-        assert.equal(assignmentOf(305).is_locked, true); assert.ok(await L('#applyEdit').isDisabled());
+        assert.equal(assignmentOf(305).is_locked, true);
+        await tapPlace('ON1-C1', 305); await page.waitForTimeout(200);                     // a locked machine takes no piece
+        assert.match(await L('#toast').innerText(), /고정한 설비/);
+        assert.equal(assignmentOf(305).final_model_id, server.model('M3').id);
         await L('#undo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).is_locked, false);
         await L('#undo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).final_model_id, server.model('ON1').id);
         const afterUndo = await L('#groupAlert').innerText();
         assert.equal(afterUndo, await fresh());
         assert.doesNotMatch(await L('#selectionStatus').innerText(), /사용자가 조정한 배치/);
-        await L('#redo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).final_model_id, server.model('PA1').id);
+        await L('#redo').click(); await settled(); await page.waitForTimeout(200); assert.equal(assignmentOf(305).final_model_id, server.model('M3').id);
       });
-      await check('Model-specific process choices: H8M offers CNC 0/1/2, ON1 only CNC 1/2', async () => {
-        await search(1);
-        await page.selectOption(S('#editModel'), 'H8M');
-        assert.deepEqual(await page.locator(S('#editProcess option')).allInnerTexts(), ['CNC 0', 'CNC 1', 'CNC 2']);
-        await page.selectOption(S('#editModel'), 'ON1');
-        assert.deepEqual(await page.locator(S('#editProcess option')).allInnerTexts(), ['CNC 1', 'CNC 2']);
+      await check('The dropdown editor is gone (user decision 2026-09-28): the tray is the only way to change a machine', async () => {
+        for (const id of ['#editForm', '#editModel', '#editProcess', '#applyEdit']) assert.equal(await L(id).count(), 0);
+        assert.equal(await L('#puzzleTray').isVisible(), true);
         await search(305);
       });
       await check('Original, draft, compare and model filter', async () => {
         await L('[data-mode="current"]').click(); assert.match(await L('.machine[data-id="305"]').getAttribute('aria-label'), /B6S6-C1/);
-        await L('[data-mode="compare"]').click(); assert.match(await L('.machine[data-id="305"]').getAttribute('aria-label'), /PA1-C2/);
-        await page.selectOption(S('#modelFilter'), 'PA1'); assert.equal(await L('.machine[data-id="305"]').evaluate(e => e.classList.contains('dim')), false);
+        await L('[data-mode="compare"]').click(); assert.match(await L('.machine[data-id="305"]').getAttribute('aria-label'), /M3-C2/);
+        await page.selectOption(S('#modelFilter'), 'M3'); assert.equal(await L('.machine[data-id="305"]').evaluate(e => e.classList.contains('dim')), false);
         await page.selectOption(S('#modelFilter'), '');
       });
       await check('Reload restores the server draft; reset and "back to recommendation" are saved too', async () => {
         await page.reload(); await ready(page);
-        assert.equal((await state(page)).draft.edits['305'].model, 'PA1');
+        assert.equal((await state(page)).draft.edits['305'].model, 'M3');
         await L('#reset').click(); await L('#confirmReset').click(); await settled(); await page.waitForTimeout(200);
         assert.deepEqual((await state(page)).draft.edits, {});
         assert.equal(assignmentOf(305).final_model_id, assignmentOf(305).base_model_id);
@@ -389,7 +391,7 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
       });
       await check('A concurrent save is detected (409): the user is told and the plan reloads from the server', async () => {
         server.state.conflictNext = true;
-        await search(1); await page.selectOption(S('#editModel'), 'M1'); await L('#applyEdit').click();
+        await search(1); await tapPlace('M3-C2', 1);
         await page.waitForSelector('[data-testid="studio-notice"]');
         assert.match(await page.locator('[data-testid="studio-notice"]').innerText(), /다른 사용자가 먼저 저장/);
         await ready(page);
@@ -469,7 +471,7 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal(server.byNo(305).modelId, before305);
         assert.ok(await L('#confirmLayout').isDisabled());
         // Read-only: no editing actions offered (edit form and lock are hidden, not just greyed out), and the notice says why.
-        for (const id of ['#demo', '#save', '#reset', '#editForm', '#lock', '#puzzleTray']) assert.equal(await L(id).isVisible(), false);
+        for (const id of ['#demo', '#save', '#reset', '#lock', '#puzzleTray']) assert.equal(await L(id).isVisible(), false);
         assert.match(await L('.notice').innerText(), /확정된 Layout/);
       });
       await check('Setup: start then complete one machine through the server; order is enforced; state survives reload', async () => {
@@ -553,7 +555,7 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         // No plan is not "no permission": the notice says there is no recommendation yet, and edit inputs are hidden.
         const notice = await page.locator(S('.notice')).innerText();
         assert.match(notice, /추천 계획이 없습니다/); assert.doesNotMatch(notice, /읽기 전용/);
-        for (const id of ['#editForm', '#lock']) assert.equal(await page.locator(S(id)).isVisible(), false);
+        for (const id of ['#lock', '#puzzleTray']) assert.equal(await page.locator(S(id)).isVisible(), false);
         assert.ok(await page.locator(S('#confirmLayout')).isDisabled());
         assert.ok(await page.getByRole('button', { name: /Forecast 에서 새 추천 만들기/ }).isVisible());
       });
@@ -601,7 +603,7 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await page.waitForTimeout(1500);
         await check('Operator cannot open Layout Studio', async () => { assert.equal(await page.locator('.layout-studio .machine').count(), 0); });
       } else {
-        await check('Engineer can open Layout Studio and edit the draft', async () => { await ready(page); assert.equal(await page.locator(S('#applyEdit')).isDisabled(), false); });
+        await check('Engineer can open Layout Studio and edit the draft', async () => { await ready(page); assert.equal(await page.locator(S('#puzzleTray')).isVisible(), true); });
       }
       await context.close();
     }
