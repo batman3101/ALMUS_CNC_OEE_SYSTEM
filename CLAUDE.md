@@ -335,6 +335,11 @@ app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파
   셋업 '완료'를 누를 때 그 설비만 machines 에 반영한다(설비 잠금 규약, `LAYOUT_APPLY` 감사). 교체는 하루 약 30대씩
   생산과 병행하므로, 확정 순간 전부 바꾸면 교체 전 설비의 생산 실적이 새 모델 T/T 로 계산돼 OEE 가 오염된다.
   완료 시 설비가 셋업 시작 때도 목표도 아니면 `SETUP_MACHINE_CHANGED` 로 거부한다.
+  **셋업 작업은 확정 계획을 따른다(20260928160000, 감사 F-01):** 새 확정은 공장의 이전 미완료 셋업을 **전부** 대조해
+  출발·목표가 같으면 이어받고(진행 상태 유지) 아니면 취소한다 — 새 계획이 *유지하는* 설비의 옛 작업이 살아남아 나중에
+  완료되면 확정 계획과 반대로 설비가 바뀌었다. 시작·완료는 확정 계획의 작업만(`SETUP_PLAN_NOT_CURRENT`).
+  **잠금 순서는 설비 → 작업**(확정: 설비 FOR SHARE → 작업, 완료: advisory → 설비 FOR UPDATE → 작업). 반대로 잡으면 교착
+  (감사 F-02, 로컬 두 세션 재현). `supabase/migrations/__tests__/layoutSetupLockOrder.test.ts` 가 최종 정의로 강제한다.
 - **추천은 작업자 동선 단위다.** 빨간 선(동선) + 마주본 두 열, 가로 통로에서 끊김 — `machine_layout_positions.walkway/
   walkway_side`(20260928130000, Excel 빨간 테두리에서 `scripts/extract-layout-walkways.py` 로 추출). 규칙(사용자 확정):
   한 동선 한 공정 최우선, 좌우 한쪽 열 → 위·아래 끝 블록, 중간 끼워넣기·섬 금지, 열 최대 2조각, 연쇄 이동 없음.
@@ -367,9 +372,9 @@ app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파
      운영 적용된 20260928130000 파일에서 읽는다).
      개발 서버에 돌릴 때는 `127.0.0.1` 이 아니라 `http://localhost:3000` 을 쓴다(개발 서버가 127.0.0.1
      요청의 화면 파일을 403 으로 막는다).
-  2. `scripts/verify-layout-planning-local.cjs` — 실제 서버 모듈 → 로컬 Supabase RPC 종단 12개
+  2. `scripts/verify-layout-planning-local.cjs` — 실제 서버 모듈 → 로컬 Supabase RPC 종단 13개
      (`npx supabase start` 필요, 로컬 전용 픽스처 생성, localhost 가 아니면 실행 거부).
-  3. `supabase/tests/layout_planning_invariants.sql` — RPC 불변조건 L1–L14(롤백형).
+  3. `supabase/tests/layout_planning_invariants.sql` — RPC 불변조건 L1–L17(롤백형).
 
 ### Production Record Input System
 - See `src/components/production/README.md` for details

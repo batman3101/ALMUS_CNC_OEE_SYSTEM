@@ -73,12 +73,14 @@ const demand = (model, peak) => ({ model, week: '2099-W01', peakQuantity: peak, 
   const base = { title: 'local e2e', forecastFileName: 'local.xlsx', forecastFileHash: 'local', week, nextWeekDemands: [], lockedMachineIds: [] };
   let planId;
 
-  await check('workspace: ALT drawing with 800 positions; ALV has no drawing (added later)', async () => {
+  await check('workspace: ALT drawing with 800 positions; ALV drawing with 350 (20260928150000)', async () => {
     const ws = await server.loadWorkspace(factoryId);
     assert.equal(ws.geometry.positions.length, 800);
     assert.equal(ws.snapshot.status, 'available');
     const { data: alv } = await db.from('factories').select('id').eq('code', 'ALV').single();
-    assert.equal(await server.loadGeometry(alv.id), null);
+    const alvGeometry = await server.loadGeometry(alv.id);
+    assert.equal(alvGeometry.positions.length, 350);
+    assert.ok(alvGeometry.positions.every(p => p.walkway && p.side));
   });
 
   await check('unmapped forecast model with demand blocks the plan (422) until acknowledged', async () => {
@@ -195,6 +197,23 @@ const demand = (model, peak) => ({ model, week: '2099-W01', peakQuantity: peak, 
     const next = await server.loadPlan(factoryId, p);
     assert.ok(next.setupTasks.some(t => t.id === openTask.id), 'earlier open task must be visible from the new plan');
     await server.discardPlan(factoryId, null, p);
+  });
+
+  await check('audit F-01: confirming a plan that keeps a machine cancels its earlier open setup — it can no longer run (20260928160000)', async () => {
+    const earlier = await server.loadPlan(factoryId, planId);
+    const openTask = earlier.setupTasks.find(t => t.plan_id === planId && t.status === 'pending');
+    assert.ok(openTask, 'fixture: an open task of the confirmed plan');
+    const { planId: p } = await server.createPlan(factoryId, null, { ...base, demands: [], acknowledgeUnmapped: true, acknowledgeMissingProcesses: true });
+    const next = await server.loadPlan(factoryId, p);
+    const kept = next.assignments.find(a => a.machine_id === openTask.machine_id);
+    assert.equal(kept.final_model_id, kept.base_model_id);            // the new plan keeps this machine as it is
+    await server.confirmPlan(factoryId, null, p, next.plan.revision);
+    const after = await server.loadPlan(factoryId, p);
+    assert.ok(!after.setupTasks.some(t => t.id === openTask.id), 'the earlier task is no longer open');
+    const { data: task } = await db.from('machine_setup_tasks').select('status, revision, cancel_reason').eq('id', openTask.id).single();
+    assert.equal(task.status, 'cancelled');
+    assert.match(task.cancel_reason, /superseded by layout plan/);
+    await expectCode(server.transitionSetupTask(factoryId, null, openTask.id, task.revision, 'in_progress', null), 'invalid_setup_transition');
   });
 
   await check('another factory cannot read or confirm this plan (404)', async () => {

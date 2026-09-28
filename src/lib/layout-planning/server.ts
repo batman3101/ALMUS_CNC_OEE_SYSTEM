@@ -34,6 +34,8 @@ const RPC_ERRORS: Array<[prefix: string, status: number, code: string]> = [
   ['INVALID_SETUP_TRANSITION', 409, 'invalid_setup_transition'],
   // Setup completion found the machine changed elsewhere (neither the setup's start state nor its target) — 20260928140000.
   ['SETUP_MACHINE_CHANGED', 409, 'setup_machine_changed'],
+  // The task belongs to a plan that is no longer the confirmed one — a newer confirm took over (20260928160000, audit F-01).
+  ['SETUP_PLAN_NOT_CURRENT', 409, 'setup_plan_not_current'],
   ['UNKNOWN_MACHINE', 400, 'unknown_machine'],
   ['PLAN_NOT_FOUND', 404, 'plan_not_found'],
   ['TASK_NOT_FOUND', 404, 'task_not_found'],
@@ -53,6 +55,9 @@ function raise(error: { message?: string; code?: string } | null): never {
   }
   // FK / check violations: the client sent a model/process pair or machine that does not fit this factory.
   if (error?.code === '23503' || error?.code === '23514') throw new LayoutPlanningError(400, 'invalid_assignment');
+  // Deadlock / serialization failure between two writers (confirm vs setup completion, audit F-02): a retryable
+  // conflict, not a server fault. The lock order is unified in 20260928160000; this is the answer if one still happens.
+  if (error?.code === '40P01' || error?.code === '40001') throw new LayoutPlanningError(409, 'concurrent_update');
   throw new Error(message || 'layout planning query failed');
 }
 

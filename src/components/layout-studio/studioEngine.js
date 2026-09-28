@@ -47,6 +47,8 @@ const dbMessages = {
 // Puzzle tray texts (2026-09-28).
 Object.assign(dbMessages.ko,{trayTitle:'조각 트레이',trayHelp:'조각을 도면의 설비로 끌어 놓으세요. 원래 그 자리의 모델·공정은 트레이로 돌아옵니다. 설비를 끌어 다른 설비에 놓으면 옮겨지고, 아래 비우기에 놓으면 빈 자리가 됩니다. Shift+클릭으로 한 열의 여러 대를 묶습니다. 터치: 조각을 누른 뒤 설비를 누르세요.',trayNeed:'놓아야 할 조각',trayNeedEmpty:'모두 채웠습니다 ✓',traySpare:'여유 — 바꿔도 되는 설비',traySpareEmpty:'없음',trayDropOut:'여기에 설비를 끌어 놓으면 비우기(빈 자리)',ruleGood:'무리에 붙음',ruleWarn:'동선 공정 섞임',ruleBad:'섬·끼워넣기·3조각',violations:'규칙 위반',armed:'{g} 을(를) 놓을 설비를 누르세요 · 다시 누르거나 Esc 로 취소',noRoom:'그 열에는 이만큼 들어갈 자리가 없습니다.',placedBad:'⚠ 규칙 위반: {r} — 되돌리려면 ↶',placedWarn:'동선 안에 공정이 섞였습니다.',reasonIsland:'섬',reasonMiddle:'끼워넣기',reasonThree:'3조각',rangeHint:'한 열에서 {n}대 선택 — 끌어서 한 번에 옮기거나, 조각을 놓아 한 번에 채웁니다.',fromTile:'설비에서 옮기는 중',fromTray:'트레이에서'});
 Object.assign(messages.ko,{emptySlot:'빈 자리'});Object.assign(messages.vi,{emptySlot:'Trống'});
+Object.assign(dbMessages.ko,{setupPlanNotCurrent:'이 셋업은 새로 확정된 Layout 으로 대체되었습니다. 화면을 새로 불러오세요.',concurrentUpdate:'다른 작업과 동시에 처리되어 반영하지 못했습니다. 잠시 뒤 다시 시도하세요.'});
+Object.assign(dbMessages.vi,{setupPlanNotCurrent:'Setup này đã được thay bằng Layout vừa xác nhận. Hãy tải lại màn hình.',concurrentUpdate:'Bị trùng với thao tác khác nên chưa áp dụng được. Hãy thử lại sau.'});
 Object.assign(dbMessages.ko,{trayViewTitle:'현재 배정 현황',trayViewNote:'편집할 수 없는 화면입니다. 모델·공정별 배정 대수와 색을 확인하세요.',trayViewNoDemand:'수요(Forecast)가 없어 필요·차이는 비워 둡니다.'});
 Object.assign(dbMessages.vi,{trayViewTitle:'Phân bổ hiện tại',trayViewNote:'Màn hình chỉ xem. Kiểm tra số máy và màu theo model·công đoạn.',trayViewNoDemand:'Chưa có Forecast nên để trống Cần·Chênh.'});
 Object.assign(dbMessages.ko,{trayCapa:'CAPA',capaCount:'{n}개',capaRequired:'필요',capaAssigned:'배정',capaGap:'차이',trayLegend:'색 범례'});
@@ -231,7 +233,7 @@ function renderSetup(){
 // One machine per call (user decision 2026-09-28: no bulk complete — completing writes that machine to the DB). A machine
 // with a request in flight is busy, so a double click cannot send the same transition twice.
 let setupBusy=new Set();
-function transitionSetup(from,to,id=selected){const task=setupTask(id);if(!task||task.status!==from||setupBusy.has(id))return;if(backend){setupBusy.add(id);render();backend.transition(id,to).then(next=>{setupBatch=next;toast(t('setupSaved'));}).catch(error=>{const code=error&&error.code;toast(code==='setup_machine_changed'?t('setupMachineChanged'):code==='machine_inactive'?t('setupMachineInactive'):t('setupFailed'));}).finally(()=>{setupBusy.delete(id);render();});return;}const next=copy(setupBatch);next.tasks[id].status=to;next.tasks[id].events.push({status:to,at:new Date().toISOString(),actor:'preview-user'});if(saveSetup(next)){render();toast(t('setupSaved'));}}
+function transitionSetup(from,to,id=selected){const task=setupTask(id);if(!task||task.status!==from||setupBusy.has(id))return;if(backend){setupBusy.add(id);render();backend.transition(id,to).then(next=>{setupBatch=next;toast(t('setupSaved'));}).catch(error=>{const code=error&&error.code;toast(code==='setup_machine_changed'?t('setupMachineChanged'):code==='machine_inactive'?t('setupMachineInactive'):code==='setup_plan_not_current'?t('setupPlanNotCurrent'):code==='concurrent_update'?t('concurrentUpdate'):t('setupFailed'));}).finally(()=>{setupBusy.delete(id);render();});return;}const next=copy(setupBatch);next.tasks[id].status=to;next.tasks[id].events.push({status:to,at:new Date().toISOString(),actor:'preview-user'});if(saveSetup(next)){render();toast(t('setupSaved'));}}
 
 // ── Setup board (user decision 2026-09-28) ───────────────────────────────────
 // Every task of the confirmed plan in one list — in progress, then waiting, then done, by walkway and number — with the
@@ -306,7 +308,7 @@ $('confirmLayout').onclick=()=>{if(!backend||readOnly)return;$('confirmText').te
 $('cancelConfirm').onclick=()=>$('confirmDialog').close();
 $('confirmLayoutGo').onclick=()=>{$('confirmDialog').close();$('confirmLayout').disabled=true;
  Promise.resolve(saving).then(()=>backend.confirm(copy(draft))).then(result=>{setupBatch=result.setup;mode='setup';toast(t('confirmed'));if(backend.onConfirmed)backend.onConfirmed(result);else render();})
-  .catch(error=>{toast(error&&error.code==='layout_base_stale'?t('stale'):t('confirmFailed'));render();});};
+  .catch(error=>{toast(error&&error.code==='layout_base_stale'?t('stale'):error&&error.code==='concurrent_update'?t('concurrentUpdate'):t('confirmFailed'));render();});};
 
 // ── Puzzle tray (user decision 2026-09-28) ───────────────────────────────────
 // A piece is a model·process group. Dropping one on a machine sends whatever the machine held back to the tray through

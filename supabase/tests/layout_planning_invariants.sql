@@ -15,6 +15,9 @@
 --   L8  셋업 전이: 순서 강제, 이벤트 기록, 이벤트 수정 불가, **완료하면 그 설비만** machines 에 목표 반영 + 감사 기록
 --   L13 완료 시 설비가 그사이 다른 모델로 바뀌어 있으면 거부(SETUP_MACHINE_CHANGED), 셋업·설비 모두 그대로
 --   L14 완료 시 설비가 이미 목표와 같으면 쓰기 없이 완료
+--   L15 새 확정은 그 계획이 **유지하는** 설비의 옛 미완료 셋업도 취소한다(감사 F-01, 20260928160000) — 완료 불가, 설비 그대로
+--   L16 출발·목표가 같은 옛 셋업은 새 계획으로 이어받는다(진행 상태 유지, 중복 작업 없음), 완료하면 새 계획으로 감사 기록
+--   L17 확정 계획이 아닌 계획의 작업은 시작·완료 불가(SETUP_PLAN_NOT_CURRENT)
 --   L9  권한: RPC 는 anon/authenticated 실행 불가, 내부 함수는 service_role 도 불가
 --   L10 도면: ALT 활성 도면 1개, 800대, 셀 중복 없음
 --   L12 계획이 Forecast 수요 경고(warnings)를 저장한다(감사 BUG-01, 20260928110000)
@@ -38,6 +41,7 @@ declare
   v_half uuid;
   v_m1_model uuid; v_m1_proc uuid; v_m2_model uuid; v_m2_proc uuid; v_m3_model uuid; v_m3_proc uuid;
   v_task3 uuid;
+  v_plan4 uuid; v_plan5 uuid; v_task1 uuid; v_task2b uuid;
 begin
   select id into v_alt from public.factories where code = 'ALT';
   select id into v_alv from public.factories where code = 'ALV';
@@ -172,34 +176,6 @@ begin
   select count(*) into n from public.machines where id = v_half and production_model_id = v_model_b and current_process_id is null;
   if n <> 1 then raise exception 'L11 FAIL: confirm touched the half-assigned machine'; end if;
 
-  -- [L6] 두 번째 계획: m1 을 다시 B 로 → 이전 확정 superseded, m1 의 대기 셋업은 cancelled
-  r := public.create_layout_plan(v_alt, null,
-    jsonb_build_object('title', 'T2', 'forecast_file_name', 'f', 'forecast_file_hash', 'h', 'target_week', 'w', 'period_start', '2099-01-08', 'period_end', '2099-01-14'),
-    '[]'::jsonb, jsonb_build_array(jsonb_build_object('machine_id', v_m1, 'recommended_model_id', v_model_b, 'recommended_process_id', v_proc_b1)));
-  v_plan2 := (r->>'plan_id')::uuid;
-  r := public.confirm_layout_plan(v_alt, v_plan2, 1, null);
-  select count(*) into n from public.layout_plans where id = v_plan and status = 'superseded';
-  if n <> 1 then raise exception 'L6 FAIL: first plan not superseded'; end if;
-  select count(*) into n from public.machine_setup_tasks where plan_id = v_plan and machine_id = v_m1 and status = 'cancelled';
-  if n <> 1 then raise exception 'L6 FAIL: old setup task not cancelled'; end if;
-  select count(*) into n from public.machine_setup_tasks where factory_id = v_alt and machine_id = v_m1 and status in ('pending', 'in_progress');
-  if n <> 1 then raise exception 'L6 FAIL: active tasks for m1 = %', n; end if;
-
-  -- [L7] 기준이 바뀐 계획은 확정 거부
-  r := public.create_layout_plan(v_alt, null,
-    jsonb_build_object('title', 'T3', 'forecast_file_name', 'f', 'forecast_file_hash', 'h', 'target_week', 'w', 'period_start', '2099-01-15', 'period_end', '2099-01-21'),
-    '[]'::jsonb, jsonb_build_array(jsonb_build_object('machine_id', v_m2, 'recommended_model_id', v_model_b, 'recommended_process_id', v_proc_b1)));
-  v_plan3 := (r->>'plan_id')::uuid;
-  update public.machines set production_model_id = v_model_a, current_process_id = v_proc_a1 where id = v_m3;
-  v_ok := false;
-  begin
-    perform public.confirm_layout_plan(v_alt, v_plan3, 1, null);
-  exception when others then v_ok := sqlerrm like 'LAYOUT_BASE_STALE%';
-  end;
-  if not v_ok then raise exception 'L7 FAIL: stale plan confirmed'; end if;
-  select count(*) into n from public.machines where id = v_m2 and production_model_id is not distinct from v_m2_model and current_process_id is not distinct from v_m2_proc;
-  if n <> 1 then raise exception 'L7 FAIL: machine changed by rejected confirm'; end if;
-
   -- [L8] 셋업 전이
   select id into v_task from public.machine_setup_tasks where plan_id = v_plan and machine_id = v_m2 and status = 'pending';
   v_ok := false;
@@ -226,7 +202,8 @@ begin
   end;
   if not v_ok then raise exception 'L8 FAIL: event history editable'; end if;
 
-  -- [L13] m3 는 L7 에서 목표(B/b1)도 기준도 아닌 A/a1 로 바뀌었다 → 완료 거부, 셋업·설비 모두 그대로
+  -- [L13] 누가 설비 현황에서 m3 를 목표(B/b1)도 기준도 아닌 A/a1 로 바꿨다 → 완료 거부, 셋업·설비 모두 그대로
+  update public.machines set production_model_id = v_model_a, current_process_id = v_proc_a1 where id = v_m3;
   select id into v_task3 from public.machine_setup_tasks where plan_id = v_plan and machine_id = v_m3 and status = 'pending';
   r := public.transition_machine_setup_task(v_alt, v_task3, 1, 'in_progress', null);
   v_ok := false;
@@ -248,6 +225,85 @@ begin
   select count(*) into n from public.audit_log where factory_id = v_alt and action = 'LAYOUT_APPLY' and record_id = v_m3;
   if n <> 0 then raise exception 'L14 FAIL: wrote a machine that was already at the target'; end if;
 
+  -- [L6] 두 번째 계획: m1 을 다시 B 로 → 이전 확정 superseded, m1 의 대기 셋업은 cancelled
+  r := public.create_layout_plan(v_alt, null,
+    jsonb_build_object('title', 'T2', 'forecast_file_name', 'f', 'forecast_file_hash', 'h', 'target_week', 'w', 'period_start', '2099-01-08', 'period_end', '2099-01-14'),
+    '[]'::jsonb, jsonb_build_array(jsonb_build_object('machine_id', v_m1, 'recommended_model_id', v_model_b, 'recommended_process_id', v_proc_b1)));
+  v_plan2 := (r->>'plan_id')::uuid;
+  r := public.confirm_layout_plan(v_alt, v_plan2, 1, null);
+  select count(*) into n from public.layout_plans where id = v_plan and status = 'superseded';
+  if n <> 1 then raise exception 'L6 FAIL: first plan not superseded'; end if;
+  select count(*) into n from public.machine_setup_tasks where plan_id = v_plan and machine_id = v_m1 and status = 'cancelled';
+  if n <> 1 then raise exception 'L6 FAIL: old setup task not cancelled'; end if;
+  select count(*) into n from public.machine_setup_tasks where factory_id = v_alt and machine_id = v_m1 and status in ('pending', 'in_progress');
+  if n <> 1 then raise exception 'L6 FAIL: active tasks for m1 = %', n; end if;
+
+  -- [L15] 감사 F-01: plan2 의 m1 셋업(→B) 진행 중에 m1 을 **그대로 두는** plan4 를 확정 → 옛 작업 취소, 완료 불가, m1 그대로
+  select id into v_task1 from public.machine_setup_tasks where plan_id = v_plan2 and machine_id = v_m1 and status = 'pending';
+  r := public.transition_machine_setup_task(v_alt, v_task1, 1, 'in_progress', null);
+  r := public.create_layout_plan(v_alt, null,
+    jsonb_build_object('title', 'T4', 'forecast_file_name', 'f', 'forecast_file_hash', 'h', 'target_week', 'w', 'period_start', '2099-01-22', 'period_end', '2099-01-28'),
+    '[]'::jsonb, jsonb_build_array(jsonb_build_object('machine_id', v_m2, 'recommended_model_id', v_model_b, 'recommended_process_id', v_proc_b1)));
+  v_plan4 := (r->>'plan_id')::uuid;
+  r := public.confirm_layout_plan(v_alt, v_plan4, 1, null);
+  select count(*) into n from public.machine_setup_tasks where id = v_task1 and status = 'cancelled' and cancel_reason like 'superseded by layout plan%';
+  if n <> 1 then raise exception 'L15 FAIL: old in-progress task on a machine the new plan keeps was not cancelled'; end if;
+  v_ok := false;
+  begin
+    perform public.transition_machine_setup_task(v_alt, v_task1, 3, 'completed', null);
+  exception when others then v_ok := sqlerrm like 'INVALID_SETUP_TRANSITION%';
+  end;
+  if not v_ok then raise exception 'L15 FAIL: superseded task could still be completed'; end if;
+  select count(*) into n from public.machines where id = v_m1 and production_model_id is not distinct from v_m1_model and current_process_id is not distinct from v_m1_proc;
+  if n <> 1 then raise exception 'L15 FAIL: m1 changed against the confirmed plan'; end if;
+
+  -- [L16] plan4 의 m2 셋업(A/a2 → B/b1)을 시작한 뒤 같은 목표의 plan5 확정 → 이어받음(진행 중 유지·작업 하나), 완료는 plan5 로 기록
+  select id into v_task2b from public.machine_setup_tasks where plan_id = v_plan4 and machine_id = v_m2 and status = 'pending';
+  r := public.transition_machine_setup_task(v_alt, v_task2b, 1, 'in_progress', null);
+  r := public.create_layout_plan(v_alt, null,
+    jsonb_build_object('title', 'T5', 'forecast_file_name', 'f', 'forecast_file_hash', 'h', 'target_week', 'w', 'period_start', '2099-01-29', 'period_end', '2099-02-04'),
+    '[]'::jsonb, jsonb_build_array(jsonb_build_object('machine_id', v_m2, 'recommended_model_id', v_model_b, 'recommended_process_id', v_proc_b1)));
+  v_plan5 := (r->>'plan_id')::uuid;
+  r := public.confirm_layout_plan(v_alt, v_plan5, 1, null);
+  if (r->>'changed_machines')::int <> 1 then raise exception 'L16 FAIL: changed %', r->>'changed_machines'; end if;
+  select count(*) into n from public.machine_setup_tasks where id = v_task2b and plan_id = v_plan5 and status = 'in_progress';
+  if n <> 1 then raise exception 'L16 FAIL: matching task not carried over in progress'; end if;
+  select count(*) into n from public.machine_setup_tasks where factory_id = v_alt and machine_id = v_m2 and status in ('pending', 'in_progress');
+  if n <> 1 then raise exception 'L16 FAIL: % open tasks for m2', n; end if;
+  select revision into v_rev from public.machine_setup_tasks where id = v_task2b;
+  r := public.transition_machine_setup_task(v_alt, v_task2b, v_rev, 'completed', null);
+  select count(*) into n from public.machines where id = v_m2 and production_model_id = v_model_b and current_process_id = v_proc_b1;
+  if n <> 1 then raise exception 'L16 FAIL: carried-over completion did not apply'; end if;
+  select count(*) into n from public.audit_log where action = 'LAYOUT_APPLY' and record_id = v_m2 and new_values->>'layout_plan_id' = v_plan5::text;
+  if n <> 1 then raise exception 'L16 FAIL: completion not recorded under the confirmed plan'; end if;
+
+  -- [L17] 확정 계획이 아닌 계획의 작업(인위적으로 남긴 상태)은 시작·완료 불가
+  insert into public.machine_setup_tasks (factory_id, plan_id, machine_id, before_model_id, before_process_id, target_model_id, target_process_id)
+  values (v_alt, v_plan4, v_m1, v_m1_model, v_m1_proc, v_model_b, v_proc_b1) returning id into v_task;
+  v_ok := false;
+  begin
+    perform public.transition_machine_setup_task(v_alt, v_task, 1, 'in_progress', null);
+  exception when others then v_ok := sqlerrm like 'SETUP_PLAN_NOT_CURRENT%';
+  end;
+  if not v_ok then raise exception 'L17 FAIL: task of a superseded plan could start'; end if;
+  r := public.transition_machine_setup_task(v_alt, v_task, 1, 'cancelled', null, 'cleanup');   -- 취소는 허용
+
+  -- [L7] 기준이 바뀐 계획은 확정 거부
+  r := public.create_layout_plan(v_alt, null,
+    jsonb_build_object('title', 'T3', 'forecast_file_name', 'f', 'forecast_file_hash', 'h', 'target_week', 'w', 'period_start', '2099-01-15', 'period_end', '2099-01-21'),
+    '[]'::jsonb, jsonb_build_array(jsonb_build_object('machine_id', v_m2, 'recommended_model_id', v_model_b, 'recommended_process_id', v_proc_b1)));
+  v_plan3 := (r->>'plan_id')::uuid;
+  update public.machines set production_model_id = v_model_a, current_process_id = v_proc_a1 where id = v_m3;   -- 계획을 만든 뒤 바뀜
+  v_ok := false;
+  begin
+    perform public.confirm_layout_plan(v_alt, v_plan3, 1, null);
+  exception when others then v_ok := sqlerrm like 'LAYOUT_BASE_STALE%';
+  end;
+  if not v_ok then raise exception 'L7 FAIL: stale plan confirmed'; end if;
+  select count(*) into n from public.machines where id = v_m2 and production_model_id = v_model_b and current_process_id = v_proc_b1;   -- L16 에서 B/b1 로 완료됨
+  if n <> 1 then raise exception 'L7 FAIL: machine changed by rejected confirm'; end if;
+  update public.machines set production_model_id = v_model_b, current_process_id = v_proc_b1 where id = v_m3;   -- 되돌려 둔다
+
   -- [L9] 권한
   if has_function_privilege('anon', 'public.confirm_layout_plan(uuid, uuid, integer, uuid)', 'execute')
      or has_function_privilege('authenticated', 'public.confirm_layout_plan(uuid, uuid, integer, uuid)', 'execute')
@@ -261,6 +317,6 @@ begin
     raise exception 'L9 FAIL: service_role cannot confirm';
   end if;
 
-  raise exception 'ALL_INVARIANTS_PASSED (L1-L14)';
+  raise exception 'ALL_INVARIANTS_PASSED (L1-L17)';
 end;
 $$;
