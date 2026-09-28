@@ -2,7 +2,7 @@
   "result": "PASS",
   "mode": "db",
   "root": "http://localhost:3000",
-  "timestamp": "2026-09-28T07:55:11.683Z",
+  "timestamp": "2026-09-28T08:50:40.088Z",
   "checks": [
     "800 machines from the app sit on their Excel cells with their CNC numbers",
     "The recommended layout opens first: 6 recommended moves, labelled, compare shows them",
@@ -14,6 +14,8 @@
     "Model-specific process choices: H8M offers CNC 0/1/2, ON1 only CNC 1/2",
     "Original, draft, compare and model filter",
     "Reload restores the server draft; reset and \"back to recommendation\" are saved too",
+    "Puzzle tray: colours by model·process, pieces to place / spare, rule rings while dragging",
+    "Puzzle tray: drag a machine to \"empty\", Ctrl+Z undoes it; Shift+click range + tap-to-place fills a block",
     "A concurrent save is detected (409): the user is told and the plan reloads from the server",
     "JSON export marks the plan as capacity-validated",
     "Korean and Vietnamese UI (follows the app header language switch live, without remounting)",

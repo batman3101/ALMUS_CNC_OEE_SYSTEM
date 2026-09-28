@@ -40,6 +40,8 @@ const studioWrites = writes => writes.filter(w => !w.endsWith('/rest/v1/rpc/upda
 // ── In-memory layout-planning server ─────────────────────────────────────────────────────────────
 const uid = (prefix, n) => `${prefix}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const MODEL_DEFS = { ON1: [['CNC #1', 560], ['CNC #2', 558]], ON3: [['CNC #1', 948], ['CNC #2', 646]], H8M: [['CNC #0', 63], ['CNC #1', 593], ['CNC #2', 453]], H8S: [['CNC #0', 68], ['CNC #1', 807], ['CNC #2', 860]], M1: [['CNC #1', 602], ['CNC #2', 638]], M3: [['CNC #1', 851], ['CNC #2', 965]], PA1: [['CNC #1', 531], ['CNC #2', 664]], B6S6: [['CNC #1', 379], ['CNC #2', 298]] };
+// Walkways as applied to production (20260928130000): the puzzle's rule rings need them.
+const WALKWAYS = new Map([...fs.readFileSync(path.resolve('supabase/migrations/20260928130000_layout_walkways.sql'), 'utf8').matchAll(/\((\d+), '([A-Z]-\d\d-[UD])', '([LR])'/g)].map(m => [Number(m[1]), { walkway: m[2], side: m[3] }]));
 const RECOMMENDED = [[305, 'ON1', 'C1'], [306, 'ON1', 'C1'], [315, 'ON1', 'C2'], [316, 'ON1', 'C2'], [653, 'M3', 'C2'], [654, 'M3', 'C2']];
 
 function makeServer({ withPlan = true, onlyBuilding = null } = {}) {
@@ -52,7 +54,7 @@ function makeServer({ withPlan = true, onlyBuilding = null } = {}) {
   const proc = (name, code) => model(name).processes.find(p => p.name.replace(/\D/g, '') === code.slice(1)).id;
   const machines = sourceMachines.map(m => ({ id: uid('30000000', m.id), name: `CNC-${String(m.id).padStart(3, '0')}`, location: m.building, isActive: true, modelId: model(m.model).id, processId: proc(m.model, m.process) }));
   const byNo = n => machines[sourceMachines.findIndex(m => m.id === n)];
-  const positions = sourceMachines.map(m => ({ machineId: uid('30000000', m.id), building: m.building, cell: m.cell, x: m.x, y: m.y, width: m.width, height: m.height }));
+  const positions = sourceMachines.map(m => ({ machineId: uid('30000000', m.id), building: m.building, cell: m.cell, x: m.x, y: m.y, width: m.width, height: m.height, ...WALKWAYS.get(m.id) }));
   const state = { plans: [], assignments: new Map(), requirements: new Map(), tasks: [], conflictNext: false, writes: [] };
   function newPlan(id, title) {
     state.plans.push({ id, status: 'draft', revision: 1, title, target_week: '2026-W39', created_at: new Date().toISOString() });
@@ -231,7 +233,11 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         before = await state(page); await L('#zoomOut').click(); assert.ok((await state(page)).scale < before.scale);
         await L('#stage').focus(); before = await state(page); await page.keyboard.press('+'); assert.ok((await state(page)).scale > before.scale);
         const box = await L('#stage').boundingBox(); before = await state(page);
-        await page.mouse.move(box.x + 220, box.y + 200); await page.mouse.down(); await page.mouse.move(box.x + 300, box.y + 250, { steps: 8 }); await page.mouse.up();
+        // A mouse press on a machine now picks up its piece (puzzle tray), so the pan starts on empty floor.
+        const floor = await page.evaluate(() => { const s = document.querySelector('.layout-studio #stage').getBoundingClientRect(); for (let y = s.y + 120; y < s.bottom - 80; y += 5) for (let x = s.x + 60; x < s.right - 200; x += 5) { const e = document.elementFromPoint(x, y); if (e && e.closest('.layout-studio #stage') && !e.closest('g.machine, .map-tools, .minimap-wrap, .stage-label, #demoBadge, .map-hint')) return { x, y }; } return null; });
+        assert.ok(floor, 'no empty floor to pan from');
+        await page.mouse.move(floor.x, floor.y); await page.mouse.down(); await page.mouse.move(floor.x + 80, floor.y + 50, { steps: 8 }); await page.mouse.up();
+        assert.deepEqual((await state(page)).draft, before.draft);
         assert.ok(Math.abs((await state(page)).tx - before.tx) > 40);
         assert.equal(await L('#stage').evaluate(e => getComputedStyle(e).userSelect), 'none');
         assert.equal(await page.evaluate(() => window.getSelection().toString()), '');
@@ -303,6 +309,84 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal(Object.keys((await state(page)).draft.edits).length, 6);
         assert.equal(assignmentOf(305).final_model_id, server.model('ON1').id);
       });
+      await check('Puzzle tray: colours by model·process, pieces to place / spare, rule rings while dragging', async () => {
+        await L('[data-mode="draft"]').click(); await search(653);
+        assert.equal(await L('#puzzleTray').isVisible(), true);
+        // After the recommendation ON1-C1 is still 2 short and M3-C2 3 over (the same numbers as the CAPA totals).
+        assert.equal(await L('#needCards .puzzle-card[data-code="ON1-C1"] .cnt').innerText(), '2');
+        assert.equal(await L('#spareCards .puzzle-card[data-code="M3-C2"] .cnt').innerText(), '3');
+        assert.equal(await L('#needCount').innerText(), '2');
+        // Model = hue, process = lightness: C1 light, C2 dark with white text, C0 hatched.
+        const tile = n => L(`.machine[data-id="${n}"]`);
+        const fillOf = n => tile(n).locator('.machine-body').getAttribute('fill');
+        const byProcess = await page.evaluate(() => { const d = window.__layoutStudio.data.machines, s = window.__layoutStudio.state(), a = m => s.draft.edits[m.id] || m; return ['C0', 'C1', 'C2'].map(p => d.find(m => a(m).process === p).id); });
+        await L('[data-building="all"]').click();
+        assert.match(await fillOf(byProcess[1]), /hsl\(\d+ 72% 82%\)/);
+        assert.match(await fillOf(byProcess[2]), /hsl\(\d+ 62% 40%\)/);
+        assert.match(await fillOf(byProcess[0]), /^url\(#ls-hatch-/);
+        assert.equal(await tile(byProcess[2]).locator('.machine-number').evaluate(e => getComputedStyle(e).fill), 'rgb(255, 255, 255)');
+        // Rule rings while dragging. In B, next to the ON1-C1 group, some spots are fine and most are not; dropping the
+        // piece back on the tray cancels without a save.
+        const ringsWhileDragging = async (hover, drop) => {
+          const card = await L('#needCards .puzzle-card[data-code="ON1-C1"]').boundingBox();
+          await page.mouse.move(card.x + 20, card.y + 12); await page.mouse.down();
+          await page.mouse.move(card.x - 60, card.y + 40, { steps: 5 });
+          await page.mouse.move(hover.x, hover.y, { steps: 10 });
+          assert.equal(await page.locator('.layout-studio.puzzle-dragging').count(), 1);
+          assert.equal(await L('.puzzle-ghost').isVisible(), true);
+          const rings = await L('.puzzle-ring').evaluateAll(els => els.map(e => e.getAttribute('class').split(' ')[1] || 'none'));
+          if (drop) await page.mouse.move(drop.x, drop.y, { steps: 5 });
+          await page.mouse.up();
+          return rings;
+        };
+        await search(306);
+        const writesBefore = server.state.writes.length;
+        const onTray = await L('#puzzleTray .puzzle-head').boundingBox();
+        const inB = await ringsWhileDragging({ x: onTray.x - 300, y: onTray.y + 200 }, { x: onTray.x + 20, y: onTray.y + 10 });
+        assert.ok(inB.includes('good') && inB.includes('bad'), JSON.stringify([...new Set(inB)]));
+        await page.waitForTimeout(300);
+        assert.equal(server.state.writes.length, writesBefore);
+        // A has no ON1-C1 at all: every spot there would be an island. Drop on 653 (a spare M3-C2) anyway — shown, not blocked.
+        await search(653);
+        const target = await tile(653).boundingBox();
+        const inA = await ringsWhileDragging({ x: target.x + target.width / 2, y: target.y + target.height / 2 });
+        assert.deepEqual([...new Set(inA)], ['bad']);
+        await settled(); await page.waitForTimeout(200);
+        assert.equal(assignmentOf(653).final_model_id, server.model('ON1').id);
+        assert.equal(assignmentOf(653).final_process_id, server.proc('ON1', 'C1'));
+        assert.equal(await page.locator('.layout-studio.puzzle-dragging').count(), 0);
+        assert.equal(await L('.puzzle-flyer').count(), 1);                              // M3-C2 flies back to the tray
+        assert.match(await L('#toast').innerText(), /규칙 위반: .*섬/);
+        assert.equal(await L('#needCards .puzzle-card[data-code="ON1-C1"] .cnt').innerText(), '1');
+        assert.equal(await L('#spareCards .puzzle-card[data-code="M3-C2"] .cnt').innerText(), '2');
+        assert.ok(await L('.puzzle-card.flash').count() >= 2);
+        assert.match(await L('#alertTotals').innerText(), /부족 1/);
+      });
+      await check('Puzzle tray: drag a machine to "empty", Ctrl+Z undoes it; Shift+click range + tap-to-place fills a block', async () => {
+        const tile = n => L(`.machine[data-id="${n}"]`);
+        const from = await tile(654).boundingBox(), out = await L('#puzzleDropOut').boundingBox();
+        await page.mouse.move(from.x + 50, from.y + 30); await page.mouse.down();
+        await page.mouse.move(out.x + out.width / 2, out.y + out.height / 2, { steps: 12 });
+        assert.equal(await L('#puzzleDropOut.over').count(), 1);
+        await page.mouse.up(); await settled(); await page.waitForTimeout(200);
+        assert.equal(assignmentOf(654).final_model_id, null);
+        assert.deepEqual((await state(page)).draft.edits['654'], { model: '', process: '' });
+        await page.keyboard.press('Control+z'); await settled(); await page.waitForTimeout(200);
+        assert.equal(assignmentOf(654).final_model_id, server.model('M3').id);
+        // Shift+click selects a contiguous block in one column; an armed piece then fills the whole block with one click.
+        await search(305); await tile(306).click({ modifiers: ['Shift'] });
+        assert.deepEqual((await state(page)).range, [305, 306]);
+        assert.match(await L('#puzzleRange').innerText(), /2대 선택/);
+        await L('#spareCards .puzzle-card[data-code="M3-C2"]').click();
+        assert.equal((await state(page)).armed.model, 'M3');
+        await tile(305).click(); await settled(); await page.waitForTimeout(200);
+        for (const n of [305, 306]) assert.equal(assignmentOf(n).final_model_id, server.model('M3').id);
+        await page.keyboard.press('Escape'); assert.equal((await state(page)).armed, null);
+        // Back to the recommendation for the checks that follow.
+        await L('#demo').click(); await settled(); await page.waitForTimeout(200);
+        assert.equal(Object.keys((await state(page)).draft.edits).length, 6);
+        await page.screenshot({ path: path.join(output, 'puzzle-tray.png'), fullPage: true });
+      });
       await check('A concurrent save is detected (409): the user is told and the plan reloads from the server', async () => {
         server.state.conflictNext = true;
         await search(1); await page.selectOption(S('#editModel'), 'M1'); await L('#applyEdit').click();
@@ -325,6 +409,9 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         await page.locator('header .anticon-global').first().click(); await page.getByText('Tiếng Việt').click();
         await page.waitForFunction(() => window.__layoutStudio.state().lang === 'vi');
         assert.match(await L('h1').innerText(), /Bố trí Layout/); assert.match(await L('#alertTotals').innerText(), /Thiếu/);
+        // The puzzle tray follows too (keys added 2026-09-28; every ko key has a vi twin).
+        assert.match(await L('#puzzleTray').innerText(), /Khay mảnh ghép[\s\S]*Mảnh cần đặt[\s\S]*Dư — máy có thể đổi[\s\S]*Thả máy vào đây/);
+        assert.doesNotMatch(await L('#puzzleTray').innerText(), /[가-힣]/);
         assert.equal((await state(page)).scale, before.scale);
         await page.locator('header .anticon-global').first().click(); await page.getByText('한국어').click();
         await page.waitForFunction(() => window.__layoutStudio.state().lang === 'ko');
@@ -382,7 +469,7 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal(server.byNo(305).modelId, before305);
         assert.ok(await L('#confirmLayout').isDisabled());
         // Read-only: no editing actions offered (edit form and lock are hidden, not just greyed out), and the notice says why.
-        for (const id of ['#demo', '#save', '#reset', '#editForm', '#lock']) assert.equal(await L(id).isVisible(), false);
+        for (const id of ['#demo', '#save', '#reset', '#editForm', '#lock', '#puzzleTray']) assert.equal(await L(id).isVisible(), false);
         assert.match(await L('.notice').innerText(), /확정된 Layout/);
       });
       await check('Setup: start then complete one machine through the server; order is enforced; state survives reload', async () => {

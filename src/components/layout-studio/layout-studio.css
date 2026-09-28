@@ -346,3 +346,58 @@
 .layout-studio .review-box.db-mode button#confirmLayout:not(:disabled):hover{background:var(--ls-primary-hover);border-color:var(--ls-primary-hover)}
 .layout-studio .review-box>.alert-list{display:block}
 .layout-studio .review-box>.alert-totals{display:flex}
+
+/* === Puzzle tray (2026-09-28): pieces, rule rings while dragging, flyers ========================== */
+.layout-studio .machine.empty .machine-body{stroke-dasharray:6 4}
+.layout-studio .machine.kin .machine-body{stroke:#101828;stroke-width:4}
+.layout-studio .machine.in-range .machine-body{stroke:#101828;stroke-width:5}
+.layout-studio .puzzle-ring{fill:none;stroke-width:7;rx:9;display:none;pointer-events:none}
+.layout-studio.puzzle-dragging .puzzle-ring.good,.layout-studio.puzzle-dragging .puzzle-ring.warn,.layout-studio.puzzle-dragging .puzzle-ring.bad{display:block}
+.layout-studio .puzzle-ring.good{stroke:#12b76a}
+.layout-studio .puzzle-ring.warn{stroke:#f79009}
+.layout-studio .puzzle-ring.bad{stroke:#f04438;stroke-dasharray:10 6}
+.layout-studio .puzzle-viol-mark{fill:#f04438;pointer-events:none}
+.layout-studio.puzzle-dragging,.layout-studio.puzzle-dragging *{cursor:grabbing!important;user-select:none}
+.layout-studio .puzzle-tray{border:1px solid var(--ls-border-secondary,#e3e8ef);border-radius:var(--ls-radius-lg,10px);padding:12px;margin:0 0 16px;background:var(--ls-bg,#fff);color:var(--ls-text)}
+.layout-studio .puzzle-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.layout-studio .puzzle-head strong{font-size:15px}
+.layout-studio .puzzle-viol{font-size:12px;color:var(--ls-text-secondary)}
+.layout-studio .puzzle-viol.bad{color:#d92d20;font-weight:700}
+.layout-studio .puzzle-help{font-size:12px;line-height:1.6;color:var(--ls-text-secondary);margin:6px 0 8px}
+.layout-studio .puzzle-rules{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--ls-text-secondary)}
+.layout-studio .puzzle-rules span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:3px;border:3px solid;vertical-align:-3px;margin-right:4px}
+.layout-studio .puzzle-rules [data-level=good]::before{border-color:#12b76a}
+.layout-studio .puzzle-rules [data-level=warn]::before{border-color:#f79009}
+.layout-studio .puzzle-rules [data-level=bad]::before{border-color:#f04438;border-style:dashed}
+.layout-studio .puzzle-note{font-size:12px;margin:8px 0 0;padding:6px 8px;border-radius:6px;background:var(--ls-primary-bg,#eff8ff);color:var(--ls-primary,#1570ef)}
+.layout-studio .puzzle-tray h4{font-size:13px;margin:14px 0 8px;display:flex;align-items:center;gap:6px}
+.layout-studio .puzzle-tray h4 .n{border-radius:10px;padding:0 7px;font-size:12px}
+.layout-studio .puzzle-tray h4.need .n{background:#fee4e2;color:#d92d20}
+.layout-studio .puzzle-tray h4.spare .n{background:#d1fadf;color:#027a48}
+.layout-studio .puzzle-cards{display:flex;flex-wrap:wrap;gap:9px;padding-top:4px}
+.layout-studio .puzzle-empty{font-size:12px;color:var(--ls-text-secondary)}
+.layout-studio button.puzzle-card{position:relative;display:flex;align-items:center;gap:6px;min-height:0;padding:4px 10px 4px 4px;border-radius:8px;font-size:12px;cursor:grab;touch-action:none;user-select:none}
+.layout-studio .puzzle-card .sw{width:30px;height:22px;border-radius:5px;border:1px solid rgba(0,0,0,.18);flex:none}
+.layout-studio .puzzle-card .t{font-weight:600}
+.layout-studio .puzzle-card .s{color:var(--ls-text-secondary);font-size:11px}
+.layout-studio .puzzle-card .cnt{position:absolute;top:-8px;right:-8px;min-width:20px;height:20px;border-radius:10px;background:#f04438;color:#fff;font-weight:700;font-size:11px;display:grid;place-items:center;padding:0 5px}
+.layout-studio .puzzle-card.spare .cnt{background:#12b76a}
+.layout-studio .puzzle-card.armed{outline:3px solid var(--ls-primary,#1570ef);outline-offset:1px}
+.layout-studio .puzzle-card.flash,.layout-studio .alert-row.flash{animation:ls-puzzle-flash 1.2s}
+@keyframes ls-puzzle-flash{0%{background:#fef0c7}100%{background:transparent}}
+.layout-studio .puzzle-dropout{margin-top:12px;border:2px dashed var(--ls-border,#d0d5dd);border-radius:8px;padding:10px;text-align:center;font-size:12px;color:var(--ls-text-secondary)}
+.layout-studio .puzzle-dropout.over{border-color:var(--ls-primary,#1570ef);color:var(--ls-primary,#1570ef);background:var(--ls-primary-bg,#eff8ff)}
+.layout-studio .puzzle-ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:1000;padding:6px 10px;border-radius:6px;font-weight:700;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.layout-studio .puzzle-ghost small{display:block;font-weight:500;font-size:11px}
+.layout-studio .puzzle-flyer{position:fixed;z-index:999;pointer-events:none;padding:3px 8px;border-radius:5px;font-weight:700;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,.25);transition:transform .7s cubic-bezier(.4,.1,.2,1),opacity .7s}
+.layout-studio .legend-model i{border:1px solid rgba(0,0,0,.15)}
+.layout-studio .legend-model i:last-of-type{margin-right:2px}
+/* With the tray the right panel grows with the number of groups (ALT: ~30). The map used to stretch to the panel's
+ * height, which pushed a focused machine below the screen. Desktop: the work area fits the window and the panel
+ * scrolls on its own; the map keeps its minimum. */
+@media(min-width:761px){
+.layout-studio .work-body{height:clamp(680px,calc(100dvh - 150px),1200px)}
+.layout-studio .canvas-section{min-height:0}
+.layout-studio .inspector{overflow-y:auto;min-height:0}
+}
+@media(min-width:1200px){.layout-studio .work-body{grid-template-columns:minmax(0,1fr) 340px}}

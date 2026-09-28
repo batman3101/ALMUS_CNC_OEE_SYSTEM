@@ -12,10 +12,14 @@
  *  - `destroy()` releases the ResizeObserver, timers and the test hook when the page unmounts.
  *
  * Browser-only: no API, database or production calls. Drafts and setup examples live in localStorage.
+ *
+ * Puzzle tray (DB mode, 2026-09-28 — replaces fine-tuning by dropdown, which the user rated unusable): model·process
+ * pieces are dragged from a tray onto machines, the displaced piece returns to the tray through CAPA, and the walkway
+ * rules (puzzleRules.ts) are shown as rings while dragging. Colours: model = hue, process = lightness.
  */
 'use strict';
+import { PuzzleBoard, pieceKey } from './puzzleRules';
 
-const colors = {ON1:['#fff2c9','#c79d29'],ON3:['#f9eed5','#bc8f37'],H8M:['#ddecfa','#3885c7'],H8S:['#deedf4','#498ca3'],M1:['#e9eef5','#7b8da4'],M3:['#e1f0e7','#509477'],PA1:['#e8edfa','#7c86bd'],B6S6:['#e9efdd','#89a25c']};
 const messages = {
  ko:{factory:'1공장 · 800대',breadcrumb:'생산 계획 / Layout',title:'Layout 배치',subtitle:'W39 Excel 배치를 기준으로 설비를 살펴보고 다음 배치를 조정하세요.',demo:'변경 예시 보기',save:'초안 저장',notice:'UI 시안 · 위치와 모델은 원본 Excel 기준입니다. 편집은 이 브라우저에만 저장되며 운영 설비에 적용되지 않습니다.',buildingSuffix:'동',all:'전체',current:'원본 배치',draft:'조정안',compare:'변경 비교',changedOnly:'변경만',demoBadge:'직접 만든 변경 예시 · CAPA 미검증',fit:'전체 맞춤',overview:'전체 위치',hint:'드래그로 이동 · 휠 / 핀치로 확대',source:'Setting CNC.xlsx / W39 · 상단 배치만 참조',export:'초안 내보내기',selection:'선택 설비',before:'원본',after:'조정안',targetModel:'변경할 모델',targetProcess:'가공 공정',applyEdit:'조정안에 반영',unvalidated:'T/T·가공 호환성이 연결되지 않아 CAPA와 실행 가능 여부는 아직 판단하지 않습니다.',changes:'변경 목록',pending:'CAPA 검증 대기',pendingText:'가동시간·효율과 설비별 T/T 연결 후 확정할 수 있습니다.',confirm:'Layout 확정 적용',reset:'원본으로 새 초안',footer:'A/B동은 같은 1공장의 건물 구분입니다. 2공장 배치는 별도 자료가 필요합니다.',resetTitle:'원본 배치로 새 초안을 만들까요?',resetText:'현재 편집 내용은 이력에 남으며 되돌리기로 복원할 수 있습니다.',cancel:'취소',search:'설비 번호 검색',allModels:'모든 모델',sourceBaseline:'W39 · Excel 기준 배치',count:'대',building:'동',cell:'원본 셀',unchanged:'원본 배치와 같습니다.',modified:'사용자가 수정한 배치 · 검증 전',fixed:'고정된 배치입니다. 수정하려면 잠금을 해제하세요.',lock:'이 배치 고정',unlock:'배치 잠금 해제',empty:'아직 변경한 설비가 없습니다.\n설비를 선택하거나 변경 예시를 확인하세요.',saved:'이 브라우저에 초안을 저장했습니다.',autosaved:'브라우저 초안 자동 저장',original:'원본 Excel을 보고 있습니다.',missing:'해당 설비를 찾을 수 없습니다. 1~800번으로 검색하세요.',updated:'조정안에 반영했습니다. CAPA 검증은 필요합니다.',same:'현재 조정안과 같습니다.',locked:'고정한 설비는 수정할 수 없습니다.',localError:'브라우저 저장소를 사용할 수 없습니다. 내보내기로 보관하세요.',demoLoaded:'가상 변경 예시를 불러왔습니다. 실제 추천 결과가 아닙니다.',restore:'이전 브라우저 초안을 복구했습니다.',reverted:'원본 기준 새 초안을 만들었습니다.',noSelection:'설비를 먼저 선택하세요.',changed:'변경',fixedLegend:'고정',free:'대기 (모델 제거)',filterEmpty:'조건에 맞는 설비가 없습니다.',demoDirty:'기존 편집/잠금을 보존하려면 새 초안에서 예시를 시작하세요.',draftExport:'초안 파일을 내보냈습니다.',zoomLabel:'설비 배치도: 드래그 이동, +/− 확대 축소',lastSaved:'저장',previewOnly:'시안 · 운영 적용 없음',
   setupTitle:'현장 셋업', setupNotice:'조정안을 작업 지시로 반영하고 진행 상태를 체크해 보세요. 브라우저 전용 예시입니다.',
@@ -38,10 +42,18 @@ const dbMessages = {
  ko:{breadcrumb:'생산 계획 / Layout',subtitle:'Forecast 수요와 앱에 등록된 T/T 로 계산한 추천 배치입니다. 설비별로 미세조정한 뒤 확정하세요.',notice:'추천 Layout · 확정하기 전까지 설비정보에는 반영되지 않습니다. 편집은 서버에 저장됩니다.',demo:'추천안으로 되돌리기',demoBadge:'추천 Layout · 앱 T/T 기준 CAPA',current:'현재 배치',before:'현재',after:'조정안',sourceBaseline:'계획 기준 배치',source:'앱 설비·모델 정보 + 등록 도면',unvalidated:'CAPA 는 앱에 등록된 T/T·교대·휴식으로 계산합니다(cavity 로 나누지 않음).',pending:'CAPA 알림',pendingText:'모델·공정별 필요 대수 대비 부족·여유입니다. 여유 설비를 더 배치할지는 판단해 주세요.',confirm:'Layout 확정 적용',footer:'도면 위치는 등록된 Layout 도면 기준입니다.',previewOnly:'확정 전 초안',saved:'서버에 저장했습니다.',autosaved:'서버 저장',saving:'저장 중…',saveFailed:'저장하지 못했습니다. 다시 시도하세요.',conflict:'다른 사용자가 먼저 저장했습니다. 새로 불러옵니다.',recommendedLoaded:'추천안으로 되돌렸습니다.',readOnly:'편집할 수 없는 Layout 입니다.',noPlanStatus:'추천 계획 없음 · 현재 배치',confirmTitle:'이 Layout 을 확정할까요?',confirmText:'바뀐 설비 {n}대가 셋업 대기로 등록됩니다. 설비정보는 지금 바뀌지 않고, 현장에서 설비별로 셋업을 완료할 때 그 설비만 바뀝니다.',confirmShortage:'아직 {n}대가 부족한 채로 확정합니다.',confirmed:'확정했습니다. 셋업 현황에서 진행을 체크하세요.',confirmFailed:'확정하지 못했습니다.',stale:'계획을 만든 뒤 설비 배정이 바뀌었습니다. Forecast 화면에서 다시 추천하세요.',setupNotice:'확정하면 바뀐 설비가 셋업 대상이 됩니다. 현장에서 시작·완료를 체크하세요. 완료한 설비만 설비정보(모델·공정)에 반영됩니다.',setupMachineChanged:'셋업 시작 뒤 이 설비가 다른 모델로 바뀌어 있어 완료할 수 없습니다. 설비 현황을 확인하세요.',setupMachineInactive:'비활성 설비라 완료할 수 없습니다.',setupNotPublished:'아직 확정 전입니다.',setupScope:'확정 변경 대상',setupActor:'앱 사용자',setupSaved:'셋업 상태를 저장했습니다.',setupFailed:'저장에 실패했습니다. 상태를 변경하지 않았습니다.',alertShortage:'부족',alertSurplus:'여유',alertZero:'수요 0',alertUnassigned:'미배정',alertNotComputable:'계산 불가',alertNotInForecast:'Forecast 없음',alertProcessMissing:'공정 미등록',alertDemandUnknown:'수요 불명',setupPreviousPlan:'이전 계획의 작업',alertsEmpty:'부족·여유가 없습니다.',groupLine:'{g} · 필요 {r} / 배정 {a}',alertMore:'외 {n}개',machinesUnit:'대',noticeReadOnly:'확정된 Layout 입니다 · 편집·확정할 수 없습니다. 배치를 다시 바꾸려면 Forecast 화면에서 새 추천을 만드세요.',adjusted:'사용자가 조정한 배치',recommendedAssignment:'추천 배치',noticeNoPlan:'추천 계획이 없습니다 · 지금은 현재 설비 배치만 보여 줍니다. 추천을 만들면 이 화면에서 미세조정·확정합니다.',noticeClosed:'대체되었거나 폐기된 계획입니다 · 편집·확정할 수 없습니다.',subtitleNoPlan:'현재 설비 배치를 확인합니다.',subtitleReadOnly:'확정된 Layout 과 현장 셋업 진행을 확인합니다.'},
  vi:{breadcrumb:'Kế hoạch sản xuất / Layout',subtitle:'Bố trí đề xuất tính từ nhu cầu Forecast và T/T đã đăng ký trong app. Tinh chỉnh từng máy rồi xác nhận.',notice:'Layout đề xuất · Chưa áp dụng vào thông tin máy cho đến khi xác nhận. Chỉnh sửa được lưu trên máy chủ.',demo:'Quay về đề xuất',demoBadge:'Layout đề xuất · CAPA theo T/T app',current:'Bố trí hiện tại',before:'Hiện tại',after:'Điều chỉnh',sourceBaseline:'Bố trí gốc của kế hoạch',source:'Thông tin máy·model trong app + bản vẽ',unvalidated:'CAPA tính theo T/T·ca·nghỉ đã đăng ký trong app (không chia cho cavity).',pending:'Cảnh báo CAPA',pendingText:'Thiếu·dư so với số máy cần theo model·công đoạn. Việc bố trí thêm máy dư do bạn quyết định.',confirm:'Xác nhận áp dụng Layout',footer:'Vị trí theo bản vẽ Layout đã đăng ký.',previewOnly:'Bản nháp chưa xác nhận',saved:'Đã lưu lên máy chủ.',autosaved:'Đã lưu máy chủ',saving:'Đang lưu…',saveFailed:'Không lưu được. Hãy thử lại.',conflict:'Người khác đã lưu trước. Đang tải lại.',recommendedLoaded:'Đã quay về đề xuất.',readOnly:'Layout không thể chỉnh sửa.',noPlanStatus:'Chưa có kế hoạch · bố trí hiện tại',confirmTitle:'Xác nhận Layout này?',confirmText:'{n} máy thay đổi sẽ vào danh sách chờ setup. Thông tin máy chưa đổi ngay; chỉ máy nào hoàn tất setup tại xưởng mới được cập nhật.',confirmShortage:'Vẫn còn thiếu {n} máy khi xác nhận.',confirmed:'Đã xác nhận. Theo dõi tiến độ ở Tiến độ setup.',confirmFailed:'Không xác nhận được.',stale:'Phân bổ máy đã thay đổi sau khi tạo kế hoạch. Hãy tạo đề xuất lại ở màn hình Forecast.',setupNotice:'Sau khi xác nhận, các máy thay đổi sẽ cần setup. Đánh dấu bắt đầu·hoàn tất tại xưởng. Chỉ máy đã hoàn tất mới được cập nhật model·công đoạn.',setupMachineChanged:'Máy này đã bị đổi sang model khác sau khi bắt đầu setup nên không thể hoàn tất. Hãy kiểm tra tình trạng máy.',setupMachineInactive:'Máy không hoạt động nên không thể hoàn tất.',setupNotPublished:'Chưa xác nhận.',setupScope:'Máy thay đổi đã xác nhận',setupActor:'Người dùng app',setupSaved:'Đã lưu trạng thái setup.',setupFailed:'Lưu thất bại. Trạng thái chưa thay đổi.',alertShortage:'Thiếu',alertSurplus:'Dư',alertZero:'Nhu cầu 0',alertUnassigned:'Chưa gán',alertNotComputable:'Không tính được',alertNotInForecast:'Không có Forecast',alertProcessMissing:'Chưa đăng ký công đoạn',alertDemandUnknown:'Nhu cầu không rõ',setupPreviousPlan:'Việc của kế hoạch trước',alertsEmpty:'Không thiếu·dư.',groupLine:'{g} · cần {r} / đã gán {a}',alertMore:'và {n} nhóm khác',machinesUnit:'máy',noticeReadOnly:'Layout đã xác nhận · không thể chỉnh sửa·xác nhận. Muốn đổi bố trí, hãy tạo đề xuất mới ở màn hình Forecast.',adjusted:'Bố trí do người dùng chỉnh',recommendedAssignment:'Bố trí đề xuất',noticeNoPlan:'Chưa có kế hoạch đề xuất · hiện chỉ hiển thị bố trí máy hiện tại. Sau khi tạo đề xuất, tinh chỉnh·xác nhận tại màn hình này.',noticeClosed:'Kế hoạch đã bị thay thế hoặc hủy · không thể chỉnh sửa·xác nhận.',subtitleNoPlan:'Xem bố trí máy hiện tại.',subtitleReadOnly:'Xem Layout đã xác nhận và tiến độ setup tại xưởng.'}
 };
+// Puzzle tray texts (2026-09-28).
+Object.assign(dbMessages.ko,{trayTitle:'조각 트레이',trayHelp:'조각을 도면의 설비로 끌어 놓으세요. 원래 그 자리의 모델·공정은 트레이로 돌아옵니다. 설비를 끌어 다른 설비에 놓으면 옮겨지고, 아래 비우기에 놓으면 빈 자리가 됩니다. Shift+클릭으로 한 열의 여러 대를 묶습니다. 터치: 조각을 누른 뒤 설비를 누르세요.',trayNeed:'놓아야 할 조각',trayNeedEmpty:'모두 채웠습니다 ✓',traySpare:'여유 — 바꿔도 되는 설비',traySpareEmpty:'없음',trayDropOut:'여기에 설비를 끌어 놓으면 비우기(빈 자리)',ruleGood:'무리에 붙음',ruleWarn:'동선 공정 섞임',ruleBad:'섬·끼워넣기·3조각',violations:'규칙 위반',armed:'{g} 을(를) 놓을 설비를 누르세요 · 다시 누르거나 Esc 로 취소',noRoom:'그 열에는 이만큼 들어갈 자리가 없습니다.',placedBad:'⚠ 규칙 위반: {r} — 되돌리려면 ↶',placedWarn:'동선 안에 공정이 섞였습니다.',reasonIsland:'섬',reasonMiddle:'끼워넣기',reasonThree:'3조각',rangeHint:'한 열에서 {n}대 선택 — 끌어서 한 번에 옮기거나, 조각을 놓아 한 번에 채웁니다.',fromTile:'설비에서 옮기는 중',fromTray:'트레이에서'});
+Object.assign(dbMessages.vi,{trayTitle:'Khay mảnh ghép',trayHelp:'Kéo mảnh ghép vào máy trên bản vẽ. Model·công đoạn cũ của máy đó quay về khay. Kéo một máy sang máy khác để di chuyển, thả vào ô Bỏ trống bên dưới để để trống. Shift+nhấp để chọn nhiều máy trong một cột. Cảm ứng: chạm mảnh ghép rồi chạm máy.',trayNeed:'Mảnh cần đặt',trayNeedEmpty:'Đã đủ ✓',traySpare:'Dư — máy có thể đổi',traySpareEmpty:'Không có',trayDropOut:'Thả máy vào đây để bỏ trống',ruleGood:'Liền nhóm',ruleWarn:'Lẫn công đoạn trong lối đi',ruleBad:'Tách rời·chèn giữa·3 đoạn',violations:'Vi phạm quy tắc',armed:'Chạm máy để đặt {g} · chạm lại hoặc Esc để hủy',noRoom:'Cột này không đủ chỗ.',placedBad:'⚠ Vi phạm: {r} — nhấn ↶ để hoàn tác',placedWarn:'Lối đi đang lẫn công đoạn.',reasonIsland:'tách rời',reasonMiddle:'chèn giữa',reasonThree:'3 đoạn',rangeHint:'Đã chọn {n} máy trong một cột — kéo để di chuyển cùng lúc hoặc thả mảnh ghép để điền cùng lúc.',fromTile:'Đang di chuyển từ máy',fromTray:'Từ khay'});
 
-/** Pastel fill + stripe for models the preview palette does not know (DB model names), stable per name. */
-function generatedColor(model){let h=0;for(const ch of model)h=(h*31+ch.charCodeAt(0))%360;return['hsl('+h+' 62% 92%)','hsl('+h+' 42% 48%)'];}
-const colorKey = model => String(model||'').replace(/\s+/g,'').toUpperCase();
+/**
+ * Colours (user request 2026-09-28): the model is the hue, the process the lightness — C1 light, C2 dark, C0 hatched —
+ * so a model's groups read as one family and a mixed walkway stands out. Hues are spread over the sorted model list;
+ * a model outside it (inactive) gets a stable hue from its name.
+ */
+const PALETTE=[4,28,52,88,122,146,172,196,214,232,262,284,304,326,344,12,40,70,104,136,160,186,206,248,294,316];
+const nameHue=model=>{let h=0;for(const ch of String(model))h=(h*31+ch.charCodeAt(0))%360;return h;};
+const REASON_KEY={island:'reasonIsland',middle:'reasonMiddle',three_pieces:'reasonThree',mixed_process:'ruleWarn'};
 
 /**
  * Mounts the studio into `root` (which must already contain the studio markup).
@@ -61,7 +73,17 @@ const PROCESSES = DATA.processes || ['C0','C1','C2'];
 const readOnly = !!(backend && backend.readOnly);
 // Why it is read-only decides what the notice says (no plan ≠ no permission). Absent → treated as a confirmed plan.
 const readOnlyReason = readOnly ? (backend.readOnlyReason || 'confirmed') : null;
-const colorOf = model => colors[model] || colors[colorKey(model)] || (model ? generatedColor(model) : ['#f2f4f7','#aab3c0']);
+const hueIndex = new Map(DATA.models.map((m,i)=>[m,i]));
+const hueOf = model => hueIndex.has(model) ? PALETTE[hueIndex.get(model)%PALETTE.length] : nameHue(model);
+/** {fill, solid, ink, stripe} for an assignment. `fill` may be a hatch pattern (C0); `solid` is for HTML swatches. */
+function tone(a){
+ if(!a||!a.model)return{fill:'#ffffff',solid:'#f2f4f7',ink:'#8794a4',stripe:'#aab3c0'};
+ const h=hueOf(a.model);
+ if(a.process==='C2')return{fill:`hsl(${h} 62% 40%)`,solid:`hsl(${h} 62% 40%)`,ink:'#ffffff',stripe:`hsl(${h} 70% 22%)`};
+ if(a.process==='C0')return{fill:`url(#${hatchId(a.model)})`,solid:`hsl(${h} 72% 66%)`,ink:'#101828',stripe:`hsl(${h} 62% 40%)`};
+ if(a.process==='C1')return{fill:`hsl(${h} 72% 82%)`,solid:`hsl(${h} 72% 82%)`,ink:'#101828',stripe:`hsl(${h} 62% 40%)`};
+ return{fill:`hsl(${h} 55% 64%)`,solid:`hsl(${h} 55% 64%)`,ink:'#101828',stripe:`hsl(${h} 62% 32%)`};
+}
 const processLabel = code => 'CNC '+code.slice(1);
 const processesFor = model => (DATA.processesByModel && DATA.processesByModel[model]) || PROCESSES;
 const $ = id => root.querySelector('#' + id);
@@ -89,6 +111,9 @@ const label = a => a.model ? a.model+'-'+a.process : t('free');
 const changedIds = () => Object.keys(draft.edits).map(Number).sort((a,b)=>a-b);
 const visibleMachines = () => DATA.machines.filter(m=>building==='all'||m.building===building);
 const svgEl = (tag,attrs={}) => {const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e;};
+// C0 hatch patterns, created on first use. Ids are per mount so a remount never points at a removed pattern.
+const hatchDefs=svgEl('defs'),hatchPrefix='ls-hatch-'+Math.random().toString(36).slice(2,8);$('map').prepend(hatchDefs);
+function hatchId(model){const id=hatchPrefix+'-'+(hueIndex.has(model)?hueIndex.get(model):'h'+nameHue(model));if(!hatchDefs.querySelector('#'+id)){const h=hueOf(model),pattern=svgEl('pattern',{id,width:10,height:10,patternUnits:'userSpaceOnUse',patternTransform:'rotate(45)'});pattern.append(svgEl('rect',{width:10,height:10,fill:`hsl(${h} 72% 76%)`}),svgEl('rect',{width:4,height:10,fill:`hsl(${h} 62% 52%)`}));hatchDefs.append(pattern);}return id;}
 function toast(message){$('toast').textContent=message;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3200);}
 function persist(showToast=false){if(backend){saveToServer(showToast);return;}try{localStorage.setItem(storageKey,JSON.stringify({version:1,hash:DATA.sha256,draft,undoStack:undoStack.slice(-30),redoStack:redoStack.slice(-30),at:Date.now()}));saveTime=new Date();if(showToast)toast(t('saved'));}catch{toast(t('localError'));}renderSaveStatus();}
 function saveToServer(showToast){
@@ -114,7 +139,7 @@ function render(){
  $('demoBadge').hidden=!draft.demo;
  // Alerts first: they recompute `summary`, which the inspector's group line reads. Drawing the inspector first
  // showed the previous draft's numbers after every edit/undo (2026-09-28).
- renderMap();renderAlerts();renderInspector();renderChanges();renderLegend();renderSaveStatus();renderSetup();
+ renderMap();renderAlerts();renderTray();renderInspector();renderChanges();renderLegend();renderSaveStatus();renderSetup();
  $('undo').disabled=!undoStack.length;$('redo').disabled=!redoStack.length;
 }
 function renderMap(){
@@ -124,26 +149,30 @@ function renderMap(){
   const name=svgEl('text',{x:60,y:b.y+47,class:'building-name'});name.textContent=buildingName(b.id);world.append(name);
   const note=svgEl('text',{x:200,y:b.y+45,class:'building-note'});note.textContent=b.count+' '+t('count')+' / W39';world.append(note);
  }
- const filter=$('modelFilter').value,only=$('changedOnly').checked;
+ const filter=$('modelFilter').value,only=$('changedOnly').checked,puzzle=puzzleOn();
+ if(puzzle)puzzleViolations=board.violations(draftState(),baseState);
  for(const m of visibleMachines()){
   const a=mode==='setup'?setupAssignment(m):(mode==='current'?baseAssignment(m):assignment(m)),changed=mode==='setup'?!!setupTask(m.id):!!draft.edits[m.id],locked=mode!=='setup'&&draft.locks.includes(m.id);
   const task=mode==='setup'?setupTask(m.id):null;
   const dim=(filter&&a.model!==filter)||(mode!=='setup'&&only&&!changed)||(mode==='setup'&&!setupMatches(m.id));
-  const g=svgEl('g',{class:['machine',selected===m.id?'selected':'',changed&&mode!=='current'?'changed':'',locked?'locked':'',dim?'dim':''].join(' '),transform:`translate(${m.x} ${m.y})`,'data-id':m.id,tabindex:dim?-1:0,role:'button','aria-label':displayName(m.id)+' '+buildingName(m.building)+' '+label(a),'aria-pressed':selected===m.id});
-  const palette=colorOf(a.model);
-  g.append(svgEl('rect',{width:104,height:62,fill:palette[0],class:'machine-body'}));
-  g.append(svgEl('rect',{x:0,y:9,width:4,height:44,rx:2,fill:palette[1]}));
-  const number=svgEl('text',{x:10,y:27,class:'machine-number'});number.textContent=String(m.id).padStart(3,'0');g.append(number);
-  if(mode==='compare'&&changed){const old=svgEl('text',{x:10,y:42,fill:'#8794a4','font-size':12});old.textContent=label(baseAssignment(m));g.append(old);const newText=svgEl('text',{x:10,y:56,fill:'#ad6318','font-size':13});newText.textContent='→ '+(a.model?label(a):'—');g.append(newText);}else{const code=svgEl('text',{x:10,y:49,class:'machine-model'});code.textContent=a.model?label(a):'—';g.append(code);}
+  const g=svgEl('g',{class:['machine',selected===m.id?'selected':'',changed&&mode!=='current'?'changed':'',locked?'locked':'',dim?'dim':'',a.model?'':'empty',puzzle&&range.includes(m.id)?'in-range':'',puzzle&&armed&&a.model&&keyOf(a)===keyOf(armed)?'kin':''].join(' '),transform:`translate(${m.x} ${m.y})`,'data-id':m.id,tabindex:dim?-1:0,role:'button','aria-label':displayName(m.id)+' '+buildingName(m.building)+' '+label(a),'aria-pressed':selected===m.id});
+  const tn=tone(a);
+  if(puzzle)g.append(svgEl('rect',{x:-6,y:-6,width:116,height:74,class:'puzzle-ring'}));
+  g.append(svgEl('rect',{width:104,height:62,fill:tn.fill,class:'machine-body'}));
+  g.append(svgEl('rect',{x:0,y:9,width:4,height:44,rx:2,fill:tn.stripe}));
+  // Inline style, not the fill attribute: the CSS class colour would win over an attribute and hide text on dark (C2) tiles.
+  const number=svgEl('text',{x:10,y:27,class:'machine-number'});number.textContent=String(m.id).padStart(3,'0');number.style.fill=tn.ink;g.append(number);
+  if(mode==='compare'&&changed){const old=svgEl('text',{x:10,y:42,'font-size':12,opacity:.75});old.style.fill=tn.ink;old.textContent=label(baseAssignment(m));g.append(old);const newText=svgEl('text',{x:10,y:56,'font-size':13,'font-weight':700});newText.style.fill=tn.ink;newText.textContent='→ '+(a.model?label(a):'—');g.append(newText);}else{const code=svgEl('text',{x:10,y:49,class:'machine-model'});code.style.fill=tn.ink;code.textContent=a.model?label(a):'—';g.append(code);}
+  if(puzzle&&puzzleViolations.machines.has(m.id))g.append(svgEl('path',{d:'M80 60 l11 -19 l11 19 z',class:'puzzle-viol-mark'}));
   if(changed&&mode!=='current'){const mark=svgEl('text',{x:84,y:27,class:'change-mark'});mark.textContent='↗';g.append(mark);}else if(locked){const mark=svgEl('text',{x:86,y:25,fill:'#647790','font-size':21});mark.textContent='▣';g.append(mark);}
-  g.addEventListener('click',()=>{if(!wasDrag)selectMachine(m.id);});
+  g.addEventListener('click',e=>{if(wasDrag)return;if(puzzleOn()&&puzzleClick(m.id,e))return;selectMachine(m.id);});
   g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectMachine(m.id);}});
   if(mode==='setup')setupBadge(g,task);
   world.append(g);
  }
  transform();renderMinimap();
 }
-function renderMinimap(){const mini=$('minimap');mini.replaceChildren();for(const b of DATA.buildings){mini.append(svgEl('rect',{x:b.x,y:b.y,width:b.width,height:b.height,fill:'#f0f3f7',stroke:'#b8c6d7','stroke-width':15}));}for(const m of DATA.machines)mini.append(svgEl('rect',{x:m.x,y:m.y,width:104,height:62,fill:draft.edits[m.id]?'#cc7927':(m.model?colorOf(m.model)[1]:'#a0adbc')}));mini.append(svgEl('rect',{id:'viewport',fill:'#2357c616',stroke:'#2357c6','stroke-width':30}));updateViewport();}
+function renderMinimap(){const mini=$('minimap');mini.replaceChildren();for(const b of DATA.buildings){mini.append(svgEl('rect',{x:b.x,y:b.y,width:b.width,height:b.height,fill:'#f0f3f7',stroke:'#b8c6d7','stroke-width':15}));}for(const m of DATA.machines)mini.append(svgEl('rect',{x:m.x,y:m.y,width:104,height:62,fill:draft.edits[m.id]?'#cc7927':(m.model?tone(baseAssignment(m)).solid:'#a0adbc')}));mini.append(svgEl('rect',{id:'viewport',fill:'#2357c616',stroke:'#2357c6','stroke-width':30}));updateViewport();}
 function transform(){$('world').setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`);$('zoomValue').textContent=Math.round(scale*100)+'%';updateViewport();}
 function updateViewport(){const rect=$('viewport');if(!rect)return;rect.setAttribute('x',-tx/scale);rect.setAttribute('y',-ty/scale);rect.setAttribute('width',$('stage').clientWidth/scale);rect.setAttribute('height',$('stage').clientHeight/scale);}
 function zoom(factor,x=$('stage').clientWidth/2,y=$('stage').clientHeight/2){const before=scale;scale=Math.max(.08,Math.min(2.5,scale*factor));tx=x-(x-tx)*scale/before;ty=y-(y-ty)*scale/before;transform();}
@@ -152,7 +181,7 @@ function focusMachine(id){const m=machines.get(id);if(!m)return;scale=window.inn
 function selectMachine(id,focus=false){selected=id;const m=machines.get(id);if(focus||(building!=='all'&&building!==m.building))building=m.building;$('editModel').value=assignment(m).model;render();if(focus)focusMachine(id);root.querySelector('.inspector').classList.add('mobile-open');}
 function renderInspector(){const m=machines.get(selected);const a=assignment(m);$('selectedName').textContent=displayName(m.id);$('selectedLocation').textContent=buildingName(m.building)+' · '+t('cell')+' '+m.cell;$('currentLabel').textContent=label(baseAssignment(m));$('draftLabel').textContent=label(a);const locked=draft.locks.includes(m.id);$('selectionStatus').textContent=locked?t('fixed'):backend?t(selectionKey(m.id)):(draft.edits[m.id]?t('modified'):t('unchanged'));$('selectionStatus').classList.toggle('changed',!!draft.edits[m.id]);setOptions($('editModel'),[...DATA.models.map(m=>[m,m]),['',t('free')]],a.model);if(backend)setOptions($('editProcess'),processesFor(a.model).map(p=>[p,processLabel(p)]),a.process);$('editProcess').value=a.process;$('editModel').disabled=locked||readOnly;$('editProcess').disabled=locked||!a.model||readOnly;$('applyEdit').disabled=locked||readOnly;$('lock').disabled=readOnly;renderGroupAlert(a);$('lock').textContent=(locked?'▣ ':'□ ')+t(locked?'unlock':'lock');$('lock').classList.toggle('is-locked',locked);}
 function renderChanges(){const ids=changedIds();$('changeCount').textContent=ids.length;$('changes').replaceChildren();if(!ids.length){const empty=document.createElement('div');empty.className='empty';empty.style.whiteSpace='pre-line';empty.textContent=t('empty');$('changes').append(empty);return;}for(const id of ids){const m=machines.get(id),a=assignment(m);const b=document.createElement('button');b.className='change-row';b.dataset.changeId=id;const d=document.createElement('div'),name=document.createElement('strong'),small=document.createElement('small'),value=document.createElement('span');name.textContent=displayName(id)+' · '+buildingName(m.building);small.textContent=label(baseAssignment(m));value.textContent='→ '+label(a);d.append(name,small);b.append(d,value);b.onclick=()=>selectMachine(id,true);$('changes').append(b);}}
-function renderLegend(){$('legend').replaceChildren();for(const model of DATA.models){const span=document.createElement('span'),dot=document.createElement('i');dot.style.background=colorOf(model)[1];span.append(dot,document.createTextNode(model));$('legend').append(span);}const changed=document.createElement('span');changed.textContent='↗ '+t('changed');changed.style.color='#ba741c';$('legend').append(changed);}
+function renderLegend(){$('legend').replaceChildren();for(const model of DATA.models){const span=document.createElement('span');span.className='legend-model';for(const process of processesFor(model)){const dot=document.createElement('i');dot.style.background=tone({model,process}).solid;dot.title=process;span.append(dot);}span.append(document.createTextNode(model));$('legend').append(span);}const changed=document.createElement('span');changed.textContent='↗ '+t('changed');changed.style.color='#ba741c';$('legend').append(changed);}
 
 // ── Setup workflow (preview setup.js) ────────────────────────────────────────
 const setupKey='cnc-layout-setup-preview-v1-'+DATA.sha256;
@@ -199,7 +228,7 @@ function renderAlerts(){
  const rows=summary.groups.filter(g=>ALERT_KEY[g.status]);
  $('alertList').replaceChildren();
  if(!rows.length){const e=document.createElement('div');e.className='empty';e.textContent=t('alertsEmpty');$('alertList').append(e);}
- for(const g of rows.slice(0,8)){const b=document.createElement('button');b.className='alert-row';b.dataset.state=g.status;b.dataset.model=g.model;
+ for(const g of rows.slice(0,8)){const b=document.createElement('button');b.className='alert-row';b.dataset.state=g.status;b.dataset.model=g.model;b.dataset.code=g.code;
   const name=document.createElement('strong');name.textContent=g.code;const detail=document.createElement('small');
   detail.textContent=t(ALERT_KEY[g.status])+(g.gap===null||g.gap===0?'':' '+Math.abs(g.gap)+t('machinesUnit'))+(g.required===null?'':' · '+g.assigned+'/'+g.required)+(g.utilization===null?'':' · '+Math.round(g.utilization*100)+'%');
   b.append(name,detail);b.onclick=()=>{$('modelFilter').value=g.model;$('changedOnly').checked=false;if(mode==='setup')mode='draft';render();};$('alertList').append(b);}
@@ -220,6 +249,107 @@ $('cancelConfirm').onclick=()=>$('confirmDialog').close();
 $('confirmLayoutGo').onclick=()=>{$('confirmDialog').close();$('confirmLayout').disabled=true;
  Promise.resolve(saving).then(()=>backend.confirm(copy(draft))).then(result=>{setupBatch=result.setup;mode='setup';toast(t('confirmed'));if(backend.onConfirmed)backend.onConfirmed(result);else render();})
   .catch(error=>{toast(error&&error.code==='layout_base_stale'?t('stale'):t('confirmFailed'));render();});};
+
+// ── Puzzle tray (user decision 2026-09-28) ───────────────────────────────────
+// A piece is a model·process group. Dropping one on a machine sends whatever the machine held back to the tray through
+// CAPA (short → "to place", over → "spare"). Rules are shown, never enforced: when no attachable spot exists the user
+// decides (user decision) — the recommendation already applies the same rules.
+const board=new PuzzleBoard(DATA.machines.map(m=>({id:m.id,y:m.y,height:m.height,walkway:m.walkway??null,side:m.side??null})));
+const keyOf=a=>pieceKey(a.model,a.process);
+const baseState=new Map(DATA.machines.map(m=>[m.id,keyOf(baseAssignment(m))]));
+const draftState=()=>new Map(DATA.machines.map(m=>[m.id,keyOf(assignment(m))]));
+let range=[],armed=null,drag=null,puzzleViolations={count:0,machines:new Set()};
+function puzzleOn(){return !!backend&&!readOnly&&(mode==='draft'||mode==='compare');}
+const tray=document.createElement('section');tray.className='puzzle-tray';tray.id='puzzleTray';tray.hidden=true;
+tray.innerHTML='<div class="puzzle-head"><strong data-i18n="trayTitle"></strong><span id="puzzleViolations" class="puzzle-viol"></span></div>'
+ +'<p class="puzzle-help" data-i18n="trayHelp"></p>'
+ +'<div class="puzzle-rules"><span data-level="good" data-i18n="ruleGood"></span><span data-level="warn" data-i18n="ruleWarn"></span><span data-level="bad" data-i18n="ruleBad"></span></div>'
+ +'<p id="puzzleArmed" class="puzzle-note" hidden></p><p id="puzzleRange" class="puzzle-note" hidden></p>'
+ +'<h4 class="need"><span data-i18n="trayNeed"></span><span class="n" id="needCount"></span></h4><div id="needCards" class="puzzle-cards"></div>'
+ +'<h4 class="spare"><span data-i18n="traySpare"></span><span class="n" id="spareCount"></span></h4><div id="spareCards" class="puzzle-cards"></div>'
+ +'<div id="puzzleDropOut" class="puzzle-dropout" data-i18n="trayDropOut"></div>';
+root.querySelector('.inspector').prepend(tray);
+const ghost=document.createElement('div');ghost.className='puzzle-ghost';ghost.hidden=true;root.append(ghost);
+const groupCounts=()=>new Map((summary?summary.groups:[]).map(g=>[g.code,g.assigned]));
+const codeOf=a=>a.model+'-'+a.process;
+const cardFor=code=>[...tray.querySelectorAll('.puzzle-card')].find(c=>c.dataset.code===code)||null;
+const tileEl=id=>$('world').querySelector('g.machine[data-id="'+id+'"]');
+function renderTray(){
+ const on=puzzleOn();tray.hidden=!on;if(!on){armed=null;range=[];return;}
+ // Only groups a machine can actually be set to: a process missing from the app has no id to save.
+ const groups=summary.groups.filter(g=>g.model&&g.process&&g.process!=='?'&&g.status!=='process_missing');
+ const need=groups.filter(g=>g.status==='shortage').map(g=>[g,-g.gap]).sort((a,b)=>b[1]-a[1]||a[0].code.localeCompare(b[0].code));
+ const spare=groups.filter(g=>(g.status==='surplus'||g.status==='zero_demand')&&g.gap>0).map(g=>[g,g.gap]).sort((a,b)=>b[1]-a[1]||a[0].code.localeCompare(b[0].code));
+ const card=([g,n],kind)=>{const b=document.createElement('button');b.type='button';b.className='puzzle-card '+kind+(armed&&keyOf(armed)===keyOf(g)?' armed':'');b.dataset.model=g.model;b.dataset.process=g.process;b.dataset.code=g.code;
+  const sw=document.createElement('span');sw.className='sw';sw.style.background=tone(g).solid;const name=document.createElement('span');name.className='t';name.textContent=g.model;const proc=document.createElement('span');proc.className='s';proc.textContent=g.process;const cnt=document.createElement('span');cnt.className='cnt';cnt.textContent=n;b.append(sw,name,proc,cnt);return b;};
+ const fill=(el,rows,kind,emptyKey)=>{el.replaceChildren(...rows.map(r=>card(r,kind)));if(!rows.length){const e=document.createElement('span');e.className='puzzle-empty';e.textContent=t(emptyKey);el.append(e);}};
+ fill($('needCards'),need,'need','trayNeedEmpty');fill($('spareCards'),spare,'spare','traySpareEmpty');
+ $('needCount').textContent=need.reduce((s,x)=>s+x[1],0);$('spareCount').textContent=spare.reduce((s,x)=>s+x[1],0);
+ $('puzzleViolations').textContent=board.hasWalkways?t('violations')+' '+puzzleViolations.count:'';$('puzzleViolations').classList.toggle('bad',puzzleViolations.count>0);
+ tray.querySelector('.puzzle-rules').hidden=!board.hasWalkways;
+ $('puzzleArmed').hidden=!armed;if(armed)$('puzzleArmed').textContent=tf('armed',{g:label(armed)});
+ $('puzzleRange').hidden=range.length<2;if(range.length>1)$('puzzleRange').textContent=tf('rangeHint',{n:range.length});
+}
+/** Put `pieces[k]` on `targets[k]`; `sources` (a machine dragged off the map) become empty unless also a target. */
+function puzzlePlace(pieces,targets,sources){
+ const src=sources||[];
+ if([...targets,...src].some(id=>draft.locks.includes(id))){toast(t('locked'));render();return;}
+ const next=copy(draft),displaced=[];
+ const put=(id,a)=>{const m=machines.get(id);if(a.model===m.model&&a.process===m.process)delete next.edits[id];else next.edits[id]={model:a.model,process:a.process};};
+ targets.forEach((id,k)=>{const cur=assignment(machines.get(id));if(cur.model&&!src.includes(id)&&keyOf(cur)!==keyOf(pieces[k]))displaced.push({id,a:cur});put(id,pieces[k]);});
+ for(const id of src)if(!targets.includes(id))put(id,{model:'',process:''});
+ if(JSON.stringify(next.edits)===JSON.stringify(draft.edits)){toast(t('same'));render();return;}
+ const before=draftState();for(const id of src)before.set(id,null);
+ const verdict=pieces[0].model?board.evaluate(before,keyOf(pieces[0]),targets):{level:'good',reasons:[]};
+ const prev=groupCounts();
+ commit(next);
+ // The displaced pieces fly back to their card; every CAPA row whose count moved flashes.
+ for(const d of displaced){const from=tileEl(d.id);if(from)fly(from,cardFor(codeOf(d.a))||tray,d.a);}
+ for(const [code,n] of groupCounts())if(prev.get(code)!==n){cardFor(code)?.classList.add('flash');root.querySelector('.alert-row[data-code="'+CSS.escape(code)+'"]')?.classList.add('flash');}
+ if(verdict.level==='bad')toast(tf('placedBad',{r:verdict.reasons.map(r=>t(REASON_KEY[r])).join(', ')}));else if(verdict.level==='warn')toast(t('placedWarn'));
+}
+function fly(fromEl,toEl,a){
+ const from=fromEl.getBoundingClientRect(),to=toEl.getBoundingClientRect(),tn=tone(a),f=document.createElement('div');
+ f.className='puzzle-flyer';f.textContent=label(a);f.style.background=tn.solid;f.style.color=tn.ink;f.style.left=(from.left+from.width/2-30)+'px';f.style.top=(from.top+from.height/2-10)+'px';root.append(f);
+ requestAnimationFrame(()=>{f.style.transform=`translate(${to.left+20-from.left-from.width/2+30}px, ${to.top+8-from.top-from.height/2+10}px) scale(.8)`;f.style.opacity='.2';});
+ setTimeout(()=>f.remove(),750);
+}
+/** Click on a machine while puzzling: Shift extends a same-column range; an armed piece is placed. False → normal select. */
+function puzzleClick(id,e){
+ const r=e.shiftKey&&selected!==id?board.range(selected,id):null;
+ if(r){range=r;selected=id;render();return true;}
+ if(armed){const targets=range.length>1&&range.includes(id)?range.slice():[id];range=[];selected=id;puzzlePlace(targets.map(()=>armed),targets,null);return true;}
+ range=[];return false;
+}
+const dropTargets=id=>drag.kind==='card'&&range.length>1&&range.includes(id)?range.slice():board.blockFrom(id,drag.kind==='tile'?drag.sources.length:1);
+function startDrag(kind,e,extra){drag={kind,x0:e.clientX,y0:e.clientY,active:false,...extra};}
+function activateDrag(){
+ drag.active=true;root.classList.add('puzzle-dragging');
+ const piece=drag.pieces[0],tn=tone(piece),small=document.createElement('small');
+ ghost.textContent=label(piece)+(drag.pieces.length>1?' ×'+drag.pieces.length:'');small.textContent=t(drag.kind==='tile'?'fromTile':'fromTray');ghost.append(small);ghost.style.background=tn.solid;ghost.style.color=tn.ink;ghost.hidden=false;
+ // Rule ring per machine: what placing this piece (or block) there would mean.
+ const state=draftState();for(const id of drag.sources||[])state.set(id,null);
+ const key=keyOf(piece);
+ for(const g of $('world').querySelectorAll('g.machine')){const ring=g.querySelector('.puzzle-ring');if(!ring)continue;const targets=g.classList.contains('dim')||!key?null:dropTargets(Number(g.dataset.id));ring.setAttribute('class','puzzle-ring'+(targets?' '+board.evaluate(state,key,targets).level:''));}
+}
+function endDrag(e){
+ root.classList.remove('puzzle-dragging');ghost.hidden=true;$('puzzleDropOut').classList.remove('over');
+ const el=document.elementFromPoint(e.clientX,e.clientY),tile=el&&el.closest('g.machine'),out=el&&el.closest('.puzzle-tray');
+ if(tile&&root.contains(tile)){
+  const targets=dropTargets(Number(tile.dataset.id));
+  if(!targets){toast(t('noRoom'));return;}
+  if(drag.kind==='tile'&&targets.every((x,k)=>x===drag.sources[k]))return;
+  range=[];
+  puzzlePlace(drag.kind==='card'?targets.map(()=>drag.pieces[0]):drag.pieces,targets,drag.kind==='tile'?drag.sources:null);
+ }else if(out&&drag.kind==='tile'){range=[];puzzlePlace(drag.sources.map(()=>({model:'',process:''})),drag.sources,null);}
+}
+tray.addEventListener('pointerdown',e=>{const c=e.target.closest('.puzzle-card');if(!c||e.button!==0)return;e.preventDefault();startDrag('card',e,{pieces:[{model:c.dataset.model,process:c.dataset.process}],sources:null});});
+tray.addEventListener('click',e=>{const c=e.target.closest('.puzzle-card');if(!c||wasDrag)return;const piece={model:c.dataset.model,process:c.dataset.process};armed=armed&&keyOf(armed)===keyOf(piece)?null:piece;render();});
+const onDragMove=e=>{if(!drag)return;if(!drag.active){if(Math.hypot(e.clientX-drag.x0,e.clientY-drag.y0)<=5)return;activateDrag();}ghost.style.left=(e.clientX+14)+'px';ghost.style.top=(e.clientY+10)+'px';const el=document.elementFromPoint(e.clientX,e.clientY);$('puzzleDropOut').classList.toggle('over',!!(el&&el.closest('.puzzle-tray')&&drag.kind==='tile'));};
+const onDragEnd=e=>{if(!drag)return;if(drag.active){endDrag(e);wasDrag=true;setTimeout(()=>{wasDrag=false;},0);}drag=null;};
+const onDragCancel=()=>{if(!drag)return;root.classList.remove('puzzle-dragging');ghost.hidden=true;drag=null;renderMap();};
+const onPuzzleKey=e=>{if(!puzzleOn()||e.target.closest?.('input,select,textarea'))return;if(e.key==='Escape'&&(armed||range.length)){armed=null;range=[];render();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();$('undo').click();}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();$('redo').click();}};
+document.addEventListener('pointermove',onDragMove);document.addEventListener('pointerup',onDragEnd);document.addEventListener('pointercancel',onDragCancel);document.addEventListener('keydown',onPuzzleKey);
 
 // ── Event wiring ─────────────────────────────────────────────────────────────
 root.querySelectorAll('[data-building]').forEach(b=>b.onclick=()=>{building=b.dataset.building;render();fit();});
@@ -252,7 +382,9 @@ $('setupComplete').onclick=()=>transitionSetup('in_progress','completed');
 const stage=$('stage');let pointers=new Map(),pan=null,pinch=null,wasDrag=false;
 const point=e=>{const r=stage.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};};
 stage.addEventListener('wheel',e=>{if(e.target.closest('.map-tools'))return;e.preventDefault();const p=point(e);zoom(Math.exp(-e.deltaY*.0015),p.x,p.y);},{passive:false});
-stage.addEventListener('pointerdown',e=>{if(e.target.closest('.map-tools'))return;wasDrag=false;const p=point(e);pointers.set(e.pointerId,p);if(pointers.size===1){pan={x:p.x,y:p.y,tx,ty,id:e.pointerId};}if(pointers.size===2){const [a,b]=[...pointers.values()];pinch={distance:Math.hypot(a.x-b.x,a.y-b.y),scale,tx,ty,cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};pan=null;}});
+stage.addEventListener('pointerdown',e=>{if(e.target.closest('.map-tools'))return;wasDrag=false;
+ if(puzzleOn()&&e.pointerType!=='touch'&&e.button===0&&!e.shiftKey){const tile=e.target.closest('g.machine');if(tile){const id=Number(tile.dataset.id),sources=range.length>1&&range.includes(id)?range.slice():[id],pieces=sources.map(x=>assignment(machines.get(x)));if(pieces.some(p=>p.model)&&!sources.some(x=>draft.locks.includes(x))){startDrag('tile',e,{pieces,sources});return;}}}
+const p=point(e);pointers.set(e.pointerId,p);if(pointers.size===1){pan={x:p.x,y:p.y,tx,ty,id:e.pointerId};}if(pointers.size===2){const [a,b]=[...pointers.values()];pinch={distance:Math.hypot(a.x-b.x,a.y-b.y),scale,tx,ty,cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};pan=null;}});
 stage.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;const p=point(e);pointers.set(e.pointerId,p);if(pointers.size===2&&pinch){const[a,b]=[...pointers.values()];const cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;scale=Math.max(.08,Math.min(2.5,pinch.scale*Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,pinch.distance)));tx=cx-(pinch.cx-pinch.tx)*scale/pinch.scale;ty=cy-(pinch.cy-pinch.ty)*scale/pinch.scale;wasDrag=true;transform();}else if(pan){const dx=p.x-pan.x,dy=p.y-pan.y;if(Math.hypot(dx,dy)>4){wasDrag=true;if(!stage.hasPointerCapture(e.pointerId))stage.setPointerCapture(e.pointerId);tx=pan.tx+dx;ty=pan.ty+dy;transform();}}});
 function endPointer(e){pointers.delete(e.pointerId);if(stage.hasPointerCapture(e.pointerId))stage.releasePointerCapture(e.pointerId);pinch=null;pan=null;if(pointers.size===1){const [id,p]=[...pointers.entries()][0];pan={id,x:p.x,y:p.y,tx,ty};}setTimeout(()=>{if(!pointers.size)wasDrag=false;},0);}
 stage.addEventListener('pointerup',endPointer);stage.addEventListener('pointercancel',endPointer);stage.addEventListener('pointerleave',e=>{if(!stage.hasPointerCapture(e.pointerId))endPointer(e);});
@@ -263,11 +395,11 @@ resizeObserver.observe(stage);
 translate();const focusFrame=requestAnimationFrame(()=>focusMachine(selected));
 
 // Read-only hook for the browser verification suite (scripts/verify-layout-studio-browser.cjs).
-const hook={data:DATA,state:()=>({building,mode,selected,scale,tx,ty,lang,draft:copy(draft),machineCount:DATA.machines.length,setup:copy(setupBatch)})};
+const hook={data:DATA,state:()=>({building,mode,selected,scale,tx,ty,lang,draft:copy(draft),machineCount:DATA.machines.length,setup:copy(setupBatch),range:[...range],armed:armed&&copy(armed),puzzle:puzzleOn(),violations:puzzleViolations.count})};
 window.__layoutStudio=hook;
 
 return {
  setLang(next){if(!messages[next]||next===lang)return;lang=next;translate();},
- destroy(){resizeObserver.disconnect();cancelAnimationFrame(focusFrame);clearTimeout(toastTimer);if(window.__layoutStudio===hook)delete window.__layoutStudio;},
+ destroy(){document.removeEventListener('pointermove',onDragMove);document.removeEventListener('pointerup',onDragEnd);document.removeEventListener('pointercancel',onDragCancel);document.removeEventListener('keydown',onPuzzleKey);resizeObserver.disconnect();cancelAnimationFrame(focusFrame);clearTimeout(toastTimer);if(window.__layoutStudio===hook)delete window.__layoutStudio;},
 };
 }

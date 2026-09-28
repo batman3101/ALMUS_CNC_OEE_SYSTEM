@@ -10,7 +10,7 @@ import type { ForecastCapacitySnapshot } from '@/types/forecast';
 export interface WorkspacePayload {
   geometry: null | {
     id: string; sourceFile: string; sourceSheet: string | null; sourceHash: string;
-    positions: Array<{ machineId: string; building: string; cell: string; x: number; y: number; width: number; height: number }>;
+    positions: Array<{ machineId: string; building: string; cell: string; x: number; y: number; width: number; height: number; walkway?: string | null; side?: 'L' | 'R' | null }>;
   };
   snapshot: ForecastCapacitySnapshot;
 }
@@ -104,7 +104,8 @@ export function buildStudioView(workspace: WorkspacePayload, plan: PlanPayload |
       numberOf.set(machine.id, no); idOfNumber.set(no, machine.id);
       const a = assignmentById.get(machine.id);
       const base = a ? codeOf(a.base_model_id, a.base_process_id) : codeOf(machine.modelId, machine.processId);
-      return [{ id: no, uuid: machine.id, building: p.building, cell: p.cell, x: p.x, y: p.y, width: p.width, height: p.height, ...base }];
+      // Walkway/side (20260928130000) drive the puzzle tray's rule rings; null on drawings without walkways.
+      return [{ id: no, uuid: machine.id, building: p.building, cell: p.cell, x: p.x, y: p.y, width: p.width, height: p.height, walkway: p.walkway ?? null, side: p.side ?? null, ...base }];
     })
     .sort((a, b) => a.id - b.id);
 
