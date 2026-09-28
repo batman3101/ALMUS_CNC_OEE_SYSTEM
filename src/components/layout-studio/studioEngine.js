@@ -46,6 +46,8 @@ const dbMessages = {
 };
 // Puzzle tray texts (2026-09-28).
 Object.assign(dbMessages.ko,{trayTitle:'조각 트레이',trayHelp:'조각을 도면의 설비로 끌어 놓으세요. 원래 그 자리의 모델·공정은 트레이로 돌아옵니다. 설비를 끌어 다른 설비에 놓으면 옮겨지고, 아래 비우기에 놓으면 빈 자리가 됩니다. Shift+클릭으로 한 열의 여러 대를 묶습니다. 터치: 조각을 누른 뒤 설비를 누르세요.',trayNeed:'놓아야 할 조각',trayNeedEmpty:'모두 채웠습니다 ✓',traySpare:'여유 — 바꿔도 되는 설비',traySpareEmpty:'없음',trayDropOut:'여기에 설비를 끌어 놓으면 비우기(빈 자리)',ruleGood:'무리에 붙음',ruleWarn:'동선 공정 섞임',ruleBad:'섬·끼워넣기·3조각',violations:'규칙 위반',armed:'{g} 을(를) 놓을 설비를 누르세요 · 다시 누르거나 Esc 로 취소',noRoom:'그 열에는 이만큼 들어갈 자리가 없습니다.',placedBad:'⚠ 규칙 위반: {r} — 되돌리려면 ↶',placedWarn:'동선 안에 공정이 섞였습니다.',reasonIsland:'섬',reasonMiddle:'끼워넣기',reasonThree:'3조각',rangeHint:'한 열에서 {n}대 선택 — 끌어서 한 번에 옮기거나, 조각을 놓아 한 번에 채웁니다.',fromTile:'설비에서 옮기는 중',fromTray:'트레이에서'});
+Object.assign(dbMessages.ko,{trayCapa:'CAPA',capaCount:'{n}개',capaRequired:'필요',capaAssigned:'배정',capaGap:'차이',trayLegend:'색 범례'});
+Object.assign(dbMessages.vi,{trayCapa:'CAPA',capaCount:'{n} nhóm',capaRequired:'Cần',capaAssigned:'Đã gán',capaGap:'Chênh',trayLegend:'Chú thích màu'});
 Object.assign(dbMessages.ko,{verdictGood:'✓ 무리에 붙음',verdictWarn:'⚠ 동선 공정 섞임',verdictEmpty:'여기 놓으면 비우기(빈 자리)'});
 Object.assign(dbMessages.vi,{verdictGood:'✓ Liền nhóm',verdictWarn:'⚠ Lẫn công đoạn trong lối đi',verdictEmpty:'Thả vào đây để bỏ trống'});
 Object.assign(dbMessages.ko,{setupBoard:'셋업 작업판',setupProgress:'완료 {d} / {n}대',setupListHint:'진행 중 → 대기 → 완료 순입니다. 행을 누르면 도면에서 위치를 보여 줍니다. 완료는 한 대씩 누릅니다 — 누르는 순간 그 설비의 모델·공정이 설비정보에 반영됩니다.',setupDoneTitle:'셋업 완료',setupDoneText:'바뀐 설비 {n}대의 셋업을 모두 마쳤습니다. 설비정보(모델·공정)에 반영됐습니다.',setupDonePeriod:'기간 {a} ~ {b}',setupRowDone:'완료 {t}'});
@@ -317,7 +319,10 @@ tray.innerHTML='<div class="puzzle-head"><strong data-i18n="trayTitle"></strong>
  +'<p id="puzzleArmed" class="puzzle-note" hidden></p><p id="puzzleRange" class="puzzle-note" hidden></p>'
  +'<h4 class="need"><span data-i18n="trayNeed"></span><span class="n" id="needCount"></span></h4><div id="needCards" class="puzzle-cards"></div>'
  +'<h4 class="spare"><span data-i18n="traySpare"></span><span class="n" id="spareCount"></span></h4><div id="spareCards" class="puzzle-cards"></div>'
- +'<div id="puzzleDropOut" class="puzzle-dropout" data-i18n="trayDropOut"></div>';
+ +'<div id="puzzleDropOut" class="puzzle-dropout" data-i18n="trayDropOut"></div>'
+ // CAPA table + colour legend, as in the prototype (user 2026-09-28).
+ +'<h4 class="capa"><span data-i18n="trayCapa"></span><span class="n" id="capaCount"></span></h4><table id="capaTable" class="puzzle-capa"></table>'
+ +'<h4 class="legend-title"><span data-i18n="trayLegend"></span></h4><div id="trayLegend" class="puzzle-legend"></div>';
 root.querySelector('.inspector').prepend(tray);
 // While puzzling the panel is the tray (user 2026-09-28): the selected-machine card, lock, change list and CAPA alert
 // rows are hidden by CSS (.puzzle-mode). Undo/redo move up next to the tray title; the CAPA totals and the confirm
@@ -343,6 +348,15 @@ function renderTray(){
  tray.querySelector('.puzzle-rules').hidden=!board.hasWalkways;
  $('puzzleArmed').hidden=!armed;if(armed)$('puzzleArmed').textContent=tf('armed',{g:label(armed)});
  $('puzzleRange').hidden=range.length<2;if(range.length>1)$('puzzleRange').textContent=tf('rangeHint',{n:range.length});
+ // CAPA: every group with a known requirement, most short first (gap ascending), then by name.
+ const capa=groups.filter(g=>g.required!==null&&(g.required>0||g.assigned>0)).sort((a,b)=>a.gap-b.gap||a.code.localeCompare(b.code));
+ $('capaCount').textContent=tf('capaCount',{n:capa.length});
+ const cell=(text,cls)=>{const td=document.createElement('td');if(cls)td.className=cls;td.textContent=text;return td;};
+ const head=document.createElement('tr');head.append(cell(''),cell(t('capaRequired'),'num'),cell(t('capaAssigned'),'num'),cell(t('capaGap'),'num'));
+ $('capaTable').replaceChildren(head,...capa.map(g=>{const tr=document.createElement('tr');tr.dataset.code=g.code;tr.className=g.gap<0?'short':g.gap>0?'over':'';
+  const name=cell('');const sw=document.createElement('i');sw.className='sw-inline';sw.style.background=tone(g).solid;name.append(sw,document.createTextNode(g.model+' '+g.process));
+  tr.append(name,cell(String(g.required),'num'),cell(String(g.assigned),'num'),cell((g.gap>0?'+':'')+g.gap,'num d'));return tr;}));
+ $('trayLegend').replaceChildren(...DATA.models.map(model=>{const row=document.createElement('div');for(const process of processesFor(model)){const sw=document.createElement('i');sw.className='sw-inline';sw.title=process;sw.style.background=tone({model,process}).solid;row.append(sw);}row.append(document.createTextNode(model));return row;}));
 }
 /** Put `pieces[k]` on `targets[k]`; `sources` (a machine dragged off the map) become empty unless also a target. */
 function puzzlePlace(pieces,targets,sources){
@@ -359,7 +373,7 @@ function puzzlePlace(pieces,targets,sources){
  commit(next);
  // The displaced pieces fly back to their card; every CAPA row whose count moved flashes.
  for(const d of displaced){const from=tileEl(d.id);if(from)fly(from,cardFor(codeOf(d.a))||tray,d.a);}
- for(const [code,n] of groupCounts())if(prev.get(code)!==n){cardFor(code)?.classList.add('flash');root.querySelector('.alert-row[data-code="'+CSS.escape(code)+'"]')?.classList.add('flash');}
+ for(const [code,n] of groupCounts())if(prev.get(code)!==n){cardFor(code)?.classList.add('flash');root.querySelector('.alert-row[data-code="'+CSS.escape(code)+'"]')?.classList.add('flash');root.querySelector('.puzzle-capa tr[data-code="'+CSS.escape(code)+'"]')?.classList.add('flash');}
  if(verdict.level==='bad')toast(tf('placedBad',{r:verdict.reasons.map(r=>t(REASON_KEY[r])).join(', ')}));else if(verdict.level==='warn')toast(t('placedWarn'));
 }
 function fly(fromEl,toEl,a){

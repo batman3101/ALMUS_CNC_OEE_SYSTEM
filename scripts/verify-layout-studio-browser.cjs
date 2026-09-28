@@ -317,6 +317,11 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.equal(await L('#needCards .puzzle-card[data-code="ON1-C1"] .cnt').innerText(), '2');
         assert.equal(await L('#spareCards .puzzle-card[data-code="M3-C2"] .cnt').innerText(), '3');
         assert.equal(await L('#needCount').innerText(), '2');
+        // CAPA table (most short first) and colour legend under the tray, as in the prototype.
+        const capaRows = () => L('.puzzle-capa tr[data-code]').evaluateAll(els => els.map(e => [e.dataset.code, e.lastChild.textContent]));
+        assert.deepEqual(await capaRows(), [['ON1-C1', '-2'], ['PA1-C2', '0'], ['M3-C2', '+3']]);
+        assert.equal(await L('#capaCount').innerText(), '3개');
+        assert.equal(await L('#trayLegend > div').count(), (await page.evaluate(() => window.__layoutStudio.data.models.length)));
         // Model = hue, process = lightness: C1 light, C2 dark with white text, C0 hatched.
         const tile = n => L(`.machine[data-id="${n}"]`);
         const fillOf = n => tile(n).locator('.machine-body').getAttribute('fill');
@@ -375,6 +380,8 @@ const state = page => page.evaluate(() => window.__layoutStudio.state());
         assert.match(await L('#toast').innerText(), /규칙 위반: .*섬/);
         assert.equal(await L('#needCards .puzzle-card[data-code="ON1-C1"] .cnt').innerText(), '1');
         assert.equal(await L('#spareCards .puzzle-card[data-code="M3-C2"] .cnt').innerText(), '2');
+        assert.deepEqual(await capaRows(), [['ON1-C1', '-1'], ['PA1-C2', '0'], ['M3-C2', '+2']]);
+        assert.equal(await L('.puzzle-capa tr.flash').count(), 2);
         assert.ok(await L('.puzzle-card.flash').count() >= 2);
         assert.match(await L('#alertTotals').innerText(), /부족 1/);
       });

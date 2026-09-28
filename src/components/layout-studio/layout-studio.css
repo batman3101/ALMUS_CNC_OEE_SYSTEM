@@ -458,3 +458,16 @@
 .layout-studio .puzzle-history button{min-height:0;padding:2px 9px;font-size:14px}
 /* Section dividers in the tray (user 2026-09-28): rules | pieces to place | spare. */
 .layout-studio .puzzle-tray h4.need,.layout-studio .puzzle-tray h4.spare{border-top:1px solid var(--ls-border,#d0d5dd);padding-top:12px;margin-top:14px}
+/* CAPA table + colour legend in the tray (user 2026-09-28, as in the prototype). */
+.layout-studio .puzzle-tray h4.capa,.layout-studio .puzzle-tray h4.legend-title{border-top:1px solid var(--ls-border,#d0d5dd);padding-top:12px;margin-top:16px}
+.layout-studio .puzzle-tray h4.capa .n{background:var(--ls-fill-secondary,#eef1f5);color:var(--ls-text-secondary)}
+.layout-studio .puzzle-capa{width:100%;border-collapse:collapse;font-size:12px}
+.layout-studio .puzzle-capa td{padding:3px 4px;border-bottom:1px solid var(--ls-border-secondary,#f2f4f7)}
+.layout-studio .puzzle-capa tr:first-child td{color:var(--ls-text-secondary);font-size:11px}
+.layout-studio .puzzle-capa td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.layout-studio .puzzle-capa tr.short td.d{color:#d92d20;font-weight:700}
+.layout-studio .puzzle-capa tr.over td.d{color:#027a48}
+.layout-studio .puzzle-capa tr.flash{animation:ls-puzzle-flash 1.2s}
+.layout-studio .sw-inline{display:inline-block;width:14px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:1px solid rgba(0,0,0,.2)}
+.layout-studio .puzzle-legend{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:11px}
+.layout-studio .puzzle-legend div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
