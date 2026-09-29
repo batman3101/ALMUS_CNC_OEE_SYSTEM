@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
+  App,
   Card,
   Table,
   Button,
@@ -22,9 +23,11 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  SettingOutlined
+  SettingOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import { createSupabaseClient } from '@/lib/supabase';
+import { useFactory } from '@/contexts/FactoryContext';
 import { authFetch } from '@/lib/authFetch';
 import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import type { ProductModel, ModelProcess } from '@/types/modelInfo';
@@ -69,6 +72,10 @@ type ModelInfoManagerProps = Record<string, never>;
 const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   const reportFailure = useFailureReport();
   const { t } = useModelInfoTranslation();
+  const { factoryCode } = useFactory();
+  // 정적 message 는 테마·로케일 컨텍스트를 받지 못한다 - 새로 넣는 알림은 App 인스턴스로 낸다.
+  const { message: appMessage } = App.useApp();
+  const [exporting, setExporting] = useState(false);
   const [models, setModels] = useState<ProductModel[]>([]);
   const [processes, setProcesses] = useState<ModelProcess[]>([]);
   const [loading, setLoading] = useState(false);
@@ -225,6 +232,24 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     } catch (error) {
       console.error('공정 삭제 오류:', error);
       reportFailure(t('에러.공정삭제실패'), error);
+    }
+  };
+
+  // 모든 모델·공정을 엑셀로 출력 (사용자 요청 2026-09-29). 화면 상태가 아니라 DB 에서 새로 읽는다 -
+  // 화면의 공정 목록은 '공정 관리'를 누르면 그 모델 것만 남아, 그대로 내보내면 다른 모델의 공정 수가 0 이 된다.
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      // xlsx 는 무거우므로 출력할 때만 불러온다.
+      const { exportModelInfo } = await import('@/lib/excel/modelInfoExport');
+      const counts = await exportModelInfo({ client: supabase, t: key => t(key), factoryCode });
+      appMessage.success(t('export.success', { models: counts.models, processes: counts.processes }));
+    } catch (error) {
+      console.error('모델 정보 엑셀 출력 오류:', error);
+      reportFailure(t('export.failed'), error);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -425,13 +450,22 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           </div>
         }
         extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => openModelModal()}
-          >
-            {t('버튼.모델추가')}
-          </Button>
+          <Space>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={handleExport}
+              loading={exporting}
+            >
+              {t('export.button')}
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => openModelModal()}
+            >
+              {t('버튼.모델추가')}
+            </Button>
+          </Space>
         }
         style={{ marginBottom: '24px' }}
       >

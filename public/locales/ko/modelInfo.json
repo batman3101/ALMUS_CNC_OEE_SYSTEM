@@ -129,5 +129,28 @@
     "초": "초",
     "초값": "{{n}}초",
     "개값": "{{n}}개"
+  },
+  "export": {
+    "button": "엑셀 출력",
+    "success": "엑셀 파일을 만들었습니다 (모델 {{models}}개 · 공정 {{processes}}개)",
+    "failed": "엑셀 출력에 실패했습니다",
+    "sheetModels": "모델",
+    "sheetProcesses": "공정",
+    "sheetInfo": "출력 정보",
+    "updatedAt": "수정일",
+    "tactTime": "Tact Time (초/개)",
+    "infoItem": "항목",
+    "infoValue": "값",
+    "infoFactory": "공장",
+    "infoExportedAt": "출력 일시",
+    "infoModelCount": "모델 수",
+    "infoProcessCount": "공정 수",
+    "infoExcluded": "제외한 공정 (삭제한 모델 소속)",
+    "infoScope": "출력 범위",
+    "infoScopeValue": "화면에 보이는 활성 모델만 포함합니다. 삭제(비활성)한 모델은 제외합니다.",
+    "infoTactUnit": "Tact Time 단위",
+    "infoTactUnitValue": "개당 초입니다 (사이클당이 아님).",
+    "infoCavity": "캐비티 수",
+    "infoCavityValue": "참고용 값입니다. OEE·CAPA 계산에 곱하거나 나누지 않습니다."
   }
 }
