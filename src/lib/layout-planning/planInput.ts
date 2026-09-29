@@ -53,7 +53,6 @@ export interface AssignmentPayload {
 }
 export interface PlanDraftInput {
   demands: WeeklyModelDemand[];
-  nextWeekDemands: WeeklyModelDemand[];
   snapshotModels: ForecastSnapshotModel[];
   machines: ForecastSnapshotMachine[];
   positions: ReadonlyMap<string, MachinePosition>;
@@ -93,18 +92,10 @@ export function buildPlanDraft(input: PlanDraftInput) {
     demands, matches: mergedMatches, models: input.snapshotModels, machines: input.machines, breakMinutes: input.breakMinutes,
   });
 
-  // Next-week protection keys on the same (merged) names the requirement rows carry, resolved by the same rules.
-  const nextWeekMatches = resolveModels(input.nextWeekDemands, input.snapshotModels, input.mappings).matches;
-  const nextWeekDemands = input.nextWeekDemands.flatMap(d => {
-    const id = nextWeekMatches.get(d.model)?.dbModel?.id;
-    const label = id ? merged.get(id)?.demand.model : undefined;
-    return label ? [{ ...d, model: label }] : [];
-  });
-
   // "One process per walkway" compares process names (CNC1/CNC2), not ids — every model has its own process ids.
   const processNames = new Map(input.snapshotModels.flatMap(m => m.processes.map(p => [p.id, normalizeProcessName(p.name) ?? p.name] as const)));
   const recommendation: LayoutRecommendation = recommendLayout({
-    requirements: requirementRows, machines: input.machines, positions: input.positions, locked: input.locked, nextWeekDemands, processNames,
+    requirements: requirementRows, machines: input.machines, positions: input.positions, locked: input.locked, processNames,
   });
 
   const requirements: RequirementPayload[] = requirementRows

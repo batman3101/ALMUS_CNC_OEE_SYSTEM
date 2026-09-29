@@ -42,13 +42,10 @@ function build(columns: Column[]) {
   return { machines, positions, processNames };
 }
 const fill = (n: number, model: string, process: Proc): Array<[string, Proc]> => Array.from({ length: n }, () => [model, process]);
-const run = (columns: Column[], requirements: ModelProcessRequirement[], nextWeekModels: string[] = []) => {
+const run = (columns: Column[], requirements: ModelProcessRequirement[]) => {
   const { machines, positions, processNames } = build(columns);
   for (const r of requirements) if (r.processId) processNames.set(r.processId, r.process);
-  const nextWeekDemands = nextWeekModels.map(model => ({
-    model, week: '2026-W42', peakQuantity: 100, peakDate: null, numericDays: 7, blankCells: 0, errorCells: 0, fractional: false, warnings: [],
-  }));
-  return recommendLayout({ requirements, machines, positions, processNames, locked: new Set(), nextWeekDemands });
+  return recommendLayout({ requirements, machines, positions, processNames, locked: new Set() });
 };
 const movedTo = (result: ReturnType<typeof recommendLayout>, model: string) =>
   result.moves.filter(mv => mv.to.modelId === model).map(mv => mv.machineName).sort();
@@ -251,18 +248,18 @@ describe('동선 기준 추천', () => {
     expect(result.unresolved).toEqual([]);
   });
 
-  it('한 동선 = 한 공정이 다음 주 수요 설비 보호보다 먼저다 (사용자 결정 2026-09-29, W41 A-01-U 사례)', () => {
-    // T(CNC1) 가 동선 3 L 에서 4대 부족. 붙을 수 있는 곳은 맞은편 동선 3 R(N, CNC1, 여유지만 다음 주 수요 있음)과
-    // 등 맞닿은 동선 2 R(Z, CNC2, 수요 0). Z 를 쓰면 동선 2 에 CNC1 이 섞이고, N 을 쓰면 동선 3 은 CNC1 하나로 남는다.
+  it('한 동선 = 한 공정이 출처 순서(여유 먼저)보다 먼저다 (사용자 결정 2026-09-29, W41 A-01-U 사례)', () => {
+    // T(CNC1) 가 동선 3 L 에서 4대 부족. 붙을 수 있는 곳은 맞은편 동선 3 R(N, CNC1, 수요 0)과
+    // 등 맞닿은 동선 2 R(Z, CNC2, 여유). 출처 순서로는 여유(Z)가 먼저지만 Z 를 쓰면 동선 2 에 CNC1 이 섞인다.
     const result = run([
       { walkway: 2, side: 'L', cells: fill(8, 'Y', 'CNC2') },
       { walkway: 2, side: 'R', cells: fill(8, 'Z', 'CNC2') },
       { walkway: 3, side: 'L', cells: fill(8, 'T', 'CNC1') },
       { walkway: 3, side: 'R', cells: fill(8, 'N', 'CNC1') },
     ], [
-      req('T', 'CNC1', 12, 8, 'shortage'), req('N', 'CNC1', 4, 8, 'surplus'),
-      req('Z', 'CNC2', 0, 8, 'zero_demand'), req('Y', 'CNC2', 8, 8, 'ok'),
-    ], ['N']);
+      req('T', 'CNC1', 12, 8, 'shortage'), req('N', 'CNC1', 0, 8, 'zero_demand'),
+      req('Z', 'CNC2', 4, 8, 'surplus'), req('Y', 'CNC2', 8, 8, 'ok'),
+    ]);
     expect(movedTo(result, 'T').every(name => name.startsWith('03R'))).toBe(true);
     expect(movedTo(result, 'T')).toHaveLength(4);
   });

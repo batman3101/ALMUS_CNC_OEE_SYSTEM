@@ -42,19 +42,17 @@ export default function WeeklySimulationCard({ preview, today }: { preview: Fact
   const result = useMemo(() => {
     if (!week || snapshot?.status !== 'available' || policy.status !== 'available') return null;
     const demands = weeklyModelDemand(preview.rows, week);
-    const nextWeek = weeks[weekIndex + 1];
-    const nextWeekDemands = nextWeek ? weeklyModelDemand(preview.rows, nextWeek) : [];
     const matches = matchModels(demands.map(d => d.model), snapshot.models);
     const requirements = buildRequirements({ demands, matches, models: snapshot.models, machines: snapshot.machines, breakMinutes: policy.breakMinutes })
       .sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || (b.gap ?? 0) - (a.gap ?? 0) || (a.forecastModel ?? a.dbModel?.name ?? '').localeCompare(b.forecastModel ?? b.dbModel?.name ?? ''));
-    const proposal = proposeReassignment({ requirements, machines: snapshot.machines, nextWeekDemands });
+    const proposal = proposeReassignment({ requirements, machines: snapshot.machines });
     const unmapped = [...matches.values()].filter(m => !m.dbModel).map(m => m.forecastModel);
     const forecastProcessIds = new Set(snapshot.models.flatMap(m => m.processes.filter(p => normalizeProcessName(p.name)).map(p => p.id)));
     const active = snapshot.machines.filter(m => m.isActive);
     const unassigned = active.filter(m => !m.modelId || !m.processId).length;
     const excluded = active.filter(m => m.modelId && m.processId && !forecastProcessIds.has(m.processId)).length;
-    return { requirements, proposal, unmapped, unassigned, excluded, demands, nextWeekDemands };
-  }, [preview.rows, week, weeks, weekIndex, snapshot, policy]);
+    return { requirements, proposal, unmapped, unassigned, excluded, demands };
+  }, [preview.rows, week, snapshot, policy]);
 
   const columns: ColumnsType<ModelProcessRequirement> = [
     { title: t('simulation.model'), key: 'model', width: 190, sorter: (a, b) => (a.forecastModel ?? '').localeCompare(b.forecastModel ?? ''), render: (_, r) => <><strong>{r.forecastModel ?? '—'}</strong><div className={styles.secondary}>{r.dbModel?.name ?? t('simulation.statuses.unmapped')}</div></> },
@@ -70,7 +68,7 @@ export default function WeeklySimulationCard({ preview, today }: { preview: Fact
     { title: t('simulation.machine'), dataIndex: 'machineName', width: 110 },
     { title: t('simulation.location'), dataIndex: 'location', width: 90 },
     { title: t('simulation.fromTo'), key: 'fromTo', render: (_, m) => <>{m.from.model ? `${m.from.model} / ${m.from.process}` : '—'} → <strong>{m.to.model} / {m.to.process}</strong></> },
-    { title: t('simulation.reason'), key: 'reason', render: (_, m) => <Space wrap><Tag>{t(`simulation.reasons.${m.reason}`)}</Tag>{m.nextWeekDemand && <Tag color="orange">{t('simulation.nextWeekDemand')}</Tag>}</Space> },
+    { title: t('simulation.reason'), key: 'reason', render: (_, m) => <Tag>{t(`simulation.reasons.${m.reason}`)}</Tag> },
   ];
 
   return <Card title={t('simulation.title')}>
@@ -101,7 +99,7 @@ export default function WeeklySimulationCard({ preview, today }: { preview: Fact
         {result.proposal.unresolved.length > 0 && <Alert type="error" showIcon message={t('simulation.unresolved', { list: result.proposal.unresolved.map(u => `${u.dbModel} ${u.process} ${u.remaining}`).join(', ') })} />}
         {result.unmapped.length > 0 && <div><Typography.Text strong>{t('simulation.unmappedTitle', { count: result.unmapped.length })}</Typography.Text><div className={styles.tagList}>{result.unmapped.map(m => <Tag key={m}>{m}</Tag>)}</div></div>}
         <Typography.Text type="secondary">{t('simulation.excludedMachines', { count: result.excluded })} · {t('simulation.unassignedMachines', { count: result.unassigned })}</Typography.Text>
-        {week && <LayoutPlanLauncher preview={preview} week={week} demands={result.demands} nextWeekDemands={result.nextWeekDemands} />}
+        {week && <LayoutPlanLauncher preview={preview} week={week} demands={result.demands} />}
       </>}
     </Space>
   </Card>;

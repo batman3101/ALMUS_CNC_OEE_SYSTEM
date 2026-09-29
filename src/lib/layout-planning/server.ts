@@ -144,7 +144,7 @@ export async function saveMappings(factoryId: string, userId: string, items: Arr
 export interface CreatePlanInput {
   title: string; forecastFileName: string; forecastFileHash: string;
   week: { key: string; start: string; end: string };
-  demands: WeeklyModelDemand[]; nextWeekDemands: WeeklyModelDemand[];
+  demands: WeeklyModelDemand[];
   lockedMachineIds: string[];
   /** The user saw the unmapped list and chose to plan without those models. */
   acknowledgeUnmapped: boolean;
@@ -161,7 +161,7 @@ export async function createPlan(factoryId: string, userId: string, input: Creat
   if (policy.status !== 'available') throw new LayoutPlanningError(503, 'capacity_policy_unavailable');
 
   const draft = buildPlanDraft({
-    demands: input.demands, nextWeekDemands: input.nextWeekDemands, snapshotModels: snapshot.models, machines: snapshot.machines,
+    demands: input.demands, snapshotModels: snapshot.models, machines: snapshot.machines,
     positions: new Map(geometry.positions.map(p => [p.machineId, p])), mappings, breakMinutes: policy.breakMinutes,
     locked: new Set(input.lockedMachineIds),
   });

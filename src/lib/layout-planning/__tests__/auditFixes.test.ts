@@ -34,7 +34,7 @@ describe('BUG-01 — unreadable demand is unknown, never zero', () => {
 
   it('the audit repro: A (error cells only) keeps its machines while C has demand', () => {
     const demands = weeklyModelDemand([row('A', [{ quantity: null, state: 'error' }]), row('C', [{ quantity: 100, state: 'number' }])], week);
-    const draft = buildPlanDraft({ demands, nextWeekDemands: [], snapshotModels: models, machines, positions: positions(['1', '2']), mappings: [], breakMinutes: 110, locked: new Set() });
+    const draft = buildPlanDraft({ demands, snapshotModels: models, machines, positions: positions(['1', '2']), mappings: [], breakMinutes: 110, locked: new Set() });
     expect(draft.assignments).toEqual([]);
     expect(draft.requirements.filter(r => r.product_model_id === 'A').map(r => [r.required_machines, r.warnings])).toEqual([
       [null, ['error_cells', 'partial_week', 'no_numeric']], [null, ['error_cells', 'partial_week', 'no_numeric']],
@@ -45,11 +45,11 @@ describe('BUG-01 — unreadable demand is unknown, never zero', () => {
     // Readable day: 10 pieces → 1 machine needed on each process, 2 present → "surplus" 1, but the error day is unknown.
     const two = [machine('1', 'A', 'A-1'), machine('2', 'A', 'A-1'), machine('3', 'A', 'A-2'), machine('4', 'A', 'A-2')];
     const demands = [demand('A', 10, ['error_cells']), demand('C', 100)];
-    const draft = buildPlanDraft({ demands, nextWeekDemands: [], snapshotModels: models, machines: two, positions: positions(['1', '2', '3', '4']), mappings: [], breakMinutes: 110, locked: new Set() });
+    const draft = buildPlanDraft({ demands, snapshotModels: models, machines: two, positions: positions(['1', '2', '3', '4']), mappings: [], breakMinutes: 110, locked: new Set() });
     expect(draft.assignments).toEqual([]);
     // Same rule in the Forecast screen's quantity-only proposal.
     const requirements = buildRequirements({ demands, matches: matchModels(['A', 'C'], models), models, machines: two, breakMinutes: 110 });
-    expect(proposeReassignment({ requirements, machines: two, nextWeekDemands: [] }).moves).toEqual([]);
+    expect(proposeReassignment({ requirements, machines: two }).moves).toEqual([]);
   });
 
   it('the plan keeps the demand warnings, and the capacity alert says demand is unknown', () => {
@@ -64,7 +64,7 @@ describe('BUG-01 — unreadable demand is unknown, never zero', () => {
 describe('BUG-03 — a required process that is not registered stays visible', () => {
   it('lists CNC1/CNC2 missing on a model with demand; CNC0 (optional) and zero-demand models are not listed', () => {
     const draft = buildPlanDraft({
-      demands: [demand('B', 100), demand('C', 0)], nextWeekDemands: [], snapshotModels: models,
+      demands: [demand('B', 100), demand('C', 0)], snapshotModels: models,
       machines: [machine('1', 'B', 'B-1')], positions: positions(['1']), mappings: [], breakMinutes: 110, locked: new Set(),
     });
     expect(draft.missingProcesses).toEqual([{ forecastModel: 'B', modelId: 'B', modelName: 'B', process: 'CNC2' }]);

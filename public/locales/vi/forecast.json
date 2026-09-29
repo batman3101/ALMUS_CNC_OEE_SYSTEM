@@ -125,7 +125,6 @@
       "unassigned": "Máy chưa gán model",
       "zero_demand": "Model không có nhu cầu"
     },
-    "nextWeekDemand": "Tuần sau có nhu cầu",
     "noMoves": "Không có máy để chuyển.",
     "unresolved": "Còn thiếu sau khi hết máy dư: {{list}}",
     "unmappedTitle": "{{count}} model chưa khớp (tạm dừng tính)",

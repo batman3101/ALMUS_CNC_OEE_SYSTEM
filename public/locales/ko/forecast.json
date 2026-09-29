@@ -125,7 +125,6 @@
       "unassigned": "미배정 설비",
       "zero_demand": "수요 없는 모델"
     },
-    "nextWeekDemand": "다음 주 수요 있음",
     "noMoves": "옮길 설비가 없습니다.",
     "unresolved": "풀 부족으로 남은 수량: {{list}}",
     "unmappedTitle": "미매칭 모델 {{count}}개 (계산 보류)",

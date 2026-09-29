@@ -1,6 +1,5 @@
 import type { ForecastSnapshotMachine } from '@/types/forecast';
 import { hasUnreadableDemand, type ModelProcessRequirement } from '@/lib/forecast/requiredMachines';
-import type { WeeklyModelDemand } from '@/lib/forecast/weeklyDemand';
 
 /**
  * Drawing position of one machine (layout geometry). Cell grid, not physical distance.
@@ -18,7 +17,7 @@ export interface Assignment { modelId: string | null; processId: string | null }
 export interface LayoutMove {
   machineId: string; machineName: string;
   from: Assignment; to: { modelId: string; processId: string };
-  reason: MoveReason; nextWeekDemand: boolean;
+  reason: MoveReason;
 }
 export interface LayoutRecommendation {
   moves: LayoutMove[];
@@ -31,7 +30,6 @@ export interface RecommendInput {
   positions: ReadonlyMap<string, MachinePosition>;
   /** Machines the user pinned; never moved and never taken from. */
   locked: ReadonlySet<string>;
-  nextWeekDemands: WeeklyModelDemand[];
   /** processId → process name ('CNC1', 'CNC2', …) for the "one process per walkway" rule. Falls back to the id. */
   processNames?: ReadonlyMap<string, string>;
 }
@@ -64,7 +62,7 @@ function distance(a: MachinePosition, b: MachinePosition): number {
 
 const groupKey = (modelId: string, processId: string) => `${modelId}\u0000${processId}`;
 
-interface Candidate { machine: ForecastSnapshotMachine; reason: MoveReason; group: string | null; nextWeekDemand: boolean }
+interface Candidate { machine: ForecastSnapshotMachine; reason: MoveReason; group: string | null }
 
 /**
  * Minimal-change recommendation with spatial grouping (user requirement 2026-09-25).
@@ -72,7 +70,8 @@ interface Candidate { machine: ForecastSnapshotMachine; reason: MoveReason; grou
  * Change count is fixed by the shortages: one moved machine fills one missing unit, and no machine is
  * moved unless a shortage needs it (surplus alone is kept — PRD 6.5). What this adds over the
  * quantity-only proposal is *which* machine moves:
- *   1. tier first — the proven order, with next-week-demand machines last (PRD 6.3);
+ *   1. tier first — the proven order (surplus, unassigned, zero demand). Next week's demand is not used: the
+ *      Forecast beyond the week being planned changes too much to protect machines for it (user decision 2026-09-29);
  *   2. within a tier, the machine closest to the short group as it grows, so the group stays together
  *      (a brand-new group starts where the most usable machines touch, so it has room to grow);
  *   3. then the machine with the fewest neighbours of its own group — releasing from the edge keeps the
@@ -95,8 +94,7 @@ export function recommendLayout(input: RecommendInput): LayoutRecommendation {
   return short(withoutExcess) < short(withExcess) ? withoutExcess : withExcess;
 }
 
-function recommendByDistance({ requirements, machines, positions, locked, nextWeekDemands }: RecommendInput): LayoutRecommendation {
-  const nextWeek = new Set(nextWeekDemands.filter(d => d.peakQuantity > 0).map(d => d.model));
+function recommendByDistance({ requirements, machines, positions, locked }: RecommendInput): LayoutRecommendation {
   const usable = machines.filter(m => m.isActive && !locked.has(m.id));
 
   // Current members per group (active machines only), used both to grow short groups and to judge edges.
@@ -117,13 +115,12 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
     const key = groupKey(row.dbModel.id, row.processId);
     quota.set(key, -row.gap);
     const reason: MoveReason = row.status === 'surplus' ? 'surplus_release' : 'zero_demand_release';
-    const nextWeekDemand = row.forecastModel !== null && nextWeek.has(row.forecastModel);
     for (const machine of usable) {
-      if (machine.modelId === row.dbModel.id && machine.processId === row.processId) pool.push({ machine, reason, group: key, nextWeekDemand });
+      if (machine.modelId === row.dbModel.id && machine.processId === row.processId) pool.push({ machine, reason, group: key });
     }
   }
   for (const machine of usable) {
-    if (!machine.modelId || !machine.processId) pool.push({ machine, reason: 'unassigned_fill', group: null, nextWeekDemand: false });
+    if (!machine.modelId || !machine.processId) pool.push({ machine, reason: 'unassigned_fill', group: null });
   }
 
   const shortages = requirements
@@ -169,7 +166,7 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
     while (shortage.remaining > 0) {
       const eligible = pool.filter(c => !used.has(c.machine.id) && (c.group === null || (quota.get(c.group) ?? 0) > 0));
       if (!eligible.length) break;
-      const scored = eligible.map(c => ({ c, key: [Number(c.nextWeekDemand), TIER[c.reason], placementCost(c, eligible), sameGroupNeighbours(c)] }));
+      const scored = eligible.map(c => ({ c, key: [TIER[c.reason], placementCost(c, eligible), sameGroupNeighbours(c)] }));
       scored.sort((a, b) => {
         for (let i = 0; i < a.key.length; i++) if (a.key[i] !== b.key[i]) return a.key[i] - b.key[i];
         return a.c.machine.name.localeCompare(b.c.machine.name);
@@ -188,7 +185,7 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
         machineId: pick.machine.id, machineName: pick.machine.name,
         from: { modelId: pick.machine.modelId, processId: pick.machine.processId },
         to: { modelId: shortage.modelId, processId: shortage.processId },
-        reason: pick.reason, nextWeekDemand: pick.nextWeekDemand,
+        reason: pick.reason,
       });
       shortage.remaining--;
     }
@@ -215,8 +212,7 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
 
 interface Block { ids: string[]; key: number[]; firstName: string }
 
-function recommendByWalkway({ requirements, machines, positions, locked, nextWeekDemands, processNames }: RecommendInput, allowExcess: boolean): LayoutRecommendation {
-  const nextWeek = new Set(nextWeekDemands.filter(d => d.peakQuantity > 0).map(d => d.model));
+function recommendByWalkway({ requirements, machines, positions, locked, processNames }: RecommendInput, allowExcess: boolean): LayoutRecommendation {
   const active = machines.filter(m => m.isActive && positions.has(m.id));
   const byId = new Map(active.map(m => [m.id, m]));
 
@@ -266,13 +262,12 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
     const key = groupKey(row.dbModel.id, row.processId);
     quota.set(key, -row.gap);
     const reason: MoveReason = row.status === 'surplus' ? 'surplus_release' : 'zero_demand_release';
-    const nextWeekDemand = row.forecastModel !== null && nextWeek.has(row.forecastModel);
     for (const m of active) {
-      if (!locked.has(m.id) && m.modelId === row.dbModel.id && m.processId === row.processId) pool.set(m.id, { machine: m, reason, group: key, nextWeekDemand });
+      if (!locked.has(m.id) && m.modelId === row.dbModel.id && m.processId === row.processId) pool.set(m.id, { machine: m, reason, group: key });
     }
   }
   for (const m of active) {
-    if (!locked.has(m.id) && (!m.modelId || !m.processId)) pool.set(m.id, { machine: m, reason: 'unassigned_fill', group: null, nextWeekDemand: false });
+    if (!locked.has(m.id) && (!m.modelId || !m.processId)) pool.set(m.id, { machine: m, reason: 'unassigned_fill', group: null });
   }
 
   const shortages = requirements
@@ -404,10 +399,9 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
             blocks.push({
               ids: [...range], firstName: byId.get(ids[i])!.name,
               key: [
-                // Rule 1 first (user decision 2026-09-29): keeping the walkway to one process outranks sparing machines
-                // whose model has demand next week — those were winning, and mixed walkways that had a clean option.
+                // Rule 1 first (user decision 2026-09-29): keeping the walkway to one process outranks everything below —
+                // source order and room were winning, and mixed walkways that had a clean option.
                 Number(otherProcess > 0),
-                Math.max(...picked.map(c => Number(c.nextWeekDemand))),   // next-week demand last (PRD 6.3)
                 // A new group's start decides whether it can grow as one group at all (no islands), so room comes
                 // before the source order — starting on 2 surplus machines with nowhere to grow strands the rest.
                 Math.max(0, need - room),
@@ -441,7 +435,7 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
           machineId: id, machineName: pick.machine.name,
           from: { modelId: pick.machine.modelId, processId: pick.machine.processId },
           to: { modelId: shortage.modelId, processId: shortage.processId },
-          reason: pick.reason, nextWeekDemand: pick.nextWeekDemand,
+          reason: pick.reason,
         });
         shortage.remaining--;
       }
