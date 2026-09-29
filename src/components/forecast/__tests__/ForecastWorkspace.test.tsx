@@ -51,6 +51,22 @@ describe('Forecast upload workspace', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'inspect' })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'inspect' })); expect(await screen.findByText('plan.xlsx')).toBeInTheDocument();
   });
+  it('accepts a dropped file and sends that file', async () => {
+    render(<ForecastWorkspace />);
+    const dropped = new File(['xlsx'], 'dropped.xlsx');
+    fireEvent.drop(screen.getByTestId('forecast-drop-zone'), { dataTransfer: { files: [dropped] } });
+    expect(screen.getByText('selectedFile')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'inspect' }));
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(mockFetch.mock.calls[0][1].body).toBe(dropped);
+  });
+  it('rejects a dropped non-xlsx file before any request', () => {
+    render(<ForecastWorkspace />);
+    fireEvent.drop(screen.getByTestId('forecast-drop-zone'), { dataTransfer: { files: [new File(['x'], 'plan.xls')] } });
+    expect(screen.getByText('errors.invalid_filename')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'inspect' })).toBeDisabled();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
   it('has matching Korean/Vietnamese translation keys', () => {
     const keys = (value: object, prefix = ''): string[] => Object.entries(value).flatMap(([key, child]) => typeof child === 'object' ? keys(child, prefix + key + '.') : [prefix + key]);
     expect(keys(ko).sort()).toEqual(keys(vi).sort());

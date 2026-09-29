@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Checkbox, Col, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { InboxOutlined } from '@ant-design/icons';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useFactory } from '@/contexts/FactoryContext';
 import { authFetch } from '@/lib/authFetch';
@@ -22,6 +23,7 @@ export default function ForecastWorkspace() {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [issuesOnly, setIssuesOnly] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const requestRef = useRef<AbortController | null>(null);
   const currentFactory = useRef(factoryId);
   currentFactory.current = factoryId;
@@ -39,6 +41,13 @@ export default function ForecastWorkspace() {
   const problem = (q: ForecastQuantity) => q.state !== 'number' || (q.quantity !== null && !Number.isInteger(q.quantity));
   const quantities = selectedRows.flatMap(row => row.quantities);
   const numberFormat = new Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'ko-KR', { maximumFractionDigits: 10 });
+
+  /** Picker and drop share one gate: wrong type or size never reaches the server. */
+  function choose(next: File | null) {
+    requestRef.current?.abort(); setLoading(false); setPreview(null); setError('');
+    if (next && (next.size > MAX_BYTES || !/\.xlsx$/i.test(next.name))) { setFile(null); setError(next.size > MAX_BYTES ? 'file_too_large' : 'invalid_filename'); return; }
+    setFile(next);
+  }
 
   async function inspect() {
     if (!file || !factoryId) return;
@@ -85,12 +94,18 @@ export default function ForecastWorkspace() {
     <Alert type="info" showIcon message={t('stage')} description={t('stageDescription')} />
     <Card title={t('upload')}>
       <Space direction="vertical" className={styles.fullWidth}>
-        <label className={styles.fileLabel}>{t('selectFile')}<input key={factoryId} type="file" accept=".xlsx" aria-label={t('selectFile')} disabled={loading || !factoryId} onChange={event => {
-          requestRef.current?.abort(); setLoading(false); setPreview(null); setError('');
-          const next = event.target.files?.[0] ?? null;
-          if (next && (next.size > MAX_BYTES || !/\.xlsx$/i.test(next.name))) { setFile(null); setError(next.size > MAX_BYTES ? 'file_too_large' : 'invalid_filename'); return; }
-          setFile(next);
-        }} /></label>
+        <label
+          className={`${styles.dropZone}${dragging ? ` ${styles.dropZoneActive}` : ''}${loading || !factoryId ? ` ${styles.dropZoneDisabled}` : ''}`}
+          data-testid="forecast-drop-zone"
+          onDragOver={event => { event.preventDefault(); if (!loading && factoryId) setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={event => { event.preventDefault(); setDragging(false); if (!loading && factoryId) choose(event.dataTransfer.files?.[0] ?? null); }}>
+          <input key={factoryId} className={styles.fileInput} type="file" accept=".xlsx" aria-label={t('selectFile')} disabled={loading || !factoryId}
+            onChange={event => choose(event.target.files?.[0] ?? null)} />
+          <InboxOutlined className={styles.dropIcon} aria-hidden />
+          <span className={styles.dropTitle}>{t('dropTitle')}</span>
+          {file ? <Tag color="blue">{t('selectedFile', { name: file.name })}</Tag> : <span className={styles.secondary}>{t('noFile')}</span>}
+        </label>
         <Typography.Text type="secondary">{t('uploadHelp')}</Typography.Text>
         <Button type="primary" onClick={inspect} loading={loading} disabled={!file || !factoryId}>{t('inspect')}</Button>
         {error && <Alert type="error" showIcon message={t(`errors.${error}`, { defaultValue: t('errors.preview_failed') })} />}
