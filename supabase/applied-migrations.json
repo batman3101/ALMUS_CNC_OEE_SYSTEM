@@ -1,5 +1,5 @@
 {
-  "note": "운영(wmtkkefsorrdlzprhlpr) 적용 원장 — MCP list_migrations 스냅샷. 파일명 타임스탬프와 적용 version 이 다르므로(런북 0절, db push 금지) 이름 기준으로 대조한다. 갱신: 마이그레이션을 적용한 세션이 applied 배열과 hashes(적용 시점 파일 sha256-16) 를 함께 갱신한다. 검사: npm run check:migrations (미적용 = 실패, 적용 후 파일 내용 드리프트 = 경고). | 2026-08-25: 공장 다중화 21개 운영 적용. baseline 3개는 **실행하지 않고** 원장에만 기록했다(migration repair 상당) — 그 파일들은 운영 스키마의 재구성본이고 마지막 줄의 `grant all ... to anon` 이 의도적 권한 회수를 되돌리기 때문이다. | 2026-09-28: Layout 계획 3개(tables·rpcs·alt_w39) 운영 적용(사용자 승인). 반쪽 배정 완화 20260928100000 도 별도 승인 후 운영 적용(v20260928005906), 운영 L1–L11 PASS. | 2026-09-28: Codex 감사 DB-01 — enforce_write_boundary·close_shift_source_completeness·settings_batch_update·revoke_public_execute_sweep 의 version 을 운영 schema_migrations 값으로 정정(기록만, DB 변경 없음). | 2026-09-28: layout_planning_audit_fixes 운영 적용(승인, v20260928013937), 운영 L1–L12 PASS. | 2026-09-28: layout_setup_tasks_follow_confirmed_plan 운영 적용(승인, v20260928100416) — Codex 재감사 F-01·F-02, 함수 본문 md5 로컬 일치, 운영 L1–L17 PASS·흔적 0.",
+  "note": "운영(wmtkkefsorrdlzprhlpr) 적용 원장 — MCP list_migrations 스냅샷. 파일명 타임스탬프와 적용 version 이 다르므로(런북 0절, db push 금지) 이름 기준으로 대조한다. 갱신: 마이그레이션을 적용한 세션이 applied 배열과 hashes(적용 시점 파일 sha256-16) 를 함께 갱신한다. 검사: npm run check:migrations (미적용 = 실패, 적용 후 파일 내용 드리프트 = 경고). | 2026-08-25: 공장 다중화 21개 운영 적용. baseline 3개는 **실행하지 않고** 원장에만 기록했다(migration repair 상당) — 그 파일들은 운영 스키마의 재구성본이고 마지막 줄의 `grant all ... to anon` 이 의도적 권한 회수를 되돌리기 때문이다. | 2026-09-28: Layout 계획 3개(tables·rpcs·alt_w39) 운영 적용(사용자 승인). 반쪽 배정 완화 20260928100000 도 별도 승인 후 운영 적용(v20260928005906), 운영 L1–L11 PASS. | 2026-09-28: Codex 감사 DB-01 — enforce_write_boundary·close_shift_source_completeness·settings_batch_update·revoke_public_execute_sweep 의 version 을 운영 schema_migrations 값으로 정정(기록만, DB 변경 없음). | 2026-09-28: layout_planning_audit_fixes 운영 적용(승인, v20260928013937), 운영 L1–L12 PASS. | 2026-09-28: layout_setup_tasks_follow_confirmed_plan 운영 적용(승인, v20260928100416) — Codex 재감사 F-01·F-02, 함수 본문 md5 로컬 일치, 운영 L1–L17 PASS·흔적 0. | 2026-09-29: forecast_submissions 운영 적용(승인, v20260929031221) — 새 테이블만, RLS on·정책 없음·service_role 전용 확인.",
   "snapshot_at": "2026-09-28T01:40:43.947Z",
   "hashes": {
     "20251116070000_create_system_settings_audit_table": "02a1488bae1ef176",
@@ -94,7 +94,8 @@
     "20260928130000_layout_walkways": "d5317e811ef37d6b",
     "20260928140000_layout_setup_completion_applies": "aa04c631dfba012a",
     "20260928150000_layout_geometry_alv": "e6cc62393a8b8174",
-    "20260928160000_layout_setup_tasks_follow_confirmed_plan": "7493004623c34c4a"
+    "20260928160000_layout_setup_tasks_follow_confirmed_plan": "7493004623c34c4a",
+    "20260929100000_forecast_submissions": "00e786a5636a9579"
   },
   "applied": [
     {
@@ -592,6 +593,10 @@
     {
       "version": "20260928100416",
       "name": "layout_setup_tasks_follow_confirmed_plan"
+    },
+    {
+      "version": "20260929031221",
+      "name": "forecast_submissions"
     }
   ],
   "file_matches": {
