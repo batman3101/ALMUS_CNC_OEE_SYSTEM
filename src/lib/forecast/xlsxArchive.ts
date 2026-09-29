@@ -5,7 +5,7 @@ const MAX_EXPANDED_BYTES = 32 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 16 * 1024 * 1024;
 
 export class ForecastInputError extends Error {
-  constructor(public readonly code: string, public readonly status: 400 | 413 | 422 = 422) {
+  constructor(public readonly code: string, public readonly status: 400 | 409 | 413 | 422 = 422) {
     super(code);
     this.name = 'ForecastInputError';
   }

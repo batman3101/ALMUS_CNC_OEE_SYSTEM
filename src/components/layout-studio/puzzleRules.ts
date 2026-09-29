@@ -3,6 +3,7 @@
  *
  * 추천 알고리즘(src/lib/layout-planning/recommendLayout.ts)과 같은 규칙을 화면에서 끌어 놓는 순간에 보여 준다:
  *   · 섬 금지 — 같은 모델·공정 무리에 붙어야 한다(같은 열 이어서 · 마주본 열 · 등 맞닿은 옆 열, 행이 겹침)
+ *   · 빼 오는 쪽도 섬 금지 — 원래 자리의 무리가 갈라지면 안 된다(split, 사용자 결정 2026-09-29)
  *   · 열은 최대 2조각(이미 더 쪼개진 열은 더 쪼개지 않음) · 열 중간 끼워넣기 금지
  *   · 한 동선 = 한 공정 — 공정이 섞이면 경고(막지는 않는다)
  * 판정은 막지 않고 보여 주기만 한다. 사람이 판단해 놓을 수 있어야 하기 때문이다(붙일 자리가 없는 부족은 사용자가
@@ -24,7 +25,7 @@ export type PieceKey = string | null;
 export type PuzzleState = ReadonlyMap<number, PieceKey>;
 
 export type Level = 'good' | 'warn' | 'bad';
-export type Reason = 'island' | 'middle' | 'three_pieces' | 'mixed_process';
+export type Reason = 'island' | 'split' | 'middle' | 'three_pieces' | 'mixed_process';
 
 export const pieceKey = (model: string, process: string): PieceKey => (model ? `${model}\u0000${process}` : null);
 const processOf = (key: PieceKey) => (key ? key.slice(key.indexOf('\u0000') + 1) : null);
@@ -118,6 +119,10 @@ export class PuzzleBoard {
           .some(id => state.get(id) === key && Math.abs(this.byId.get(id)!.y - y) <= this.tolerance));
       });
       if (!attached) reasons.add('island');
+    }
+    // 빼 오는 쪽: 놓는 자리에 있던 모델·공정이 이 때문에 더 갈라지면 안 된다.
+    for (const displaced of new Set(targets.map(t => state.get(t)).filter((k): k is string => !!k && k !== key))) {
+      if (this.groupsOf(after, displaced) > this.groupsOf(state, displaced)) reasons.add('split');
     }
     if (reasons.size) return { level: 'bad', reasons: [...reasons] };
 

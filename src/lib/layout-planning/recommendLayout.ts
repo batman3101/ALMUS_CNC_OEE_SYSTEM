@@ -1,6 +1,5 @@
 import type { ForecastSnapshotMachine } from '@/types/forecast';
 import { hasUnreadableDemand, type ModelProcessRequirement } from '@/lib/forecast/requiredMachines';
-import type { WeeklyModelDemand } from '@/lib/forecast/weeklyDemand';
 
 /**
  * Drawing position of one machine (layout geometry). Cell grid, not physical distance.
@@ -18,7 +17,7 @@ export interface Assignment { modelId: string | null; processId: string | null }
 export interface LayoutMove {
   machineId: string; machineName: string;
   from: Assignment; to: { modelId: string; processId: string };
-  reason: MoveReason; nextWeekDemand: boolean;
+  reason: MoveReason;
 }
 export interface LayoutRecommendation {
   moves: LayoutMove[];
@@ -31,13 +30,19 @@ export interface RecommendInput {
   positions: ReadonlyMap<string, MachinePosition>;
   /** Machines the user pinned; never moved and never taken from. */
   locked: ReadonlySet<string>;
-  nextWeekDemands: WeeklyModelDemand[];
   /** processId → process name ('CNC1', 'CNC2', …) for the "one process per walkway" rule. Falls back to the id. */
   processNames?: ReadonlyMap<string, string>;
 }
 
+type Tier = Record<MoveReason, number>;
 /** Proven pool order (PRD 6.3, reassignment.ts): take from surplus, then idle machines, then zero-demand groups. */
-const TIER: Record<MoveReason, number> = { surplus_release: 0, unassigned_fill: 1, zero_demand_release: 2 };
+const TIER: Tier = { surplus_release: 0, unassigned_fill: 1, zero_demand_release: 2 };
+/** Source orders the walkway plan is tried under (see recommendLayout). The proven order first, so it wins ties. */
+const TIER_ORDERS: Tier[] = [
+  TIER,
+  { surplus_release: 2, unassigned_fill: 1, zero_demand_release: 0 },   // zero-demand groups first
+  { surplus_release: 0, unassigned_fill: 0, zero_demand_release: 0 },   // no source order
+];
 /** Another building is "far" whatever the coordinates say; used before any cross-building move is considered. */
 const OTHER_BUILDING = 1e6;
 
@@ -64,7 +69,7 @@ function distance(a: MachinePosition, b: MachinePosition): number {
 
 const groupKey = (modelId: string, processId: string) => `${modelId}\u0000${processId}`;
 
-interface Candidate { machine: ForecastSnapshotMachine; reason: MoveReason; group: string | null; nextWeekDemand: boolean }
+interface Candidate { machine: ForecastSnapshotMachine; reason: MoveReason; group: string | null }
 
 /**
  * Minimal-change recommendation with spatial grouping (user requirement 2026-09-25).
@@ -72,7 +77,8 @@ interface Candidate { machine: ForecastSnapshotMachine; reason: MoveReason; grou
  * Change count is fixed by the shortages: one moved machine fills one missing unit, and no machine is
  * moved unless a shortage needs it (surplus alone is kept — PRD 6.5). What this adds over the
  * quantity-only proposal is *which* machine moves:
- *   1. tier first — the proven order, with next-week-demand machines last (PRD 6.3);
+ *   1. tier first — the proven order (surplus, unassigned, zero demand). Next week's demand is not used: the
+ *      Forecast beyond the week being planned changes too much to protect machines for it (user decision 2026-09-29);
  *   2. within a tier, the machine closest to the short group as it grows, so the group stays together
  *      (a brand-new group starts where the most usable machines touch, so it has room to grow);
  *   3. then the machine with the fewest neighbours of its own group — releasing from the edge keeps the
@@ -85,18 +91,41 @@ export function recommendLayout(input: RecommendInput): LayoutRecommendation {
   // Walkway rules only when the whole drawing carries them; a half-known drawing would mix two rule sets.
   const walkwayMode = placed.length > 0 && placed.every(m => !!input.positions.get(m.id)?.walkway && !!input.positions.get(m.id)?.side);
   if (!walkwayMode) return recommendByDistance(input);
+  const short = (r: LayoutRecommendation) => r.unresolved.reduce((sum, u) => sum + u.remaining, 0);
   // Rule 3 guard (user decision 2026-09-28): converting a whole column beyond the need is allowed only when the
   // spare machines can still cover every shortage. Compared on the whole plan, because whether an excess starves
   // another model only shows once every shortage has been tried.
-  const withExcess = recommendByWalkway(input, true);
-  const short = (r: LayoutRecommendation) => r.unresolved.reduce((sum, u) => sum + u.remaining, 0);
-  if (!short(withExcess)) return withExcess;
-  const withoutExcess = recommendByWalkway(input, false);
-  return short(withoutExcess) < short(withExcess) ? withoutExcess : withExcess;
+  const plan = (tier: Tier) => {
+    const withExcess = recommendByWalkway(input, true, tier);
+    if (!short(withExcess)) return withExcess;
+    const withoutExcess = recommendByWalkway(input, false, tier);
+    return short(withoutExcess) < short(withExcess) ? withoutExcess : withExcess;
+  };
+  // Scarce sources (user decision 2026-09-29, W41 ON1/PA1): shortages are filled largest first, so a fixed source order
+  // lets an early shortage spend a surplus that a later one could only attach to — and no single order wins every week
+  // (measured on W40–W42). So the plan is computed under each source order and the one with the fewest machines left
+  // short wins; then the fewest machines placed into a mixed-process walkway; then the fewest changes. Ties keep the
+  // proven order, which comes first.
+  const mixedPlacements = (r: LayoutRecommendation) => {
+    const after = new Map(placed.map(m => [m.id, m.processId]));
+    for (const mv of r.moves) after.set(mv.machineId, mv.to.processId);
+    const processesOf = new Map<string, Set<string>>();
+    for (const [id, processId] of after) {
+      const walkway = input.positions.get(id)!.walkway!;
+      if (!processesOf.has(walkway)) processesOf.set(walkway, new Set());
+      if (processId) processesOf.get(walkway)!.add(input.processNames?.get(processId) ?? processId);
+    }
+    return r.moves.filter(mv => (processesOf.get(input.positions.get(mv.machineId)!.walkway!)?.size ?? 0) > 1).length;
+  };
+  const scored = TIER_ORDERS.map(tier => {
+    const r = plan(tier);
+    return { r, key: [short(r), mixedPlacements(r), r.moves.length] };
+  });
+  scored.sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1] || a.key[2] - b.key[2]);
+  return scored[0].r;
 }
 
-function recommendByDistance({ requirements, machines, positions, locked, nextWeekDemands }: RecommendInput): LayoutRecommendation {
-  const nextWeek = new Set(nextWeekDemands.filter(d => d.peakQuantity > 0).map(d => d.model));
+function recommendByDistance({ requirements, machines, positions, locked }: RecommendInput): LayoutRecommendation {
   const usable = machines.filter(m => m.isActive && !locked.has(m.id));
 
   // Current members per group (active machines only), used both to grow short groups and to judge edges.
@@ -117,13 +146,12 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
     const key = groupKey(row.dbModel.id, row.processId);
     quota.set(key, -row.gap);
     const reason: MoveReason = row.status === 'surplus' ? 'surplus_release' : 'zero_demand_release';
-    const nextWeekDemand = row.forecastModel !== null && nextWeek.has(row.forecastModel);
     for (const machine of usable) {
-      if (machine.modelId === row.dbModel.id && machine.processId === row.processId) pool.push({ machine, reason, group: key, nextWeekDemand });
+      if (machine.modelId === row.dbModel.id && machine.processId === row.processId) pool.push({ machine, reason, group: key });
     }
   }
   for (const machine of usable) {
-    if (!machine.modelId || !machine.processId) pool.push({ machine, reason: 'unassigned_fill', group: null, nextWeekDemand: false });
+    if (!machine.modelId || !machine.processId) pool.push({ machine, reason: 'unassigned_fill', group: null });
   }
 
   const shortages = requirements
@@ -169,7 +197,7 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
     while (shortage.remaining > 0) {
       const eligible = pool.filter(c => !used.has(c.machine.id) && (c.group === null || (quota.get(c.group) ?? 0) > 0));
       if (!eligible.length) break;
-      const scored = eligible.map(c => ({ c, key: [Number(c.nextWeekDemand), TIER[c.reason], placementCost(c, eligible), sameGroupNeighbours(c)] }));
+      const scored = eligible.map(c => ({ c, key: [TIER[c.reason], placementCost(c, eligible), sameGroupNeighbours(c)] }));
       scored.sort((a, b) => {
         for (let i = 0; i < a.key.length; i++) if (a.key[i] !== b.key[i]) return a.key[i] - b.key[i];
         return a.c.machine.name.localeCompare(b.c.machine.name);
@@ -188,7 +216,7 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
         machineId: pick.machine.id, machineName: pick.machine.name,
         from: { modelId: pick.machine.modelId, processId: pick.machine.processId },
         to: { modelId: shortage.modelId, processId: shortage.processId },
-        reason: pick.reason, nextWeekDemand: pick.nextWeekDemand,
+        reason: pick.reason,
       });
       shortage.remaining--;
     }
@@ -215,8 +243,7 @@ function recommendByDistance({ requirements, machines, positions, locked, nextWe
 
 interface Block { ids: string[]; key: number[]; firstName: string }
 
-function recommendByWalkway({ requirements, machines, positions, locked, nextWeekDemands, processNames }: RecommendInput, allowExcess: boolean): LayoutRecommendation {
-  const nextWeek = new Set(nextWeekDemands.filter(d => d.peakQuantity > 0).map(d => d.model));
+function recommendByWalkway({ requirements, machines, positions, locked, processNames }: RecommendInput, allowExcess: boolean, tier: Tier): LayoutRecommendation {
   const active = machines.filter(m => m.isActive && positions.has(m.id));
   const byId = new Map(active.map(m => [m.id, m]));
 
@@ -266,13 +293,12 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
     const key = groupKey(row.dbModel.id, row.processId);
     quota.set(key, -row.gap);
     const reason: MoveReason = row.status === 'surplus' ? 'surplus_release' : 'zero_demand_release';
-    const nextWeekDemand = row.forecastModel !== null && nextWeek.has(row.forecastModel);
     for (const m of active) {
-      if (!locked.has(m.id) && m.modelId === row.dbModel.id && m.processId === row.processId) pool.set(m.id, { machine: m, reason, group: key, nextWeekDemand });
+      if (!locked.has(m.id) && m.modelId === row.dbModel.id && m.processId === row.processId) pool.set(m.id, { machine: m, reason, group: key });
     }
   }
   for (const m of active) {
-    if (!locked.has(m.id) && (!m.modelId || !m.processId)) pool.set(m.id, { machine: m, reason: 'unassigned_fill', group: null, nextWeekDemand: false });
+    if (!locked.has(m.id) && (!m.modelId || !m.processId)) pool.set(m.id, { machine: m, reason: 'unassigned_fill', group: null });
   }
 
   const shortages = requirements
@@ -312,6 +338,34 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
   /** Two machines are side by side when their rows overlap — one row pitch of tolerance (72 on a 62-high box). */
   const tolerance = Math.max(...active.map(m => positions.get(m.id)!.height)) * 1.3;
 
+  // Members of each model·process as moves are made, for the source-side island check below.
+  const membersOf = new Map<string, Set<string>>();
+  for (const [id, g] of current) if (g) { if (!membersOf.has(g)) membersOf.set(g, new Set()); membersOf.get(g)!.add(id); }
+  const columnOf = new Map<string, string>();
+  for (const [column, ids] of columns) for (const id of ids) columnOf.set(id, column);
+  /**
+   * Pieces a model·process forms without `leaving`: next to each other in one column, or rows overlapping in the
+   * facing / back-to-back column. Same connectivity as the attach rule and as puzzleRules.groupsOf on the screen.
+   */
+  const piecesOf = (group: string, leaving: ReadonlySet<string>) => {
+    const members = [...(membersOf.get(group) ?? [])].filter(id => !leaving.has(id));
+    const set = new Set(members);
+    const parent = new Map(members.map(id => [id, id]));
+    const find = (id: string): string => { while (parent.get(id) !== id) id = parent.get(id)!; return id; };
+    const join = (a: string, b: string) => parent.set(find(a), find(b));
+    for (const id of members) {
+      const column = columnOf.get(id)!, ids = columns.get(column)!;
+      const next = ids[ids.indexOf(id) + 1];
+      if (next !== undefined && set.has(next)) join(id, next);
+      const y = positions.get(id)!.y;
+      for (const c of neighbourColumns(column)) {
+        for (const other of columns.get(c)!) if (set.has(other) && Math.abs(positions.get(other)!.y - y) <= tolerance) join(id, other);
+      }
+    }
+    return new Set(members.map(find)).size;
+  };
+  const NONE: ReadonlySet<string> = new Set();
+
   for (const shortage of shortages) {
     const target = groupKey(shortage.modelId, shortage.processId);
     const targetProcess = processOf(target);
@@ -329,6 +383,8 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
       const touches = (column: string, top: number, bottom: number) => columns.get(column)!
         .some(id => current.get(id) === target && positions.get(id)!.y >= top - tolerance && positions.get(id)!.y <= bottom + tolerance);
       const blocks: Block[] = [];
+      const piecesNow = new Map<string, number>();
+      const piecesBefore = (g: string) => { if (!piecesNow.has(g)) piecesNow.set(g, piecesOf(g, NONE)); return piecesNow.get(g)!; };
 
       for (const [column, ids] of columns) {
         const walkway = walkwayOf(column);
@@ -360,6 +416,9 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
             const attached = !hasMembers || ids.some(id => current.get(id) === target)
               || neighbourColumns(column).some(c => touches(c, span.top, span.bottom));
             if (!attached) continue;
+            // No islands on the source side either (user decision 2026-09-29, W42 H8 SUB): taking a block must not split
+            // what stays behind — e.g. a whole column that was the bridge between two columns of its group.
+            if ([...taken.keys()].some(g => piecesOf(g, range) > piecesBefore(g))) continue;
             // Where a new group starts, it needs room to grow: what it could still take here and next door, each source
             // counted only up to what that source can still give (a surplus of 2 is 2, however many machines it has).
             const room = hasMembers ? need : roomAround(column, available);
@@ -371,13 +430,14 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
             blocks.push({
               ids: [...range], firstName: byId.get(ids[i])!.name,
               key: [
-                Math.max(...picked.map(c => Number(c.nextWeekDemand))),   // next-week demand last (PRD 6.3)
+                // Rule 1 first (user decision 2026-09-29): keeping the walkway to one process outranks everything below —
+                // source order and room were winning, and mixed walkways that had a clean option.
+                Number(otherProcess > 0),
                 // A new group's start decides whether it can grow as one group at all (no islands), so room comes
                 // before the source order — starting on 2 surplus machines with nowhere to grow strands the rest.
                 Math.max(0, need - room),
-                Math.max(...picked.map(c => TIER[c.reason])),             // proven source order
-                Number(otherProcess > 0),                                 // rule 1: the walkway stays one process
-                Number(!wholeColumn),                                     // rule 2: a whole side before an end block
+                Math.max(...picked.map(c => tier[c.reason])),             // source order (the one this pass tries)
+                Number(!wholeColumn),                                   // rule 2: a whole side before an end block
                 otherProcess,                                             // less process mixing
                 otherModel,                                               // then less model mixing
                 Math.max(0, excess),                                      // least excess
@@ -397,12 +457,16 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
         const pick = pool.get(id)!;
         used.add(id);
         if (pick.group) quota.set(pick.group, (quota.get(pick.group) ?? 0) - 1);
+        const was = current.get(id);
+        if (was) membersOf.get(was)?.delete(id);
+        if (!membersOf.has(target)) membersOf.set(target, new Set());
+        membersOf.get(target)!.add(id);
         current.set(id, target);
         moves.push({
           machineId: id, machineName: pick.machine.name,
           from: { modelId: pick.machine.modelId, processId: pick.machine.processId },
           to: { modelId: shortage.modelId, processId: shortage.processId },
-          reason: pick.reason, nextWeekDemand: pick.nextWeekDemand,
+          reason: pick.reason,
         });
         shortage.remaining--;
       }

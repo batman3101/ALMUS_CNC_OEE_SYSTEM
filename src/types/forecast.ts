@@ -52,6 +52,8 @@ export interface FactoryForecastPreview extends ForecastPreview {
   fileName: string;
   capacityPolicy: ForecastCapacityPolicy;
   capacitySnapshot: ForecastCapacitySnapshot;
+  /** Set when this preview is the factory's accepted Forecast (forecast_submissions); absent for an unsaved inspection. */
+  submission?: { submittedAt: string };
 }
 
 export type ForecastCapacityPolicy = { status: 'unavailable' } | {

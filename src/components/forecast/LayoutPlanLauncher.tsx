@@ -20,8 +20,8 @@ interface SavedMapping { forecastModelKey: string; productModelId: string }
  * (decision 2026-09-25: the field abbreviates model names, so the user confirms pairings here and they are
  * reused for later forecasts of this factory).
  */
-export default function LayoutPlanLauncher({ preview, week, demands, nextWeekDemands }: {
-  preview: FactoryForecastPreview; week: ForecastWeek; demands: WeeklyModelDemand[]; nextWeekDemands: WeeklyModelDemand[];
+export default function LayoutPlanLauncher({ preview, week, demands }: {
+  preview: FactoryForecastPreview; week: ForecastWeek; demands: WeeklyModelDemand[];
 }) {
   const { t } = useTranslation('forecast');
   const router = useRouter();
@@ -75,7 +75,7 @@ export default function LayoutPlanLauncher({ preview, week, demands, nextWeekDem
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: `${week.label} · ${preview.fileName}`, forecastFileName: preview.fileName, forecastFileHash: preview.sourceHash,
-          week: { key: week.key, start: week.start, end: week.end }, demands, nextWeekDemands, acknowledgeUnmapped, acknowledgeMissingProcesses,
+          week: { key: week.key, start: week.start, end: week.end }, demands, acknowledgeUnmapped, acknowledgeMissingProcesses,
         }),
       });
       const body = await response.json();

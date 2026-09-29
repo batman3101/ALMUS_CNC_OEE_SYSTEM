@@ -45,7 +45,7 @@ const fill = (n: number, model: string, process: Proc): Array<[string, Proc]> =>
 const run = (columns: Column[], requirements: ModelProcessRequirement[]) => {
   const { machines, positions, processNames } = build(columns);
   for (const r of requirements) if (r.processId) processNames.set(r.processId, r.process);
-  return recommendLayout({ requirements, machines, positions, processNames, locked: new Set(), nextWeekDemands: [] });
+  return recommendLayout({ requirements, machines, positions, processNames, locked: new Set() });
 };
 const movedTo = (result: ReturnType<typeof recommendLayout>, model: string) =>
   result.moves.filter(mv => mv.to.modelId === model).map(mv => mv.machineName).sort();
@@ -231,5 +231,54 @@ describe('동선 기준 추천', () => {
     ], [req('X', 'CNC1', 10, 8, 'shortage'), req('W', 'CNC1', 10, 8, 'shortage'), req('H', 'CNC1', 0, 8, 'zero_demand')]);
     expect(result.moves).toHaveLength(2);
     expect(result.unresolved.reduce((s, u) => s + u.remaining, 0)).toBe(2);
+  });
+
+  it('빼 오는 쪽도 섬 금지: 무리를 잇는 다리 열을 빼 가서 남은 무리가 갈라지면 안 된다 (W42 H8 SUB 사례, 사용자 결정 2026-09-29)', () => {
+    // S 16대(여유 6)가 동선 9 R · 동선 10 L · 동선 10 R 아래 4대로 한 무리. 동선 10 L 이 동선 9 R(등)과
+    // 동선 10 R(맞은편)을 잇는 다리다. T 는 동선 10 R 위 2대에서 6대 부족.
+    // 다리(동선 10 L)를 통째로 가져가면 남은 S 가 동선 9 R 과 동선 10 R 로 갈라진다 → 대신 동선 10 R 을 채우고
+    // 모자란 2대는 다리 열의 끝 블록에서 가져온다(남은 S 는 동선 9 R 과 등으로 이어져 한 무리).
+    const s = (n: number) => fill(n, 'S', 'CNC1') as Array<[string, Proc] | null>;
+    const result = run([
+      { walkway: 9, side: 'R', cells: s(6) },
+      { walkway: 10, side: 'L', cells: s(6) },
+      { walkway: 10, side: 'R', cells: [['T', 'CNC1'], ['T', 'CNC1'], ...s(4)] },
+    ], [req('T', 'CNC1', 8, 2, 'shortage'), req('S', 'CNC1', 10, 16, 'surplus')]);
+    expect(movedTo(result, 'T')).toEqual(['10L00', '10L01', '10R02', '10R03', '10R04', '10R05']);
+    expect(result.unresolved).toEqual([]);
+  });
+
+  it('한 동선 = 한 공정이 출처 순서(여유 먼저)보다 먼저다 (사용자 결정 2026-09-29, W41 A-01-U 사례)', () => {
+    // T(CNC1) 가 동선 3 L 에서 4대 부족. 붙을 수 있는 곳은 맞은편 동선 3 R(N, CNC1, 수요 0)과
+    // 등 맞닿은 동선 2 R(Z, CNC2, 여유). 출처 순서로는 여유(Z)가 먼저지만 Z 를 쓰면 동선 2 에 CNC1 이 섞인다.
+    const result = run([
+      { walkway: 2, side: 'L', cells: fill(8, 'Y', 'CNC2') },
+      { walkway: 2, side: 'R', cells: fill(8, 'Z', 'CNC2') },
+      { walkway: 3, side: 'L', cells: fill(8, 'T', 'CNC1') },
+      { walkway: 3, side: 'R', cells: fill(8, 'N', 'CNC1') },
+    ], [
+      req('T', 'CNC1', 12, 8, 'shortage'), req('N', 'CNC1', 0, 8, 'zero_demand'),
+      req('Z', 'CNC2', 4, 8, 'surplus'), req('Y', 'CNC2', 8, 8, 'ok'),
+    ]);
+    expect(movedTo(result, 'T').every(name => name.startsWith('03R'))).toBe(true);
+    expect(movedTo(result, 'T')).toHaveLength(4);
+  });
+
+  it('희소한 여유를 큰 부족이 먼저 다 쓰지 않는다 — 출처 순서를 바꿔 계산해 부족이 적은 안을 고른다 (W41 ON1/PA1 사례, 사용자 결정 2026-09-29)', () => {
+    // A(동선 1 R) 3대 부족, B(동선 2 R) 2대 부족 — 큰 A 가 먼저 차례다.
+    // A 는 맞은편 Z(수요 0, 4대)와 등 맞닿은 S(여유 2대)에 붙을 수 있고, B 는 맞은편 S 에만 붙을 수 있다.
+    // '여유 먼저'로만 계산하면 A 가 S 의 여유 2대를 다 써서 B 가 부족으로 남는다. A 가 Z 를 쓰면 둘 다 채워진다.
+    const result = run([
+      { walkway: 1, side: 'L', cells: fill(4, 'Z', 'CNC1') },
+      { walkway: 1, side: 'R', cells: fill(4, 'A', 'CNC1') },
+      { walkway: 2, side: 'L', cells: fill(4, 'S', 'CNC1') },
+      { walkway: 2, side: 'R', cells: fill(4, 'B', 'CNC1') },
+    ], [
+      req('A', 'CNC1', 7, 4, 'shortage'), req('B', 'CNC1', 6, 4, 'shortage'),
+      req('S', 'CNC1', 2, 4, 'surplus'), req('Z', 'CNC1', 0, 4, 'zero_demand'),
+    ]);
+    expect(result.unresolved).toEqual([]);
+    expect(movedTo(result, 'B').every(name => name.startsWith('02L'))).toBe(true);
+    expect(movedTo(result, 'A').every(name => name.startsWith('01L'))).toBe(true);
   });
 });

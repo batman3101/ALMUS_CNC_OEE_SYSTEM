@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
       forecastFileHash: text(body.forecastFileHash, 'invalid_file_hash', 128),
       week: { key: text(week.key, 'invalid_week', 20), start: week.start as string, end: week.end as string },
       demands: array(body.demands, 'invalid_demands', 500, demand),
-      nextWeekDemands: body.nextWeekDemands === undefined ? [] : array(body.nextWeekDemands, 'invalid_demands', 500, demand),
       lockedMachineIds: body.lockedMachineIds === undefined ? [] : array(body.lockedMachineIds, 'invalid_locks', 2000, v => uuid(v, 'invalid_locks')),
       acknowledgeUnmapped: body.acknowledgeUnmapped === true,
       acknowledgeMissingProcesses: body.acknowledgeMissingProcesses === true,

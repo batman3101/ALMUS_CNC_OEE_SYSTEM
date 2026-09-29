@@ -47,7 +47,7 @@ describe('plan draft payload', () => {
 
   it('builds requirement rows (with CNC #0 when the model has it) and moves only what a shortage needs', () => {
     const draft = buildPlanDraft({
-      demands: [demand('ON 1', 260), demand('M3', 0)], nextWeekDemands: [], snapshotModels: models, machines, positions,
+      demands: [demand('ON 1', 260), demand('M3', 0)], snapshotModels: models, machines, positions,
       mappings: [], breakMinutes: 110, locked: new Set(),
     });
     // ON1 CNC1: 260 / 130 per day = 2 needed, 1 present → 1 short; CNC2: 2 short. M3 zero demand → pool.
@@ -62,7 +62,7 @@ describe('plan draft payload', () => {
 
   it('merges two forecast names that point at one model by adding their peaks (conservative) and joins the labels', () => {
     const draft = buildPlanDraft({
-      demands: [demand('ON 1', 100), demand('ON-ONE', 160)], nextWeekDemands: [], snapshotModels: models, machines, positions,
+      demands: [demand('ON 1', 100), demand('ON-ONE', 160)], snapshotModels: models, machines, positions,
       mappings: [{ forecastModelKey: 'ON-ONE', productModelId: 'on1' }], breakMinutes: 110, locked: new Set(),
     });
     const on1 = draft.requirements.find(r => r.process_id === 'on1-CNC #1')!;
@@ -72,7 +72,7 @@ describe('plan draft payload', () => {
 
   it('keeps locked machines where they are and records them as locked', () => {
     const draft = buildPlanDraft({
-      demands: [demand('ON 1', 260), demand('M3', 0)], nextWeekDemands: [], snapshotModels: models, machines, positions,
+      demands: [demand('ON 1', 260), demand('M3', 0)], snapshotModels: models, machines, positions,
       mappings: [], breakMinutes: 110, locked: new Set(['CNC-002']),
     });
     expect(draft.assignments.find(a => a.machine_id === 'CNC-002')).toEqual({

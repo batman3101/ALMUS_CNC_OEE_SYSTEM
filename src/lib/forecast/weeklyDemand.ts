@@ -36,6 +36,22 @@ export function groupWeeks(dates: string[]): ForecastWeek[] {
 }
 
 /**
+ * Week the simulation opens on (user decision 2026-09-29): next week, because changeovers are prepared a week
+ * ahead. When the file does not reach next week, its last week. `today` is a plant-local YYYY-MM-DD date.
+ */
+export function defaultSimulationWeek(weeks: ForecastWeek[], today: string): ForecastWeek | undefined {
+  const nextMonday = iso(utc(isoWeek(today).monday) + 7 * DAY);
+  return weeks.find(w => w.start === nextMonday) ?? weeks.at(-1);
+}
+
+/** Today's calendar date in the plant's timezone; the browser's own date when the timezone is unknown or invalid. */
+export function plantToday(timezone: string | null, now = new Date()): string {
+  try { if (timezone) return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now); }
+  catch { /* fall through to the browser date */ }
+  return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+/**
  * Peak daily quantity per model inside one week (user decision 2026-09-25: the week's busiest day,
  * not its total or average). Same-model rows are summed per date first (PRD 6.2).
  * Blank = 0; error cells are counted and flagged, never silently zero; fractions round up.

@@ -52,6 +52,7 @@ const POLICY: Record<string, Record<string, string>> = {
   // Forecast Excel 접수 미리보기(파일 파싱 + 공장 CAPA 스냅샷 읽기). 쓰기는 없다.
   // Forecast 화면(`/forecast`)과 같은 등급 — 2026-09-25 사용자 확인.
   'forecasts/preview': { POST: AE },
+  'forecasts/submission': { GET: AE, POST: AE },
   // Layout 계획(도면·추천·미세조정·확정·셋업). 확정도 관리자·엔지니어 둘 다 — 2026-09-25 사용자 결정
   // (PRD D11 "관리자 기본, 엔지니어는 정책"의 답). 쓰기는 전부 RPC 안에서 공장 범위로 묶인다.
   'layout-planning/workspace': { GET: AE },
