@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   App,
   Card,
@@ -88,7 +88,10 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   const [modelForm] = Form.useForm();
   const [processForm] = Form.useForm();
 
-  const supabase = createSupabaseClient();
+  // 클라이언트는 화면이 뜰 때 한 번만 만든다. createSupabaseClient 는 부를 때마다 자동 토큰 갱신·세션 저장이 켜진 새 인증 클라이언트를
+  // 만들고, 새 클라이언트는 시작하며 다른 인스턴스(AuthContext)에 인증 이벤트를 퍼뜨린다. 렌더마다 만들면 컨텍스트 구독(공장 정보)이
+  // 더해지는 순간 '다시 그림 → 새 클라이언트 → 인증 이벤트 → 프로필·공장 재조회 → 다시 그림' 반복이 생긴다(2026-09-29 통제 실험).
+  const supabase = useMemo(() => createSupabaseClient(), []);
 
   // 모델 목록 조회
   const fetchModels = async () => {

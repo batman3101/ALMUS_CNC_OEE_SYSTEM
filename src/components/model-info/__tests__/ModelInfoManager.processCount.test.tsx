@@ -40,7 +40,8 @@ const chain = (table: string) => {
 };
 const mockClient = { from: (table: string) => chain(table) };
 
-jest.mock('@/lib/supabase', () => ({ createSupabaseClient: () => mockClient }));
+const mockCreateClient = jest.fn(() => mockClient);
+jest.mock('@/lib/supabase', () => ({ createSupabaseClient: () => mockCreateClient() }));
 jest.mock('@/lib/authFetch', () => ({ authFetch: jest.fn() }));
 jest.mock('@/contexts/FactoryContext', () => ({ useFactory: () => ({ factoryCode: 'ALT' }) }));
 jest.mock('@/hooks/useFailureReport', () => ({ useFailureReport: () => (...args: unknown[]) => mockReportFailure(...args) }));
@@ -60,6 +61,7 @@ describe('ModelInfoManager - 모델 표의 공정 수', () => {
   beforeEach(() => {
     mockQueries.length = 0;
     mockOrders.length = 0;
+    mockCreateClient.mockClear();
     mockServer.cap = Number.POSITIVE_INFINITY;
     mockProcessRows = processes;
     mockReportFailure.mockClear();
@@ -100,6 +102,17 @@ describe('ModelInfoManager - 모델 표의 공정 수', () => {
     await waitFor(() => expect(within(modelRow('PA1')).getByText(countOf(2))).toBeInTheDocument());
     // 첫 읽기의 정렬 키: 표시 순서(process_order) 다음에 유일한 id - 같은 순서의 공정이 쪽 경계에서 중복·누락되지 않는다.
     expect(mockOrders.filter(([table]) => table === 'model_processes').map(([, column]) => column)).toEqual(['process_order', 'id']);
+  });
+
+  // 통제 실험(2026-09-29): 이 화면이 렌더 본문에서 createSupabaseClient() 를 부르는 구조에 공장 컨텍스트 구독(useFactory)을 더하자,
+  // 컨텍스트가 갱신될 때마다 다시 그려지며 새 인증 클라이언트가 만들어졌고 → 인증 이벤트 → 프로필·공장 재조회 → 컨텍스트 갱신의
+  // 되먹임이 생겼다(탭 1개 30초에 인증 조회 85건·클라이언트 84개). 화면은 다시 그려져도 클라이언트를 새로 만들지 않아야 한다.
+  it('다시 그려져도 supabase 클라이언트를 새로 만들지 않는다 (렌더마다 만들면 인증 되먹임 반복이 생긴다)', async () => {
+    const view = render(<ModelInfoManager />);
+    await waitFor(() => expect(within(modelRow('PA1')).getByText(countOf(2))).toBeInTheDocument());
+    for (let i = 0; i < 5; i += 1) view.rerender(<ModelInfoManager />);
+    await settle();
+    expect(mockCreateClient).toHaveBeenCalledTimes(1);
   });
 
   // 감사 MODEL-01 (2026-09-29): 전체 공정을 한 번만 읽으면 서버 상한을 넘는 순간 뒤쪽 모델의 공정이 통째로 사라진다.
