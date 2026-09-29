@@ -263,4 +263,23 @@ describe('동선 기준 추천', () => {
     expect(movedTo(result, 'T').every(name => name.startsWith('03R'))).toBe(true);
     expect(movedTo(result, 'T')).toHaveLength(4);
   });
+
+  it('희소한 여유를 큰 부족이 먼저 다 쓰지 않는다 — 출처 순서를 바꿔 계산해 부족이 적은 안을 고른다 (W41 ON1/PA1 사례, 사용자 결정 2026-09-29)', () => {
+    // A(동선 1 R) 3대 부족, B(동선 2 R) 2대 부족 — 큰 A 가 먼저 차례다.
+    // A 는 맞은편 Z(수요 0, 4대)와 등 맞닿은 S(여유 2대)에 붙을 수 있고, B 는 맞은편 S 에만 붙을 수 있다.
+    // '여유 먼저'로만 계산하면 A 가 S 의 여유 2대를 다 써서 B 가 부족으로 남는다. A 가 Z 를 쓰면 둘 다 채워진다.
+    const result = run([
+      { walkway: 1, side: 'L', cells: fill(4, 'Z', 'CNC1') },
+      { walkway: 1, side: 'R', cells: fill(4, 'A', 'CNC1') },
+      { walkway: 2, side: 'L', cells: fill(4, 'S', 'CNC1') },
+      { walkway: 2, side: 'R', cells: fill(4, 'B', 'CNC1') },
+    ], [
+      req('A', 'CNC1', 7, 4, 'shortage'), req('B', 'CNC1', 6, 4, 'shortage'),
+      req('S', 'CNC1', 2, 4, 'surplus'), req('Z', 'CNC1', 0, 4, 'zero_demand'),
+    ]);
+    expect(result.unresolved).toEqual([]);
+    expect(movedTo(result, 'B').every(name => name.startsWith('02L'))).toBe(true);
+    expect(movedTo(result, 'A').every(name => name.startsWith('01L'))).toBe(true);
+  });
 });
+

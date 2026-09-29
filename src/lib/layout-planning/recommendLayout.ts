@@ -34,8 +34,15 @@ export interface RecommendInput {
   processNames?: ReadonlyMap<string, string>;
 }
 
+type Tier = Record<MoveReason, number>;
 /** Proven pool order (PRD 6.3, reassignment.ts): take from surplus, then idle machines, then zero-demand groups. */
-const TIER: Record<MoveReason, number> = { surplus_release: 0, unassigned_fill: 1, zero_demand_release: 2 };
+const TIER: Tier = { surplus_release: 0, unassigned_fill: 1, zero_demand_release: 2 };
+/** Source orders the walkway plan is tried under (see recommendLayout). The proven order first, so it wins ties. */
+const TIER_ORDERS: Tier[] = [
+  TIER,
+  { surplus_release: 2, unassigned_fill: 1, zero_demand_release: 0 },   // zero-demand groups first
+  { surplus_release: 0, unassigned_fill: 0, zero_demand_release: 0 },   // no source order
+];
 /** Another building is "far" whatever the coordinates say; used before any cross-building move is considered. */
 const OTHER_BUILDING = 1e6;
 
@@ -84,14 +91,38 @@ export function recommendLayout(input: RecommendInput): LayoutRecommendation {
   // Walkway rules only when the whole drawing carries them; a half-known drawing would mix two rule sets.
   const walkwayMode = placed.length > 0 && placed.every(m => !!input.positions.get(m.id)?.walkway && !!input.positions.get(m.id)?.side);
   if (!walkwayMode) return recommendByDistance(input);
+  const short = (r: LayoutRecommendation) => r.unresolved.reduce((sum, u) => sum + u.remaining, 0);
   // Rule 3 guard (user decision 2026-09-28): converting a whole column beyond the need is allowed only when the
   // spare machines can still cover every shortage. Compared on the whole plan, because whether an excess starves
   // another model only shows once every shortage has been tried.
-  const withExcess = recommendByWalkway(input, true);
-  const short = (r: LayoutRecommendation) => r.unresolved.reduce((sum, u) => sum + u.remaining, 0);
-  if (!short(withExcess)) return withExcess;
-  const withoutExcess = recommendByWalkway(input, false);
-  return short(withoutExcess) < short(withExcess) ? withoutExcess : withExcess;
+  const plan = (tier: Tier) => {
+    const withExcess = recommendByWalkway(input, true, tier);
+    if (!short(withExcess)) return withExcess;
+    const withoutExcess = recommendByWalkway(input, false, tier);
+    return short(withoutExcess) < short(withExcess) ? withoutExcess : withExcess;
+  };
+  // Scarce sources (user decision 2026-09-29, W41 ON1/PA1): shortages are filled largest first, so a fixed source order
+  // lets an early shortage spend a surplus that a later one could only attach to — and no single order wins every week
+  // (measured on W40–W42). So the plan is computed under each source order and the one with the fewest machines left
+  // short wins; then the fewest machines placed into a mixed-process walkway; then the fewest changes. Ties keep the
+  // proven order, which comes first.
+  const mixedPlacements = (r: LayoutRecommendation) => {
+    const after = new Map(placed.map(m => [m.id, m.processId]));
+    for (const mv of r.moves) after.set(mv.machineId, mv.to.processId);
+    const processesOf = new Map<string, Set<string>>();
+    for (const [id, processId] of after) {
+      const walkway = input.positions.get(id)!.walkway!;
+      if (!processesOf.has(walkway)) processesOf.set(walkway, new Set());
+      if (processId) processesOf.get(walkway)!.add(input.processNames?.get(processId) ?? processId);
+    }
+    return r.moves.filter(mv => (processesOf.get(input.positions.get(mv.machineId)!.walkway!)?.size ?? 0) > 1).length;
+  };
+  const scored = TIER_ORDERS.map(tier => {
+    const r = plan(tier);
+    return { r, key: [short(r), mixedPlacements(r), r.moves.length] };
+  });
+  scored.sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1] || a.key[2] - b.key[2]);
+  return scored[0].r;
 }
 
 function recommendByDistance({ requirements, machines, positions, locked }: RecommendInput): LayoutRecommendation {
@@ -212,7 +243,7 @@ function recommendByDistance({ requirements, machines, positions, locked }: Reco
 
 interface Block { ids: string[]; key: number[]; firstName: string }
 
-function recommendByWalkway({ requirements, machines, positions, locked, processNames }: RecommendInput, allowExcess: boolean): LayoutRecommendation {
+function recommendByWalkway({ requirements, machines, positions, locked, processNames }: RecommendInput, allowExcess: boolean, tier: Tier): LayoutRecommendation {
   const active = machines.filter(m => m.isActive && positions.has(m.id));
   const byId = new Map(active.map(m => [m.id, m]));
 
@@ -405,7 +436,7 @@ function recommendByWalkway({ requirements, machines, positions, locked, process
                 // A new group's start decides whether it can grow as one group at all (no islands), so room comes
                 // before the source order — starting on 2 surplus machines with nowhere to grow strands the rest.
                 Math.max(0, need - room),
-                Math.max(...picked.map(c => TIER[c.reason])),             // proven source order
+                Math.max(...picked.map(c => tier[c.reason])),             // source order (the one this pass tries)
                 Number(!wholeColumn),                                   // rule 2: a whole side before an end block
                 otherProcess,                                             // less process mixing
                 otherModel,                                               // then less model mixing
