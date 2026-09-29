@@ -12,6 +12,7 @@
   "selectedFile": "Đã chọn: {{name}}",
   "inspect": "Kiểm tra tệp",
   "commit": "Xác nhận tiếp nhận",
+  "retry": "Thử lại",
   "unsavedDescription": "Sau khi xem kết quả kiểm tra, nhấn 'Xác nhận tiếp nhận' để lưu tệp này làm Forecast của nhà máy, thay cho tệp đã tiếp nhận trước đó. Nếu không nhấn, tệp sẽ mất khi tải lại trang hoặc chuyển màn hình.",
   "unsavedTitle": "Tệp này chưa được tiếp nhận",
   "noAccepted": "Chưa có Forecast nào được tiếp nhận.",
@@ -73,7 +74,7 @@
     "preview_failed": "Kiểm tra thất bại. Vui lòng thử lại.",
     "source_changed": "Nội dung khác với tệp đã kiểm tra. Hãy kiểm tra lại tệp rồi tiếp nhận.",
     "submission_failed": "Không thể tiếp nhận Forecast. Vui lòng thử lại sau.",
-    "submission_load_failed": "Không thể tải Forecast đã tiếp nhận. Hãy tải lại trang."
+    "submission_load_failed": "Không kiểm tra được Forecast đã tiếp nhận. Hãy thử lại."
   },
   "capacitySettings": "Cài đặt nhà máy: A {{a}} / B {{b}} · Nghỉ {{rest}} phút/ca · {{timezone}}",
   "capacityUnavailable": "Không đọc được cài đặt OEE. Chỉ kiểm tra tệp; tạm dừng tính CAPA.",

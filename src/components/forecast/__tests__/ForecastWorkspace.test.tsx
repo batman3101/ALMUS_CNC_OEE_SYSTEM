@@ -104,6 +104,46 @@ describe('Forecast upload workspace', () => {
     expect(await screen.findByText('errors.source_changed')).toBeInTheDocument();
     expect(screen.queryByTestId('accepted-forecast')).not.toBeInTheDocument();
   });
+  // Codex 감사 F-01 (2026-09-29): 저장본 조회 상태를 '없음'과 섞지 않는다.
+  it('F-01: picking a file while the accepted Forecast is still loading does not cancel it or claim there is none', async () => {
+    let finish: (r: ReturnType<typeof success>) => void = () => {};
+    mockSaved.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    render(<ForecastWorkspace />);
+    select();
+    expect(mockSaved.mock.calls[0][1].signal.aborted).toBe(false);
+    expect(screen.queryByTestId('no-accepted-forecast')).not.toBeInTheDocument();
+    await act(async () => finish(success('factory-1', { submittedAt: '2026-09-29T02:00:00Z' })));
+    expect(screen.getByTestId('accepted-forecast')).toBeInTheDocument();
+    expect(screen.queryByTestId('no-accepted-forecast')).not.toBeInTheDocument();
+    // The chosen file is not replaced by the accepted one's preview.
+    expect(screen.queryByText('plan.xlsx')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'inspect' })).not.toBeDisabled();
+  });
+  it('F-01: an accepted Forecast arriving after a new inspection does not overwrite the inspected preview', async () => {
+    let finish: (r: ReturnType<typeof success>) => void = () => {};
+    mockSaved.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    render(<ForecastWorkspace />); select(); fireEvent.click(screen.getByRole('button', { name: 'inspect' }));
+    expect(await screen.findByTestId('unsaved-forecast')).toBeInTheDocument();
+    await act(async () => finish(success('factory-1', { submittedAt: '2026-09-29T02:00:00Z' })));
+    expect(screen.getByTestId('unsaved-forecast')).toBeInTheDocument();
+    expect(screen.getByTestId('accepted-forecast')).toBeInTheDocument();
+  });
+  it('F-01: a failed lookup says it could not check — never "none" — and can be retried', async () => {
+    mockSaved.mockRejectedValueOnce(new Error('network failure'));
+    render(<ForecastWorkspace />);
+    expect(await screen.findByTestId('accepted-load-failed')).toBeInTheDocument();
+    expect(screen.queryByTestId('no-accepted-forecast')).not.toBeInTheDocument();
+    mockSaved.mockResolvedValueOnce(success('factory-1', { submittedAt: '2026-09-29T02:00:00Z' }));
+    fireEvent.click(screen.getByTestId('retry-accepted'));
+    expect(await screen.findByTestId('accepted-forecast')).toBeInTheDocument();
+    expect(screen.queryByTestId('accepted-load-failed')).not.toBeInTheDocument();
+  });
+  it('F-01: a server error on the lookup is also "could not check", not "none"', async () => {
+    mockSaved.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ success: false, code: 'submission_load_failed' }) });
+    render(<ForecastWorkspace />);
+    expect(await screen.findByTestId('accepted-load-failed')).toBeInTheDocument();
+    expect(screen.queryByTestId('no-accepted-forecast')).not.toBeInTheDocument();
+  });
   it('has matching Korean/Vietnamese translation keys', () => {
     const keys = (value: object, prefix = ''): string[] => Object.entries(value).flatMap(([key, child]) => typeof child === 'object' ? keys(child, prefix + key + '.') : [prefix + key]);
     expect(keys(ko).sort()).toEqual(keys(vi).sort());

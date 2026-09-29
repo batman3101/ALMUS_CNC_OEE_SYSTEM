@@ -18,8 +18,8 @@ export default function ForecastWorkspace() {
   const { factoryId, factoryCode } = useFactory();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<FactoryForecastPreview | null>(null);
-  /** Which request is in flight. Starting any request aborts the previous one (one requestRef). */
-  const [busy, setBusy] = useState<'' | 'saved' | 'inspect' | 'commit'>('');
+  /** Which upload request is in flight. Starting one aborts the previous one (requestRef). */
+  const [busy, setBusy] = useState<'' | 'inspect' | 'commit'>('');
   const [error, setError] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -27,18 +27,27 @@ export default function ForecastWorkspace() {
   const [dragging, setDragging] = useState(false);
   /** The factory's accepted Forecast; stays visible while a new file is being inspected. */
   const [accepted, setAccepted] = useState<{ fileName: string; submittedAt: string } | null>(null);
+  /**
+   * Codex audit F-01: "none" is only what a successful lookup returned. Loading and failure are their own states —
+   * otherwise a cancelled or failed lookup told the user there was no accepted Forecast when there was one.
+   */
+  const [savedStatus, setSavedStatus] = useState<'loading' | 'empty' | 'present' | 'error'>('loading');
   const requestRef = useRef<AbortController | null>(null);
+  /** The accepted-Forecast lookup has its own controller: choosing or inspecting a file must not cancel it. */
+  const savedRef = useRef<AbortController | null>(null);
+  /** Set once the user picks a file: a late lookup then only fills in "accepted", never replaces their preview. */
+  const userFileRef = useRef(false);
   const currentFactory = useRef(factoryId);
   currentFactory.current = factoryId;
   const uploading = busy === 'inspect' || busy === 'commit';
 
   function show(received: FactoryForecastPreview) {
     setPreview(received); setStart(received.dates[0]); setEnd(received.dates[received.dates.length - 1]); setIssuesOnly(false);
-    if (received.submission) setAccepted({ fileName: received.fileName, submittedAt: received.submission.submittedAt });
+    if (received.submission) { setAccepted({ fileName: received.fileName, submittedAt: received.submission.submittedAt }); setSavedStatus('present'); }
   }
 
   /** undefined = failed or superseded (error already set when it matters); null = the server has nothing to show. */
-  async function request(kind: 'saved' | 'inspect' | 'commit', url: string, init: RequestInit, fallback: string): Promise<FactoryForecastPreview | null | undefined> {
+  async function request(kind: 'inspect' | 'commit', url: string, init: RequestInit, fallback: string): Promise<FactoryForecastPreview | null | undefined> {
     if (!factoryId) return undefined;
     requestRef.current?.abort();
     const controller = new AbortController();
@@ -62,15 +71,38 @@ export default function ForecastWorkspace() {
     } finally { if (requestRef.current === controller && !controller.signal.aborted) setBusy(''); }
   }
 
+  async function loadSaved() {
+    if (!factoryId) return;
+    savedRef.current?.abort();
+    const controller = new AbortController();
+    savedRef.current = controller;
+    const expectedFactory = factoryId;
+    setSavedStatus('loading');
+    try {
+      const response = await authFetch('/api/forecasts/submission', { method: 'GET', signal: controller.signal });
+      const result = await response.json();
+      if (controller.signal.aborted || currentFactory.current !== expectedFactory) return;
+      if (!response.ok || !result.success || (result.preview !== null && result.preview?.factory?.id !== expectedFactory)) { setSavedStatus('error'); return; }
+      if (result.preview === null) { setAccepted(null); setSavedStatus('empty'); return; }
+      const saved = result.preview as FactoryForecastPreview;
+      if (userFileRef.current) {
+        setAccepted({ fileName: saved.fileName, submittedAt: saved.submission?.submittedAt ?? '' }); setSavedStatus('present');
+      } else {
+        show(saved);
+      }
+    } catch {
+      if (!controller.signal.aborted && currentFactory.current === expectedFactory) setSavedStatus('error');
+    }
+  }
+
   // Each factory opens on its last accepted Forecast (user decision 2026-09-29), re-joined with today's machines.
   useEffect(() => {
-    setPreview(null); setFile(null); setError(''); setBusy(''); setAccepted(null);
+    setPreview(null); setFile(null); setError(''); setBusy(''); setAccepted(null); setSavedStatus('loading');
+    userFileRef.current = false;
     requestRef.current?.abort();
-    if (factoryId) {
-      request('saved', '/api/forecasts/submission', { method: 'GET' }, 'submission_load_failed').then(saved => { if (saved) show(saved); });
-    }
-    return () => requestRef.current?.abort();
-    // request/show only read refs and state setters besides factoryId.
+    loadSaved();
+    return () => { requestRef.current?.abort(); savedRef.current?.abort(); };
+    // loadSaved only reads refs and state setters besides factoryId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [factoryId]);
 
@@ -86,6 +118,7 @@ export default function ForecastWorkspace() {
   /** Picker and drop share one gate: wrong type or size never reaches the server. */
   function choose(next: File | null) {
     requestRef.current?.abort(); setBusy(''); setPreview(null); setError('');
+    userFileRef.current = true;
     if (next && (next.size > MAX_BYTES || !/\.xlsx$/i.test(next.name))) { setFile(null); setError(next.size > MAX_BYTES ? 'file_too_large' : 'invalid_filename'); return; }
     setFile(next);
   }
@@ -141,9 +174,10 @@ export default function ForecastWorkspace() {
         </label>
         <Typography.Text type="secondary">{t('uploadHelp')}</Typography.Text>
         <Button type="primary" onClick={inspect} loading={busy === 'inspect'} disabled={!file || !factoryId || uploading}>{t('inspect')}</Button>
-        {accepted
-          ? <Alert type="success" showIcon data-testid="accepted-forecast" message={t('acceptedTitle', { name: accepted.fileName, time: new Date(accepted.submittedAt).toLocaleString(locale) })} />
-          : busy !== 'saved' && <Typography.Text type="secondary" data-testid="no-accepted-forecast">{t('noAccepted')}</Typography.Text>}
+        {savedStatus === 'present' && accepted && <Alert type="success" showIcon data-testid="accepted-forecast" message={t('acceptedTitle', { name: accepted.fileName, time: new Date(accepted.submittedAt).toLocaleString(locale) })} />}
+        {savedStatus === 'empty' && <Typography.Text type="secondary" data-testid="no-accepted-forecast">{t('noAccepted')}</Typography.Text>}
+        {savedStatus === 'error' && <Alert type="warning" showIcon data-testid="accepted-load-failed" message={t('errors.submission_load_failed')}
+          action={<Button size="small" onClick={loadSaved} data-testid="retry-accepted">{t('retry')}</Button>} />}
         {error && <Alert type="error" showIcon message={t(`errors.${error}`, { defaultValue: t('errors.preview_failed') })} />}
       </Space>
     </Card>
