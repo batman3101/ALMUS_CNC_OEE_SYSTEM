@@ -109,22 +109,18 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     }
   };
 
-  // 공정 목록 조회
-  const fetchProcesses = async (modelId?: string) => {
+  // 공정 목록 조회 - 항상 전체를 읽는다. 위 모델 표의 '공정 수'가 이 목록에서 세어지므로, 모델별로 좁혀 읽으면
+  // '공정 관리'를 누르는 순간 다른 모델의 공정 수가 0 으로 보인다(사용자 승인 2026-09-29 수정).
+  // 아래 공정 표는 selectedModel 로 화면에서 거른다.
+  const fetchProcesses = async () => {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('model_processes')
         .select(`
           *,
           product_models!inner(model_name)
         `)
         .order('process_order', { ascending: true });
-
-      if (modelId) {
-        query = query.eq('model_id', modelId);
-      }
-
-      const { data, error } = await query;
 
       if (error) throw error;
       setProcesses(data || []);
@@ -332,7 +328,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             icon={<SettingOutlined />}
             onClick={() => {
               setSelectedModel(record);
-              fetchProcesses(record.id);
+              fetchProcesses();
             }}
             size="small"
           >
@@ -505,11 +501,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
               onChange={(value) => {
                 const model = models.find(m => m.id === value);
                 setSelectedModel(model || null);
-                if (value) {
-                  fetchProcesses(value);
-                } else {
-                  fetchProcesses(); // 전체 공정 조회
-                }
+                fetchProcesses(); // 공정 표는 selectedModel 로 화면에서 거른다
               }}
               allowClear
               onClear={() => {
