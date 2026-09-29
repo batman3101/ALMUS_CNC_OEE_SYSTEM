@@ -114,8 +114,12 @@ type Cell = string | number;
 
 const byName = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
+/** 엑셀 시트 이름에 쓸 수 없는 문자: 역슬래시·슬래시·물음표·별표·대괄호·콜론. 역슬래시는 글자 코드로 다룬다. */
+const FORBIDDEN_IN_SHEET_NAME = new Set(['/', '?', '*', '[', ']', ':', String.fromCharCode(92)]);
+
 /** 엑셀 시트 이름 제약(31자·금지 문자)을 지킨다. */
-const sheetName = (label: string) => label.replace(/[\/?*[\]:]/g, ' ').trim().slice(0, 31) || 'Sheet';
+const sheetName = (label: string) =>
+  Array.from(label, ch => (FORBIDDEN_IN_SHEET_NAME.has(ch) ? ' ' : ch)).join('').trim().slice(0, 31) || 'Sheet';
 
 function sheetFrom(rows: Cell[][], widths: number[], filter: boolean): XLSX.WorkSheet {
   const sheet = XLSX.utils.aoa_to_sheet(rows);

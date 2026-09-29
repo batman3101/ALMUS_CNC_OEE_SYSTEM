@@ -107,11 +107,13 @@ describe('buildModelInfoWorkbook - 시트 구성', () => {
   });
 
   it('시트 이름은 엑셀 제약(31자·금지 문자)을 지킨다', () => {
-    const custom = { ...labels, sheetModels: 'a/b?c*[d]:e ' + 'x'.repeat(40) };
+    const backslash = String.fromCharCode(92);
+    const custom = { ...labels, sheetModels: 'a/b?c*[d]:e' + backslash + 'f ' + 'x'.repeat(40) };
     const { workbook } = buildModelInfoWorkbook({ models: [], processes: [], labels: custom, factoryCode: 'ALT', exportedAt: NOW });
     const name = workbook.SheetNames[0];
     expect(name.length).toBeLessThanOrEqual(31);
-    expect(name).not.toMatch(/[\/?*[\]:]/);
+    // 금지 문자(역슬래시 포함)가 하나도 남지 않는다.
+    expect(Array.from(name).filter(ch => ['/', '?', '*', '[', ']', ':', backslash].includes(ch))).toEqual([]);
   });
 });
 
