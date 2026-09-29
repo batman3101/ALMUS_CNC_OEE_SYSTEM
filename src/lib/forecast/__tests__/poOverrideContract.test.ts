@@ -17,7 +17,13 @@ jest.mock('@/lib/supabase-admin', () => ({
         mockSelects.push(table + ':' + columns);
         return table === 'forecast_submissions'
           ? { eq: () => ({ maybeSingle: async () => ({ data: { submission_id: '11111111-1111-4111-8111-111111111111', preview: { rows: [{ sourceRow: 15, model: 'ON 1', processes: ['CNC1'], quantities: [{ date: '2026-10-05', state: 'number', quantity: 9000 }] }] } }, error: null }) }) }
-          : { eq: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) };
+          : (() => {
+            const api: Record<string, unknown> = {};
+            api.eq = () => api;
+            api.order = () => api;
+            api.range = async () => ({ data: [], error: null, count: 0 });
+            return api;
+          })();
       },
     }),
     rpc: (...args: unknown[]) => mockRpc(...args),

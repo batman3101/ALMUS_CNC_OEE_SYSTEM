@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { readAllRows } from '@/lib/supabasePaging';
 import type { ForecastSourceRow } from '@/types/forecast';
 import type { StoredPoOverride } from './poOverrides';
 
@@ -18,17 +19,21 @@ export class PoOverrideError extends Error {
   }
 }
 
-/** 한 접수에 붙을 수 있는 수정값의 현실적인 상한보다 훨씬 크다. 닿으면 잘린 것이므로 조용히 쓰지 않고 실패시킨다. */
-const OVERRIDE_LIMIT = 50_000;
+interface OverrideRow { source_row: number; work_date: string; quantity: number; updated_at: string }
 
+/**
+ * 접수 1건의 수정값을 **전부** 읽는다. 감사 PO-01(2026-09-29): 예전에는 limit(50,000) 에 닿을 때만 '잘림'으로 봤는데,
+ * 서버 반환 상한(PostgREST max-rows)이 그보다 낮으면 잘린 결과를 정상으로 받아들였다 - 빠진 칸은 Forecast 원본으로
+ * 계산되어 실제 PO 와 다른 수요로 필요 대수가 나온다. 이제 전체 개수(count: exact)와 모은 행 수를 맞춰 완전할 때만 돌려주고,
+ * 확인하지 못하면 실패시킨다(화면은 저장본 조회 실패로 알린다). 정렬은 기본 키(행 번호·날짜)라 쪽 경계가 안정적이다.
+ */
 export async function loadPoOverrides(factoryId: string, submissionId: string): Promise<StoredPoOverride[]> {
-  const { data, error } = await supabaseAdmin.from('forecast_po_overrides')
-    .select('source_row, work_date, quantity, updated_at')
-    .eq('factory_id', factoryId).eq('submission_id', submissionId).limit(OVERRIDE_LIMIT);
-  if (error) throw error;
-  const rows = data ?? [];
-  if (rows.length >= OVERRIDE_LIMIT) throw new Error('po_overrides_truncated');
-  return rows.map(r => ({ sourceRow: r.source_row as number, date: r.work_date as string, quantity: r.quantity as number, updatedAt: r.updated_at as string }));
+  const rows = await readAllRows<OverrideRow>((from, to) => supabaseAdmin.from('forecast_po_overrides')
+    .select('source_row, work_date, quantity, updated_at', { count: 'exact' })
+    .eq('factory_id', factoryId).eq('submission_id', submissionId)
+    .order('source_row', { ascending: true }).order('work_date', { ascending: true })
+    .range(from, to));
+  return rows.map(r => ({ sourceRow: r.source_row, date: r.work_date, quantity: r.quantity, updatedAt: r.updated_at }));
 }
 
 interface Target { submissionId: string; sourceRow: number; date: string }

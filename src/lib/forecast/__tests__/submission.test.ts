@@ -11,7 +11,16 @@ jest.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: (table: string) => (table === 'forecast_po_overrides'
       // 실제 PO 수정값은 (공장, 접수 번호)로 좁혀 읽는다.
-      ? { select: () => ({ eq: (...a: unknown[]) => ({ eq: (...b: unknown[]) => ({ limit: () => mockOverrides([a, b]) }) }) }) }
+      ? {
+        select: () => {
+          const filters: unknown[][] = [];
+          const api: Record<string, unknown> = {};
+          api.eq = (...args: unknown[]) => { filters.push(args); return api; };
+          api.order = () => api;
+          api.range = () => mockOverrides(filters);
+          return api;
+        },
+      }
       : {
         // 접수를 확정하면 DB 트리거가 새 submission_id 를 만들어 돌려준다(초기화).
         upsert: (...args: unknown[]) => { mockUpsert(...args); return { select: () => ({ single: async () => ({ data: { submitted_at: '2026-09-29T02:00:00Z', submission_id: SUBMISSION_ID }, error: null }) }) }; },
@@ -46,7 +55,7 @@ const storedRow = (extra: object = {}) => ({
 describe('forecast submission (one per factory, file data only)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockOverrides.mockResolvedValue({ data: [], error: null });
+    mockOverrides.mockResolvedValue({ data: [], error: null, count: 0 });
     mockPolicy.mockResolvedValue({ status: 'available', source: 'oee_settings', timezone: 'Asia/Ho_Chi_Minh', shiftAStart: '08:00', shiftBStart: '20:00', breakMinutes: 110, separateEfficiencyMultiplier: false });
   });
 
@@ -82,7 +91,7 @@ describe('forecast submission (one per factory, file data only)', () => {
 
   it('현재 접수 번호의 실제 PO 수정값을 원본 수량 옆에 붙여 돌려준다 (원본은 그대로)', async () => {
     mockMaybeSingle.mockResolvedValue(storedRow());
-    mockOverrides.mockResolvedValue({ data: [{ source_row: 15, work_date: '2026-10-05', quantity: 12000, updated_at: '2026-09-29T05:00:00Z' }], error: null });
+    mockOverrides.mockResolvedValue({ data: [{ source_row: 15, work_date: '2026-10-05', quantity: 12000, updated_at: '2026-09-29T05:00:00Z' }], error: null, count: 1 });
     mockSnapshot.mockResolvedValue(snapshotAt('t', 'm'));
     const loaded = await loadForecastSubmission(factory);
     expect(loaded?.rows[0].quantities[0]).toMatchObject({ quantity: 9000, state: 'number', po: { quantity: 12000, updatedAt: '2026-09-29T05:00:00Z' } });
@@ -92,7 +101,7 @@ describe('forecast submission (one per factory, file data only)', () => {
 
   it('수정값 조회가 실패하면 "수정값 없음"으로 뭉개지 않고 실패한다 — 시뮬레이션이 조용히 Forecast 로 돌아가면 안 된다', async () => {
     mockMaybeSingle.mockResolvedValue(storedRow());
-    mockOverrides.mockResolvedValue({ data: null, error: { message: 'relation "forecast_po_overrides" does not exist' } });
+    mockOverrides.mockResolvedValue({ data: null, error: { message: 'relation "forecast_po_overrides" does not exist' }, count: null });
     mockSnapshot.mockResolvedValue(snapshotAt('t', 'm'));
     await expect(loadForecastSubmission(factory)).rejects.toMatchObject({ message: expect.stringContaining('does not exist') });
   });
