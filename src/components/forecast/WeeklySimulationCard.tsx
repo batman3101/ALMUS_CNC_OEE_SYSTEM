@@ -5,7 +5,7 @@ import { Alert, Card, Col, Row, Select, Space, Statistic, Table, Tag, Typography
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { FactoryForecastPreview } from '@/types/forecast';
-import { groupWeeks, weeklyModelDemand } from '@/lib/forecast/weeklyDemand';
+import { defaultSimulationWeek, groupWeeks, plantToday, weeklyModelDemand } from '@/lib/forecast/weeklyDemand';
 import { matchModels, normalizeProcessName } from '@/lib/forecast/modelAliases';
 import { buildRequirements, type ModelProcessRequirement } from '@/lib/forecast/requiredMachines';
 import { proposeReassignment, type ReassignmentMove } from '@/lib/forecast/reassignment';
@@ -25,11 +25,14 @@ const nullable = (pick: (r: ModelProcessRequirement) => number | null) => (a: Mo
   return x - y;
 };
 
-export default function WeeklySimulationCard({ preview }: { preview: FactoryForecastPreview }) {
+/** `today` (plant-local YYYY-MM-DD) is injectable for tests; it only picks the week the card opens on. */
+export default function WeeklySimulationCard({ preview, today }: { preview: FactoryForecastPreview; today?: string }) {
   const { t, language } = useTranslation('forecast');
   const locale = language === 'vi' ? 'vi-VN' : 'ko-KR';
   const weeks = useMemo(() => groupWeeks(preview.dates), [preview.dates]);
-  const [weekKey, setWeekKey] = useState(weeks[0]?.key ?? '');
+  const [weekKey, setWeekKey] = useState(() => defaultSimulationWeek(
+    weeks, today ?? plantToday(preview.capacityPolicy.status === 'available' ? preview.capacityPolicy.timezone : null),
+  )?.key ?? '');
   const weekIndex = Math.max(0, weeks.findIndex(w => w.key === weekKey));
   const week = weeks[weekIndex];
   const snapshot = preview.capacitySnapshot;

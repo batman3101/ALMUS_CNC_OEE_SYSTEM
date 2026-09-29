@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { ForecastSourceRow } from '@/types/forecast';
 import { parseForecastFile } from '../parseForecast';
-import { groupWeeks, isoWeek, weeklyModelDemand } from '../weeklyDemand';
+import { defaultSimulationWeek, groupWeeks, isoWeek, plantToday, weeklyModelDemand } from '../weeklyDemand';
 
 const row = (model: string, quantities: Array<[string, number | null, ForecastSourceRow['quantities'][number]['state']?]>, extra: Partial<ForecastSourceRow> = {}): ForecastSourceRow => ({
   sourceRow: 1, model, displayModel: model, vendor: 'ALMUS', processGroup: 'CNC', processLabel: 'CNC 1 ~ CNC 2', processes: ['CNC1', 'CNC2'], issues: [],
@@ -81,4 +81,28 @@ const samplePath = process.env.FORECAST_SAMPLE_PATH;
     expect(h8.peakQuantity).toBe(Math.ceil(Math.max(...daily)));
     expect(h8.peakQuantity).toBeGreaterThan(0);
   });
+});
+
+describe('defaultSimulationWeek (user decision 2026-09-29: next week, else the file\'s last week)', () => {
+  const weeks = groupWeeks(days('2026-09-07', 42)); // W37 … W42
+  it('opens on next week, not the first week of the file', () => {
+    expect(defaultSimulationWeek(weeks, '2026-09-29')?.label).toBe('W41');
+  });
+  it('treats Sunday as the end of its week', () => {
+    expect(defaultSimulationWeek(weeks, '2026-10-04')?.label).toBe('W41');
+    expect(defaultSimulationWeek(weeks, '2026-10-05')?.label).toBe('W42');
+  });
+  it('falls back to the last week when the file does not reach next week', () => {
+    expect(defaultSimulationWeek(weeks, '2026-10-19')?.label).toBe('W42');
+  });
+  it('returns undefined only when there are no weeks', () => {
+    expect(defaultSimulationWeek([], '2026-09-29')).toBeUndefined();
+  });
+});
+
+describe('plantToday', () => {
+  // 2026-09-29 18:30 UTC is already 09-30 in Vietnam (UTC+7).
+  const now = new Date('2026-09-29T18:30:00Z');
+  it('uses the plant timezone', () => { expect(plantToday('Asia/Ho_Chi_Minh', now)).toBe('2026-09-30'); });
+  it('falls back to the browser date on an invalid timezone', () => { expect(plantToday('Not/AZone', now)).toMatch(/^\d{4}-\d{2}-\d{2}$/); });
 });

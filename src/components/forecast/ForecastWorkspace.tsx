@@ -18,20 +18,60 @@ export default function ForecastWorkspace() {
   const { factoryId, factoryCode } = useFactory();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<FactoryForecastPreview | null>(null);
-  const [loading, setLoading] = useState(false);
+  /** Which request is in flight. Starting any request aborts the previous one (one requestRef). */
+  const [busy, setBusy] = useState<'' | 'saved' | 'inspect' | 'commit'>('');
   const [error, setError] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [dragging, setDragging] = useState(false);
+  /** The factory's accepted Forecast; stays visible while a new file is being inspected. */
+  const [accepted, setAccepted] = useState<{ fileName: string; submittedAt: string } | null>(null);
   const requestRef = useRef<AbortController | null>(null);
   const currentFactory = useRef(factoryId);
   currentFactory.current = factoryId;
+  const uploading = busy === 'inspect' || busy === 'commit';
 
-  useEffect(() => {
-    setPreview(null); setFile(null); setError(''); setLoading(false);
+  function show(received: FactoryForecastPreview) {
+    setPreview(received); setStart(received.dates[0]); setEnd(received.dates[received.dates.length - 1]); setIssuesOnly(false);
+    if (received.submission) setAccepted({ fileName: received.fileName, submittedAt: received.submission.submittedAt });
+  }
+
+  /** undefined = failed or superseded (error already set when it matters); null = the server has nothing to show. */
+  async function request(kind: 'saved' | 'inspect' | 'commit', url: string, init: RequestInit, fallback: string): Promise<FactoryForecastPreview | null | undefined> {
+    if (!factoryId) return undefined;
     requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const expectedFactory = factoryId;
+    setBusy(kind); setError('');
+    try {
+      const response = await authFetch(url, { ...init, signal: controller.signal });
+      const result = await response.json();
+      if (controller.signal.aborted || currentFactory.current !== expectedFactory) return undefined;
+      if (!response.ok || !result.success) {
+        setError(response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : (typeof result.code === 'string' ? result.code : fallback));
+        return undefined;
+      }
+      if (result.preview === null) return null;
+      if (result.preview?.factory?.id !== expectedFactory) { setError('factory_changed'); return undefined; }
+      return result.preview as FactoryForecastPreview;
+    } catch {
+      if (!controller.signal.aborted && currentFactory.current === expectedFactory) setError(fallback);
+      return undefined;
+    } finally { if (requestRef.current === controller && !controller.signal.aborted) setBusy(''); }
+  }
+
+  // Each factory opens on its last accepted Forecast (user decision 2026-09-29), re-joined with today's machines.
+  useEffect(() => {
+    setPreview(null); setFile(null); setError(''); setBusy(''); setAccepted(null);
+    requestRef.current?.abort();
+    if (factoryId) {
+      request('saved', '/api/forecasts/submission', { method: 'GET' }, 'submission_load_failed').then(saved => { if (saved) show(saved); });
+    }
     return () => requestRef.current?.abort();
+    // request/show only read refs and state setters besides factoryId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [factoryId]);
 
   const visiblePreview = preview?.factory.id === factoryId ? preview : null;
@@ -40,39 +80,32 @@ export default function ForecastWorkspace() {
   })), [visiblePreview, start, end]);
   const problem = (q: ForecastQuantity) => q.state !== 'number' || (q.quantity !== null && !Number.isInteger(q.quantity));
   const quantities = selectedRows.flatMap(row => row.quantities);
-  const numberFormat = new Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'ko-KR', { maximumFractionDigits: 10 });
+  const locale = language === 'vi' ? 'vi-VN' : 'ko-KR';
+  const numberFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 10 });
 
   /** Picker and drop share one gate: wrong type or size never reaches the server. */
   function choose(next: File | null) {
-    requestRef.current?.abort(); setLoading(false); setPreview(null); setError('');
+    requestRef.current?.abort(); setBusy(''); setPreview(null); setError('');
     if (next && (next.size > MAX_BYTES || !/\.xlsx$/i.test(next.name))) { setFile(null); setError(next.size > MAX_BYTES ? 'file_too_large' : 'invalid_filename'); return; }
     setFile(next);
   }
 
+  const fileHeaders = (f: File) => ({ 'Content-Type': 'application/octet-stream', 'x-forecast-file-name': encodeURIComponent(f.name), 'x-forecast-factory-id': factoryId ?? '' });
+
   async function inspect() {
-    if (!file || !factoryId) return;
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-    const expectedFactory = factoryId;
-    setLoading(true); setPreview(null); setError('');
-    try {
-      const response = await authFetch('/api/forecasts/preview', {
-        method: 'POST', body: file, signal: controller.signal,
-        headers: { 'Content-Type': 'application/octet-stream', 'x-forecast-file-name': encodeURIComponent(file.name), 'x-forecast-factory-id': expectedFactory },
-      });
-      const result = await response.json();
-      if (controller.signal.aborted || currentFactory.current !== expectedFactory) return;
-      if (!response.ok || !result.success) {
-        setError(response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : (typeof result.code === 'string' ? result.code : 'preview_failed'));
-        return;
-      }
-      if (result.preview?.factory?.id !== expectedFactory) { setError('factory_changed'); return; }
-      const received: FactoryForecastPreview = result.preview;
-      setPreview(received); setStart(received.dates[0]); setEnd(received.dates[received.dates.length - 1]); setIssuesOnly(false);
-    } catch {
-      if (!controller.signal.aborted && currentFactory.current === expectedFactory) setError('preview_failed');
-    } finally { if (requestRef.current === controller && !controller.signal.aborted) setLoading(false); }
+    if (!file) return;
+    setPreview(null);
+    const received = await request('inspect', '/api/forecasts/preview', { method: 'POST', body: file, headers: fileHeaders(file) }, 'preview_failed');
+    if (received) show(received);
+  }
+
+  /** '접수 확정': the same file goes again and the server stores its own reading, pinned to the hash the user saw. */
+  async function commit() {
+    if (!file || !visiblePreview || visiblePreview.submission) return;
+    const received = await request('commit', '/api/forecasts/submission', {
+      method: 'POST', body: file, headers: { ...fileHeaders(file), 'x-forecast-source-hash': visiblePreview.sourceHash },
+    }, 'submission_failed');
+    if (received) show(received);
   }
 
   const quantityColumns: ColumnsType<ForecastQuantity> = [
@@ -95,19 +128,22 @@ export default function ForecastWorkspace() {
     <Card title={t('upload')}>
       <Space direction="vertical" className={styles.fullWidth}>
         <label
-          className={`${styles.dropZone}${dragging ? ` ${styles.dropZoneActive}` : ''}${loading || !factoryId ? ` ${styles.dropZoneDisabled}` : ''}`}
+          className={`${styles.dropZone}${dragging ? ` ${styles.dropZoneActive}` : ''}${uploading || !factoryId ? ` ${styles.dropZoneDisabled}` : ''}`}
           data-testid="forecast-drop-zone"
-          onDragOver={event => { event.preventDefault(); if (!loading && factoryId) setDragging(true); }}
+          onDragOver={event => { event.preventDefault(); if (!uploading && factoryId) setDragging(true); }}
           onDragLeave={() => setDragging(false)}
-          onDrop={event => { event.preventDefault(); setDragging(false); if (!loading && factoryId) choose(event.dataTransfer.files?.[0] ?? null); }}>
-          <input key={factoryId} className={styles.fileInput} type="file" accept=".xlsx" aria-label={t('selectFile')} disabled={loading || !factoryId}
+          onDrop={event => { event.preventDefault(); setDragging(false); if (!uploading && factoryId) choose(event.dataTransfer.files?.[0] ?? null); }}>
+          <input key={factoryId} className={styles.fileInput} type="file" accept=".xlsx" aria-label={t('selectFile')} disabled={uploading || !factoryId}
             onChange={event => choose(event.target.files?.[0] ?? null)} />
           <InboxOutlined className={styles.dropIcon} aria-hidden />
           <span className={styles.dropTitle}>{t('dropTitle')}</span>
           {file ? <Tag color="blue">{t('selectedFile', { name: file.name })}</Tag> : <span className={styles.secondary}>{t('noFile')}</span>}
         </label>
         <Typography.Text type="secondary">{t('uploadHelp')}</Typography.Text>
-        <Button type="primary" onClick={inspect} loading={loading} disabled={!file || !factoryId}>{t('inspect')}</Button>
+        <Button type="primary" onClick={inspect} loading={busy === 'inspect'} disabled={!file || !factoryId || uploading}>{t('inspect')}</Button>
+        {accepted
+          ? <Alert type="success" showIcon data-testid="accepted-forecast" message={t('acceptedTitle', { name: accepted.fileName, time: new Date(accepted.submittedAt).toLocaleString(locale) })} />
+          : busy !== 'saved' && <Typography.Text type="secondary" data-testid="no-accepted-forecast">{t('noAccepted')}</Typography.Text>}
         {error && <Alert type="error" showIcon message={t(`errors.${error}`, { defaultValue: t('errors.preview_failed') })} />}
       </Space>
     </Card>
@@ -116,6 +152,8 @@ export default function ForecastWorkspace() {
       {visiblePreview?.capacityPolicy.status === 'unavailable' && <Alert type="warning" message={t('capacityUnavailable')} />}
     </Card>
     {visiblePreview && <>
+      {!visiblePreview.submission && <Alert type="warning" showIcon data-testid="unsaved-forecast" message={t('unsavedTitle')} description={t('unsavedDescription')}
+        action={<Button type="primary" onClick={commit} loading={busy === 'commit'} disabled={!file || uploading} data-testid="commit-forecast">{t('commit')}</Button>} />}
       <Alert type="warning" showIcon message={t('reviewRequired')} description={t('reviewDescription')} />
       <Card title={visiblePreview.fileName}>
         <div className={styles.filters}>

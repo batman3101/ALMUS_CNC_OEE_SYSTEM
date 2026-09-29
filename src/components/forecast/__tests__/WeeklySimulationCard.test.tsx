@@ -9,6 +9,8 @@ jest.mock('@/hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: s
 
 const days = (start: string, count: number) => Array.from({ length: count }, (_, i) => new Date(Date.parse(`${start}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10));
 const dates = days('2026-09-07', 14);
+// W36: next week is W37, the file's first week — the tests below read that week.
+const BEFORE_FILE = '2026-09-02';
 const row = (model: string, week1: number, week2: number, sourceRow = 1): FactoryForecastPreview['rows'][number] => ({
   sourceRow, model, displayModel: model, vendor: 'ALMUS', processGroup: 'CNC', processLabel: 'CNC 1 ~ CNC 2', processes: ['CNC1', 'CNC2'], issues: [],
   quantities: dates.map((date, i) => ({ date, cell: `I${i}`, quantity: i < 7 ? week1 : week2, state: 'number', formula: false, error: null })),
@@ -32,8 +34,8 @@ describe('WeeklySimulationCard', () => {
   const originalStyle = window.getComputedStyle.bind(window);
   beforeAll(() => { jest.spyOn(window, 'getComputedStyle').mockImplementation(element => originalStyle(element)); });
   afterAll(() => jest.restoreAllMocks());
-  it('defaults to the first week and shows required vs current per model/process', () => {
-    render(<WeeklySimulationCard preview={preview()} />);
+  it('opens on next week (the first week of the file here) and shows required vs current per model/process', () => {
+    render(<WeeklySimulationCard preview={preview()} today={BEFORE_FILE} />);
     // ON 1 peak 1300, CAPA 130/day → 10 needed; CNC1 has 12 (surplus 2), CNC2 has 8 (shortage 2)
     const table = screen.getByTestId('requirements-table');
     expect(within(table).getByText('simulation.statuses.surplus')).toBeInTheDocument();
@@ -42,25 +44,30 @@ describe('WeeklySimulationCard', () => {
     expect(screen.getByText('simulation.unmappedTitle:1')).toBeInTheDocument();
   });
   it('proposes moving surplus machines before the unassigned one, highest number first', () => {
-    render(<WeeklySimulationCard preview={preview()} />);
+    render(<WeeklySimulationCard preview={preview()} today={BEFORE_FILE} />);
     const moves = screen.getByTestId('moves-table');
     const names = within(moves).getAllByText(/^CNC-\d{3}$/).map(el => el.textContent);
     expect(names).toEqual(['CNC-012', 'CNC-011']);
     expect(within(moves).getAllByText('simulation.reasons.surplus')).toHaveLength(2);
   });
   it('recomputes when another week is selected', () => {
-    render(<WeeklySimulationCard preview={preview()} />);
+    render(<WeeklySimulationCard preview={preview()} today={BEFORE_FILE} />);
     fireEvent.mouseDown(within(screen.getByTestId('week-select')).getByRole('combobox'));
     fireEvent.click(screen.getByText('W38 · 09-14~09-20'));
     // week 2: ON 1 demand 0 → both processes zero_demand, nothing to move
     expect(screen.getAllByText('simulation.statuses.zero_demand')).toHaveLength(2);
     expect(screen.getByText('simulation.noMoves')).toBeInTheDocument();
   });
+  it('opens on next week rather than the first week of the file', () => {
+    render(<WeeklySimulationCard preview={preview()} today="2026-09-08" />);
+    expect(screen.getByText('W38 · 09-14~09-20')).toBeInTheDocument();
+    expect(screen.getAllByText('simulation.statuses.zero_demand')).toHaveLength(2);
+  });
   it('holds the simulation when the snapshot or the OEE settings are unavailable', () => {
-    const { rerender } = render(<WeeklySimulationCard preview={preview({ capacitySnapshot: { status: 'unavailable' } })} />);
+    const { rerender } = render(<WeeklySimulationCard preview={preview({ capacitySnapshot: { status: 'unavailable' } })} today={BEFORE_FILE} />);
     expect(screen.getByText('simulation.snapshotUnavailable')).toBeInTheDocument();
     expect(screen.queryByTestId('requirements-table')).not.toBeInTheDocument();
-    rerender(<WeeklySimulationCard preview={preview({ capacityPolicy: { status: 'unavailable' } })} />);
+    rerender(<WeeklySimulationCard preview={preview({ capacityPolicy: { status: 'unavailable' } })} today={BEFORE_FILE} />);
     expect(screen.getByText('simulation.policyUnavailable')).toBeInTheDocument();
   });
 });
