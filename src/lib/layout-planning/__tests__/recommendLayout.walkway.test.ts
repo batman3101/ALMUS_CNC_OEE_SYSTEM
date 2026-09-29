@@ -282,4 +282,3 @@ describe('동선 기준 추천', () => {
     expect(movedTo(result, 'A').every(name => name.startsWith('01L'))).toBe(true);
   });
 });
-

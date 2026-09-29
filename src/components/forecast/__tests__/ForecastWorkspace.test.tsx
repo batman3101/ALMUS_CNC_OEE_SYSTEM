@@ -10,7 +10,8 @@ const mockFetch = jest.fn();
 const mockSaved = jest.fn();
 jest.mock('@/contexts/FactoryContext', () => ({ useFactory: () => ({ factoryId: mockFactoryId, factoryCode: mockFactoryId }) }));
 jest.mock('@/lib/authFetch', () => ({ authFetch: (url: string, init?: RequestInit) => (init?.method === 'GET' ? mockSaved : mockFetch)(url, init) }));
-jest.mock('@/hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key, language: 'ko' }) }));
+// acceptedTitle keeps the file name, so a test can tell which accepted Forecast is shown (R-01).
+jest.mock('@/hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string, opts?: { name?: string }) => (key === 'acceptedTitle' ? `${key}:${opts?.name}` : key), language: 'ko' }) }));
 
 const success = (factoryId = 'factory-1', submission?: { submittedAt: string }) => ({ ok: true, status: 200, json: async () => ({ success: true, preview: {
   factory: { id: factoryId, code: 'ALT' }, fileName: 'plan.xlsx', parserVersion: 'almus-v1', sourceHash: 'hash', dates: ['2026-09-22'],
@@ -143,6 +144,46 @@ describe('Forecast upload workspace', () => {
     render(<ForecastWorkspace />);
     expect(await screen.findByTestId('accepted-load-failed')).toBeInTheDocument();
     expect(screen.queryByTestId('no-accepted-forecast')).not.toBeInTheDocument();
+  });
+  // Codex 재감사 R-01 (2026-09-29): 접수 성공보다 먼저 시작한 조회가 늦게 와도 성공 상태를 되돌리지 않는다.
+  const oldAccepted = { ok: true, status: 200, json: async () => ({ success: true, preview: {
+    factory: { id: 'factory-1', code: 'ALT' }, fileName: 'old-W39.xlsx', parserVersion: 'almus-v1', sourceHash: 'old', dates: ['2026-09-15'], rows: [],
+    summary: { sourceRows: 0, models: 0 }, capacityPolicy: { status: 'unavailable' }, requiresReview: true, capacityValidated: false,
+    submission: { submittedAt: '2026-09-20T02:00:00Z' },
+  } }) };
+  const serverError = { ok: false, status: 500, json: async () => ({ success: false, code: 'submission_load_failed' }) };
+  it.each([
+    ['none', nothingSaved],
+    ['an older accepted file', oldAccepted],
+    ['an error', serverError],
+  ])('R-01: a lookup started before 접수 확정 that returns %s afterwards does not undo the new acceptance', async (_label, stale) => {
+    let finish: (r: unknown) => void = () => {};
+    mockSaved.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    render(<ForecastWorkspace />); select(); fireEvent.click(screen.getByRole('button', { name: 'inspect' }));
+    await screen.findByTestId('unsaved-forecast');
+    mockFetch.mockResolvedValueOnce(success('factory-1', { submittedAt: '2026-09-29T02:00:00Z' }));
+    fireEvent.click(screen.getByTestId('commit-forecast'));
+    await screen.findByTestId('accepted-forecast');
+    await act(async () => finish(stale));
+    expect(screen.getByTestId('accepted-forecast')).toBeInTheDocument();
+    expect(screen.queryByTestId('no-accepted-forecast')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('accepted-load-failed')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('unsaved-forecast')).not.toBeInTheDocument();
+    expect(screen.getByTestId('accepted-forecast')).toHaveTextContent('acceptedTitle:plan.xlsx');
+    expect(screen.getByText('plan.xlsx')).toBeInTheDocument();
+  });
+  it('R-01: a failed 접수 확정 leaves the lookup running, so the accepted Forecast still shows when it arrives', async () => {
+    let finish: (r: unknown) => void = () => {};
+    mockSaved.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    render(<ForecastWorkspace />); select(); fireEvent.click(screen.getByRole('button', { name: 'inspect' }));
+    await screen.findByTestId('unsaved-forecast');
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ success: false, code: 'source_changed' }) });
+    fireEvent.click(screen.getByTestId('commit-forecast'));
+    await screen.findByText('errors.source_changed');
+    expect(mockSaved.mock.calls[0][1].signal.aborted).toBe(false);
+    await act(async () => finish(oldAccepted));
+    expect(screen.getByTestId('accepted-forecast')).toHaveTextContent('acceptedTitle:old-W39.xlsx');
+    expect(screen.getByTestId('unsaved-forecast')).toBeInTheDocument();
   });
   it('has matching Korean/Vietnamese translation keys', () => {
     const keys = (value: object, prefix = ''): string[] => Object.entries(value).flatMap(([key, child]) => typeof child === 'object' ? keys(child, prefix + key + '.') : [prefix + key]);

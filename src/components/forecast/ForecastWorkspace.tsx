@@ -138,7 +138,12 @@ export default function ForecastWorkspace() {
     const received = await request('commit', '/api/forecasts/submission', {
       method: 'POST', body: file, headers: { ...fileHeaders(file), 'x-forecast-source-hash': visiblePreview.sourceHash },
     }, 'submission_failed');
-    if (received) show(received);
+    if (!received) return;
+    // Codex re-audit R-01: a lookup still in flight read the state before this acceptance. Cancel it so its late
+    // answer (none, the older file, or an error) cannot undo what just succeeded. Only on success — a failed commit
+    // leaves the lookup running, so the accepted state still gets filled in.
+    savedRef.current?.abort();
+    show(received);
   }
 
   const quantityColumns: ColumnsType<ForecastQuantity> = [
