@@ -404,13 +404,15 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
             blocks.push({
               ids: [...range], firstName: byId.get(ids[i])!.name,
               key: [
+                // Rule 1 first (user decision 2026-09-29): keeping the walkway to one process outranks sparing machines
+                // whose model has demand next week — those were winning, and mixed walkways that had a clean option.
+                Number(otherProcess > 0),
                 Math.max(...picked.map(c => Number(c.nextWeekDemand))),   // next-week demand last (PRD 6.3)
                 // A new group's start decides whether it can grow as one group at all (no islands), so room comes
                 // before the source order — starting on 2 surplus machines with nowhere to grow strands the rest.
                 Math.max(0, need - room),
                 Math.max(...picked.map(c => TIER[c.reason])),             // proven source order
-                Number(otherProcess > 0),                                 // rule 1: the walkway stays one process
-                Number(!wholeColumn),                                     // rule 2: a whole side before an end block
+                Number(!wholeColumn),                                   // rule 2: a whole side before an end block
                 otherProcess,                                             // less process mixing
                 otherModel,                                               // then less model mixing
                 Math.max(0, excess),                                      // least excess
