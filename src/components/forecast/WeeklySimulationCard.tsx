@@ -1,11 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Alert, Card, Col, Row, Select, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, Card, Col, Row, Select, Space, Statistic, Switch, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { FactoryForecastPreview } from '@/types/forecast';
 import { defaultSimulationWeek, groupWeeks, plantToday, weeklyModelDemand } from '@/lib/forecast/weeklyDemand';
+import { countPoOverrides } from '@/lib/forecast/poOverrides';
 import { matchModels, normalizeProcessName } from '@/lib/forecast/modelAliases';
 import { buildRequirements, type ModelProcessRequirement } from '@/lib/forecast/requiredMachines';
 import { proposeReassignment, type ReassignmentMove } from '@/lib/forecast/reassignment';
@@ -33,6 +34,9 @@ export default function WeeklySimulationCard({ preview, today }: { preview: Fact
   const [weekKey, setWeekKey] = useState(() => defaultSimulationWeek(
     weeks, today ?? plantToday(preview.capacityPolicy.status === 'available' ? preview.capacityPolicy.timezone : null),
   )?.key ?? '');
+  /** 실제 PO 수정값을 시뮬레이션에 쓸지(기본: 쓴다). 끄면 접수한 Forecast 수량으로만 계산해 비교할 수 있다. */
+  const [usePo, setUsePo] = useState(true);
+  const poDays = useMemo(() => countPoOverrides(preview.rows), [preview.rows]);
   const weekIndex = Math.max(0, weeks.findIndex(w => w.key === weekKey));
   const week = weeks[weekIndex];
   const snapshot = preview.capacitySnapshot;
@@ -41,7 +45,7 @@ export default function WeeklySimulationCard({ preview, today }: { preview: Fact
 
   const result = useMemo(() => {
     if (!week || snapshot?.status !== 'available' || policy.status !== 'available') return null;
-    const demands = weeklyModelDemand(preview.rows, week);
+    const demands = weeklyModelDemand(preview.rows, week, { usePo });
     const matches = matchModels(demands.map(d => d.model), snapshot.models);
     const requirements = buildRequirements({ demands, matches, models: snapshot.models, machines: snapshot.machines, breakMinutes: policy.breakMinutes })
       .sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || (b.gap ?? 0) - (a.gap ?? 0) || (a.forecastModel ?? a.dbModel?.name ?? '').localeCompare(b.forecastModel ?? b.dbModel?.name ?? ''));
@@ -52,7 +56,7 @@ export default function WeeklySimulationCard({ preview, today }: { preview: Fact
     const unassigned = active.filter(m => !m.modelId || !m.processId).length;
     const excluded = active.filter(m => m.modelId && m.processId && !forecastProcessIds.has(m.processId)).length;
     return { requirements, proposal, unmapped, unassigned, excluded, demands };
-  }, [preview.rows, week, snapshot, policy]);
+  }, [preview.rows, week, snapshot, policy, usePo]);
 
   const columns: ColumnsType<ModelProcessRequirement> = [
     { title: t('simulation.model'), key: 'model', width: 190, sorter: (a, b) => (a.forecastModel ?? '').localeCompare(b.forecastModel ?? ''), render: (_, r) => <><strong>{r.forecastModel ?? '—'}</strong><div className={styles.secondary}>{r.dbModel?.name ?? t('simulation.statuses.unmapped')}</div></> },
@@ -78,7 +82,9 @@ export default function WeeklySimulationCard({ preview, today }: { preview: Fact
         <label data-testid="week-select">{t('simulation.week')}
           <Select value={weekKey} onChange={setWeekKey} className={styles.weekSelect} options={weeks.map(w => ({ value: w.key, label: `${w.label} · ${w.start.slice(5)}~${w.end.slice(5)}${w.partial ? ` (${t('simulation.partial')})` : ''}` }))} />
         </label>
+        {poDays > 0 && <label data-testid="po-switch"><Switch checked={usePo} onChange={setUsePo} aria-label={t('po.switchLabel')} /> {t('po.switchLabel')}</label>}
       </div>
+      {poDays > 0 && <Typography.Text type="secondary" data-testid="po-switch-help">{t('po.switchHelp', { count: poDays })}</Typography.Text>}
       {snapshot?.status !== 'available' && <Alert type="warning" message={t('simulation.snapshotUnavailable')} />}
       {snapshot?.status === 'available' && policy.status !== 'available' && <Alert type="warning" message={t('simulation.policyUnavailable')} />}
       {result && snapshot?.status === 'available' && policy.status === 'available' && <>

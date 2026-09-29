@@ -71,6 +71,9 @@ const INPUT_VALIDATION = [
 const DOMAIN_ANSWER = [
   "src/components/model-info/ModelInfoManager.tsx | message.error(t('messages.modelNameExists'));",
   "src/components/model-info/ModelInfoManager.tsx | message.error(t('에러.중복공정명'));",
+  // 실제 PO 저장·원복을 서버가 거부한 자리: 409(그사이 새 Forecast 접수)·404·422·400·403. 서버가 준 답이라 세션과 무관하게
+  // 보여야 한다. 통신·서버 실패(po_save_failed)는 바로 위 줄에서 reportFailure 로 나간다.
+  "src/components/forecast/ForecastWorkspace.tsx | message.error(text);",
 ];
 
 /** 서버가 아니라 **브라우저 API** 가 거절한 자리. 세션과 무관하다. */

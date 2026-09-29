@@ -1,7 +1,8 @@
 import type { ForecastSourceRow } from '@/types/forecast';
+import { effectiveQuantity } from './poOverrides';
 
 export interface ForecastWeek { key: string; label: string; start: string; end: string; dates: string[]; partial: boolean }
-export type DemandWarning = 'error_cells' | 'fractional' | 'partial_week' | 'no_numeric' | 'duplicate_rows';
+export type DemandWarning = 'error_cells' | 'fractional' | 'partial_week' | 'no_numeric' | 'duplicate_rows' | 'po_override';
 export interface WeeklyModelDemand {
   model: string; week: string; peakQuantity: number; peakDate: string | null;
   numericDays: number; blankCells: number; errorCells: number; fractional: boolean; warnings: DemandWarning[];
@@ -55,21 +56,26 @@ export function plantToday(timezone: string | null, now = new Date()): string {
  * Peak daily quantity per model inside one week (user decision 2026-09-25: the week's busiest day,
  * not its total or average). Same-model rows are summed per date first (PRD 6.2).
  * Blank = 0; error cells are counted and flagged, never silently zero; fractions round up.
+ * A cell's actual PO (`po`, user request 2026-09-29) replaces its Forecast value, and the model is flagged
+ * `po_override` when one was used. `usePo: false` reads the Forecast as accepted.
  */
-export function weeklyModelDemand(rows: ForecastSourceRow[], week: ForecastWeek): WeeklyModelDemand[] {
+export function weeklyModelDemand(rows: ForecastSourceRow[], week: ForecastWeek, options: { usePo?: boolean } = {}): WeeklyModelDemand[] {
+  const usePo = options.usePo ?? true;
   const inWeek = new Set(week.dates);
-  const models = new Map<string, { daily: Map<string, number>; blank: number; error: number; fractional: boolean; duplicate: boolean }>();
+  const models = new Map<string, { daily: Map<string, number>; blank: number; error: number; fractional: boolean; duplicate: boolean; po: boolean }>();
   for (const row of rows) {
     if (!row.model || !row.processes.length) continue;
     let entry = models.get(row.model);
-    if (!entry) { entry = { daily: new Map(), blank: 0, error: 0, fractional: false, duplicate: false }; models.set(row.model, entry); }
+    if (!entry) { entry = { daily: new Map(), blank: 0, error: 0, fractional: false, duplicate: false, po: false }; models.set(row.model, entry); }
     if (row.issues.includes('duplicate_row')) entry.duplicate = true;
     for (const q of row.quantities) {
       if (!inWeek.has(q.date)) continue;
-      if (q.state === 'blank') { entry.blank++; continue; }
-      if (q.state !== 'number' || q.quantity === null) { entry.error++; continue; }
-      if (!Number.isInteger(q.quantity)) entry.fractional = true;
-      entry.daily.set(q.date, (entry.daily.get(q.date) ?? 0) + q.quantity);
+      const cell = effectiveQuantity(q, usePo);
+      if (cell.po) entry.po = true;
+      if (cell.state === 'blank') { entry.blank++; continue; }
+      if (cell.state !== 'number' || cell.quantity === null) { entry.error++; continue; }
+      if (!Number.isInteger(cell.quantity)) entry.fractional = true;
+      entry.daily.set(q.date, (entry.daily.get(q.date) ?? 0) + cell.quantity);
     }
   }
   return [...models.entries()].map(([model, entry]) => {
@@ -79,6 +85,7 @@ export function weeklyModelDemand(rows: ForecastSourceRow[], week: ForecastWeek)
     if (entry.error) warnings.push('error_cells');
     if (entry.fractional) warnings.push('fractional');
     if (entry.duplicate) warnings.push('duplicate_rows');
+    if (entry.po) warnings.push('po_override');
     if (week.partial) warnings.push('partial_week');
     if (!entry.daily.size) warnings.push('no_numeric');
     return { model, week: week.key, peakQuantity: Math.ceil(peak), peakDate, numericDays: entry.daily.size, blankCells: entry.blank, errorCells: entry.error, fractional: entry.fractional, warnings };

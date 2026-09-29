@@ -4,6 +4,15 @@ export type ForecastIssueCode =
   | 'missing_model' | 'missing_vendor' | 'unsupported_process' | 'duplicate_row'
   | 'blank' | 'error' | 'missing_cache' | 'invalid' | 'fractional';
 
+/**
+ * Actual PO entered after the Forecast was accepted (user request 2026-09-29). It belongs to one accepted Forecast:
+ * a newly accepted file starts without any. The original `quantity` is never overwritten.
+ */
+export interface PoOverride {
+  quantity: number;
+  updatedAt: string;
+}
+
 export interface ForecastQuantity {
   date: string;
   cell: string;
@@ -11,6 +20,8 @@ export interface ForecastQuantity {
   quantity: number | null;
   formula: boolean;
   error: string | null;
+  /** Set only on the accepted Forecast. Wins over `quantity` wherever demand is computed (see `effectiveQuantity`). */
+  po?: PoOverride | null;
 }
 
 export interface ForecastSourceRow {
@@ -53,7 +64,7 @@ export interface FactoryForecastPreview extends ForecastPreview {
   capacityPolicy: ForecastCapacityPolicy;
   capacitySnapshot: ForecastCapacitySnapshot;
   /** Set when this preview is the factory's accepted Forecast (forecast_submissions); absent for an unsaved inspection. */
-  submission?: { submittedAt: string };
+  submission?: { submittedAt: string; submissionId: string };
 }
 
 export type ForecastCapacityPolicy = { status: 'unavailable' } | {

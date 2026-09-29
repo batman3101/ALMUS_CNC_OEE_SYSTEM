@@ -30,7 +30,7 @@
   "models": "Số model gốc",
   "selectedProblemCells": "Ô cần kiểm tra trong kỳ",
   "mappingRows": "Dòng/công đoạn cần kiểm tra",
-  "subtotalNote": "Tổng phụ chỉ cộng ô số trong kỳ, trước khi tách công đoạn. Nếu có ô trống/lỗi thì đây không phải toàn bộ nhu cầu. Không làm tròn số thập phân. Mở rộng dòng để xem ngày, ô gốc và lỗi.",
+  "subtotalNote": "Tổng phụ chỉ cộng ô số trong kỳ, trước khi tách công đoạn. Nếu có ô trống/lỗi thì đây không phải toàn bộ nhu cầu. Không làm tròn số thập phân. Mở rộng dòng để xem ngày, ô gốc và lỗi. Tổng này tính theo bản gốc Forecast đã tiếp nhận, không bao gồm số lượng PO đã sửa (nhập ở cột 'Số lượng PO thực tế' của bảng mở rộng và được phản ánh vào mô phỏng).",
   "sourceRow": "Dòng gốc",
   "model": "Model",
   "process": "Công đoạn",
@@ -74,7 +74,13 @@
     "preview_failed": "Kiểm tra thất bại. Vui lòng thử lại.",
     "source_changed": "Nội dung khác với tệp đã kiểm tra. Hãy kiểm tra lại tệp rồi tiếp nhận.",
     "submission_failed": "Không thể tiếp nhận Forecast. Vui lòng thử lại sau.",
-    "submission_load_failed": "Không kiểm tra được Forecast đã tiếp nhận. Hãy thử lại."
+    "submission_load_failed": "Không kiểm tra được Forecast đã tiếp nhận. Hãy thử lại.",
+    "submission_changed": "Forecast mới đã được tiếp nhận trong lúc đó nên màn hình đã được tải lại. Vui lòng nhập lại.",
+    "no_submission": "Chưa có Forecast nào được tiếp nhận.",
+    "po_target_not_found": "Không tìm thấy dòng/ngày này trong bản đã tiếp nhận. Hãy tải lại trang.",
+    "po_row_unsupported": "Không thể nhập PO cho dòng không nằm trong mô phỏng.",
+    "invalid_request": "Hãy kiểm tra giá trị nhập. Số lượng PO là số nguyên từ 0 trở lên.",
+    "po_save_failed": "Không lưu được số lượng PO. Vui lòng thử lại sau."
   },
   "capacitySettings": "Cài đặt nhà máy: A {{a}} / B {{b}} · Nghỉ {{rest}} phút/ca · {{timezone}}",
   "capacityUnavailable": "Không đọc được cài đặt OEE. Chỉ kiểm tra tệp; tạm dừng tính CAPA.",
@@ -114,7 +120,8 @@
       "fractional": "Làm tròn lên",
       "partial_week": "Tuần không đủ ngày",
       "no_numeric": "Không có số",
-      "duplicate_rows": "Cộng dòng trùng"
+      "duplicate_rows": "Cộng dòng trùng",
+      "po_override": "Đã phản ánh PO sửa"
     },
     "movesTitle": "Đề xuất bố trí lại",
     "machine": "Máy",
@@ -188,5 +195,20 @@
       "too_many_rows": "Dữ liệu quá lớn nên không tải."
     },
     "conflictReloaded": "Người khác đã lưu trước nên kế hoạch mới nhất đã được tải lại. Thay đổi vừa rồi chưa được lưu, hãy áp dụng lại."
+  },
+  "po": {
+    "quantityUsed": "Số lượng (dùng cho mô phỏng)",
+    "forecastOriginal": "Forecast {{n}}",
+    "input": "Số lượng PO thực tế",
+    "placeholder": "SL PO",
+    "apply": "Áp dụng",
+    "revert": "Khôi phục",
+    "tag": "Đã sửa PO",
+    "updatedAt": "Sửa {{time}}",
+    "needsAcceptance": "Chỉ nhập được số lượng PO thực tế sau khi xác nhận tiếp nhận.",
+    "unsupportedRow": "Dòng này không nằm trong mô phỏng nên PO nhập vào sẽ không được phản ánh.",
+    "modifiedDays": "Sửa PO {{count}} ngày",
+    "switchLabel": "Phản ánh số lượng PO đã sửa",
+    "switchHelp": "Có {{count}} ngày sửa PO. Tắt để chỉ tính theo số lượng Forecast đã tiếp nhận."
   }
 }

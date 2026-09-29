@@ -1,13 +1,16 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Col, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Checkbox, Col, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { InboxOutlined } from '@ant-design/icons';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useFailureReport } from '@/hooks/useFailureReport';
 import { useFactory } from '@/contexts/FactoryContext';
 import { authFetch } from '@/lib/authFetch';
-import type { FactoryForecastPreview, ForecastQuantity, ForecastSourceRow } from '@/types/forecast';
+import { countPoOverrides, withPoOverride } from '@/lib/forecast/poOverrides';
+import type { FactoryForecastPreview, ForecastQuantity, ForecastSourceRow, PoOverride } from '@/types/forecast';
+import ForecastQuantityTable from './ForecastQuantityTable';
 import WeeklySimulationCard from './WeeklySimulationCard';
 import styles from './ForecastWorkspace.module.css';
 
@@ -16,6 +19,8 @@ const MAX_BYTES = 4 * 1024 * 1024;
 export default function ForecastWorkspace() {
   const { t, language } = useTranslation('forecast');
   const { factoryId, factoryCode } = useFactory();
+  const reportFailure = useFailureReport();
+  const { message } = App.useApp();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<FactoryForecastPreview | null>(null);
   /** Which upload request is in flight. Starting one aborts the previous one (requestRef). */
@@ -146,18 +151,39 @@ export default function ForecastWorkspace() {
     show(received);
   }
 
-  const quantityColumns: ColumnsType<ForecastQuantity> = [
-    { title: t('date'), dataIndex: 'date', width: 120 },
-    { title: t('cell'), dataIndex: 'cell', width: 90 },
-    { title: t('quantity'), render: (_, q) => q.quantity === null ? '—' : numberFormat.format(q.quantity) },
-    { title: t('state'), render: (_, q) => <Space wrap><Tag color={problem(q) ? 'orange' : 'default'}>{t(`states.${q.state}`)}</Tag>{q.error && <span>{q.error}</span>}{q.quantity !== null && !Number.isInteger(q.quantity) && <Tag color="orange">{t('fractional')}</Tag>}{q.formula && <Tag>{t('cached')}</Tag>}</Space> },
-  ];
+  /**
+   * 실제 PO 수정값을 화면 상태에 반영한다 (서버가 받아들인 뒤에만 부른다).
+   * 요청을 보낼 때 본 접수 번호와 지금 화면의 접수 번호가 다르면 버린다 - 그사이 다른 접수본으로 바뀌었다면
+   * 같은 행 번호라도 다른 파일의 칸이라 엉뚱한 곳에 붙는다.
+   */
+  function patchPo(submissionId: string, sourceRow: number, date: string, po: PoOverride | null) {
+    setPreview(current => (current && current.submission?.submissionId === submissionId
+      ? { ...current, rows: withPoOverride(current.rows, sourceRow, date, po) } : current));
+  }
+
+  /**
+   * 실제 PO 저장·원복이 거부·실패했을 때. 위쪽 error 알림은 업로드 카드에만 뜨므로 아래 펼친 표에서 작업하는
+   * 사용자에게는 보이지 않는다 - 토스트로 알린다. 그사이 새 Forecast 가 접수됐다면(409) 화면이 낡았으므로 저장본을 다시 불러온다.
+   */
+  function handlePoError(code: string, cause?: unknown) {
+    if (code === 'submission_changed') { userFileRef.current = false; loadSaved(); }
+    if (code === 'unauthorized') return; // 세션 만료 안내가 이미 떠 있다
+    const text = t(`errors.${code}`, { defaultValue: t('errors.po_save_failed') });
+    // 통신·서버 실패는 실패 보고 통로(세션 판정 포함)로 보낸다.
+    if (code === 'po_save_failed') { reportFailure(text, cause); return; }
+    // 서버가 준 도메인 답(409·404·422·400·403)은 세션과 무관하게 그대로 알린다 - 원장(failureReportLedger)의 DOMAIN_ANSWER.
+    message.error(text);
+  }
+
   const columns: ColumnsType<ForecastSourceRow> = [
     { title: t('sourceRow'), dataIndex: 'sourceRow', width: 90 },
     { title: t('model'), render: (_, row) => <><strong>{row.model || '—'}</strong><div className={styles.secondary}>{row.displayModel}</div></>, width: 200 },
     { title: t('process'), render: (_, row) => <>{row.processLabel}<div className={styles.secondary}>{row.processes.join(' / ') || t('mappingRequired')}</div></>, width: 180 },
     { title: t('numericSubtotal'), render: (_, row) => numberFormat.format(row.quantities.reduce((sum, q) => sum + (q.quantity ?? 0), 0)), width: 160 },
-    { title: t('review'), render: (_, row) => <Space wrap>{row.issues.map(issue => <Tag color="orange" key={issue}>{t(`issues.${issue}`)}</Tag>)}<span>{t('problemCells', { count: row.quantities.filter(problem).length })}</span></Space> },
+    { title: t('review'), render: (_, row) => {
+      const poDays = countPoOverrides([row]);
+      return <Space wrap>{row.issues.map(issue => <Tag color="orange" key={issue}>{t(`issues.${issue}`)}</Tag>)}<span>{t('problemCells', { count: row.quantities.filter(problem).length })}</span>{poDays > 0 && <Tag color="blue">{t('po.modifiedDays', { count: poDays })}</Tag>}</Space>;
+    } },
   ];
 
   return <div className={styles.workspace}>
@@ -208,7 +234,11 @@ export default function ForecastWorkspace() {
           <Col xs={12} md={6}><Statistic title={t('mappingRows')} value={selectedRows.filter(row => row.issues.length).length} /></Col>
         </Row>
         <Typography.Paragraph type="secondary">{t('subtotalNote')}</Typography.Paragraph>
-        <Table<ForecastSourceRow> columns={columns} dataSource={selectedRows.filter(row => !issuesOnly || row.issues.length || row.quantities.some(problem))} rowKey="sourceRow" scroll={{ x: 850 }} pagination={{ pageSize: 15, showSizeChanger: true }} expandable={{ expandedRowRender: row => <Table<ForecastQuantity> size="small" columns={quantityColumns} dataSource={row.quantities} rowKey="cell" pagination={{ pageSize: 10 }} scroll={{ x: 600 }} /> }} />
+        <Table<ForecastSourceRow> columns={columns} dataSource={selectedRows.filter(row => !issuesOnly || row.issues.length || row.quantities.some(problem))} rowKey="sourceRow" scroll={{ x: 850 }} pagination={{ pageSize: 15, showSizeChanger: true }} expandable={{ expandedRowRender: row => {
+          const submissionId = visiblePreview.submission?.submissionId ?? null;
+          // key: 접수본이 바뀌면(새 접수·다시 불러오기) 입력 중이던 값이 남지 않도록 표를 새로 만든다.
+          return <ForecastQuantityTable key={`${submissionId ?? 'unsaved'}:${row.sourceRow}`} row={row} submissionId={submissionId} numberFormat={numberFormat} onChange={patchPo} onError={handlePoError} />;
+        } }} />
         <Typography.Paragraph className={styles.provenance}>{visiblePreview.sheet} · {visiblePreview.parserVersion} · SHA-256: {visiblePreview.sourceHash}</Typography.Paragraph>
       </Card>
       <WeeklySimulationCard preview={visiblePreview} />
