@@ -8,8 +8,8 @@ const mockReportFailure = jest.fn();
 /** 화면이 처음 읽어 오는 모델·공정 조회 - 빈 목록으로 답한다. */
 const chain = () => {
   const api: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'order', 'limit']) api[method] = () => api;
-  api.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve);
+  for (const method of ['select', 'eq', 'order', 'limit', 'range']) api[method] = () => api;
+  api.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [], error: null, count: 0 }).then(resolve);
   return api;
 };
 const mockClient = { from: () => chain() };

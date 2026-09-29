@@ -29,6 +29,7 @@ import {
 import { createSupabaseClient } from '@/lib/supabase';
 import { useFactory } from '@/contexts/FactoryContext';
 import { authFetch } from '@/lib/authFetch';
+import { readAllRows } from '@/lib/supabasePaging';
 import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import type { ProductModel, ModelProcess } from '@/types/modelInfo';
 import { useFailureReport } from '@/hooks/useFailureReport';
@@ -114,16 +115,18 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   // 아래 공정 표는 selectedModel 로 화면에서 거른다.
   const fetchProcesses = async () => {
     try {
-      const { data, error } = await supabase
+      // 끝까지 읽는다 - 서버 반환 상한을 넘어도 잘린 목록으로 공정 수를 세거나 모델의 공정을 놓치지 않도록(감사 MODEL-01).
+      // 전체 개수와 맞춰 완전성을 확인하지 못하면 예외가 되어 아래 catch 에서 실패로 알린다.
+      const rows = await readAllRows<ModelProcess>((from, to) => supabase
         .from('model_processes')
         .select(`
           *,
           product_models!inner(model_name)
-        `)
-        .order('process_order', { ascending: true });
-
-      if (error) throw error;
-      setProcesses(data || []);
+        `, { count: 'exact' })
+        .order('process_order', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to));
+      setProcesses(rows);
     } catch (error) {
       console.error('공정 조회 오류:', error);
       reportFailure(t('에러.공정목록조회실패'), error);
