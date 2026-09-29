@@ -32,7 +32,7 @@ export async function loadPoOverrides(factoryId: string, submissionId: string): 
     .select('source_row, work_date, quantity, updated_at', { count: 'exact' })
     .eq('factory_id', factoryId).eq('submission_id', submissionId)
     .order('source_row', { ascending: true }).order('work_date', { ascending: true })
-    .range(from, to));
+    .range(from, to), { keyOf: row => row.source_row + '|' + row.work_date });
   return rows.map(r => ({ sourceRow: r.source_row, date: r.work_date, quantity: r.quantity, updatedAt: r.updated_at }));
 }
 

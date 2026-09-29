@@ -93,6 +93,12 @@ describe('loadPoOverrides', () => {
     await expect(loadPoOverrides('f1', SUBMISSION)).rejects.toMatchObject({ name: 'IncompleteReadError', reason: 'count_missing' });
   });
 
+  // 재감사 PAGE-01 (2026-09-29): 쪽 경계에서 같은 칸이 두 번 읽히면(오프셋 이동) 그 결과를 정상으로 쓰지 않는다.
+  it('PAGE-01: 같은 칸(행 번호·날짜)이 두 번 읽히면 완전한 결과로 받아들이지 않고 실패한다', async () => {
+    mockOverrides.mockResolvedValue({ data: [overrideRow(0), overrideRow(0)], error: null, count: 2 });
+    await expect(loadPoOverrides('f1', SUBMISSION)).rejects.toMatchObject({ name: 'IncompleteReadError', reason: 'changed' });
+  });
+
   it('PO-01: 개수는 더 있다는데 빈 쪽이 오면 조용히 넘기지 않고 실패한다', async () => {
     mockOverrides.mockResolvedValue({ data: [], error: null, count: 3 });
     await expect(loadPoOverrides('f1', SUBMISSION)).rejects.toMatchObject({ name: 'IncompleteReadError', reason: 'short_page' });

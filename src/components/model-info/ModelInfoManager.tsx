@@ -128,7 +128,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
         `, { count: 'exact' })
         .order('process_order', { ascending: true })
         .order('id', { ascending: true })
-        .range(from, to));
+        .range(from, to), { keyOf: row => row.id });
       setProcesses(rows);
     } catch (error) {
       console.error('공정 조회 오류:', error);

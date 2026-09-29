@@ -135,6 +135,14 @@ describe('ModelInfoManager - 모델 표의 공정 수', () => {
     expect(mockReportFailure).not.toHaveBeenCalled();
   });
 
+  it('PAGE-01: 같은 공정이 두 번 읽히면(쪽 경계 중복) 틀린 공정 수를 쓰지 않고 실패를 알린다', async () => {
+    mockProcessRows = [processes[0], processes[0], processes[1], processes[2]];
+    render(<ModelInfoManager />);
+    await waitFor(() => expect(mockReportFailure).toHaveBeenCalled());
+    expect(mockReportFailure.mock.calls[0][0]).toBe('에러.공정목록조회실패');
+    expect(mockReportFailure.mock.calls[0][1]).toMatchObject({ name: 'IncompleteReadError', reason: 'changed' });
+  });
+
   it('MODEL-01: 서버가 전체 개수를 주지 않아 완전성을 확인할 수 없으면 틀린 숫자를 조용히 쓰지 않고 실패를 알린다', async () => {
     // count 를 요구했는데 못 받는 서버 - 위 가짜 서버에서 wantCount 를 끄는 대신 select 옵션을 무시하게 만든다.
     const original = mockClient.from;
