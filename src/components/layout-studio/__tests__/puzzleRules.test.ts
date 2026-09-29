@@ -62,6 +62,13 @@ describe('PuzzleBoard.evaluate — 조각을 놓으면 규칙상 어떤가', () 
     expect(board.evaluate(state({}), B, [1])).toEqual({ level: 'good', reasons: [] });
   });
 
+  it('원래 자리의 무리가 갈라지면 split (다리 열을 빼 가면) — 추천과 같은 규칙, 사용자 결정 2026-09-29', () => {
+    // A 가 네 열 전부. 동선 1 R 열(5–8)은 동선 1 L 과 동선 2 L 을 잇는 다리 — 통째로 X 가 되면 동선 1 L 의 A 가 떨어진다.
+    expect(board.evaluate(state({}), X, [5, 6, 7, 8])).toEqual({ level: 'bad', reasons: ['split'] });
+    // 가장자리 열(동선 2 R)은 빼도 남은 A 가 이어진다.
+    expect(board.evaluate(state({}), X, [13, 14, 15, 16]).reasons).not.toContain('split');
+  });
+
   it('빈 자리로 만드는 것은 판정하지 않는다', () => {
     expect(board.evaluate(state({}), null, [2]).level).toBe('good');
   });

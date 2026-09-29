@@ -312,6 +312,34 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
   /** Two machines are side by side when their rows overlap — one row pitch of tolerance (72 on a 62-high box). */
   const tolerance = Math.max(...active.map(m => positions.get(m.id)!.height)) * 1.3;
 
+  // Members of each model·process as moves are made, for the source-side island check below.
+  const membersOf = new Map<string, Set<string>>();
+  for (const [id, g] of current) if (g) { if (!membersOf.has(g)) membersOf.set(g, new Set()); membersOf.get(g)!.add(id); }
+  const columnOf = new Map<string, string>();
+  for (const [column, ids] of columns) for (const id of ids) columnOf.set(id, column);
+  /**
+   * Pieces a model·process forms without `leaving`: next to each other in one column, or rows overlapping in the
+   * facing / back-to-back column. Same connectivity as the attach rule and as puzzleRules.groupsOf on the screen.
+   */
+  const piecesOf = (group: string, leaving: ReadonlySet<string>) => {
+    const members = [...(membersOf.get(group) ?? [])].filter(id => !leaving.has(id));
+    const set = new Set(members);
+    const parent = new Map(members.map(id => [id, id]));
+    const find = (id: string): string => { while (parent.get(id) !== id) id = parent.get(id)!; return id; };
+    const join = (a: string, b: string) => parent.set(find(a), find(b));
+    for (const id of members) {
+      const column = columnOf.get(id)!, ids = columns.get(column)!;
+      const next = ids[ids.indexOf(id) + 1];
+      if (next !== undefined && set.has(next)) join(id, next);
+      const y = positions.get(id)!.y;
+      for (const c of neighbourColumns(column)) {
+        for (const other of columns.get(c)!) if (set.has(other) && Math.abs(positions.get(other)!.y - y) <= tolerance) join(id, other);
+      }
+    }
+    return new Set(members.map(find)).size;
+  };
+  const NONE: ReadonlySet<string> = new Set();
+
   for (const shortage of shortages) {
     const target = groupKey(shortage.modelId, shortage.processId);
     const targetProcess = processOf(target);
@@ -329,6 +357,8 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
       const touches = (column: string, top: number, bottom: number) => columns.get(column)!
         .some(id => current.get(id) === target && positions.get(id)!.y >= top - tolerance && positions.get(id)!.y <= bottom + tolerance);
       const blocks: Block[] = [];
+      const piecesNow = new Map<string, number>();
+      const piecesBefore = (g: string) => { if (!piecesNow.has(g)) piecesNow.set(g, piecesOf(g, NONE)); return piecesNow.get(g)!; };
 
       for (const [column, ids] of columns) {
         const walkway = walkwayOf(column);
@@ -360,6 +390,9 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
             const attached = !hasMembers || ids.some(id => current.get(id) === target)
               || neighbourColumns(column).some(c => touches(c, span.top, span.bottom));
             if (!attached) continue;
+            // No islands on the source side either (user decision 2026-09-29, W42 H8 SUB): taking a block must not split
+            // what stays behind — e.g. a whole column that was the bridge between two columns of its group.
+            if ([...taken.keys()].some(g => piecesOf(g, range) > piecesBefore(g))) continue;
             // Where a new group starts, it needs room to grow: what it could still take here and next door, each source
             // counted only up to what that source can still give (a surplus of 2 is 2, however many machines it has).
             const room = hasMembers ? need : roomAround(column, available);
@@ -397,6 +430,10 @@ function recommendByWalkway({ requirements, machines, positions, locked, nextWee
         const pick = pool.get(id)!;
         used.add(id);
         if (pick.group) quota.set(pick.group, (quota.get(pick.group) ?? 0) - 1);
+        const was = current.get(id);
+        if (was) membersOf.get(was)?.delete(id);
+        if (!membersOf.has(target)) membersOf.set(target, new Set());
+        membersOf.get(target)!.add(id);
         current.set(id, target);
         moves.push({
           machineId: id, machineName: pick.machine.name,

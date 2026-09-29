@@ -232,4 +232,19 @@ describe('동선 기준 추천', () => {
     expect(result.moves).toHaveLength(2);
     expect(result.unresolved.reduce((s, u) => s + u.remaining, 0)).toBe(2);
   });
+
+  it('빼 오는 쪽도 섬 금지: 무리를 잇는 다리 열을 빼 가서 남은 무리가 갈라지면 안 된다 (W42 H8 SUB 사례, 사용자 결정 2026-09-29)', () => {
+    // S 16대(여유 6)가 동선 9 R · 동선 10 L · 동선 10 R 아래 4대로 한 무리. 동선 10 L 이 동선 9 R(등)과
+    // 동선 10 R(맞은편)을 잇는 다리다. T 는 동선 10 R 위 2대에서 6대 부족.
+    // 다리(동선 10 L)를 통째로 가져가면 남은 S 가 동선 9 R 과 동선 10 R 로 갈라진다 → 대신 동선 10 R 을 채우고
+    // 모자란 2대는 다리 열의 끝 블록에서 가져온다(남은 S 는 동선 9 R 과 등으로 이어져 한 무리).
+    const s = (n: number) => fill(n, 'S', 'CNC1') as Array<[string, Proc] | null>;
+    const result = run([
+      { walkway: 9, side: 'R', cells: s(6) },
+      { walkway: 10, side: 'L', cells: s(6) },
+      { walkway: 10, side: 'R', cells: [['T', 'CNC1'], ['T', 'CNC1'], ...s(4)] },
+    ], [req('T', 'CNC1', 8, 2, 'shortage'), req('S', 'CNC1', 10, 16, 'surplus')]);
+    expect(movedTo(result, 'T')).toEqual(['10L00', '10L01', '10R02', '10R03', '10R04', '10R05']);
+    expect(result.unresolved).toEqual([]);
+  });
 });
