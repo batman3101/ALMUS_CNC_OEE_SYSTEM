@@ -52,7 +52,9 @@
     "admin": "관리자",
     "engineer": "엔지니어",
     "operator_role": "운영자",
-    "ongoing": "진행중"
+    "ongoing": "진행중",
+    "defectPendingPlaceholder": "미검사 (빈칸)",
+    "defectPendingHint": "불량 수량을 아직 입력하지 않은 교대가 있습니다(미검사)"
   },
   "shift": {
     "dayShift": "주간조",
@@ -127,7 +129,9 @@
     "confirmDeleteDescription": "이 생산 기록을 삭제하면 복구할 수 없습니다.",
     "noExistingRecord": "저장된 생산 기록이 없습니다. 새로 입력해주세요.",
     "noRecordsSaved": "저장된 생산 기록이 없습니다.",
-    "deletedShiftsSuffix": " ({{count}}개 교대 기록 삭제됨)"
+    "deletedShiftsSuffix": " ({{count}}개 교대 기록 삭제됨)",
+    "recordChangedReload": "다른 곳에서 이 교대 기록이 먼저 변경되었습니다. 최신 기록을 다시 불러왔으니 확인 후 다시 저장해 주세요.",
+    "downtimeChangedRetry": "저장하는 동안 비가동 기록이 바뀌었습니다. 다시 저장해 주세요."
   },
   "editMode": {
     "existingRecordFound": "기존 데이터 발견",
@@ -234,5 +238,18 @@
     "units": "분",
     "hoursMinutesFormat": "{hours}시간 {minutes}분",
     "defaultTimeNote": "현재 시간이 기본값입니다"
+  },
+  "dailyErrors": {
+    "missing_machine_or_date": "설비와 날짜를 선택해 주세요.",
+    "invalid_output_qty": "{{shift}} 생산 수량은 0 이상의 정수여야 합니다.",
+    "invalid_defect_qty": "{{shift}} 불량 수량은 0 이상의 정수이거나 빈칸(미검사)이어야 합니다.",
+    "defect_exceeds_output": "{{shift}} 불량 수량은 생산 수량보다 클 수 없습니다.",
+    "defect_unconfirm_not_allowed": "{{shift}}의 확정된 불량 수량은 비울 수 없습니다. 숫자로 고쳐 주세요.",
+    "invalid_operating_minutes": "{{shift}} 가동시간은 0 이상 {{max}} 이하의 정수(분)여야 합니다.",
+    "expected_records_required": "화면을 새로 고친 뒤 다시 저장해 주세요.",
+    "shift_config_invalid": "교대 시간 설정이 올바르지 않습니다. 관리자에게 문의해 주세요.",
+    "downtime_source_failed": "비가동 기록을 읽지 못했습니다. 잠시 후 다시 저장해 주세요.",
+    "machine_not_found": "설비를 찾을 수 없습니다.",
+    "machine_inactive": "비활성 설비에는 생산 기록을 저장할 수 없습니다."
   }
 }

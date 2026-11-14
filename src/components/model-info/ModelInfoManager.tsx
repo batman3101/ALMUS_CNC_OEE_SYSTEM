@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
+  App,
   Card,
   Table,
   Button,
@@ -22,10 +23,13 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  SettingOutlined
+  SettingOutlined,
+  DownloadOutlined
 } from '@ant-design/icons';
 import { createSupabaseClient } from '@/lib/supabase';
+import { useFactory } from '@/contexts/FactoryContext';
 import { authFetch } from '@/lib/authFetch';
+import { readAllRows } from '@/lib/supabasePaging';
 import { useModelInfoTranslation } from '@/hooks/useTranslation';
 import type { ProductModel, ModelProcess } from '@/types/modelInfo';
 import { useFailureReport } from '@/hooks/useFailureReport';
@@ -69,6 +73,10 @@ type ModelInfoManagerProps = Record<string, never>;
 const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   const reportFailure = useFailureReport();
   const { t } = useModelInfoTranslation();
+  const { factoryCode } = useFactory();
+  // 정적 message 는 테마·로케일 컨텍스트를 받지 못한다 - 새로 넣는 알림은 App 인스턴스로 낸다.
+  const { message: appMessage } = App.useApp();
+  const [exporting, setExporting] = useState(false);
   const [models, setModels] = useState<ProductModel[]>([]);
   const [processes, setProcesses] = useState<ModelProcess[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,7 +88,10 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
   const [modelForm] = Form.useForm();
   const [processForm] = Form.useForm();
 
-  const supabase = createSupabaseClient();
+  // 클라이언트는 화면이 뜰 때 한 번만 만든다. createSupabaseClient 는 부를 때마다 자동 토큰 갱신·세션 저장이 켜진 새 인증 클라이언트를
+  // 만들고, 새 클라이언트는 시작하며 다른 인스턴스(AuthContext)에 인증 이벤트를 퍼뜨린다. 렌더마다 만들면 컨텍스트 구독(공장 정보)이
+  // 더해지는 순간 '다시 그림 → 새 클라이언트 → 인증 이벤트 → 프로필·공장 재조회 → 다시 그림' 반복이 생긴다(2026-09-29 통제 실험).
+  const supabase = useMemo(() => createSupabaseClient(), []);
 
   // 모델 목록 조회
   const fetchModels = async () => {
@@ -102,25 +113,23 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     }
   };
 
-  // 공정 목록 조회
-  const fetchProcesses = async (modelId?: string) => {
+  // 공정 목록 조회 - 항상 전체를 읽는다. 위 모델 표의 '공정 수'가 이 목록에서 세어지므로, 모델별로 좁혀 읽으면
+  // '공정 관리'를 누르는 순간 다른 모델의 공정 수가 0 으로 보인다(사용자 승인 2026-09-29 수정).
+  // 아래 공정 표는 selectedModel 로 화면에서 거른다.
+  const fetchProcesses = async () => {
     try {
-      let query = supabase
+      // 끝까지 읽는다 - 서버 반환 상한을 넘어도 잘린 목록으로 공정 수를 세거나 모델의 공정을 놓치지 않도록(감사 MODEL-01).
+      // 전체 개수와 맞춰 완전성을 확인하지 못하면 예외가 되어 아래 catch 에서 실패로 알린다.
+      const rows = await readAllRows<ModelProcess>((from, to) => supabase
         .from('model_processes')
         .select(`
           *,
           product_models!inner(model_name)
-        `)
-        .order('process_order', { ascending: true });
-
-      if (modelId) {
-        query = query.eq('model_id', modelId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setProcesses(data || []);
+        `, { count: 'exact' })
+        .order('process_order', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to), { keyOf: row => row.id });
+      setProcesses(rows);
     } catch (error) {
       console.error('공정 조회 오류:', error);
       reportFailure(t('에러.공정목록조회실패'), error);
@@ -228,6 +237,24 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
     }
   };
 
+  // 모든 모델·공정을 엑셀로 출력 (사용자 요청 2026-09-29). 화면 상태가 아니라 DB 에서 새로 읽는다 -
+  // 화면의 공정 목록은 '공정 관리'를 누르면 그 모델 것만 남아, 그대로 내보내면 다른 모델의 공정 수가 0 이 된다.
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      // xlsx 는 무거우므로 출력할 때만 불러온다.
+      const { exportModelInfo } = await import('@/lib/excel/modelInfoExport');
+      const counts = await exportModelInfo({ client: supabase, t: key => t(key), factoryCode });
+      appMessage.success(t('export.success', { models: counts.models, processes: counts.processes }));
+    } catch (error) {
+      console.error('모델 정보 엑셀 출력 오류:', error);
+      reportFailure(t('export.failed'), error);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // 모델 편집 모달 열기
   const openModelModal = (model?: ProductModel) => {
     setEditingModel(model || null);
@@ -307,7 +334,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
             icon={<SettingOutlined />}
             onClick={() => {
               setSelectedModel(record);
-              fetchProcesses(record.id);
+              fetchProcesses();
             }}
             size="small"
           >
@@ -425,13 +452,22 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
           </div>
         }
         extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => openModelModal()}
-          >
-            {t('버튼.모델추가')}
-          </Button>
+          <Space>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={handleExport}
+              loading={exporting}
+            >
+              {t('export.button')}
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => openModelModal()}
+            >
+              {t('버튼.모델추가')}
+            </Button>
+          </Space>
         }
         style={{ marginBottom: '24px' }}
       >
@@ -471,11 +507,7 @@ const ModelInfoManager: React.FC<ModelInfoManagerProps> = () => {
               onChange={(value) => {
                 const model = models.find(m => m.id === value);
                 setSelectedModel(model || null);
-                if (value) {
-                  fetchProcesses(value);
-                } else {
-                  fetchProcesses(); // 전체 공정 조회
-                }
+                fetchProcesses(); // 공정 표는 selectedModel 로 화면에서 거른다
               }}
               allowClear
               onClear={() => {

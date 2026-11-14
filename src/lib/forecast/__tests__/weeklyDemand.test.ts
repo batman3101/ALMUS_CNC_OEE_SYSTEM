@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { ForecastSourceRow } from '@/types/forecast';
 import { parseForecastFile } from '../parseForecast';
 import { defaultSimulationWeek, groupWeeks, isoWeek, plantToday, weeklyModelDemand } from '../weeklyDemand';
+import { mergePoOverrides } from '../poOverrides';
 
 const row = (model: string, quantities: Array<[string, number | null, ForecastSourceRow['quantities'][number]['state']?]>, extra: Partial<ForecastSourceRow> = {}): ForecastSourceRow => ({
   sourceRow: 1, model, displayModel: model, vendor: 'ALMUS', processGroup: 'CNC', processLabel: 'CNC 1 ~ CNC 2', processes: ['CNC1', 'CNC2'], issues: [],
@@ -105,4 +106,69 @@ describe('plantToday', () => {
   const now = new Date('2026-09-29T18:30:00Z');
   it('uses the plant timezone', () => { expect(plantToday('Asia/Ho_Chi_Minh', now)).toBe('2026-09-30'); });
   it('falls back to the browser date on an invalid timezone', () => { expect(plantToday('Not/AZone', now)).toMatch(/^\d{4}-\d{2}-\d{2}$/); });
+});
+
+describe('weeklyModelDemand — 실제 PO 수정값 (사용자 요청 2026-09-29)', () => {
+  const week = groupWeeks(days('2026-10-05', 7))[0];
+  const po = (sourceRow: number, date: string, quantity: number) => ({ sourceRow, date, quantity, updatedAt: 't' });
+  const forecast = [row('ON 1', [['2026-10-05', 100], ['2026-10-06', 300], ['2026-10-07', 200]], { sourceRow: 15 })];
+  const of = (rows: ForecastSourceRow[], options?: { usePo?: boolean }) => weeklyModelDemand(rows, week, options).find(d => d.model === 'ON 1')!;
+
+  it('수정값이 그 날짜의 Forecast 수량을 대신해 주간 최대값이 바뀐다', () => {
+    const rows = mergePoOverrides(forecast, [po(15, '2026-10-06', 50), po(15, '2026-10-07', 800)]);
+    const demand = of(rows);
+    expect(demand).toMatchObject({ peakQuantity: 800, peakDate: '2026-10-07' });
+    expect(demand.warnings).toContain('po_override');
+  });
+
+  it('원본 최대일을 더 낮게 고치면 다음으로 큰 날이 최대가 된다', () => {
+    expect(of(mergePoOverrides(forecast, [po(15, '2026-10-06', 50)]))).toMatchObject({ peakQuantity: 200, peakDate: '2026-10-07' });
+  });
+
+  it('usePo: false 면 접수한 Forecast 그대로 읽고 경고도 없다', () => {
+    const demand = of(mergePoOverrides(forecast, [po(15, '2026-10-06', 50)]), { usePo: false });
+    expect(demand).toMatchObject({ peakQuantity: 300, peakDate: '2026-10-06' });
+    expect(demand.warnings).not.toContain('po_override');
+  });
+
+  it('빈 칸은 PO 로 채워지고, 오류 칸은 PO 로 해소되어 error_cells 경고가 사라진다', () => {
+    const rows = [row('ON 1', [['2026-10-05', 100], ['2026-10-06', null, 'blank'], ['2026-10-07', null, 'error']], { sourceRow: 15 })];
+    const before = of(rows);
+    expect(before).toMatchObject({ blankCells: 1, errorCells: 1 });
+    expect(before.warnings).toContain('error_cells');
+    const after = of(mergePoOverrides(rows, [po(15, '2026-10-06', 400), po(15, '2026-10-07', 250)]));
+    expect(after).toMatchObject({ blankCells: 0, errorCells: 0, peakQuantity: 400, numericDays: 3 });
+    expect(after.warnings).not.toContain('error_cells');
+  });
+
+  it('0 인 PO 는 그날 수요가 0 이라는 뜻이다', () => {
+    expect(of(mergePoOverrides(forecast, [po(15, '2026-10-06', 0), po(15, '2026-10-07', 0)]))).toMatchObject({ peakQuantity: 100, peakDate: '2026-10-05' });
+  });
+
+  it('같은 모델의 다른 행은 자기 행의 수정값만 받는다 — 합계는 행별 유효 값의 합이다', () => {
+    const rows = [
+      row('ON 1', [['2026-10-05', 100]], { sourceRow: 15 }),
+      row('ON 1', [['2026-10-05', 40]], { sourceRow: 20, vendor: 'OTHER' }),
+    ];
+    expect(of(mergePoOverrides(rows, [po(20, '2026-10-05', 60)]))).toMatchObject({ peakQuantity: 160, peakDate: '2026-10-05' });
+  });
+
+  it('그 주 밖의 수정값은 그 주 계산과 경고에 영향을 주지 않는다', () => {
+    const rows = [row('ON 1', [['2026-10-05', 100], ['2026-10-12', 900]], { sourceRow: 15 })];
+    const demand = of(mergePoOverrides(rows, [po(15, '2026-10-12', 1)]));
+    expect(demand).toMatchObject({ peakQuantity: 100 });
+    expect(demand.warnings).not.toContain('po_override');
+  });
+
+  it('수정값을 쓴 모델에만 경고가 붙는다', () => {
+    const rows = [...forecast, row('M3', [['2026-10-05', 10]], { sourceRow: 16 })];
+    const demands = weeklyModelDemand(mergePoOverrides(rows, [po(15, '2026-10-06', 1)]), week);
+    expect(demands.find(d => d.model === 'ON 1')!.warnings).toContain('po_override');
+    expect(demands.find(d => d.model === 'M3')!.warnings).not.toContain('po_override');
+  });
+
+  it('CNC1~CNC2 로 매핑되지 않은 행은 수정값이 있어도 수요에 들어가지 않는다(시뮬레이션 대상이 아니다)', () => {
+    const rows = [row('CNC3', [['2026-10-05', 100]], { sourceRow: 30, processes: [] })];
+    expect(weeklyModelDemand(mergePoOverrides(rows, [po(30, '2026-10-05', 999)]), week)).toEqual([]);
+  });
 });

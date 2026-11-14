@@ -6,7 +6,7 @@ import { array, BadRequest, isDate, jsonBody, text, uuid } from '@/lib/layout-pl
 
 export const runtime = 'nodejs';
 
-const WARNINGS = new Set(['error_cells', 'fractional', 'partial_week', 'no_numeric', 'duplicate_rows']);
+const WARNINGS = new Set(['error_cells', 'fractional', 'partial_week', 'no_numeric', 'duplicate_rows', 'po_override']);
 
 function demand(item: unknown): WeeklyModelDemand {
   const d = (item ?? {}) as Record<string, unknown>;

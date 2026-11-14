@@ -30,7 +30,7 @@
   "models": "원본 모델 수",
   "selectedProblemCells": "선택 기간 검토 셀",
   "mappingRows": "행/공정 검토 대상",
-  "subtotalNote": "소계는 선택 기간의 숫자 셀만 합산한 공정 전개 전 값입니다. 빈값·오류가 있으면 전체 필요량을 뜻하지 않습니다. 소수는 반올림하지 않습니다. 행을 펼치면 날짜·원본 셀·오류를 확인할 수 있습니다.",
+  "subtotalNote": "소계는 선택 기간의 숫자 셀만 합산한 공정 전개 전 값입니다. 빈값·오류가 있으면 전체 필요량을 뜻하지 않습니다. 소수는 반올림하지 않습니다. 행을 펼치면 날짜·원본 셀·오류를 확인할 수 있습니다. 이 소계는 접수한 Forecast 원본 기준이며 실제 PO 수정값은 포함하지 않습니다(펼친 표의 '실제 PO 수량'에 입력하며 시뮬레이션에 반영됩니다).",
   "sourceRow": "원본 행",
   "model": "모델",
   "process": "공정",
@@ -74,7 +74,13 @@
     "preview_failed": "파일 검증에 실패했습니다. 다시 시도하세요.",
     "source_changed": "검증한 파일과 내용이 다릅니다. 파일을 다시 검증한 뒤 접수하세요.",
     "submission_failed": "Forecast를 접수하지 못했습니다. 잠시 후 다시 시도하세요.",
-    "submission_load_failed": "접수된 Forecast를 확인하지 못했습니다. 다시 시도하세요."
+    "submission_load_failed": "접수된 Forecast를 확인하지 못했습니다. 다시 시도하세요.",
+    "submission_changed": "그사이 새 Forecast 가 접수되어 화면을 새로 불러왔습니다. 다시 입력해 주세요.",
+    "no_submission": "접수된 Forecast 가 없습니다.",
+    "po_target_not_found": "접수본에서 해당 행·날짜를 찾을 수 없습니다. 새로고침해 주세요.",
+    "po_row_unsupported": "시뮬레이션 대상이 아닌 행에는 PO 를 입력할 수 없습니다.",
+    "invalid_request": "입력값을 확인해 주세요. PO 수량은 0 이상의 정수입니다.",
+    "po_save_failed": "PO 수량을 저장하지 못했습니다. 잠시 후 다시 시도하세요."
   },
   "capacitySettings": "현재 공장 설정: A {{a}} / B {{b}} · 교대당 휴식 {{rest}}분 · {{timezone}}",
   "capacityUnavailable": "OEE 시간 설정을 읽지 못했습니다. 입력 검증만 가능하며 CAPA 계산은 보류합니다.",
@@ -114,7 +120,8 @@
       "fractional": "소수 올림",
       "partial_week": "부분 주",
       "no_numeric": "숫자 없음",
-      "duplicate_rows": "중복 행 합산"
+      "duplicate_rows": "중복 행 합산",
+      "po_override": "PO 수정값 반영"
     },
     "movesTitle": "재배치 검토안",
     "machine": "설비",
@@ -188,5 +195,20 @@
       "too_many_rows": "데이터가 너무 많아 불러오지 않았습니다."
     },
     "conflictReloaded": "다른 사용자가 먼저 저장해서 최신 계획을 다시 불러왔습니다. 방금 바꾼 내용은 저장되지 않았으니 다시 적용해 주세요."
+  },
+  "po": {
+    "quantityUsed": "수량 (시뮬레이션 사용값)",
+    "forecastOriginal": "Forecast {{n}}",
+    "input": "실제 PO 수량",
+    "placeholder": "PO 수량",
+    "apply": "적용",
+    "revert": "원복",
+    "tag": "PO 수정",
+    "updatedAt": "수정 {{time}}",
+    "needsAcceptance": "접수 확정 후에 실제 PO 수량을 입력할 수 있습니다.",
+    "unsupportedRow": "시뮬레이션 대상이 아닌 행이라 PO 를 입력해도 반영되지 않습니다.",
+    "modifiedDays": "PO 수정 {{count}}일",
+    "switchLabel": "실제 PO 수정값 반영",
+    "switchHelp": "PO 수정 {{count}}일이 있습니다. 끄면 접수한 Forecast 수량으로만 계산합니다."
   }
 }

@@ -129,5 +129,28 @@
     "초": "giây",
     "초값": "{{n}} giây",
     "개값": "{{n}} cái"
+  },
+  "export": {
+    "button": "Xuất Excel",
+    "success": "Đã tạo tệp Excel ({{models}} mô hình · {{processes}} công đoạn)",
+    "failed": "Xuất Excel không thành công",
+    "sheetModels": "Mô hình",
+    "sheetProcesses": "Công đoạn",
+    "sheetInfo": "Thông tin xuất",
+    "updatedAt": "Ngày cập nhật",
+    "tactTime": "Tact Time (giây/cái)",
+    "infoItem": "Mục",
+    "infoValue": "Giá trị",
+    "infoFactory": "Nhà máy",
+    "infoExportedAt": "Thời điểm xuất",
+    "infoModelCount": "Số mô hình",
+    "infoProcessCount": "Số công đoạn",
+    "infoExcluded": "Công đoạn bị loại (thuộc mô hình đã xóa)",
+    "infoScope": "Phạm vi xuất",
+    "infoScopeValue": "Chỉ gồm các mô hình đang hoạt động hiển thị trên màn hình. Không gồm mô hình đã xóa (ngừng hoạt động).",
+    "infoTactUnit": "Đơn vị Tact Time",
+    "infoTactUnitValue": "Giây trên mỗi sản phẩm (không phải theo chu kỳ).",
+    "infoCavity": "Số Cavity",
+    "infoCavityValue": "Chỉ mang tính tham khảo. Không nhân hoặc chia trong tính OEE·CAPA."
   }
 }

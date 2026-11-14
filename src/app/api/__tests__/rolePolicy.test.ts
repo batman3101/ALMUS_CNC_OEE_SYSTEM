@@ -53,6 +53,7 @@ const POLICY: Record<string, Record<string, string>> = {
   // Forecast 화면(`/forecast`)과 같은 등급 — 2026-09-25 사용자 확인.
   'forecasts/preview': { POST: AE },
   'forecasts/submission': { GET: AE, POST: AE },
+  'forecasts/po-overrides': { PUT: AE, DELETE: AE },
   // Layout 계획(도면·추천·미세조정·확정·셋업). 확정도 관리자·엔지니어 둘 다 — 2026-09-25 사용자 결정
   // (PRD D11 "관리자 기본, 엔지니어는 정책"의 답). 쓰기는 전부 RPC 안에서 공장 범위로 묶인다.
   'layout-planning/workspace': { GET: AE },
@@ -89,7 +90,8 @@ const POLICY: Record<string, Record<string, string>> = {
   // 전사 마감 대기 큐(읽기 전용). 운영자도 본다 — 다만 라우트가 `assignedMachineIds` 로
   // 스코프를 좁히므로 남의 설비는 나오지 않는다. 마감 **쓰기**는 여전히 close-shift 하나뿐이다.
   'production-records/close-queue': { GET: AEO },
-  'production-records/daily': { POST: AEO },
+  // 2026-11-14 감사 F-02: '휴무' 체크가 확정 기록을 지우므로 삭제와 같은 등급(사용자 확정). 화면 /data-input 도 MANAGERS.
+  'production-records/daily': { POST: AE },
   'production-records/pending': { GET: AEO },
   'productivity-analysis': { GET: AE },
   'quality-analysis': { GET: AE },

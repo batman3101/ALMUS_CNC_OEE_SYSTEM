@@ -376,8 +376,44 @@ app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파
      (`npx supabase start` 필요, 로컬 전용 픽스처 생성, localhost 가 아니면 실행 거부).
   3. `supabase/tests/layout_planning_invariants.sql` — RPC 불변조건 L1–L17(롤백형).
 
+### Forecast 실제 PO 수정 (`/forecast`)
+
+접수한 Forecast 의 날짜별 수량을 실제 PO 로 고쳐 시뮬레이션에 쓴다(2026-09-29). 코드를 고칠 때 지킬 것:
+
+- **수정값은 '접수 1건'에 속한다.** `forecast_submissions.submission_id` 를 DB 트리거가 UPDATE 마다 새로 발급해 '새 접수 = 초기화'를
+  강제한다(옛 수정값은 이력으로 남고 읽지 않는다). 앱 코드로 지우지 말 것.
+- **쓰기는 RPC 두 개(`apply/revert_forecast_po_override`)만.** 표 갱신 + 이력 추가가 한 트랜잭션이고, 이력 표는 추가 전용이다
+  (트리거가 UPDATE/DELETE 차단). 시그니처를 바꾸면 오버로드가 생기므로 바꾸지 않는다(본문만 `create or replace`).
+- **잠금 순서는 칸(advisory) → 접수 행(FOR SHARE) → 수정값 행(FOR UPDATE).** 처음 입력하는 칸에는 잠글 행이 없어 행 잠금만으로는
+  이력의 이전 값이 틀린다(감사 PO-02). 적용·원복이 같은 키를 쓴다 —
+  `supabase/migrations/__tests__/forecastPoOverrideCellLockMigration.test.ts` 가 지킨다.
+- **시뮬레이션이 읽는 값은 `effectiveQuantity` 한 곳이 정한다**(PO 우선. 원본이 빈 칸·오류여도 PO 가 있으면 숫자).
+- **여러 쪽에 걸쳐 읽을 때는 `readAllRows`(`src/lib/supabasePaging.ts`).** `count: exact` 로 완전성을 증명한다. 한 요청으로 끝나면
+  한 스냅샷이라 그대로 믿고, 여러 요청이면 같은 읽기를 한 번 더 해서 같을 때만 돌려준다 — 요청 사이의 동시 변경(삭제+추가로
+  총개수 유지)은 개수로 알 수 없다(재감사 PAGE-01). `limit(큰 수)` 로 '상한 이하면 완전'이라 믿지 말 것. 호출자는 유일 열을 포함한
+  정렬과 `keyOf` 를 준다. 컬렉션이 서버 상한을 넘어 자주 바뀌는 규모가 되면 한 SQL 문장으로 모으는 RPC(단일 jsonb)가 정답이다.
+- **화면 본문에서 `createSupabaseClient()` 를 부르지 말 것.** 렌더마다 자동 갱신 인증 클라이언트가 새로 생기고, 컨텍스트 구독이
+  더해지면 '다시 그림 → 새 클라이언트 → 인증 이벤트 → 재조회'가 반복된다(탭 1개 30초에 85건 실측). `useMemo` 로 한 번만 만든다.
+- **검증:** 동시성은 Docker 없이 진짜 Postgres 로 `node scripts/verify-po-concurrency-local.mjs --deps <폴더>`(준비 방법은 파일 머리말).
+  PO-02 경합(원본 결함 재현 → 칸 잠금 후 해소)과 PAGE-01(읽기·쓰기 세션이 따로인 쪽 사이 변경)을 함께 본다.
+
 ### Production Record Input System
 - See `src/components/production/README.md` for details
+
+#### ⚠️ 일일 저장(`/api/production-records/daily`)은 낙관적 동시성으로 쓴다 (감사 2026-11-14 F-02·F-03)
+
+- 라우트는 **admin·engineer 전용**(`PRODUCTION_RECORD_DELETE_ROLES`) — '휴무' 체크가 확정 기록을 지운다.
+- 화면은 불러온 기록을 `expected_records`(교대별 지문, 없던 기록은 `null`)로 되돌려 보내고, `save_daily_production_v2`
+  가 마감 경로와 같은 잠금(설비 → A → B) 아래에서 지문·비가동 digest 를 대조한다. 어긋나면 409(`record_changed`/`source_changed`).
+- **지문 컬럼은 세 곳이 같아야 한다:** daily `EXPECTED_RECORD_COLUMNS`, `[recordId]` `CONCURRENCY_GUARD_COLUMNS`, v2 SQL.
+  그리고 화면이 지문을 읽는 **목록 API(`GET /api/production-records`)가 그 컬럼을 DB 값 그대로** 돌려줘야 한다 — 하나라도 빠지면
+  기존 기록 수정이 **항상 409** 가 된다(실제로 그랬고 브라우저 종단 검증에서만 드러났다; `listFingerprintContract.test.ts`).
+- `operating_minutes` 는 0 이상 정수, 상한은 설정의 교대 창 길이(720 고정 아님).
+- **불량 빈칸 = 미검사(null), 0 = 불량 없음 확정**(사용자 확정 2026-11-14). 데이터 입력 화면은 미검사 기록·새 기록 모두 빈칸으로
+  보여 주고 null 을 보낸다(`|| 0` 으로 채우지 말 것 — 그대로 저장하면 '불량 0 확정'이 됐다). 확정된 불량을 빈칸으로 되돌리는 것은
+  서버가 400 `defect_unconfirm_not_allowed` 로 막는다. 미검사면 품질·OEE·화면 요약도 null('—').
+- 오류는 `code`·`params` 로 내려주고 화면이 `dataInput.json` 의 `dailyErrors.<code>` 로 번역한다(ko/vi). 코드를 더하면 두 언어 모두 추가.
+- 검증: `scripts/verify-daily-save-concurrency-local.mjs`(진짜 Postgres 경합), `scripts/verify-daily-save-browser-local.cjs`(로컬 Supabase + dev 3100).
 
 ### Report Generation System
 - See `src/components/reports/README.md` for API reference

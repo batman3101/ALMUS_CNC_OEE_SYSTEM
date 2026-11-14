@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { FactoryForecastPreview } from '@/types/forecast';
+import { withPoOverride } from '@/lib/forecast/poOverrides';
 import WeeklySimulationCard from '../WeeklySimulationCard';
 
 // The card embeds LayoutPlanLauncher (network + navigation); its flow is covered by scripts/verify-layout-studio-browser.cjs.
@@ -69,5 +70,53 @@ describe('WeeklySimulationCard', () => {
     expect(screen.queryByTestId('requirements-table')).not.toBeInTheDocument();
     rerender(<WeeklySimulationCard preview={preview({ capacityPolicy: { status: 'unavailable' } })} today={BEFORE_FILE} />);
     expect(screen.getByText('simulation.policyUnavailable')).toBeInTheDocument();
+  });
+
+  // 실제 PO 수정값 (사용자 요청 2026-09-29): 접수 후 바뀐 PO 를 시뮬레이션이 쓰고, 끄면 접수한 Forecast 로 비교할 수 있다.
+  describe('실제 PO 수정값', () => {
+    /** ON 1 의 9/8(첫 주)을 접수한 Forecast 1,300 대신 실제 PO 2,600 으로 고친 접수본. */
+    const poPreview = (date = '2026-09-08') => {
+      const base = preview();
+      return { ...base, rows: withPoOverride(base.rows, 1, date, { quantity: 2600, updatedAt: '2026-09-29T05:00:00Z' }) };
+    };
+    const poSwitch = () => within(screen.getByTestId('po-switch')).getByRole('switch');
+
+    it('PO 수정값이 없으면 스위치를 보이지 않는다', () => {
+      render(<WeeklySimulationCard preview={preview()} today={BEFORE_FILE} />);
+      expect(screen.queryByTestId('po-switch')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('po-switch-help')).not.toBeInTheDocument();
+    });
+
+    it('기본으로 수정값을 시뮬레이션에 쓰고(최대 일수량 2,600) 경고 태그로 알린다', () => {
+      render(<WeeklySimulationCard preview={poPreview()} today={BEFORE_FILE} />);
+      const table = screen.getByTestId('requirements-table');
+      expect(poSwitch()).toBeChecked();
+      expect(screen.getByTestId('po-switch-help')).toHaveTextContent('po.switchHelp:1');
+      // ON 1 의 CNC1·CNC2 두 줄이 모두 수정값을 읽는다.
+      expect(within(table).getAllByText('2,600')).toHaveLength(2);
+      expect(within(table).queryByText('1,300')).not.toBeInTheDocument();
+      expect(within(table).getAllByText('simulation.warnings.po_override')).toHaveLength(2);
+    });
+
+    it('스위치를 끄면 접수한 Forecast 수량으로만 계산하고, 켜면 다시 수정값을 쓴다', () => {
+      render(<WeeklySimulationCard preview={poPreview()} today={BEFORE_FILE} />);
+      fireEvent.click(poSwitch());
+      expect(poSwitch()).not.toBeChecked();
+      const off = screen.getByTestId('requirements-table');
+      expect(within(off).getAllByText('1,300')).toHaveLength(2);
+      expect(within(off).queryByText('2,600')).not.toBeInTheDocument();
+      expect(within(off).queryByText('simulation.warnings.po_override')).not.toBeInTheDocument();
+      fireEvent.click(poSwitch());
+      expect(within(screen.getByTestId('requirements-table')).getAllByText('2,600')).toHaveLength(2);
+    });
+
+    it('수정값이 선택한 주가 아닌 다른 주에만 있으면 그 주의 계산은 그대로다', () => {
+      render(<WeeklySimulationCard preview={poPreview('2026-09-15')} today={BEFORE_FILE} />);
+      const table = screen.getByTestId('requirements-table');
+      expect(within(table).getAllByText('1,300')).toHaveLength(2);
+      expect(within(table).queryByText('simulation.warnings.po_override')).not.toBeInTheDocument();
+      // 수정값 자체는 접수본 안에 있으므로 스위치는 보인다.
+      expect(screen.getByTestId('po-switch')).toBeInTheDocument();
+    });
   });
 });
