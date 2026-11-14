@@ -73,7 +73,49 @@ interface ExistingProductionRecord {
   quality?: number | null;
   oee?: number | null;
   downtime_minutes?: number | null;
+  ideal_runtime?: number | null;
+  tact_time_seconds?: number | null;
 }
+
+/**
+ * 서버(save_daily_production_v2)가 잠금 아래에서 현재 행과 대조하는 지문. 화면이 불러온 그대로 보낸다.
+ * `null` = "이 교대에는 기록이 없었다". 그 사이 누가 바꿨으면 서버가 409 로 돌려보낸다(감사 2026-11-14 F-02).
+ */
+type ExpectedShiftRecord = {
+  record_id: string;
+  output_qty: number | null;
+  defect_qty: number | null;
+  planned_runtime: number | null;
+  actual_runtime: number | null;
+  ideal_runtime: number | null;
+  downtime_minutes: number | null;
+  tact_time_seconds: number | null;
+  availability: number | null;
+  performance: number | null;
+  quality: number | null;
+  oee: number | null;
+};
+
+const toExpectedShiftRecord = (record: ExistingProductionRecord | null): ExpectedShiftRecord | null =>
+  record
+    ? {
+        record_id: record.record_id,
+        output_qty: record.output_qty ?? null,
+        defect_qty: record.defect_qty ?? null,
+        planned_runtime: record.planned_runtime ?? null,
+        actual_runtime: record.actual_runtime ?? null,
+        ideal_runtime: record.ideal_runtime ?? null,
+        downtime_minutes: record.downtime_minutes ?? null,
+        tact_time_seconds: record.tact_time_seconds ?? null,
+        availability: record.availability ?? null,
+        performance: record.performance ?? null,
+        quality: record.quality ?? null,
+        oee: record.oee ?? null,
+      }
+    : null;
+
+/** 저장이 동시 변경으로 거부됐을 때 서버가 돌려주는 사유. */
+const CONCURRENT_SAVE_REJECTIONS = new Set(['record_changed', 'source_changed']);
 
 interface PersistedShiftState {
   shift: 'A' | 'B';
@@ -100,6 +142,8 @@ interface DailyProductionSavePayload {
   night_shift_off: boolean;
   day_shift?: ShiftSavePayload;
   night_shift?: ShiftSavePayload;
+  /** 보내는 교대(저장·휴무)마다 화면이 본 기존 기록. 서버가 반드시 요구한다. */
+  expected_records: Partial<Record<'A' | 'B', ExpectedShiftRecord | null>>;
 }
 
 type VersionedDowntimeEntry = DowntimeEntry & { version?: number };
@@ -1124,20 +1168,26 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
 
       // MANDATORY API CONTRACT: 서버가 availability/performance/quality/oee/planned_capacity를
       // 자체 계산하므로, 클라이언트가 계산한 지표는 전송하지 않고 원시 입력값만 보낸다.
+      const submitDay = shouldSubmitShift(dayShiftData, dayShiftOff, existingDayRecord, dayShiftWorkingConfirmed);
+      const submitNight = shouldSubmitShift(nightShiftData, nightShiftOff, existingNightRecord, nightShiftWorkingConfirmed);
       const payload: DailyProductionSavePayload = {
         machine_id: selectedMachineId,
         date: selectedDate,
         day_shift_off: dayShiftOff,
         night_shift_off: nightShiftOff,
+        expected_records: {
+          ...(submitDay && { A: toExpectedShiftRecord(existingDayRecord) }),
+          ...(submitNight && { B: toExpectedShiftRecord(existingNightRecord) }),
+        },
         // 입력되지 않은 교대는 아예 생략한다 (0으로 채워 보내면 유령 레코드가 생김)
-        ...(shouldSubmitShift(dayShiftData, dayShiftOff, existingDayRecord, dayShiftWorkingConfirmed) && {
+        ...(submitDay && {
           day_shift: {
             actual_production: dayShiftData.actual_production,
             defect_quantity: dayShiftData.defect_quantity,
             operating_minutes: dayShiftOperatingMinutes,
           }
         }),
-        ...(shouldSubmitShift(nightShiftData, nightShiftOff, existingNightRecord, nightShiftWorkingConfirmed) && {
+        ...(submitNight && {
           night_shift: {
             actual_production: nightShiftData.actual_production,
             defect_quantity: nightShiftData.defect_quantity,
@@ -1158,7 +1208,18 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        // 다른 곳에서 먼저 바뀌었다 — 저장하지 않고(폼 초기화도 하지 않고) 최신 기록을 다시 불러와 폼을 그 값으로
+        // 바꾼다. 사용자는 확정된 최신 값을 보고 다시 입력·저장한다(비가동 변경은 다시 저장만 하면 된다).
+        if (response.status === 409 && CONCURRENT_SAVE_REJECTIONS.has(errorData.error)) {
+          message.warning(t(
+            errorData.error === 'record_changed' ? 'messages.recordChangedReload' : 'messages.downtimeChangedRetry'
+          ));
+          if (errorData.error === 'record_changed') {
+            await loadExistingProductionRecords(selectedMachineId, selectedDate, ++loadRequestIdRef.current);
+          }
+          return;
+        }
+        throw new Error(errorData.message || errorData.error || `HTTP ${response.status}`);
       }
 
       const result = await response.json();
@@ -1395,6 +1456,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                     onChange={(value) => setDayShiftOperatingMinutes(value ?? DEFAULT_OPERATING_MINUTES)}
                     min={0}
                     max={720}
+                    precision={0}
                     addonAfter={t('common.minutes')}
                     style={{ width: 120 }}
                     disabled={dayShiftOff}
@@ -1453,6 +1515,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                     onChange={(value) => setNightShiftOperatingMinutes(value ?? DEFAULT_OPERATING_MINUTES)}
                     min={0}
                     max={720}
+                    precision={0}
                     addonAfter={t('common.minutes')}
                     style={{ width: 120 }}
                     disabled={nightShiftOff}

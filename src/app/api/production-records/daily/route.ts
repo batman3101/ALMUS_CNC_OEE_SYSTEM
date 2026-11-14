@@ -22,6 +22,7 @@ import {
   assertMachineAccess,
 } from '@/lib/apiAuth';
 import { requireFactoryUser } from '@/lib/factoryAuth';
+import { PRODUCTION_RECORD_DELETE_ROLES } from '@/lib/pageAccess';
 
 // 교대별 입력 데이터 (클라이언트 폼에서 전송)
 interface ShiftInputData {
@@ -30,6 +31,13 @@ interface ShiftInputData {
   operating_minutes: number;
 }
 
+/**
+ * 화면이 읽어 둔 기존 기록의 지문. `null` 은 "이 교대에는 기록이 없었다"는 뜻이다.
+ * save_daily_production_v2 가 잠금 아래에서 현재 행과 대조해, 그 사이 누가 바꿨으면 쓰지 않는다
+ * (감사 2026-11-14 F-02 — 낡은 화면이 확정 불량·실적을 덮어쓰던 문제).
+ */
+type ExpectedRecord = Record<string, unknown> & { record_id: string };
+
 interface DailyProductionRequest {
   machine_id: string;
   date: string;
@@ -37,6 +45,57 @@ interface DailyProductionRequest {
   night_shift_off?: boolean;
   day_shift?: ShiftInputData;
   night_shift?: ShiftInputData;
+  /** 건드리는 교대(저장·휴무)마다 반드시 있어야 한다. 키가 없으면 낡은 화면인지 알 수 없다. */
+  expected_records?: Partial<Record<'A' | 'B', ExpectedRecord | null>>;
+}
+
+/** v2 가 대조하는 지문 컬럼. [recordId] 라우트의 CONCURRENCY_GUARD_COLUMNS 와 같은 집합이다. */
+const EXPECTED_RECORD_COLUMNS = [
+  'output_qty',
+  'defect_qty',
+  'planned_runtime',
+  'actual_runtime',
+  'ideal_runtime',
+  'downtime_minutes',
+  'tact_time_seconds',
+  'availability',
+  'performance',
+  'quality',
+  'oee',
+] as const;
+
+/**
+ * 지문 하나를 검사하고 대조에 쓰는 컬럼만 남긴다. 형식이 틀리면 'invalid' 를 돌려준다
+ * (null 은 "기록 없음"이라는 정당한 값이라 오류 표시로 쓸 수 없다).
+ */
+function normalizeExpectedRecord(value: unknown): ExpectedRecord | null | 'invalid' {
+  if (value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return 'invalid';
+  const source = value as Record<string, unknown>;
+  if (typeof source.record_id !== 'string' || source.record_id.length === 0) return 'invalid';
+  const normalized: ExpectedRecord = { record_id: source.record_id };
+  for (const column of EXPECTED_RECORD_COLUMNS) {
+    const v = source[column];
+    if (v === undefined || v === null) {
+      normalized[column] = null;
+    } else if (typeof v === 'number' && Number.isFinite(v)) {
+      normalized[column] = v;
+    } else {
+      return 'invalid';
+    }
+  }
+  return normalized;
+}
+
+/**
+ * 가동시간 검증 (감사 F-03): 0 이상의 정수이고 설정된 교대 창 길이를 넘을 수 없다.
+ * 상한을 720 으로 박지 않는 이유 — 교대 시각은 시스템 설정이고, 자정을 넘는 B 교대도 같은 창 계산으로 잰다.
+ */
+function validateOperatingMinutes(shiftName: string, value: unknown, maxMinutes: number): string | null {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > maxMinutes) {
+    return `${shiftName} 가동시간은 0 이상 ${maxMinutes} 이하의 정수(분)여야 합니다`;
+  }
+  return null;
 }
 
 interface SavedRecord {
@@ -115,7 +174,9 @@ async function loadDowntimeMinutes(
 // POST /api/production-records/daily - 일일 생산 데이터 저장
 export async function POST(request: NextRequest) {
   try {
-    const authenticatedUser = await requireFactoryUser(request, ['admin', 'engineer', 'operator']);
+    // '휴무' 체크는 그 교대의 확정 기록을 지운다. 삭제 권한과 같은 역할로 닫는다(감사 F-02,
+    // 사용자 확정 2026-11-14). 이 라우트의 유일한 화면 /data-input 도 MANAGERS 전용이다.
+    const authenticatedUser = await requireFactoryUser(request, [...PRODUCTION_RECORD_DELETE_ROLES]);
     console.log('POST /api/production-records/daily called');
 
     const body: DailyProductionRequest = await request.json();
@@ -127,7 +188,8 @@ export async function POST(request: NextRequest) {
       day_shift,
       day_shift_off,
       night_shift,
-      night_shift_off
+      night_shift_off,
+      expected_records
     } = body;
 
     // 필수 필드 검증
@@ -158,6 +220,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 건드리는 교대(저장 또는 휴무)는 화면이 본 지문이 반드시 있어야 한다(감사 F-02).
+    // 없으면 "기록 없음을 봤다"와 "아무것도 모른다"가 구분되지 않아 낡은 화면을 막을 수 없다.
+    const savingShift = {
+      A: Boolean(day_shift && !day_shift_off),
+      B: Boolean(night_shift && !night_shift_off),
+    };
+    const touchedShifts = (['A', 'B'] as const).filter(shift =>
+      shift === 'A' ? Boolean(day_shift_off) || savingShift.A : Boolean(night_shift_off) || savingShift.B
+    );
+    const expected: Partial<Record<'A' | 'B', ExpectedRecord | null>> = {};
+    for (const shift of touchedShifts) {
+      const hasKey = expected_records !== null && typeof expected_records === 'object'
+        && Object.prototype.hasOwnProperty.call(expected_records, shift);
+      const normalized = hasKey ? normalizeExpectedRecord(expected_records![shift]) : 'invalid';
+      if (normalized === 'invalid') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'expected_records_required',
+            message: '화면을 새로 고친 뒤 다시 저장해 주세요 (기존 기록 확인 정보가 없습니다).',
+          },
+          { status: 400 }
+        );
+      }
+      expected[shift] = normalized;
+    }
+
     const businessTime = await getBusinessTimeConfig(authenticatedUser.factoryId);
     const [dayWindow] = buildShiftWindows({
       startDate: date,
@@ -173,6 +262,42 @@ export async function POST(request: NextRequest) {
     });
     if (!dayWindow || !nightWindow) {
       return NextResponse.json({ success: false, error: 'Shift time configuration is invalid' }, { status: 500 });
+    }
+
+    // 가동시간 상한 = 설정된 교대 창 길이(감사 F-03). 휴무 교대는 저장하지 않으므로 검사하지 않는다.
+    const shiftMinutes = {
+      A: Math.round((dayWindow.end - dayWindow.start) / 60_000),
+      B: Math.round((nightWindow.end - nightWindow.start) / 60_000),
+    };
+    if (savingShift.A) {
+      const error = validateOperatingMinutes('주간조', day_shift!.operating_minutes, shiftMinutes.A);
+      if (error) return NextResponse.json({ success: false, error }, { status: 400 });
+    }
+    if (savingShift.B) {
+      const error = validateOperatingMinutes('야간조', night_shift!.operating_minutes, shiftMinutes.B);
+      if (error) return NextResponse.json({ success: false, error }, { status: 400 });
+    }
+
+    // 비가동 원천 지문을 **행을 읽기 전에** 잡는다(close-shift 와 같은 순서, 자체 감사 #6).
+    // 반대로 하면 그 사이의 변경이 지문에는 반영되고 계산에는 반영되지 않아 대조가 통과해 버린다.
+    const sources: Partial<Record<'A' | 'B', { start: string; end: string; digest: string }>> = {};
+    for (const [shift, window, saving] of [
+      ['A', dayWindow, savingShift.A],
+      ['B', nightWindow, savingShift.B],
+    ] as const) {
+      if (!saving) continue;
+      const start = new Date(window.start).toISOString();
+      const end = new Date(window.end).toISOString();
+      const { data: digest, error: digestError } = await supabaseAdmin.rpc('downtime_window_digest', {
+        p_machine_id: machine_id,
+        p_window_start: start,
+        p_window_end: end,
+      });
+      if (digestError || typeof digest !== 'string') {
+        console.error('비가동 원천 지문 조회 오류:', digestError);
+        return NextResponse.json({ success: false, error: 'Failed to read downtime source' }, { status: 500 });
+      }
+      sources[shift] = { start, end, digest };
     }
     // 비가동 원본은 클라이언트 합계가 아니라 서버 DB에서 직접 읽는다. 조회 실패 시
     // 생산수량 저장은 계속하되 OEE 런타임 계열을 NULL로 남겨 잘못된 100%를 만들지 않는다.
@@ -306,17 +431,21 @@ export async function POST(request: NextRequest) {
     // 주간(A)/야간(B) 교대의 삭제·저장을 하나의 트랜잭션에서 처리한다.
     // (기존에는 교대별 delete/upsert 를 개별 왕복으로 실행해, 중간 실패 시 하루치가
     //  반쪽만 적용된 채로 남는 문제가 있었다)
+    // save_daily_production_v2 는 잠금(설비 → 교대) 아래에서 p_expected 지문과 p_sources 비가동 지문을
+    // 현재 DB 와 대조한 뒤에만 v1 과 같은 쓰기를 한다. 어긋나면 아무것도 쓰지 않고 ok:false 를 돌려준다.
     const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc(
-      'save_daily_production',
+      'save_daily_production_v2',
       {
+      p_expected: expected,
+      p_sources: sources,
       p_machine_id: machine_id,
       p_date: date,
       p_day_shift_off: Boolean(day_shift_off),
       p_night_shift_off: Boolean(night_shift_off),
-      p_day_record: !day_shift_off && day_shift
+      p_day_record: savingShift.A && day_shift
         ? buildShiftRecord('A', day_shift, downtimeByShift.A)
         : null,
-      p_night_record: !night_shift_off && night_shift
+      p_night_record: savingShift.B && night_shift
         ? buildShiftRecord('B', night_shift, downtimeByShift.B)
         : null,
     });
@@ -339,9 +468,28 @@ export async function POST(request: NextRequest) {
     }
 
     const rpcData = (rpcResult ?? {}) as {
+      ok?: boolean;
+      reason?: string;
+      shift?: 'A' | 'B';
       saved_records?: SavedRecord[];
       deleted_shifts?: ('A' | 'B')[];
     };
+
+    if (rpcData.ok !== true) {
+      // 거부는 쓰기 전에 일어난다. 화면은 최신 상태를 다시 불러와야 한다.
+      const messages: Record<string, string> = {
+        record_changed: '다른 곳에서 이 교대 기록이 먼저 변경되었습니다. 최신 내용을 다시 불러온 뒤 저장해 주세요.',
+        source_changed: '저장하는 동안 비가동 기록이 바뀌었습니다. 다시 저장해 주세요.',
+      };
+      const reason = rpcData.reason ?? 'unknown';
+      if (reason in messages) {
+        return NextResponse.json(
+          { success: false, error: reason, shift: rpcData.shift, message: messages[reason] },
+          { status: 409 }
+        );
+      }
+      throw new Error(`일일 생산 데이터 저장 실패: ${reason}`);
+    }
     const savedRecords: SavedRecord[] = rpcData.saved_records ?? [];
     const deletedShifts: ('A' | 'B')[] = rpcData.deleted_shifts ?? [];
 

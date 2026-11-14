@@ -127,7 +127,9 @@
     "confirmDeleteDescription": "Bản ghi sản xuất này không thể khôi phục sau khi xóa.",
     "noExistingRecord": "Không có bản ghi sản xuất nào. Vui lòng nhập mới.",
     "noRecordsSaved": "Không có bản ghi sản xuất nào được lưu.",
-    "deletedShiftsSuffix": " (Đã xóa {{count}} ca)"
+    "deletedShiftsSuffix": " (Đã xóa {{count}} ca)",
+    "recordChangedReload": "Bản ghi ca này vừa được thay đổi ở nơi khác. Đã tải lại dữ liệu mới nhất, vui lòng kiểm tra rồi lưu lại.",
+    "downtimeChangedRetry": "Dữ liệu dừng máy đã thay đổi trong lúc lưu. Vui lòng lưu lại."
   },
   "editMode": {
     "existingRecordFound": "Tìm thấy dữ liệu hiện có",

@@ -257,6 +257,11 @@ export async function GET(request: NextRequest) {
       performance: record.performance ?? null,
       quality: record.quality ?? null,
       oee: record.oee ?? null,
+      // 데이터 입력 화면이 이 기록을 그대로 지문(expected_records)으로 되돌려 보낸다. 서버
+      // (save_daily_production_v2)가 컬럼마다 DB 와 대조하므로 하나라도 빠지면 기존 기록 수정이
+      // 항상 409 가 된다(감사 2026-11-14 F-02 후속, listFingerprintContract.test.ts).
+      downtime_minutes: record.downtime_minutes ?? null,
+      tact_time_seconds: record.tact_time_seconds ?? null,
       created_at: record.created_at,
       machine: record.machines
     }));

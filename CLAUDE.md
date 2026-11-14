@@ -400,5 +400,16 @@ app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파
 ### Production Record Input System
 - See `src/components/production/README.md` for details
 
+#### ⚠️ 일일 저장(`/api/production-records/daily`)은 낙관적 동시성으로 쓴다 (감사 2026-11-14 F-02·F-03)
+
+- 라우트는 **admin·engineer 전용**(`PRODUCTION_RECORD_DELETE_ROLES`) — '휴무' 체크가 확정 기록을 지운다.
+- 화면은 불러온 기록을 `expected_records`(교대별 지문, 없던 기록은 `null`)로 되돌려 보내고, `save_daily_production_v2`
+  가 마감 경로와 같은 잠금(설비 → A → B) 아래에서 지문·비가동 digest 를 대조한다. 어긋나면 409(`record_changed`/`source_changed`).
+- **지문 컬럼은 세 곳이 같아야 한다:** daily `EXPECTED_RECORD_COLUMNS`, `[recordId]` `CONCURRENCY_GUARD_COLUMNS`, v2 SQL.
+  그리고 화면이 지문을 읽는 **목록 API(`GET /api/production-records`)가 그 컬럼을 DB 값 그대로** 돌려줘야 한다 — 하나라도 빠지면
+  기존 기록 수정이 **항상 409** 가 된다(실제로 그랬고 브라우저 종단 검증에서만 드러났다; `listFingerprintContract.test.ts`).
+- `operating_minutes` 는 0 이상 정수, 상한은 설정의 교대 창 길이(720 고정 아님).
+- 검증: `scripts/verify-daily-save-concurrency-local.mjs`(진짜 Postgres 경합), `scripts/verify-daily-save-browser-local.cjs`(로컬 Supabase + dev 3100).
+
 ### Report Generation System
 - See `src/components/reports/README.md` for API reference
