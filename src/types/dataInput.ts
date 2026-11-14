@@ -37,8 +37,9 @@ export interface ShiftProductionData {
   
   // 생산 실적
   actual_production: number;
-  defect_quantity: number;
-  good_quantity: number; // actual - defect
+  /** null = 미검사(빈칸). 0 은 "검사했고 불량 없음" — 빈칸≠0 (2026-11-14). */
+  defect_quantity: number | null;
+  good_quantity: number | null; // actual - defect, 불량 미검사면 null
   
   // 비가동 시간
   downtime_entries: DowntimeEntry[];
@@ -89,16 +90,17 @@ export interface DailyProductionData {
 
   // 일일 합계
   total_production: number;
-  total_defects: number;
-  total_good_quantity: number;
+  /** 생산이 있는 교대에 불량 미검사가 있으면 null */
+  total_defects: number | null;
+  total_good_quantity: number | null;
   total_downtime_minutes: number;
 
   // OEE 계산 (모델 무관)
   planned_capacity: number; // 일일 계획 생산량
   availability: number; // 가용성
   performance: number; // 성능
-  quality: number; // 품질
-  oee: number; // 종합효율
+  quality: number | null; // 품질 (불량 미검사면 null — NULL≠0%)
+  oee: number | null; // 종합효율 (불량 미검사면 null)
 }
 
 export interface MachineProcess {

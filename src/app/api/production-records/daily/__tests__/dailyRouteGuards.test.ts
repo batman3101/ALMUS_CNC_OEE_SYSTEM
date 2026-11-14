@@ -247,3 +247,62 @@ describe('F-03 가동시간: 0 이상 정수, 설정된 교대 창 길이 이하
     expect(res.status).toBe(200);
   });
 });
+
+describe('불량 미검사(빈칸≠0, 사용자 확정 2026-11-14)', () => {
+  const dayRecordParam = () => (saveCalls()[0][1] as { p_day_record: Record<string, unknown> }).p_day_record;
+
+  it('새 기록의 불량 null 은 미검사로 저장한다 — 품질·OEE 도 null (0% 아님)', async () => {
+    const res = await post(base({ day_shift: { actual_production: 100, defect_quantity: null, operating_minutes: 720 } }));
+    expect(res.status).toBe(200);
+    expect(dayRecordParam()).toMatchObject({ defect_qty: null, quality: null, oee: null, output_qty: 100 });
+  });
+
+  it('미검사였던 기존 기록은 불량 null 로 다시 저장할 수 있다', async () => {
+    const res = await post(base({
+      day_shift: { actual_production: 120, defect_quantity: null, operating_minutes: 720 },
+      expected_records: { A: { ...STALE_SNAPSHOT, defect_qty: null, quality: null, oee: null } },
+    }));
+    expect(res.status).toBe(200);
+    expect(dayRecordParam()).toMatchObject({ defect_qty: null, output_qty: 120 });
+  });
+
+  it('확정된 불량을 빈칸으로 되돌리는 것은 거부한다 (400 defect_unconfirm_not_allowed)', async () => {
+    const res = await post(base({
+      day_shift: { actual_production: 100, defect_quantity: null, operating_minutes: 720 },
+      expected_records: { A: STALE_SNAPSHOT },
+    }));
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'defect_unconfirm_not_allowed', params: { shift: 'A' } });
+    expect(saveCalls()).toHaveLength(0);
+  });
+
+  it('불량 키가 아예 없으면(undefined) 400 — 빈칸은 null 로 명시해야 한다', async () => {
+    const res = await post(base({ day_shift: { actual_production: 100, operating_minutes: 720 } }));
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ code: 'invalid_defect_qty', params: { shift: 'A' } });
+  });
+});
+
+describe('오류는 화면이 번역할 수 있게 code·params 로 내려준다', () => {
+  it.each([
+    ['설비·날짜 누락', { machine_id: undefined }, 400, 'missing_machine_or_date', undefined],
+    ['생산 수량 형식', { day_shift: { actual_production: -1, defect_quantity: 0, operating_minutes: 720 } }, 400, 'invalid_output_qty', { shift: 'A' }],
+    ['불량 > 생산', { day_shift: { actual_production: 1, defect_quantity: 2, operating_minutes: 720 } }, 400, 'defect_exceeds_output', { shift: 'A' }],
+    ['가동시간 상한', { day_shift: { actual_production: 1, defect_quantity: 0, operating_minutes: 721 } }, 400, 'invalid_operating_minutes', { shift: 'A', max: 720 }],
+    ['지문 누락', { expected_records: undefined }, 400, 'expected_records_required', undefined],
+  ])('%s → %s %s', async (_label, overrides, status, code, params) => {
+    const res = await post(base(overrides as Record<string, unknown>));
+    expect(res.status).toBe(status);
+    expect(res.body.code).toBe(code);
+    if (params) expect(res.body.params).toEqual(params);
+  });
+
+  it('동시 변경 거부(409)에도 code 가 있다', async () => {
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'downtime_window_digest') return { data: 'digest-1', error: null };
+      return { data: { ok: false, reason: 'record_changed', shift: 'A' }, error: null };
+    });
+    const res = await post(base({ expected_records: { A: STALE_SNAPSHOT } }));
+    expect(res.body).toMatchObject({ code: 'record_changed', params: { shift: 'A' } });
+  });
+});

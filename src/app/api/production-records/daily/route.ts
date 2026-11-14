@@ -27,7 +27,8 @@ import { PRODUCTION_RECORD_DELETE_ROLES } from '@/lib/pageAccess';
 // 교대별 입력 데이터 (클라이언트 폼에서 전송)
 interface ShiftInputData {
   actual_production: number;
-  defect_quantity: number;
+  /** null = 미검사(빈칸). 0 은 "검사했고 불량 없음"이다 — 빈칸≠0 (사용자 확정 2026-11-14). */
+  defect_quantity: number | null;
   operating_minutes: number;
 }
 
@@ -91,11 +92,46 @@ function normalizeExpectedRecord(value: unknown): ExpectedRecord | null | 'inval
  * 가동시간 검증 (감사 F-03): 0 이상의 정수이고 설정된 교대 창 길이를 넘을 수 없다.
  * 상한을 720 으로 박지 않는 이유 — 교대 시각은 시스템 설정이고, 자정을 넘는 B 교대도 같은 창 계산으로 잰다.
  */
-function validateOperatingMinutes(shiftName: string, value: unknown, maxMinutes: number): string | null {
+function validateOperatingMinutes(shift: 'A' | 'B', value: unknown, maxMinutes: number): DailySaveError | null {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > maxMinutes) {
-    return `${shiftName} 가동시간은 0 이상 ${maxMinutes} 이하의 정수(분)여야 합니다`;
+    return {
+      code: 'invalid_operating_minutes',
+      params: { shift, max: maxMinutes },
+      message: `${SHIFT_LABEL[shift]} 가동시간은 0 이상 ${maxMinutes} 이하의 정수(분)여야 합니다`,
+    };
   }
   return null;
+}
+
+/**
+ * 화면이 번역할 수 있게 오류를 코드로 내려준다(ko/vi). `error` 는 예전 호환·로그용 한국어 문구로 남긴다.
+ * 화면 번역 키: dataInput.json `dailyErrors.<code>`.
+ */
+type DailySaveErrorCode =
+  | 'missing_machine_or_date'
+  | 'invalid_output_qty'
+  | 'invalid_defect_qty'
+  | 'defect_exceeds_output'
+  | 'defect_unconfirm_not_allowed'
+  | 'invalid_operating_minutes'
+  | 'expected_records_required'
+  | 'shift_config_invalid'
+  | 'downtime_source_failed'
+  | 'machine_not_found'
+  | 'machine_inactive'
+  | 'record_changed'
+  | 'source_changed';
+
+interface DailySaveError {
+  code: DailySaveErrorCode;
+  params?: Record<string, string | number>;
+  message: string;
+}
+
+const SHIFT_LABEL = { A: '주간조', B: '야간조' } as const;
+
+function dailyErrorResponse(status: number, { code, params, message }: DailySaveError, error: string = message) {
+  return NextResponse.json({ success: false, error, code, params, message }, { status });
 }
 
 interface SavedRecord {
@@ -106,20 +142,19 @@ interface SavedRecord {
 const toNumber = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
-// 수량 검증: 정수 & 0 이상 & 불량 수량 <= 생산 수량
-function validateQuantities(
-  shiftName: string,
-  outputQty: unknown,
-  defectQty: unknown
-): string | null {
+// 수량 검증: 생산은 0 이상 정수. 불량은 null(미검사) 또는 0 이상 정수이고 생산 수량 이하.
+// 불량 키가 아예 없으면(undefined) 거부한다 — 빈칸은 null 로 명시해야 "미검사"와 "안 보냄"이 구분된다.
+function validateQuantities(shift: 'A' | 'B', outputQty: unknown, defectQty: unknown): DailySaveError | null {
+  const label = SHIFT_LABEL[shift];
   if (!Number.isInteger(outputQty) || (outputQty as number) < 0) {
-    return `${shiftName} 생산 수량은 0 이상의 정수여야 합니다`;
+    return { code: 'invalid_output_qty', params: { shift }, message: `${label} 생산 수량은 0 이상의 정수여야 합니다` };
   }
+  if (defectQty === null) return null;
   if (!Number.isInteger(defectQty) || (defectQty as number) < 0) {
-    return `${shiftName} 불량 수량은 0 이상의 정수여야 합니다`;
+    return { code: 'invalid_defect_qty', params: { shift }, message: `${label} 불량 수량은 0 이상의 정수이거나 빈칸이어야 합니다` };
   }
   if ((defectQty as number) > (outputQty as number)) {
-    return `${shiftName} 불량 수량은 생산 수량보다 클 수 없습니다`;
+    return { code: 'defect_exceeds_output', params: { shift }, message: `${label} 불량 수량은 생산 수량보다 클 수 없습니다` };
   }
   return null;
 }
@@ -132,7 +167,7 @@ function calculateShiftMetrics(params: {
   breakMinutes: number;
   downtimeMinutes: number | null;
   outputQty: number;
-  defectQty: number;
+  defectQty: number | null;
   tactSeconds: number;
   cavity: number;
 }) {
@@ -194,30 +229,20 @@ export async function POST(request: NextRequest) {
 
     // 필수 필드 검증
     if (!machine_id || !date) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Machine ID and date are required'
-        },
-        { status: 400 }
-      );
+      return dailyErrorResponse(400, { code: 'missing_machine_or_date', message: 'Machine ID and date are required' });
     }
 
     assertMachineAccess(authenticatedUser, machine_id);
 
     // 수량 검증 (휴무가 아닌 교대만)
     if (day_shift && !day_shift_off) {
-      const error = validateQuantities('주간조', day_shift.actual_production, day_shift.defect_quantity);
-      if (error) {
-        return NextResponse.json({ success: false, error }, { status: 400 });
-      }
+      const error = validateQuantities('A', day_shift.actual_production, day_shift.defect_quantity);
+      if (error) return dailyErrorResponse(400, error);
     }
 
     if (night_shift && !night_shift_off) {
-      const error = validateQuantities('야간조', night_shift.actual_production, night_shift.defect_quantity);
-      if (error) {
-        return NextResponse.json({ success: false, error }, { status: 400 });
-      }
+      const error = validateQuantities('B', night_shift.actual_production, night_shift.defect_quantity);
+      if (error) return dailyErrorResponse(400, error);
     }
 
     // 건드리는 교대(저장 또는 휴무)는 화면이 본 지문이 반드시 있어야 한다(감사 F-02).
@@ -235,16 +260,26 @@ export async function POST(request: NextRequest) {
         && Object.prototype.hasOwnProperty.call(expected_records, shift);
       const normalized = hasKey ? normalizeExpectedRecord(expected_records![shift]) : 'invalid';
       if (normalized === 'invalid') {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'expected_records_required',
-            message: '화면을 새로 고친 뒤 다시 저장해 주세요 (기존 기록 확인 정보가 없습니다).',
-          },
-          { status: 400 }
-        );
+        return dailyErrorResponse(400, {
+          code: 'expected_records_required',
+          message: '화면을 새로 고친 뒤 다시 저장해 주세요 (기존 기록 확인 정보가 없습니다).',
+        }, 'expected_records_required');
       }
       expected[shift] = normalized;
+    }
+
+    // 확정된 불량을 빈칸(미검사)으로 되돌리는 것은 막는다(사용자 확정 2026-11-14). 실수로 지운 칸이
+    // 확정값을 지우면 안 된다. 화면이 본 지문은 v2 가 잠금 아래에서 DB 와 같음을 보장하므로 여기서 판단해도 된다.
+    for (const shift of ['A', 'B'] as const) {
+      const shiftData = shift === 'A' ? day_shift : night_shift;
+      const seen = expected[shift];
+      if (savingShift[shift] && shiftData?.defect_quantity === null && seen && seen.defect_qty !== null) {
+        return dailyErrorResponse(400, {
+          code: 'defect_unconfirm_not_allowed',
+          params: { shift },
+          message: `${SHIFT_LABEL[shift]}의 확정된 불량 수량은 비울 수 없습니다. 숫자로 고쳐 주세요.`,
+        });
+      }
     }
 
     const businessTime = await getBusinessTimeConfig(authenticatedUser.factoryId);
@@ -261,7 +296,7 @@ export async function POST(request: NextRequest) {
       requestedShifts: ['B'],
     });
     if (!dayWindow || !nightWindow) {
-      return NextResponse.json({ success: false, error: 'Shift time configuration is invalid' }, { status: 500 });
+      return dailyErrorResponse(500, { code: 'shift_config_invalid', message: 'Shift time configuration is invalid' });
     }
 
     // 가동시간 상한 = 설정된 교대 창 길이(감사 F-03). 휴무 교대는 저장하지 않으므로 검사하지 않는다.
@@ -270,12 +305,12 @@ export async function POST(request: NextRequest) {
       B: Math.round((nightWindow.end - nightWindow.start) / 60_000),
     };
     if (savingShift.A) {
-      const error = validateOperatingMinutes('주간조', day_shift!.operating_minutes, shiftMinutes.A);
-      if (error) return NextResponse.json({ success: false, error }, { status: 400 });
+      const error = validateOperatingMinutes('A', day_shift!.operating_minutes, shiftMinutes.A);
+      if (error) return dailyErrorResponse(400, error);
     }
     if (savingShift.B) {
-      const error = validateOperatingMinutes('야간조', night_shift!.operating_minutes, shiftMinutes.B);
-      if (error) return NextResponse.json({ success: false, error }, { status: 400 });
+      const error = validateOperatingMinutes('B', night_shift!.operating_minutes, shiftMinutes.B);
+      if (error) return dailyErrorResponse(400, error);
     }
 
     // 비가동 원천 지문을 **행을 읽기 전에** 잡는다(close-shift 와 같은 순서, 자체 감사 #6).
@@ -295,7 +330,7 @@ export async function POST(request: NextRequest) {
       });
       if (digestError || typeof digest !== 'string') {
         console.error('비가동 원천 지문 조회 오류:', digestError);
-        return NextResponse.json({ success: false, error: 'Failed to read downtime source' }, { status: 500 });
+        return dailyErrorResponse(500, { code: 'downtime_source_failed', message: 'Failed to read downtime source' });
       }
       sources[shift] = { start, end, digest };
     }
@@ -317,19 +352,10 @@ export async function POST(request: NextRequest) {
 
     if (machineError || !machine) {
       console.error('Machine not found:', machineError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Machine not found'
-        },
-        { status: 404 }
-      );
+      return dailyErrorResponse(404, { code: 'machine_not_found', message: 'Machine not found' });
     }
     if (!machine.is_active) {
-      return NextResponse.json(
-        { success: false, error: 'Inactive machines cannot receive production records' },
-        { status: 409 }
-      );
+      return dailyErrorResponse(409, { code: 'machine_inactive', message: 'Inactive machines cannot receive production records' });
     }
 
     // 기존 교대 snapshot과 현재 공정값을 함께 조회한다. 기존 행은 반드시 과거 snapshot을 우선한다.
@@ -477,14 +503,21 @@ export async function POST(request: NextRequest) {
 
     if (rpcData.ok !== true) {
       // 거부는 쓰기 전에 일어난다. 화면은 최신 상태를 다시 불러와야 한다.
-      const messages: Record<string, string> = {
+      const messages: Partial<Record<DailySaveErrorCode, string>> = {
         record_changed: '다른 곳에서 이 교대 기록이 먼저 변경되었습니다. 최신 내용을 다시 불러온 뒤 저장해 주세요.',
         source_changed: '저장하는 동안 비가동 기록이 바뀌었습니다. 다시 저장해 주세요.',
       };
       const reason = rpcData.reason ?? 'unknown';
-      if (reason in messages) {
+      if (reason === 'record_changed' || reason === 'source_changed') {
         return NextResponse.json(
-          { success: false, error: reason, shift: rpcData.shift, message: messages[reason] },
+          {
+            success: false,
+            error: reason,
+            code: reason,
+            shift: rpcData.shift,
+            params: rpcData.shift ? { shift: rpcData.shift } : undefined,
+            message: messages[reason],
+          },
           { status: 409 }
         );
       }

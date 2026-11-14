@@ -409,6 +409,10 @@ app.js·setup.js 를 **로직 그대로** 옮긴 것이다. 차이는 엔진 파
   그리고 화면이 지문을 읽는 **목록 API(`GET /api/production-records`)가 그 컬럼을 DB 값 그대로** 돌려줘야 한다 — 하나라도 빠지면
   기존 기록 수정이 **항상 409** 가 된다(실제로 그랬고 브라우저 종단 검증에서만 드러났다; `listFingerprintContract.test.ts`).
 - `operating_minutes` 는 0 이상 정수, 상한은 설정의 교대 창 길이(720 고정 아님).
+- **불량 빈칸 = 미검사(null), 0 = 불량 없음 확정**(사용자 확정 2026-11-14). 데이터 입력 화면은 미검사 기록·새 기록 모두 빈칸으로
+  보여 주고 null 을 보낸다(`|| 0` 으로 채우지 말 것 — 그대로 저장하면 '불량 0 확정'이 됐다). 확정된 불량을 빈칸으로 되돌리는 것은
+  서버가 400 `defect_unconfirm_not_allowed` 로 막는다. 미검사면 품질·OEE·화면 요약도 null('—').
+- 오류는 `code`·`params` 로 내려주고 화면이 `dataInput.json` 의 `dailyErrors.<code>` 로 번역한다(ko/vi). 코드를 더하면 두 언어 모두 추가.
 - 검증: `scripts/verify-daily-save-concurrency-local.mjs`(진짜 Postgres 경합), `scripts/verify-daily-save-browser-local.cjs`(로컬 Supabase + dev 3100).
 
 ### Report Generation System

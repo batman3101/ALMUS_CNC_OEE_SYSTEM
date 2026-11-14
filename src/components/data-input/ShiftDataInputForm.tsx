@@ -65,7 +65,8 @@ interface ExistingProductionRecord {
   date: string;
   shift: 'A' | 'B';
   output_qty: number;
-  defect_qty: number;
+  /** null = 미검사. 목록 API 가 NULL 을 그대로 보낸다. */
+  defect_qty: number | null;
   planned_runtime?: number | null;
   actual_runtime?: number | null;
   availability?: number | null;
@@ -114,6 +115,13 @@ const toExpectedShiftRecord = (record: ExistingProductionRecord | null): Expecte
       }
     : null;
 
+/** 일일 저장 라우트가 내려주는 오류 코드 — dataInput.json 의 `dailyErrors.<code>` 로 번역한다. */
+const DAILY_SAVE_ERROR_CODES = new Set([
+  'missing_machine_or_date', 'invalid_output_qty', 'invalid_defect_qty', 'defect_exceeds_output',
+  'defect_unconfirm_not_allowed', 'invalid_operating_minutes', 'expected_records_required',
+  'shift_config_invalid', 'downtime_source_failed', 'machine_not_found', 'machine_inactive',
+]);
+
 /** 저장이 동시 변경으로 거부됐을 때 서버가 돌려주는 사유. */
 const CONCURRENT_SAVE_REJECTIONS = new Set(['record_changed', 'source_changed']);
 
@@ -127,7 +135,8 @@ interface PersistedShiftState {
 // 클라이언트는 원시 입력값만 전송한다)
 interface ShiftSavePayload {
   actual_production: number;
-  defect_quantity: number;
+  /** null = 미검사(빈칸). 서버는 품질·OEE 를 null 로 저장하고, 확정된 불량을 비우는 것은 거부한다. */
+  defect_quantity: number | null;
   operating_minutes: number;
 }
 
@@ -269,8 +278,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     end_time: '20:00',
     operator_name: '',
     actual_production: 0,
-    defect_quantity: 0,
-    good_quantity: 0,
+    defect_quantity: null,
+    good_quantity: null,
     downtime_entries: [],
     total_downtime_minutes: 0
   });
@@ -282,8 +291,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     end_time: '08:00',
     operator_name: '',
     actual_production: 0,
-    defect_quantity: 0,
-    good_quantity: 0,
+    defect_quantity: null,
+    good_quantity: null,
     downtime_entries: [],
     total_downtime_minutes: 0
   });
@@ -372,16 +381,19 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
           setDayShiftData(prev => ({
             ...prev,
             actual_production: dayRecord.output_qty || 0,
-            defect_quantity: dayRecord.defect_qty || 0,
-            good_quantity: Math.max(0, (dayRecord.output_qty || 0) - (dayRecord.defect_qty || 0))
+            // 미검사(NULL)는 빈칸으로 둔다. `|| 0` 으로 채우면 그대로 저장하는 순간 '불량 0 확정'이 됐다.
+            defect_quantity: dayRecord.defect_qty ?? null,
+            good_quantity: dayRecord.defect_qty === null || dayRecord.defect_qty === undefined
+              ? null
+              : Math.max(0, (dayRecord.output_qty || 0) - dayRecord.defect_qty)
           }));
           setDayShiftOperatingMinutes(recoverOperatingMinutes(dayRecord.planned_runtime));
         } else {
           setDayShiftData(prev => ({
             ...prev,
             actual_production: 0,
-            defect_quantity: 0,
-            good_quantity: 0
+            defect_quantity: null,
+            good_quantity: null
           }));
         }
 
@@ -389,16 +401,19 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
           setNightShiftData(prev => ({
             ...prev,
             actual_production: nightRecord.output_qty || 0,
-            defect_quantity: nightRecord.defect_qty || 0,
-            good_quantity: Math.max(0, (nightRecord.output_qty || 0) - (nightRecord.defect_qty || 0))
+            // 미검사(NULL)는 빈칸으로 둔다. `|| 0` 으로 채우면 그대로 저장하는 순간 '불량 0 확정'이 됐다.
+            defect_quantity: nightRecord.defect_qty ?? null,
+            good_quantity: nightRecord.defect_qty === null || nightRecord.defect_qty === undefined
+              ? null
+              : Math.max(0, (nightRecord.output_qty || 0) - nightRecord.defect_qty)
           }));
           setNightShiftOperatingMinutes(recoverOperatingMinutes(nightRecord.planned_runtime));
         } else {
           setNightShiftData(prev => ({
             ...prev,
             actual_production: 0,
-            defect_quantity: 0,
-            good_quantity: 0
+            defect_quantity: null,
+            good_quantity: null
           }));
         }
 
@@ -414,14 +429,14 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
         setDayShiftData(prev => ({
           ...prev,
           actual_production: 0,
-          defect_quantity: 0,
-          good_quantity: 0
+          defect_quantity: null,
+          good_quantity: null
         }));
         setNightShiftData(prev => ({
           ...prev,
           actual_production: 0,
-          defect_quantity: 0,
-          good_quantity: 0
+          defect_quantity: null,
+          good_quantity: null
         }));
       }
     } catch (error) {
@@ -467,16 +482,16 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
               setDayShiftData(prev => ({
                 ...prev,
                 actual_production: 0,
-                defect_quantity: 0,
-                good_quantity: 0
+                defect_quantity: null,
+                good_quantity: null
               }));
             } else {
               setExistingNightRecord(null);
               setNightShiftData(prev => ({
                 ...prev,
                 actual_production: 0,
-                defect_quantity: 0,
-                good_quantity: 0
+                defect_quantity: null,
+                good_quantity: null
               }));
             }
           }
@@ -516,16 +531,16 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     setDayShiftData(prev => ({
       ...prev,
       actual_production: 0,
-      defect_quantity: 0,
-      good_quantity: 0,
+      defect_quantity: null,
+      good_quantity: null,
       downtime_entries: [],
       total_downtime_minutes: 0
     }));
     setNightShiftData(prev => ({
       ...prev,
       actual_production: 0,
-      defect_quantity: 0,
-      good_quantity: 0,
+      defect_quantity: null,
+      good_quantity: null,
       downtime_entries: [],
       total_downtime_minutes: 0
     }));
@@ -692,17 +707,16 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
   };
 
   // 생산량 변경 핸들러
-  const handleProductionChange = (field: 'actual_production' | 'defect_quantity', value: number) => {
+  const handleProductionChange = (field: 'actual_production' | 'defect_quantity', value: number | null) => {
     const currentData = getCurrentShiftData();
-    const updates: Partial<ShiftProductionData> = { [field]: value };
-    
-    if (field === 'actual_production' || field === 'defect_quantity') {
-      const actualProduction = field === 'actual_production' ? value : currentData.actual_production;
-      const defectQuantity = field === 'defect_quantity' ? value : currentData.defect_quantity;
-      updates.good_quantity = Math.max(0, actualProduction - defectQuantity);
-    }
-    
-    updateCurrentShiftData(updates);
+    // 생산 빈칸은 0(NOT NULL 컬럼), 불량 빈칸은 null(미검사) — 빈칸≠0.
+    const actualProduction = field === 'actual_production' ? (value ?? 0) : currentData.actual_production;
+    const defectQuantity = field === 'defect_quantity' ? value : currentData.defect_quantity;
+    updateCurrentShiftData({
+      actual_production: actualProduction,
+      defect_quantity: defectQuantity,
+      good_quantity: defectQuantity === null ? null : Math.max(0, actualProduction - defectQuantity),
+    });
   };
 
   // 비가동 데이터 로드
@@ -1027,12 +1041,18 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     const totalProduction = 
       (!dayShiftOff ? dayShiftData.actual_production : 0) + 
       (!nightShiftOff ? nightShiftData.actual_production : 0);
-    const totalDefects = 
-      (!dayShiftOff ? dayShiftData.defect_quantity : 0) + 
-      (!nightShiftOff ? nightShiftData.defect_quantity : 0);
-    const totalGoodQuantity = 
-      (!dayShiftOff ? dayShiftData.good_quantity : 0) + 
-      (!nightShiftOff ? nightShiftData.good_quantity : 0);
+    // 생산이 있는 교대 중 하나라도 불량 미검사면 합계 불량·양품·품질·OEE 는 알 수 없다(NULL≠0%).
+    const countedShifts = [
+      !dayShiftOff && dayShiftData.actual_production > 0 ? dayShiftData : null,
+      !nightShiftOff && nightShiftData.actual_production > 0 ? nightShiftData : null,
+    ].filter((shift): shift is ShiftProductionData => shift !== null);
+    const defectPending = countedShifts.some(shift => shift.defect_quantity === null);
+    const totalDefects = defectPending
+      ? null
+      : countedShifts.reduce((sum, shift) => sum + (shift.defect_quantity ?? 0), 0);
+    const totalGoodQuantity = defectPending
+      ? null
+      : countedShifts.reduce((sum, shift) => sum + (shift.good_quantity ?? 0), 0);
     const totalDowntime = 
       (!dayShiftOff ? dayShiftData.total_downtime_minutes : 0) + 
       (!nightShiftOff ? nightShiftData.total_downtime_minutes : 0);
@@ -1072,8 +1092,10 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
 
     const availability = plannedOperatingTime > 0 ? actualOperatingTime / plannedOperatingTime : 0;
     const performance = actualOperatingTime > 0 ? Math.min(1, idealRuntime / actualOperatingTime) : 0;
-    const quality = totalProduction > 0 ? totalGoodQuantity / totalProduction : 0;
-    const oee = availability * performance * quality;
+    const quality = totalGoodQuantity === null
+      ? null
+      : totalProduction > 0 ? totalGoodQuantity / totalProduction : 0;
+    const oee = quality === null ? null : availability * performance * quality;
 
     return {
       machine_id: selectedMachineId || '',
@@ -1089,14 +1111,16 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
       planned_capacity: plannedCapacity,
       availability: Math.max(0, Math.min(1, availability)),
       performance: Math.max(0, Math.min(1, performance)),
-      quality: Math.max(0, Math.min(1, quality)),
-      oee: Math.max(0, Math.min(1, oee))
+      quality: quality === null ? null : Math.max(0, Math.min(1, quality)),
+      oee: oee === null ? null : Math.max(0, Math.min(1, oee))
     };
   };
 
   // 교대별 불량 수량이 생산 수량을 초과하는지 검증 (F4)
-  const isDayQuantityInvalid = !dayShiftOff && dayShiftData.defect_quantity > dayShiftData.actual_production;
-  const isNightQuantityInvalid = !nightShiftOff && nightShiftData.defect_quantity > nightShiftData.actual_production;
+  const isDayQuantityInvalid = !dayShiftOff && dayShiftData.defect_quantity !== null
+    && dayShiftData.defect_quantity > dayShiftData.actual_production;
+  const isNightQuantityInvalid = !nightShiftOff && nightShiftData.defect_quantity !== null
+    && nightShiftData.defect_quantity > nightShiftData.actual_production;
 
   /**
    * 이 교대를 서버로 전송할지 판정한다.
@@ -1130,7 +1154,7 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
     // 있다는 이유로 output=0 생산 레코드나 WORKING 교대 상태를 만들지 않는다.
     return (
       shiftData.actual_production > 0 ||
-      shiftData.defect_quantity > 0 ||
+      (shiftData.defect_quantity ?? 0) > 0 ||
       workingZeroConfirmed
     );
   };
@@ -1219,6 +1243,12 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
           }
           return;
         }
+        // 서버가 내려준 오류 코드는 화면 언어로 번역한다(ko/vi). 모르는 코드면 서버 문구를 그대로 쓴다.
+        if (typeof errorData.code === 'string' && DAILY_SAVE_ERROR_CODES.has(errorData.code)) {
+          const params = (errorData.params ?? {}) as Record<string, string | number>;
+          const shiftLabel = params.shift === 'A' ? t('shift.dayShift') : params.shift === 'B' ? t('shift.nightShift') : '';
+          throw new Error(String(t(`dailyErrors.${errorData.code}`, { ...params, shift: shiftLabel })));
+        }
         throw new Error(errorData.message || errorData.error || `HTTP ${response.status}`);
       }
 
@@ -1252,8 +1282,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
         end_time: '20:00',
         operator_name: '',
         actual_production: 0,
-        defect_quantity: 0,
-        good_quantity: 0,
+        defect_quantity: null,
+        good_quantity: null,
         downtime_entries: [],
         total_downtime_minutes: 0
       });
@@ -1264,8 +1294,8 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
         end_time: '08:00',
         operator_name: '',
         actual_production: 0,
-        defect_quantity: 0,
-        good_quantity: 0,
+        defect_quantity: null,
+        good_quantity: null,
         downtime_entries: [],
         total_downtime_minutes: 0
       });
@@ -1743,9 +1773,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                           <Text strong>{t('dataEntry.defects')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
-                            placeholder="5"
+                            placeholder={t('dataEntry.defectPendingPlaceholder')}
                             value={dayShiftData.defect_quantity}
-                            onChange={(value) => handleProductionChange('defect_quantity', value || 0)}
+                            onChange={(value) => handleProductionChange('defect_quantity', value ?? null)}
                             addonAfter={t('common.pieces')}
                             disabled={dayShiftOff}
                             min={0}
@@ -1824,9 +1854,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
                           <Text strong>{t('dataEntry.defects')}</Text>
                           <InputNumber
                             style={{ width: '100%' }}
-                            placeholder="5"
+                            placeholder={t('dataEntry.defectPendingPlaceholder')}
                             value={nightShiftData.defect_quantity}
-                            onChange={(value) => handleProductionChange('defect_quantity', value || 0)}
+                            onChange={(value) => handleProductionChange('defect_quantity', value ?? null)}
                             addonAfter={t('common.pieces')}
                             disabled={nightShiftOff}
                             min={0}
@@ -1920,7 +1950,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
               <div style={{ textAlign: 'center' }}>
                 <Text type="secondary">{t('dataEntry.defects')}</Text>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ff4d4f' }}>
-                  {dailyData.total_defects}{t('common.pieces')}
+                  {dailyData.total_defects === null
+                    ? <span title={t('dataEntry.defectPendingHint')}>—</span>
+                    : <>{dailyData.total_defects}{t('common.pieces')}</>}
                 </div>
               </div>
             </Col>
@@ -1936,7 +1968,9 @@ const ShiftDataInputForm: React.FC<ShiftDataInputFormProps> = ({ initialDate }) 
               <div style={{ textAlign: 'center' }}>
                 <Text type="secondary">OEE</Text>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#52c41a' }}>
-                  {(dailyData.oee * 100).toFixed(1)}%
+                  {dailyData.oee === null
+                    ? <span title={t('dataEntry.defectPendingHint')}>—</span>
+                    : `${(dailyData.oee * 100).toFixed(1)}%`}
                 </div>
               </div>
             </Col>

@@ -52,7 +52,9 @@
     "admin": "Quản trị viên",
     "engineer": "Kỹ sư",
     "operator_role": "Người vận hành",
-    "ongoing": "Đang tiến hành"
+    "ongoing": "Đang tiến hành",
+    "defectPendingPlaceholder": "Chưa kiểm tra (để trống)",
+    "defectPendingHint": "Có ca chưa nhập số lượng lỗi (chưa kiểm tra)"
   },
   "shift": {
     "dayShift": "Ca ngày",
@@ -236,5 +238,18 @@
     "units": "phút",
     "hoursMinutesFormat": "{hours} giờ {minutes} phút",
     "defaultTimeNote": "Thời gian hiện tại là giá trị mặc định"
+  },
+  "dailyErrors": {
+    "missing_machine_or_date": "Vui lòng chọn máy và ngày.",
+    "invalid_output_qty": "Số lượng sản xuất {{shift}} phải là số nguyên từ 0 trở lên.",
+    "invalid_defect_qty": "Số lượng lỗi {{shift}} phải là số nguyên từ 0 trở lên hoặc để trống (chưa kiểm tra).",
+    "defect_exceeds_output": "Số lượng lỗi {{shift}} không được lớn hơn số lượng sản xuất.",
+    "defect_unconfirm_not_allowed": "Không thể để trống số lượng lỗi đã xác nhận của {{shift}}. Vui lòng sửa bằng số.",
+    "invalid_operating_minutes": "Thời gian vận hành {{shift}} phải là số nguyên (phút) từ 0 đến {{max}}.",
+    "expected_records_required": "Vui lòng tải lại trang rồi lưu lại.",
+    "shift_config_invalid": "Cài đặt giờ ca không hợp lệ. Vui lòng liên hệ quản trị viên.",
+    "downtime_source_failed": "Không đọc được dữ liệu dừng máy. Vui lòng lưu lại sau.",
+    "machine_not_found": "Không tìm thấy máy.",
+    "machine_inactive": "Không thể lưu bản ghi sản xuất cho máy không hoạt động."
   }
 }

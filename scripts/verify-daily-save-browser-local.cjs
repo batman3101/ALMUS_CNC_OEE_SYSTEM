@@ -6,7 +6,8 @@
  *   3. 낡은 화면에서 저장 → 409 경고 + 최신 기록 재조회, DB 불량은 9 그대로.
  *   4. 다시 불러온 화면에서 저장 → 성공.
  *   5. 가동시간 999,999분(F-03) → 400.  6. operator 토큰으로 일일 저장 → 403(F-02 권한).
- *   (2·3 은 한 항목으로 센다 — 합격 기준 5개)
+ *   7. 확정된 불량을 빈칸으로 저장 → 400(번역 문구), DB 유지.  8. 새 기록 불량 빈칸 → DB NULL(미검사), 다시 열어도 빈칸.
+ *   (2·3 은 한 항목으로 센다 — 합격 기준 7개)
  * KEEP_FIXTURE=1 이면 끝난 뒤 로컬 기록을 지우지 않는다(디버깅용).
  *
  * 준비:
@@ -121,7 +122,8 @@ const recordOf = async (machineId, date) =>
       // 순서: 주간 기준 가동시간, 야간 기준 가동시간, 주간 생산, 주간 불량, ...
       const inputs = page.locator('.ant-input-number-input');
       await inputs.nth(2).fill(String(output));
-      await inputs.nth(3).fill(String(defect));
+      // defect === null → 빈칸(미검사)
+      await inputs.nth(3).fill(defect === null ? '' : String(defect));
       await inputs.nth(3).press('Tab');
     };
     const clickSave = async label => {
@@ -190,7 +192,36 @@ const recordOf = async (machineId, date) =>
     assert.equal(atMax.status, 200, JSON.stringify(atMax));
     pass('가동시간 999,999분 → 400, 교대 길이 720분 → 200 (실제 서버·로컬 DB)');
 
-    // 6. F-02 권한: operator 는 일일 저장(휴무=삭제) 불가
+    // 6. 확정된 불량을 빈칸으로 되돌리기 → 400, 화면은 번역된 문구, DB 불량 유지
+    await openForm();
+    await fillDay(100, null);
+    const unconfirm = await clickSave(/수정|업데이트|Cập nhật|updateData/);
+    assert.equal(unconfirm, 400, 'clearing a confirmed defect must be rejected');
+    await page.waitForTimeout(800);
+    const unconfirmMsg = await page.locator('.ant-message, .ant-notification').innerText().catch(() => '');
+    console.log('INFO toast', unconfirmMsg.split(String.fromCharCode(10)).filter(Boolean).join(' | '));
+    assert.match(unconfirmMsg, /비울 수 없습니다|Không thể để trống/, 'translated message expected: ' + unconfirmMsg);
+    assert.equal((await recordOf(machine.id, date)).defect_qty, 4, 'confirmed defect must survive');
+    pass('확정 불량을 빈칸으로 저장 → 400 번역 문구, DB 불량 4 유지');
+
+    // 7. 새 기록: 불량 칸이 빈칸으로 시작, 생산만 넣고 저장 → DB 불량 NULL(미검사)·품질·OEE NULL
+    await rest(`production_records?machine_id=eq.${machine.id}&date=eq.${date}`, { method: 'DELETE' });
+    await rest(`production_shift_states?machine_id=eq.${machine.id}&date=eq.${date}`, { method: 'DELETE' });
+    await openForm();
+    assert.equal(await page.locator('.ant-input-number-input').nth(3).inputValue(), '', 'new record defect starts blank');
+    await page.locator('.ant-input-number-input').nth(2).fill('80');
+    await page.locator('.ant-input-number-input').nth(2).press('Tab');
+    const pendingStatus = await clickSave(/저장|Lưu|newRecord/);
+    assert.equal(pendingStatus, 200);
+    await page.waitForTimeout(800);
+    const pendingRow = (await rest(`production_records?machine_id=eq.${machine.id}&date=eq.${date}&shift=eq.A&select=output_qty,defect_qty,quality,oee`))[0];
+    assert.deepEqual(pendingRow, { output_qty: 80, defect_qty: null, quality: null, oee: null }, JSON.stringify(pendingRow));
+    // 다시 열어도 빈칸이다(0 으로 채우지 않는다)
+    await openForm();
+    assert.equal(await page.locator('.ant-input-number-input').nth(3).inputValue(), '', 'pending defect reloads blank');
+    pass('새 기록 불량 빈칸 → DB 불량·품질·OEE NULL(미검사), 다시 열어도 빈칸');
+
+    // 8. F-02 권한: operator 는 일일 저장(휴무=삭제) 불가
     const opToken = await signIn(OP_EMAIL, opPw);
     const opOff = await post(opToken, { machine_id: machine.id, date, day_shift_off: true, night_shift_off: false, expected_records: { A: null } });
     assert.equal(opOff.status, 403, JSON.stringify(opOff));
@@ -203,6 +234,6 @@ const recordOf = async (machineId, date) =>
       await rest(`production_shift_states?machine_id=eq.${machine.id}&date=eq.${date}`, { method: 'DELETE' }).catch(() => {});
     }
   }
-  console.log(`\n${results.length}/5 통과`);
-  if (results.length !== 5) process.exit(1);
+  console.log(`\n${results.length}/7 통과`);
+  if (results.length !== 7) process.exit(1);
 })().catch(error => { console.error('FAIL', error.message); process.exit(1); });
